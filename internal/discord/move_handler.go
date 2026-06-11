@@ -181,7 +181,27 @@ type MoveHandler struct {
 	logger *slog.Logger
 	// J-H09: optional encounter snapshot publisher. nil-safe.
 	publisher MoveEncounterPublisher
+	// T19 / Finding 11: optional map regenerator + async dispatcher used to
+	// post the rendered map to #combat-map after an exploration /move, so the
+	// party (and fog-of-war reveals) become visible instead of only the
+	// mover's ephemeral text. Channel resolution reuses h.oaChannels. Both are
+	// nil-safe: without a regenerator wired, exploration moves post no map
+	// (preserving the pre-T19 behavior used by minimal test wiring).
+	mapRegen     MapRegenerator
+	mapPostAsync func(func())
 }
+
+// SetMapRegenerator wires the T19 exploration-move map poster. After a
+// successful exploration /move, the rendered map is posted to #combat-map
+// (channel resolved via the same provider as the OA hooks). nil-safe.
+func (h *MoveHandler) SetMapRegenerator(mr MapRegenerator) { h.mapRegen = mr }
+
+// SetMapPostDispatcher wires the dispatcher used to run the exploration-move
+// map render + upload. In production this is `go f()` so /move acknowledges
+// within Discord's 3-second window and the render happens off the interaction
+// path (T19, mirroring T18). nil (the default, used by tests) runs the work
+// inline so channel-post assertions stay deterministic.
+func (h *MoveHandler) SetMapPostDispatcher(dispatch func(func())) { h.mapPostAsync = dispatch }
 
 // SetLogger wires the structured logger used to emit per-command
 // observability lines via the internal/logging helper. nil-safe: when
@@ -669,6 +689,41 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
+
+	// T19 / Finding 11: the move above is otherwise invisible — only the mover
+	// sees the ephemeral text. Post the rendered map to #combat-map so the rest
+	// of the party (and any fog-of-war reveal) can see the new positions. Done
+	// after the ack and (in production) off the interaction path so the render
+	// never blows Discord's 3-second window.
+	h.postExplorationMap(ctx, encounter)
+}
+
+// postExplorationMap renders and posts the encounter map to #combat-map after
+// an exploration /move. Best-effort and nil-safe: a missing regenerator or
+// channel provider is a silent no-op (preserving pre-T19 behavior). The work
+// is dispatched through mapPostAsync (`go f()` in production, inline in tests).
+func (h *MoveHandler) postExplorationMap(ctx context.Context, encounter refdata.Encounter) {
+	if h.mapRegen == nil || h.oaChannels == nil {
+		return
+	}
+	h.dispatchMapPost(func() {
+		channelIDs, err := h.oaChannels.GetChannelIDs(ctx, encounter.ID)
+		if err != nil {
+			return
+		}
+		label := fmt.Sprintf("\U0001f5fa️ %s", combat.EncounterDisplayName(encounter))
+		PostCombatMap(ctx, h.session, h.mapRegen, encounter.ID, channelIDs, label, nil)
+	})
+}
+
+// dispatchMapPost runs the exploration map render+upload either asynchronously
+// (production) or inline (tests / default), per SetMapPostDispatcher.
+func (h *MoveHandler) dispatchMapPost(f func()) {
+	if h.mapPostAsync != nil {
+		h.mapPostAsync(f)
+		return
+	}
+	f()
 }
 
 // resolveExplorationMover picks the PC combatant that belongs to the invoking

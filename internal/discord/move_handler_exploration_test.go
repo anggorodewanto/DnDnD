@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/refdata"
@@ -440,5 +441,86 @@ func TestMoveHandler_SetCharacterLookup(t *testing.T) {
 	handler.SetCharacterLookup(lookup)
 	if handler.characterLookup != lookup {
 		t.Errorf("SetCharacterLookup did not wire the dependency")
+	}
+}
+
+// TestMoveHandler_ExplorationMode_PostsMapToChannel asserts that a successful
+// exploration /move posts the rendered map to #combat-map so the party (and
+// fog-of-war reveals) become visible — previously the only output was the
+// mover's ephemeral "Moved to" text and everyone else saw nothing (T19 /
+// Finding 11). The map render must run AFTER the interaction is acknowledged
+// (same 3-second-window concern as /done, T18).
+func TestMoveHandler_ExplorationMode_PostsMapToChannel(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, combatantID := setupMoveHandler(sess)
+
+	encID := uuid.New()
+	mapID := uuid.New()
+	charID := uuid.New()
+
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{
+				ID:     encID,
+				Status: "active",
+				Mode:   "exploration",
+				Name:   "Dungeon Crawl",
+				MapID:  uuid.NullUUID{UUID: mapID, Valid: true},
+			}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          combatantID,
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				PositionCol: "A", PositionRow: 1,
+				IsAlive: true, HpCurrent: 10, IsNpc: false,
+			}, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+					PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false},
+			}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	handler.encounterProvider = &mockMoveEncounterProvider{
+		getActiveEncounterID: func(_ context.Context, _ string) (uuid.UUID, error) { return encID, nil },
+	}
+
+	responded := false
+	respondedBeforeRender := false
+	var mapChannel string
+	capSess := &captureComplexSession{}
+	capSess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+		responded = true
+		return nil
+	}
+	capSess.onSendComplex = func(channelID string, _ *discordgo.MessageSend) {
+		mapChannel = channelID
+	}
+	handler.session = capSess
+
+	handler.oaChannels = &mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-map": "chan-cm"}, nil
+		},
+	}
+	handler.mapRegen = &mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			respondedBeforeRender = responded
+			return []byte("png"), nil
+		},
+	}
+
+	handler.Handle(makeMoveInteraction("D1"))
+
+	if mapChannel != "chan-cm" {
+		t.Errorf("expected exploration map posted to chan-cm, got %q", mapChannel)
+	}
+	if !respondedBeforeRender {
+		t.Error("expected exploration /move to acknowledge before rendering the map (T19)")
 	}
 }

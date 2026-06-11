@@ -387,6 +387,15 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	if deps.notifier != nil && deps.combatService != nil {
 		handlers.move.SetOpportunityAttackNotifier(deps.notifier, deps.combatService)
 	}
+	// T19 / Finding 11: post the rendered map to #combat-map after an
+	// exploration /move so the party sees the new positions (previously the
+	// move was visible only to the mover via ephemeral text). Channel
+	// resolution reuses deps.campaignSettings (already wired as the OA
+	// channel provider above); the render runs off the interaction path.
+	if deps.mapRegenerator != nil {
+		handlers.move.SetMapRegenerator(deps.mapRegenerator)
+		handlers.move.SetMapPostDispatcher(func(f func()) { go f() })
+	}
 	// D-56 / Phase 56: wire the drag lookup so /move applies the x2 drag
 	// movement cost when the mover is currently grappling another combatant.
 	if deps.combatService != nil {
