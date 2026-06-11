@@ -68,7 +68,9 @@ data (classes, races, spells, creatures, magic items) is seeded the same way.
    Application**. Name it whatever (e.g. `DnDnD-Playtest`).
 2. **Bot tab → Reset Token** → copy the token. This is `DISCORD_BOT_TOKEN`.
 3. **Bot tab → Privileged Gateway Intents** → enable **Server Members
-   Intent** and **Message Content Intent**.
+   Intent**. Message Content Intent is **not** required — DnDnD is
+   slash-command only and the bot requests just `IntentsGuildMembers`
+   (`cmd/dndnd/discord_handlers.go`).
 4. **OAuth2 tab → Redirects** → add
    `http://localhost:8080/portal/auth/callback`.
 5. **OAuth2 tab → Client ID / Client Secret** → copy both. These are
