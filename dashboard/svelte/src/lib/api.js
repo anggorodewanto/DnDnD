@@ -40,6 +40,30 @@ export async function createCampaign(params) {
 }
 
 /**
+ * Set the authenticated DM's active campaign (T20 / Finding 12). The dashboard
+ * then binds Maps/Encounters/Party to this campaign instead of silently
+ * following the most-recently-created one.
+ * @param {string} id - Campaign UUID to activate.
+ * @returns {Promise<object>} { campaign_id, status }
+ */
+export async function setActiveCampaign(id) {
+  const res = await apiFetch(`/api/campaigns/${id}/set-active`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
+ * List the Discord guilds the bot is currently in, for the campaign-create
+ * guild dropdown (T20 / Finding 12).
+ * @returns {Promise<{guilds: {id: string, name: string}[]}>}
+ */
+export async function listGuilds() {
+  const res = await apiFetch('/api/guilds');
+  return res.json();
+}
+
+/**
  * Create a new map.
  * @param {object} params - { campaign_id, name, width, height, tiled_json? }
  * @returns {Promise<object>} The created map.

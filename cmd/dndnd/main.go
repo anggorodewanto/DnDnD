@@ -150,16 +150,21 @@ func (l dashboardCampaignLookup) LookupActiveCampaign(ctx context.Context, dmUse
 	if err != nil {
 		return "", "", err
 	}
-	for _, c := range campaigns {
-		if c.DmUserID != dmUserID {
-			continue
-		}
-		if c.Status == "archived" {
-			continue
-		}
-		return c.ID.String(), c.Status, nil
+
+	// T20 / Finding 12: honor the DM's explicit active-campaign selection when
+	// one is stored, so creating a second campaign no longer silently flips the
+	// dashboard to it. GetActiveCampaign returns sql.ErrNoRows when the DM has
+	// never chosen — that falls through to the most-recent heuristic via
+	// ResolveActiveCampaign(preferred == uuid.Nil).
+	var preferred uuid.UUID
+	if pref, perr := l.queries.GetActiveCampaign(ctx, dmUserID); perr == nil {
+		preferred = pref
+	} else if !errors.Is(perr, sql.ErrNoRows) {
+		return "", "", perr
 	}
-	return "", "", nil
+
+	id, status := dashboard.ResolveActiveCampaign(campaigns, dmUserID, preferred)
+	return id, status, nil
 }
 
 // IsDM satisfies dashboard.DMVerifier (F-2) by reusing LookupActiveCampaign:
@@ -1229,6 +1234,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		dashboard.RegisterMeRoute(router, dashboard.NewMeHandler(logger, dashboardCampaignLookup{queries: queries}), authMw)
 		dashboard.RegisterHomeRoute(router, dashboard.NewHomeHandler(logger, dashHandler), authMw)
 		dashboard.RegisterCampaignsRoutes(router, dashboard.NewCampaignsHandler(logger, queries), authMw)
+		// T20 / Finding 12: expose the guilds the bot is in so the campaign
+		// form can replace its free-text Guild ID field with a dropdown,
+		// preventing typo'd-guild orphan campaigns.
+		dashboard.RegisterGuildsRoute(router, dashboard.NewGuildsHandler(logger, discordGuildLister{session: discordSession}), authMw)
 
 		// Discord startup self-check publication: the holder is populated
 		// from a single discordcheck.Run invocation immediately after the

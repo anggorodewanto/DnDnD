@@ -30,6 +30,8 @@ import {
   getCurrentUser,
   listCampaigns,
   createCampaign,
+  setActiveCampaign,
+  listGuilds,
   getMap,
   updateMap,
 } from './api.js';
@@ -123,6 +125,30 @@ describe('campaign APIs', () => {
     expect(url).toBe('/api/campaigns');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual({ name: 'Local', guild_id: 'guild-1' });
+  });
+
+  it('sets the active campaign', async () => {
+    const mockResponse = { campaign_id: 'camp-1', status: 'active' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    await expect(setActiveCampaign('camp-1')).resolves.toEqual(mockResponse);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/camp-1/set-active');
+    expect(options.method).toBe('POST');
+  });
+
+  it('lists guilds the bot is in', async () => {
+    const mockResponse = { guilds: [{ id: 'g1', name: 'Tavern' }] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    await expect(listGuilds()).resolves.toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/guilds', undefined);
   });
 });
 

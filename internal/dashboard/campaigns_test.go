@@ -19,8 +19,18 @@ import (
 type stubCampaignStore struct {
 	campaigns []refdata.Campaign
 	created   []refdata.CreateCampaignParams
+	activated []refdata.SetActiveCampaignParams
 	createErr error
 	listErr   error
+	activeErr error
+}
+
+func (s *stubCampaignStore) SetActiveCampaign(_ context.Context, arg refdata.SetActiveCampaignParams) error {
+	if s.activeErr != nil {
+		return s.activeErr
+	}
+	s.activated = append(s.activated, arg)
+	return nil
 }
 
 func (s *stubCampaignStore) CreateCampaign(_ context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error) {
@@ -136,5 +146,124 @@ func TestRegisterCampaignsRoutes_BehindAuthMiddleware(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestResolveActiveCampaign_HonorsPreferredWhenValid(t *testing.T) {
+	newer := uuid.New()
+	older := uuid.New()
+	campaigns := []refdata.Campaign{ // ListCampaigns order: created_at DESC
+		{ID: newer, DmUserID: "dm-1", Status: "active"},
+		{ID: older, DmUserID: "dm-1", Status: "active"},
+	}
+
+	id, status := ResolveActiveCampaign(campaigns, "dm-1", older)
+	if id != older.String() {
+		t.Fatalf("expected preferred (older) campaign %s, got %s", older, id)
+	}
+	if status != "active" {
+		t.Fatalf("status = %q, want active", status)
+	}
+}
+
+func TestResolveActiveCampaign_FallsBackToMostRecentWhenNoPreference(t *testing.T) {
+	newer := uuid.New()
+	older := uuid.New()
+	campaigns := []refdata.Campaign{
+		{ID: newer, DmUserID: "dm-1", Status: "active"},
+		{ID: older, DmUserID: "dm-1", Status: "active"},
+	}
+
+	id, _ := ResolveActiveCampaign(campaigns, "dm-1", uuid.Nil)
+	if id != newer.String() {
+		t.Fatalf("expected most-recent campaign %s, got %s", newer, id)
+	}
+}
+
+func TestResolveActiveCampaign_IgnoresArchivedOrUnownedPreference(t *testing.T) {
+	archived := uuid.New()
+	fallback := uuid.New()
+	other := uuid.New()
+	campaigns := []refdata.Campaign{
+		{ID: fallback, DmUserID: "dm-1", Status: "active"},
+		{ID: archived, DmUserID: "dm-1", Status: "archived"},
+		{ID: other, DmUserID: "dm-2", Status: "active"},
+	}
+
+	// Preferred is archived -> fall back to dm-1's most-recent non-archived.
+	if id, _ := ResolveActiveCampaign(campaigns, "dm-1", archived); id != fallback.String() {
+		t.Fatalf("archived preference: expected fallback %s, got %s", fallback, id)
+	}
+	// Preferred belongs to another DM -> ignored, fall back.
+	if id, _ := ResolveActiveCampaign(campaigns, "dm-1", other); id != fallback.String() {
+		t.Fatalf("unowned preference: expected fallback %s, got %s", fallback, id)
+	}
+}
+
+func setActiveRequest(t *testing.T, handler *CampaignsHandler, userID, campaignID string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := chi.NewRouter()
+	mw := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, req.WithContext(auth.ContextWithDiscordUserID(req.Context(), userID)))
+		})
+	}
+	RegisterCampaignsRoutes(r, handler, mw)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/campaigns/"+campaignID+"/set-active", nil))
+	return rec
+}
+
+func TestCampaignsHandler_SetActivePersistsOwnedCampaign(t *testing.T) {
+	target := uuid.New()
+	store := &stubCampaignStore{campaigns: []refdata.Campaign{
+		{ID: target, DmUserID: "dm-1", Status: "active"},
+	}}
+	handler := NewCampaignsHandler(nil, store)
+
+	rec := setActiveRequest(t, handler, "dm-1", target.String())
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(store.activated) != 1 {
+		t.Fatalf("SetActiveCampaign calls = %d, want 1", len(store.activated))
+	}
+	if store.activated[0].DmUserID != "dm-1" || store.activated[0].ActiveCampaignID != target {
+		t.Fatalf("activated params = %+v", store.activated[0])
+	}
+}
+
+func TestCampaignsHandler_SetActiveRejectsUnownedCampaign(t *testing.T) {
+	target := uuid.New()
+	store := &stubCampaignStore{campaigns: []refdata.Campaign{
+		{ID: target, DmUserID: "dm-2", Status: "active"}, // owned by someone else
+	}}
+	handler := NewCampaignsHandler(nil, store)
+
+	rec := setActiveRequest(t, handler, "dm-1", target.String())
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if len(store.activated) != 0 {
+		t.Fatalf("expected no SetActiveCampaign call, got %d", len(store.activated))
+	}
+}
+
+func TestCampaignsHandler_SetActiveRejectsArchivedCampaign(t *testing.T) {
+	target := uuid.New()
+	store := &stubCampaignStore{campaigns: []refdata.Campaign{
+		{ID: target, DmUserID: "dm-1", Status: "archived"},
+	}}
+	handler := NewCampaignsHandler(nil, store)
+
+	rec := setActiveRequest(t, handler, "dm-1", target.String())
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rec.Code)
+	}
+	if len(store.activated) != 0 {
+		t.Fatalf("expected no SetActiveCampaign call, got %d", len(store.activated))
 	}
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
@@ -1128,6 +1129,33 @@ func (q *queueingSession) ChannelMessageEdit(channelID, messageID, content strin
 
 func (q *queueingSession) GetState() *discordgo.State {
 	return q.inner.GetState()
+}
+
+// discordGuildLister adapts the live discordgo session state to
+// dashboard.GuildLister so the campaign-create form can offer a dropdown of
+// the guilds the bot is in instead of a free-text Guild ID field (T20 /
+// Finding 12). Nil-safe: a nil session or unavailable state yields no guilds,
+// and the form falls back to its free-text input.
+type discordGuildLister struct {
+	session discord.Session
+}
+
+func (g discordGuildLister) ListGuilds(_ context.Context) ([]dashboard.Guild, error) {
+	if g.session == nil {
+		return nil, nil
+	}
+	state := g.session.GetState()
+	if state == nil {
+		return nil, nil
+	}
+	out := make([]dashboard.Guild, 0, len(state.Guilds))
+	for _, gld := range state.Guilds {
+		if gld == nil {
+			continue
+		}
+		out = append(out, dashboard.Guild{ID: gld.ID, Name: gld.Name})
+	}
+	return out, nil
 }
 
 // SaveChannelIDs merges channelIDs into the campaign settings JSONB and

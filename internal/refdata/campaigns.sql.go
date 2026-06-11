@@ -46,6 +46,19 @@ func (q *Queries) CreateCampaign(ctx context.Context, arg CreateCampaignParams) 
 	return i, err
 }
 
+const getActiveCampaign = `-- name: GetActiveCampaign :one
+SELECT active_campaign_id FROM dm_active_campaign WHERE dm_user_id = $1
+`
+
+// Returns the DM's stored active campaign id, or sql.ErrNoRows when the DM has
+// never made an explicit selection (the resolver then falls back to most-recent).
+func (q *Queries) GetActiveCampaign(ctx context.Context, dmUserID string) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, getActiveCampaign, dmUserID)
+	var active_campaign_id uuid.UUID
+	err := row.Scan(&active_campaign_id)
+	return active_campaign_id, err
+}
+
 const getCampaignByGuildID = `-- name: GetCampaignByGuildID :one
 SELECT id, guild_id, dm_user_id, name, settings, status, created_at, updated_at FROM campaigns WHERE guild_id = $1
 `
@@ -120,6 +133,25 @@ func (q *Queries) ListCampaigns(ctx context.Context) ([]Campaign, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setActiveCampaign = `-- name: SetActiveCampaign :exec
+INSERT INTO dm_active_campaign (dm_user_id, active_campaign_id, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (dm_user_id)
+DO UPDATE SET active_campaign_id = EXCLUDED.active_campaign_id, updated_at = now()
+`
+
+type SetActiveCampaignParams struct {
+	DmUserID         string    `json:"dm_user_id"`
+	ActiveCampaignID uuid.UUID `json:"active_campaign_id"`
+}
+
+// Records (or replaces) the DM's explicitly-selected active campaign so the
+// dashboard stops silently following created_at DESC (T20 / Finding 12).
+func (q *Queries) SetActiveCampaign(ctx context.Context, arg SetActiveCampaignParams) error {
+	_, err := q.db.ExecContext(ctx, setActiveCampaign, arg.DmUserID, arg.ActiveCampaignID)
+	return err
 }
 
 const updateCampaignName = `-- name: UpdateCampaignName :one

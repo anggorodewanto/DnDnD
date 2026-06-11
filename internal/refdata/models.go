@@ -214,6 +214,12 @@ type Creature struct {
 	BonusActions          pqtype.NullRawMessage `json:"bonus_actions"`
 }
 
+type DmActiveCampaign struct {
+	DmUserID         string    `json:"dm_user_id"`
+	ActiveCampaignID uuid.UUID `json:"active_campaign_id"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 type DmPlayerMessage struct {
 	ID                uuid.UUID `json:"id"`
 	CampaignID        uuid.UUID `json:"campaign_id"`

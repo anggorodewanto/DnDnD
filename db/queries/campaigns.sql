@@ -26,3 +26,16 @@ RETURNING *;
 
 -- name: ListCampaigns :many
 SELECT * FROM campaigns ORDER BY created_at DESC;
+
+-- name: SetActiveCampaign :exec
+-- Records (or replaces) the DM's explicitly-selected active campaign so the
+-- dashboard stops silently following created_at DESC (T20 / Finding 12).
+INSERT INTO dm_active_campaign (dm_user_id, active_campaign_id, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (dm_user_id)
+DO UPDATE SET active_campaign_id = EXCLUDED.active_campaign_id, updated_at = now();
+
+-- name: GetActiveCampaign :one
+-- Returns the DM's stored active campaign id, or sql.ErrNoRows when the DM has
+-- never made an explicit selection (the resolver then falls back to most-recent).
+SELECT active_campaign_id FROM dm_active_campaign WHERE dm_user_id = $1;

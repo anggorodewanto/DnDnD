@@ -1,11 +1,13 @@
 <script>
-  import { createCampaign, listCampaigns } from './lib/api.js';
+  import { createCampaign, listCampaigns, setActiveCampaign, listGuilds } from './lib/api.js';
 
-  let { activeCampaignId = '', oncreated = () => {} } = $props();
+  let { activeCampaignId = '', oncreated = () => {}, onactivechange = () => {} } = $props();
 
   let campaigns = $state([]);
+  let guilds = $state([]);
   let loading = $state(true);
   let saving = $state(false);
+  let activatingId = $state('');
   let error = $state('');
   let success = $state('');
   let name = $state('');
@@ -13,6 +15,7 @@
 
   $effect(() => {
     loadCampaigns();
+    loadGuilds();
   });
 
   async function loadCampaigns() {
@@ -26,6 +29,32 @@
       campaigns = [];
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadGuilds() {
+    try {
+      const data = await listGuilds();
+      guilds = data.guilds || [];
+    } catch {
+      // Fall back to the free-text Guild ID input when the guild list is
+      // unavailable (e.g. no live Discord session in this deploy).
+      guilds = [];
+    }
+  }
+
+  async function activate(campaign) {
+    activatingId = campaign.id;
+    error = '';
+    success = '';
+    try {
+      await setActiveCampaign(campaign.id);
+      success = `Switched active campaign to ${campaign.name}.`;
+      await onactivechange();
+    } catch (e) {
+      error = e.message || 'Failed to switch active campaign.';
+    } finally {
+      activatingId = '';
     }
   }
 
@@ -69,13 +98,22 @@
       </label>
       <label>
         <span class="label-row">
-          <span>Guild ID</span>
+          <span>{guilds.length > 0 ? 'Server' : 'Guild ID'}</span>
           <span class="info-wrap">
             <button type="button" class="info-btn" aria-label="What is a Guild ID?">?</button>
             <span class="tooltip" role="tooltip">Your Discord server ID. To copy it: enable Developer Mode in Discord (User Settings &rarr; Advanced &rarr; Developer Mode), then right-click your server icon and choose 'Copy Server ID'.</span>
           </span>
         </span>
-        <input type="text" bind:value={guildId} placeholder="local-guild" />
+        {#if guilds.length > 0}
+          <select bind:value={guildId}>
+            <option value="" disabled>Select a server…</option>
+            {#each guilds as guild}
+              <option value={guild.id}>{guild.name} ({guild.id})</option>
+            {/each}
+          </select>
+        {:else}
+          <input type="text" bind:value={guildId} placeholder="local-guild" />
+        {/if}
       </label>
       <button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create Campaign'}</button>
     </form>
@@ -98,6 +136,15 @@
                 <span>{campaign.status}</span>
                 {#if campaign.id === activeCampaignId}
                   <span>Active</span>
+                {:else if campaign.status !== 'archived'}
+                  <button
+                    type="button"
+                    class="set-active-btn"
+                    disabled={activatingId === campaign.id}
+                    onclick={() => activate(campaign)}
+                  >
+                    {activatingId === campaign.id ? 'Switching…' : 'Set active'}
+                  </button>
                 {/if}
               </div>
             </li>
@@ -151,7 +198,8 @@
     font-size: 0.875rem;
   }
 
-  input {
+  input,
+  select {
     box-sizing: border-box;
     width: 100%;
     padding: 0.65rem 0.75rem;
@@ -176,6 +224,23 @@
   button:disabled {
     cursor: not-allowed;
     opacity: 0.65;
+  }
+
+  .set-active-btn {
+    width: auto;
+    min-height: 0;
+    margin-top: 0.35rem;
+    padding: 0.3rem 0.6rem;
+    background: transparent;
+    color: #e94560;
+    border: 1px solid #e94560;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .set-active-btn:hover:not(:disabled) {
+    background: #e94560;
+    color: #ffffff;
   }
 
   ul {

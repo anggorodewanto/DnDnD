@@ -221,7 +221,11 @@
     {:else if currentView === 'combat'}
       <CombatManager {campaignId} onopenturnbuilder={onOpenTurnBuilder} />
     {:else if currentView === 'campaigns'}
-      <CampaignsPage activeCampaignId={campaignId} oncreated={refreshCurrentCampaign} />
+      <CampaignsPage
+        activeCampaignId={campaignId}
+        oncreated={refreshCurrentCampaign}
+        onactivechange={refreshCurrentCampaign}
+      />
     {:else if currentView === 'list'}
       <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
     {:else if currentView === 'editor'}

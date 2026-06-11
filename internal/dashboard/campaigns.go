@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -20,6 +21,7 @@ import (
 type CampaignStore interface {
 	CreateCampaign(ctx context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error)
 	ListCampaigns(ctx context.Context) ([]refdata.Campaign, error)
+	SetActiveCampaign(ctx context.Context, arg refdata.SetActiveCampaignParams) error
 }
 
 type CampaignsHandler struct {
@@ -131,6 +133,92 @@ func (h *CampaignsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeCampaignJSON(w, http.StatusCreated, campaignToDTO(created))
 }
 
+type setActiveCampaignResponse struct {
+	CampaignID string `json:"campaign_id"`
+	Status     string `json:"status"`
+}
+
+// SetActive records the DM's explicit active-campaign choice (T20 / Finding 12)
+// so the dashboard stops silently following the most-recently-created campaign.
+// The target must be owned by the authenticated DM and not archived.
+func (h *CampaignsHandler) SetActive(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h.store == nil {
+		http.Error(w, "campaign store unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	campaignID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid campaign id", http.StatusBadRequest)
+		return
+	}
+
+	campaigns, err := h.store.ListCampaigns(r.Context())
+	if err != nil {
+		h.logger.Error("list campaigns failed", "error", err)
+		http.Error(w, "failed to set active campaign", http.StatusInternalServerError)
+		return
+	}
+
+	var target *refdata.Campaign
+	for i := range campaigns {
+		if campaigns[i].ID == campaignID && campaigns[i].DmUserID == userID {
+			target = &campaigns[i]
+			break
+		}
+	}
+	if target == nil {
+		http.Error(w, "campaign not found", http.StatusNotFound)
+		return
+	}
+	if target.Status == "archived" {
+		http.Error(w, "cannot activate an archived campaign", http.StatusConflict)
+		return
+	}
+
+	if err := h.store.SetActiveCampaign(r.Context(), refdata.SetActiveCampaignParams{
+		DmUserID:         userID,
+		ActiveCampaignID: campaignID,
+	}); err != nil {
+		h.logger.Error("set active campaign failed", "error", err)
+		http.Error(w, "failed to set active campaign", http.StatusInternalServerError)
+		return
+	}
+
+	writeCampaignJSON(w, http.StatusOK, setActiveCampaignResponse{
+		CampaignID: campaignID.String(),
+		Status:     target.Status,
+	})
+}
+
+// ResolveActiveCampaign picks the DM's active campaign from the full campaign
+// list (as returned by ListCampaigns, ordered created_at DESC). It honors the
+// DM's explicit selection (preferred) when that campaign is still owned by the
+// DM and not archived; otherwise it falls back to the most-recently-created
+// non-archived campaign the DM owns (the historical heuristic). Returns
+// ("", "") when the DM owns no eligible campaign. (T20 / Finding 12)
+func ResolveActiveCampaign(campaigns []refdata.Campaign, dmUserID string, preferred uuid.UUID) (id, status string) {
+	if preferred != uuid.Nil {
+		for _, c := range campaigns {
+			if c.ID == preferred && c.DmUserID == dmUserID && c.Status != "archived" {
+				return c.ID.String(), c.Status
+			}
+		}
+	}
+	for _, c := range campaigns {
+		if c.DmUserID != dmUserID || c.Status == "archived" {
+			continue
+		}
+		return c.ID.String(), c.Status
+	}
+	return "", ""
+}
+
 func campaignToDTO(c refdata.Campaign) campaignDTO {
 	return campaignDTO{
 		ID:        c.ID.String(),
@@ -154,5 +242,6 @@ func RegisterCampaignsRoutes(r chi.Router, h *CampaignsHandler, authMiddleware f
 		r.Use(authMiddleware)
 		r.Get("/api/campaigns", h.List)
 		r.Post("/api/campaigns", h.Create)
+		r.Post("/api/campaigns/{id}/set-active", h.SetActive)
 	})
 }
