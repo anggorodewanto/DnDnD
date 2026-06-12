@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **32 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **36 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -64,10 +64,10 @@ single PR when each is trivial (noted per group).
 - [x] **T30** · 🟡 · Quickstart drift: Go `1.25.7`, real boot line ("server starting") · _Onboarding_ → `ab8db8d`
 - [x] **T31** · 🟡 · Passthrough-ownership callout + warning log when passthrough creates campaign rows · _Onboarding_ → `e44a754`
 - [x] **T32** · 🟡 · README/fly polish: `make run` env prereqs, mention `make local-up`, rename `fly.toml` app · _Onboarding_ → `a7d60ab`
-- [ ] **T33** · 🟡 · Map editor: disable creation without a campaign + map the 400 to "create/select a campaign first" · _Campaign setup_
-- [ ] **T34** · 🟡 · Next-step links in `/setup` success + dashboard Home (dashboard URL, "next: build a map") · _Campaign setup_
-- [ ] **T35** · 🟡 · Align `/setup` gate (Manage Channels exposure vs Administrator requirement) · _Campaign setup_
-- [ ] **T36** · 🟡 · Stat-block library: filter by campaign, surface load errors, reword the empty state · _Campaign setup_
+- [x] **T33** · 🟡 · Map editor: disable creation without a campaign + map the 400 to "create/select a campaign first" · _Campaign setup_ → `7ba4159`
+- [x] **T34** · 🟡 · Next-step links in `/setup` success + dashboard Home (dashboard URL, "next: build a map") · _Campaign setup_ → `645ded0`
+- [x] **T35** · 🟡 · Align `/setup` gate (Manage Channels exposure vs Administrator requirement) · _Campaign setup_ → `3401438`
+- [x] **T36** · 🟡 · Stat-block library: filter by campaign, surface load errors, reword the empty state · _Campaign setup_ → `536f693`
 - [ ] **T37** · 🟡 · Submit errors: scroll into view / inline near button; humanize raw body text · _Player onboarding_
 - [ ] **T38** · 🟡 · Unmet-requirements checklist next to Submit; gate Review on rolled scores · _Player onboarding_
 - [ ] **T39** · 🟡 · Distinguish spell load-error (with retry) from genuinely empty; skip Spells step for non-casters · _Player onboarding_
