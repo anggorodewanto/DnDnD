@@ -103,6 +103,28 @@ func TestHandler_CreateMap_InvalidCampaignID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// --- POST /api/maps with empty campaign_id returns an actionable 400 ---
+
+func TestHandler_CreateMap_MissingCampaignID(t *testing.T) {
+	_, r := newTestRouter(&mockStore{})
+
+	body := map[string]any{
+		"campaign_id": "",
+		"name":        "Test Map",
+		"width":       10,
+		"height":      10,
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/maps", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "create or select a campaign first")
+}
+
 // --- TDD Cycle 4: POST /api/maps with validation error (bad dimensions) ---
 
 func TestHandler_CreateMap_ValidationError(t *testing.T) {

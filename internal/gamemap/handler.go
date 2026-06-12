@@ -192,6 +192,11 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.CampaignID == "" {
+		http.Error(w, "create or select a campaign first", http.StatusBadRequest)
+		return
+	}
+
 	campaignID, err := uuid.Parse(req.CampaignID)
 	if err != nil {
 		http.Error(w, "invalid campaign_id", http.StatusBadRequest)

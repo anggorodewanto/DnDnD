@@ -42,7 +42,7 @@
 
 <div class="map-list">
   <div class="actions">
-    <button class="create-btn" onclick={oncreate}>+ New Map</button>
+    <button class="create-btn" onclick={oncreate} disabled={!campaignId} title={!campaignId ? 'Create or select a campaign first' : ''}>+ New Map</button>
   </div>
 
   {#if loading}
@@ -88,8 +88,13 @@
     font-size: 1rem;
   }
 
-  .create-btn:hover {
+  .create-btn:hover:not(:disabled) {
     background: #c73852;
+  }
+
+  .create-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .grid {
