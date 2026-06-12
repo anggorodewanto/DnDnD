@@ -65,7 +65,9 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
 - **Status:** pending
 - **Pre-conditions:** Aria's turn; one or more DM creatures within
   range of a save-vs-DEX spell (e.g. Burning Hands).
-- **Commands:** `/cast spell:burning-hands target:cone-from-here`
+- **Commands:** `/cast spell:burning-hands target:G5` (the `target` option
+  takes a grid coordinate or creature short-ID to aim the cone — see
+  `internal/discord/commands.go`)
 - **DM actions:** Approve target list. Accept default DC = 8 + prof + spellcasting mod.
 - **Expect:**
   - `#combat-log` posts: "Aria casts Burning Hands. DC <n> Dexterity save."
@@ -143,7 +145,9 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
 - **Status:** pending
 - **Pre-conditions:** Two approved players in the campaign; player A
   holds an item.
-- **Commands (as player A):** `/give item:potion-of-healing to:@PlayerB`
+- **Commands (as player A):** `/give item:potion-of-healing target:Bram`
+  (the recipient option is `target`, taking a creature short-ID or name —
+  @mentions are not supported)
 - **Expect:**
   - Bot prompts player B in DM to accept.
   - On accept: item moves from A's `characters.inventory` to B's.
