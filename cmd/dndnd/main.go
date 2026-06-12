@@ -1779,6 +1779,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// action (combat or exploration) lands in #dm-queue and the
 			// player can cancel it before the DM resolves.
 			discordHandlerSet.action.SetNotifier(dmQueueNotifier)
+			// T46: wire the #dm-queue [✅ Resolve] button → resolve-modal
+			// handler so a Discord-only DM can resolve queue items (whisper
+			// reply, skill-check narration, or freeform outcome) without
+			// opening the dashboard.
+			cmdRouter.SetDMQueueResolveHandler(discord.NewDMQueueResolveHandler(discordSession, dmQueueNotifier))
 			if rawDG != nil {
 				// SR-003: wire HandleGuildCreate (spec line 179, dynamic
 				// guild-join command registration) + HandleGuildMemberAdd

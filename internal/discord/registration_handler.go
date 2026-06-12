@@ -463,28 +463,33 @@ func StatusCheckResponse(pc *refdata.PlayerCharacter, characterName string) stri
 // NoRegistrationMessage is returned when a player runs a game command without registering.
 const NoRegistrationMessage = "❌ No character found. Use `/create-character`, `/import`, or `/register` to get started."
 
-// textInputModal builds a modal response with a single required short text
-// input. customID identifies the modal on submit; inputID identifies the field.
-func textInputModal(customID, title, inputID, label, placeholder string) *discordgo.InteractionResponse {
+// textInputModalFrom wraps a caller-built TextInput in a single-row modal
+// response. customID identifies the modal on submit. Callers set the input's
+// style/length so each modal keeps its own field intent.
+func textInputModalFrom(customID, title string, input discordgo.TextInput) *discordgo.InteractionResponse {
 	return &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
 			CustomID: customID,
 			Title:    title,
 			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{Components: []discordgo.MessageComponent{
-					discordgo.TextInput{
-						CustomID:    inputID,
-						Label:       label,
-						Style:       discordgo.TextInputShort,
-						Placeholder: placeholder,
-						Required:    true,
-						MaxLength:   200,
-					},
-				}},
+				discordgo.ActionsRow{Components: []discordgo.MessageComponent{input}},
 			},
 		},
 	}
+}
+
+// textInputModal builds a modal response with a single required short text
+// input. customID identifies the modal on submit; inputID identifies the field.
+func textInputModal(customID, title, inputID, label, placeholder string) *discordgo.InteractionResponse {
+	return textInputModalFrom(customID, title, discordgo.TextInput{
+		CustomID:    inputID,
+		Label:       label,
+		Style:       discordgo.TextInputShort,
+		Placeholder: placeholder,
+		Required:    true,
+		MaxLength:   200,
+	})
 }
 
 // modalTextValue extracts the value of a named text input from a modal-submit

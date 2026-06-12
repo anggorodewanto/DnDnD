@@ -6,7 +6,38 @@ import "github.com/bwmarrin/discordgo"
 // Mirrors the methods of internal/discord.Session we need.
 type sessionAPI interface {
 	ChannelMessageSend(channelID, content string) (*discordgo.Message, error)
+	ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error)
 	ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error)
+}
+
+// ResolveButtonCustomIDPrefix is the custom-ID prefix carried by the [✅
+// Resolve] button attached to every #dm-queue message. The itemID follows
+// the prefix. The discord package routes clicks with this prefix to the
+// resolve-modal flow. Defined here (not in discord) because discord imports
+// dmqueue, not the reverse.
+const ResolveButtonCustomIDPrefix = "dmqueue_resolve:"
+
+// ComponentSender is an optional Sender capability: posting a message with
+// Discord message components (buttons). DefaultNotifier.Post uses it when the
+// concrete sender implements it, falling back to plain Send otherwise — so
+// existing Sender fakes that don't need buttons keep working unchanged.
+type ComponentSender interface {
+	SendWithComponents(channelID, content string, components []discordgo.MessageComponent) (messageID string, err error)
+}
+
+// resolveButtonComponents builds the single-row [✅ Resolve] action attached
+// to a dm-queue message, encoding the itemID in the button custom ID.
+func resolveButtonComponents(itemID string) []discordgo.MessageComponent {
+	return []discordgo.MessageComponent{
+		discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Resolve",
+				Style:    discordgo.SuccessButton,
+				CustomID: ResolveButtonCustomIDPrefix + itemID,
+				Emoji:    &discordgo.ComponentEmoji{Name: "✅"},
+			},
+		}},
+	}
 }
 
 // SessionSender adapts a discordgo.Session (or any sessionAPI) to the
@@ -59,6 +90,21 @@ func (s *SessionSender) Send(channelID, content string) (string, error) {
 		lastID = msg.ID
 	}
 	return lastID, nil
+}
+
+// SendWithComponents posts a message carrying Discord components (buttons)
+// via ChannelMessageSendComplex and returns the created message's ID. Unlike
+// Send it does not split: dm-queue messages are a single short line, well
+// under the 2000-char limit.
+func (s *SessionSender) SendWithComponents(channelID, content string, components []discordgo.MessageComponent) (string, error) {
+	msg, err := s.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content:    content,
+		Components: components,
+	})
+	if err != nil {
+		return "", err
+	}
+	return msg.ID, nil
 }
 
 // lastNewline returns the index of the last newline in s, or -1.

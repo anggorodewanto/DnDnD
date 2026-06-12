@@ -9,6 +9,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/errorlog"
 )
 
@@ -40,10 +41,11 @@ type CommandRouter struct {
 	flyHandler  *FlyHandler
 	doneHandler *DoneHandler
 	restHandler *RestHandler
-	lootHandler *LootHandler
-	shopHandler *ShopHandler
-	asiHandler  *ASIHandler
-	promptStore *ReactionPromptStore
+	lootHandler           *LootHandler
+	shopHandler           *ShopHandler
+	dmQueueResolveHandler *DMQueueResolveHandler
+	asiHandler            *ASIHandler
+	promptStore           *ReactionPromptStore
 	// Registration handlers, wired only when regDeps is provided. They back
 	// the /register onboarding chooser's button and modal-submit routing.
 	registerHandler   *RegisterHandler
@@ -147,6 +149,13 @@ func (r *CommandRouter) SetLootHandler(h *LootHandler) {
 // callbacks. There is no shop slash command, so it is wired for components only.
 func (r *CommandRouter) SetShopHandler(h *ShopHandler) {
 	r.shopHandler = h
+}
+
+// SetDMQueueResolveHandler registers the handler that turns #dm-queue
+// [✅ Resolve] button clicks into a resolve modal + dispatch (T46). Wired for
+// component + modal-submit callbacks only; there is no slash command.
+func (r *CommandRouter) SetDMQueueResolveHandler(h *DMQueueResolveHandler) {
+	r.dmQueueResolveHandler = h
 }
 
 // SetAttuneHandler registers the AttuneHandler for the /attune command.
@@ -611,6 +620,13 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 		}
 	}
 
+	// T46: #dm-queue [✅ Resolve] button → open the outcome modal.
+	if r.dmQueueResolveHandler != nil && strings.HasPrefix(customID, dmqueue.ResolveButtonCustomIDPrefix) {
+		itemID := strings.TrimPrefix(customID, dmqueue.ResolveButtonCustomIDPrefix)
+		r.dmQueueResolveHandler.ShowResolveModal(interaction, itemID)
+		return
+	}
+
 	// ASI/Feat button and select menu callbacks
 	if r.asiHandler != nil {
 		// med-36 / Phase 89: feat select-menu. Check first because the
@@ -669,6 +685,14 @@ func (r *CommandRouter) handleModalSubmit(interaction *discordgo.Interaction) {
 	if !ok {
 		return
 	}
+
+	// T46: #dm-queue resolve modal submit → resolve the item by kind.
+	if r.dmQueueResolveHandler != nil && strings.HasPrefix(data.CustomID, dmQueueResolveModalPrefix) {
+		itemID := strings.TrimPrefix(data.CustomID, dmQueueResolveModalPrefix)
+		r.dmQueueResolveHandler.HandleResolveSubmit(interaction, itemID)
+		return
+	}
+
 	switch data.CustomID {
 	case regModalClaim:
 		if r.registerHandler != nil {

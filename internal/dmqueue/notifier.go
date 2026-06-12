@@ -191,7 +191,16 @@ func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 		return "", err
 	}
 
-	msgID, err := n.sender.Send(channelID, content)
+	// Attach a [✅ Resolve] button when the sender supports components, so a
+	// Discord-only DM can resolve the item without the dashboard. Senders
+	// without the capability fall back to a plain text message.
+	var msgID string
+	var err error
+	if cs, ok := n.sender.(ComponentSender); ok {
+		msgID, err = cs.SendWithComponents(channelID, content, resolveButtonComponents(itemID))
+	} else {
+		msgID, err = n.sender.Send(channelID, content)
+	}
 	if err != nil {
 		return itemID, err
 	}

@@ -17,6 +17,20 @@ type captureSession struct {
 	editedMsgID   string
 	editedContent string
 	editErr       error
+
+	complexChannel    string
+	complexContent    string
+	complexComponents []discordgo.MessageComponent
+}
+
+func (c *captureSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+	c.complexChannel = channelID
+	c.complexContent = data.Content
+	c.complexComponents = data.Components
+	if c.sendErr != nil {
+		return nil, c.sendErr
+	}
+	return &discordgo.Message{ID: c.sentMsgID}, nil
 }
 
 func (c *captureSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
