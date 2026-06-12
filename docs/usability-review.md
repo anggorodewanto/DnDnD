@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **46 / 53**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **51 / 53**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -80,11 +80,11 @@ single PR when each is trivial (noted per group).
 - [x] **T46** · 🟡 · Gated `/check` echoes the raw roll; add resolve buttons to dm-queue messages · _Live play_ → `0675f88` (roll echo) + `0cccf50` (resolve button + modal)
 
 #### Tier 9 — Documentation drift — _batchable into one PR_
-- [ ] **T47** · 🟡 · Fix `#dm-private` → `#dm-queue` in quickstart · _Doc drift_
-- [ ] **T48** · 🟡 · Refresh stale quickstart UI walkthrough (Maps → + New Map, Start Combat, no drag-to-place) · _Doc drift_
-- [ ] **T49** · 🟡 · Fix checklist syntax the bot rejects (`/cast` target, `/give` target) · _Doc drift_
-- [ ] **T50** · 🟡 · `usage.html` option drift (`/action args`, `/check target`, `/prepare subclass`); consider a generator · _Doc drift_
-- [ ] **T51** · 🟡 · Correct `usage.html` `/status` claim (combat-state only) · _Doc drift_
+- [x] **T47** · 🟡 · Fix `#dm-private` → `#dm-queue` in quickstart · _Doc drift_ → `ad05498`
+- [x] **T48** · 🟡 · Refresh stale quickstart UI walkthrough (Maps → + New Map, Start Combat, no drag-to-place) · _Doc drift_ → `a7ea58c`
+- [x] **T49** · 🟡 · Fix checklist syntax the bot rejects (`/cast` target, `/give` target) · _Doc drift_ → `c882221`
+- [x] **T50** · 🟡 · `usage.html` option drift (`/action args`, `/check target`, `/prepare subclass`); consider a generator · _Doc drift_ → `5a0a0b1`
+- [x] **T51** · 🟡 · Correct `usage.html` `/status` claim (combat-state only) · _Doc drift_ → `1df35d8`
 
 #### Tier 10 — Validation gate
 - [ ] **T52** · 🔵 · Run `docs/playtest-checklist.md` end-to-end and record a transcript (do **after** T49) · _Recommended order #7_
