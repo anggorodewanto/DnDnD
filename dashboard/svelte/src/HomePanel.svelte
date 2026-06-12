@@ -72,7 +72,8 @@
   {:else if !hasCampaign()}
     <div class="empty">
       <h2>No active campaign</h2>
-      <p>Create or join a campaign to see your DM home view.</p>
+      <p>Run <code>/setup</code> in your Discord server to create a campaign and its channel structure, then come back here.</p>
+      <p class="muted">Next steps: build a map, then create an encounter to start combat.</p>
     </div>
   {:else}
     <div class="cards">

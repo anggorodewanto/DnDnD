@@ -513,6 +513,55 @@ func TestHandleSetupCommand_AutoCreatedCampaign(t *testing.T) {
 	assert.Contains(t, *editContent, "Campaign created")
 }
 
+// T34: the /setup success message should point the DM at the dashboard so
+// they know the next step (build a map) and where to do it.
+func TestHandleSetupCommand_IncludesDashboardNextStep(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		return &discordgo.Channel{ID: fmt.Sprintf("chan-%d", channelIDCounter), Name: data.Name, Type: data.Type}, nil
+	}
+	editContent := setupMockResponder(mock)
+
+	campaignLookup := &mockCampaignLookup{}
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup).WithBaseURL("https://play.example")
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user-1"}},
+	})
+
+	assert.Contains(t, *editContent, "https://play.example/dashboard/", "should link to the dashboard")
+	assert.Contains(t, *editContent, "build a map", "should name the next step")
+}
+
+// T34: with no BASE_URL configured, the message must not render a broken
+// link — it should still name the next step without a URL.
+func TestHandleSetupCommand_NextStepWithoutBaseURL(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		return &discordgo.Channel{ID: "c", Name: data.Name, Type: data.Type}, nil
+	}
+	editContent := setupMockResponder(mock)
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, &mockCampaignLookup{})
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user-1"}},
+	})
+
+	assert.Contains(t, *editContent, "build a map")
+	assert.NotContains(t, *editContent, "http")
+}
+
 func TestHandleSetupCommand_SetupError(t *testing.T) {
 	mock := newTestMock()
 	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {

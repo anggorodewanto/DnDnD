@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -207,11 +208,21 @@ type CampaignLookup interface {
 type SetupHandler struct {
 	bot            *Bot
 	campaignLookup CampaignLookup
+	// baseURL is the operator-configured public base (BASE_URL) used to build
+	// the dashboard link in the success message. Empty disables the link.
+	baseURL string
 }
 
 // NewSetupHandler creates a new SetupHandler.
 func NewSetupHandler(bot *Bot, campaignLookup CampaignLookup) *SetupHandler {
 	return &SetupHandler{bot: bot, campaignLookup: campaignLookup}
+}
+
+// WithBaseURL sets the public base URL used to build the dashboard next-step
+// link in the /setup success message and returns the handler for chaining.
+func (h *SetupHandler) WithBaseURL(baseURL string) *SetupHandler {
+	h.baseURL = baseURL
+	return h
 }
 
 // Handle processes a /setup interaction. It defers the response, creates channels, and edits the response.
@@ -260,7 +271,18 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 	if info.AutoCreated {
 		prefix = "Campaign created and channel structure set up!"
 	}
-	h.editResponse(interaction, fmt.Sprintf("%s %d channels set up.", prefix, len(channelIDs)))
+	h.editResponse(interaction, fmt.Sprintf("%s %d channels set up.\n\n%s", prefix, len(channelIDs), h.nextStep()))
+}
+
+// nextStep returns the post-/setup guidance shown to the DM. When a base URL
+// is configured it links straight to the dashboard; otherwise it names the
+// step without rendering a broken link.
+func (h *SetupHandler) nextStep() string {
+	if h.baseURL == "" {
+		return "Next: open the dashboard to build a map, then create an encounter."
+	}
+	dashboard := strings.TrimRight(h.baseURL, "/") + "/dashboard/"
+	return fmt.Sprintf("Next: open the dashboard to build a map — %s", dashboard)
 }
 
 // setupInvokerIsAdmin returns true when the invoker has the Administrator
