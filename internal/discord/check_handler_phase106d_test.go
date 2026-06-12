@@ -203,12 +203,42 @@ func TestCheckHandler_Gating_NormalRollWithDCIsGated(t *testing.T) {
 		t.Errorf("total metadata missing")
 	}
 
-	// Player must NOT see numeric result in the gated ephemeral response.
+	// Player must NOT see the pass/fail outcome framing in the gated response
+	// (that is the DM's to narrate); the raw roll itself is echoed (T46).
 	if strings.Contains(responded, "Check:") {
-		t.Errorf("gated response should not include numeric result, got: %s", responded)
+		t.Errorf("gated response should not include outcome framing, got: %s", responded)
 	}
 	if !strings.Contains(strings.ToLower(responded), "dm") {
 		t.Errorf("gated response should mention DM, got: %s", responded)
+	}
+}
+
+// T46: a gated /check still tells the player what they rolled (their die is
+// theirs to see), while withholding the pass/fail outcome for the DM.
+func TestCheckHandler_Gating_EchoesPlayerRoll(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, rec := setupCheckHandlerWithRoll(sess, 12)
+	h.Handle(makeCheckInteractionWithDC("perception", 15, "chan-99", "user1"))
+
+	if len(rec.posted) != 1 {
+		t.Fatalf("expected gated dm-queue post, got %d", len(rec.posted))
+	}
+	// Aria's perception total at d20=12: 12 + WIS(4) + prof(3) = 19.
+	if !strings.Contains(responded, "19") {
+		t.Errorf("gated response should echo the player's roll total (19), got: %s", responded)
+	}
+	if !strings.Contains(strings.ToLower(responded), "pending") {
+		t.Errorf("gated response should signal outcome pending, got: %s", responded)
+	}
+	// Still must not reveal the pass/fail framing.
+	if strings.Contains(responded, "Check:") {
+		t.Errorf("gated response should not reveal outcome framing, got: %s", responded)
 	}
 }
 

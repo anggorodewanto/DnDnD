@@ -370,7 +370,9 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	// outcome rule and post to the queue when gated.
 	if !result.AutoFail && h.shouldGate(result, dc, hasDC) {
 		if h.postSkillCheckNarration(ctx, interaction, campaign, char, result) {
-			respondEphemeral(h.session, interaction, "🎲 Check rolled — result sent to the DM for narration.")
+			respondEphemeral(h.session, interaction, fmt.Sprintf(
+				"🎲 You rolled **%d** (%s) — outcome pending DM narration.",
+				result.Total, result.D20Result.Breakdown))
 			h.logRollIfWanted(char, result)
 			return
 		}
