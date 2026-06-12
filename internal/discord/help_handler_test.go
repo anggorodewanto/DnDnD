@@ -73,7 +73,7 @@ func TestHelpHandler_AttackTopic_ReturnsAttackHelp(t *testing.T) {
 		t.Errorf("expected ephemeral flag, got %d", flags)
 	}
 
-	for _, want := range []string{"/attack — Attack a Target", "--gwm", "Extra Attack", "Divine Smite prompt"} {
+	for _, want := range []string{"/attack — Attack a Target", "gwm:true", "Extra Attack", "Divine Smite prompt"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected attack help to contain %q", want)
 		}
@@ -188,7 +188,7 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 		{"rogue", []string{"Rogue Abilities", "Cunning Action", "Sneak Attack", "Uncanny Dodge", "Evasion"}},
 		{"cleric", []string{"Cleric Abilities", "Channel Divinity", "turn-undead", "Domain spells"}},
 		{"paladin", []string{"Paladin Abilities", "Divine Smite", "Lay on Hands", "Aura of Protection"}},
-		{"metamagic", []string{"Metamagic", "Sorcery Point", "--careful", "--subtle", "--twinned", "font-of-magic"}},
+		{"metamagic", []string{"Metamagic", "Sorcery Point", "careful:true", "subtle:true", "twin:true", "font-of-magic"}},
 		{"action", []string{"/action — Actions on Your Turn", "disengage", "dash", "dodge", "grapple", "Freeform actions"}},
 		{"register", []string{"Get a Character", "Claim Existing", "Build New", "Import from D&D Beyond"}},
 	}
@@ -203,6 +203,37 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestHelpHandler_NoStaleCommandSyntax guards against in-Discord help drift:
+// help examples must use Discord's option:value syntax (not CLI --flags) and
+// must not advertise commands/subcommands the bot does not register (T44).
+func TestHelpHandler_NoStaleCommandSyntax(t *testing.T) {
+	topics := []string{
+		"attack", "action", "ki", "rogue", "cleric", "paladin", "metamagic",
+		"cast", "move", "check", "save", "rest", "equip", "inventory",
+		"use", "give", "loot", "attune", "prepare", "retire", "register",
+		"import", "create-character", "character", "recap", "distance",
+		"whisper", "status", "done", "deathsave", "command", "reaction",
+		"interact", "shove", "bonus", "fly", "undo", "help", "setup",
+	}
+
+	// Substrings that must never appear: CLI --flag style and untypeable
+	// commands. Discord renders options as name:value, never --name.
+	forbidden := []string{
+		"--", // any double-dash CLI flag is drift; options use name:value
+		"/reaction uncanny-dodge", // not a registered subcommand (declare|cancel|cancel-all)
+		"--twinned",               // registered option is twin:true
+	}
+
+	for _, topic := range topics {
+		content, _ := runHelpCommand(topic)
+		for _, bad := range forbidden {
+			if strings.Contains(content, bad) {
+				t.Errorf("topic %q contains stale syntax %q", topic, bad)
+			}
+		}
 	}
 }
 

@@ -98,13 +98,13 @@ Usage:
   /attack [target] improvised         Improvised weapon (1d4 bludgeoning, no proficiency)
   /attack [target] unarmed            Unarmed strike (1 + STR mod bludgeoning)
 
-Flags:
-  --twohanded         Use versatile weapon's two-handed damage (off-hand must be free)
-  --gwm               Great Weapon Master: -5 to hit, +10 damage (heavy melee only)
-  --sharpshooter      Sharpshooter: -5 to hit, +10 damage (ranged only)
-  --reckless          Reckless Attack: advantage on melee STR attacks, enemies get
+Options:
+  twohanded:true      Use versatile weapon's two-handed damage (off-hand must be free)
+  gwm:true            Great Weapon Master: -5 to hit, +10 damage (heavy melee only)
+  sharpshooter:true   Sharpshooter: -5 to hit, +10 damage (ranged only)
+  reckless:true       Reckless Attack: advantage on melee STR attacks, enemies get
                       advantage against you until next turn (Barbarian only, first attack)
-  --thrown             Throw a weapon with the thrown property (or improvised, range 20/60)
+  thrown:true         Throw a weapon with the thrown property (or improvised, range 20/60)
 
 Extra Attack:
   Each /attack resolves one swing. Your remaining attacks are shown after each hit.
@@ -117,7 +117,7 @@ Two-Weapon Fighting:
 Improvised Weapons:
   Grab an object from the environment — no inventory needed.
   1d4 + STR bludgeoning, no proficiency bonus (Tavern Brawler grants proficiency).
-  Throw with --thrown (range 20/60). DM can adjust damage type/amount after the fact.
+  Throw with thrown:true (range 20/60). DM can adjust damage type/amount after the fact.
 
 Tips:
 • Advantage/disadvantage is auto-detected from conditions, position, and lighting
@@ -188,9 +188,8 @@ const helpRogue = "\U0001F5E1\uFE0F Rogue Abilities\n" +
 	"  Expertise (passive):\n" +
 	"    Double proficiency on selected skills \u2014 auto-applied to all checks\n" +
 	"\n" +
-	"  Uncanny Dodge (lvl 5+, reaction):\n" +
-	"    /reaction uncanny-dodge             Halve damage from one attack you can see\n" +
-	"    (Prompted automatically when hit by an attack)\n" +
+	"  Uncanny Dodge (lvl 5+, reaction, prompted automatically):\n" +
+	"    Halve damage from one attack you can see — confirm when prompted on being hit\n" +
 	"\n" +
 	"  Evasion (lvl 7+, passive):\n" +
 	"    DEX saves: success = no damage, fail = half damage (auto-applied)"
@@ -207,7 +206,7 @@ const helpCleric = "\u271D\uFE0F Cleric Abilities\n" +
 	"  Spellcasting:\n" +
 	"    /cast [spell] [target]       Cast a prepared spell\n" +
 	"    /prepare                     Change prepared spells (after long rest)\n" +
-	"    /cast [spell] --ritual       Ritual cast without expending a slot (out of combat)\n" +
+	"    /cast [spell] ritual:true    Ritual cast without expending a slot (out of combat)\n" +
 	"\n" +
 	"  Domain spells: always prepared, don't count against your limit (shown separately in /prepare)\n" +
 	"\n" +
@@ -238,22 +237,22 @@ const helpPaladin = "\u2694\uFE0F Paladin Abilities\n" +
 
 const helpMetamagic = "\u26A1 Metamagic \u2014 Sorcery Point Options\n" +
 	"\n" +
-	"Apply Metamagic by adding a flag to /cast:\n" +
+	"Apply Metamagic by adding an option to /cast:\n" +
 	"\n" +
-	"  --careful     (1 SP)  Allies in AoE auto-succeed on save\n" +
-	"  --distant     (1 SP)  Double spell range (touch \u2192 30ft)\n" +
-	"  --empowered   (1 SP)  Reroll up to CHA mod damage dice (combinable)\n" +
-	"  --extended    (1 SP)  Double spell duration (max 24h)\n" +
-	"  --heightened  (3 SP)  One target has disadvantage on first save\n" +
-	"  --quickened   (2 SP)  Cast action spell as bonus action\n" +
-	"  --subtle      (1 SP)  No V/S components (bypasses Silence & Counterspell)\n" +
-	"  --twinned     (Lvl SP) Second target for single-target spell (1 SP for cantrips)\n" +
+	"  careful:true     (1 SP)  Allies in AoE auto-succeed on save\n" +
+	"  distant:true     (1 SP)  Double spell range (touch \u2192 30ft)\n" +
+	"  empowered:true   (1 SP)  Reroll up to CHA mod damage dice (combinable)\n" +
+	"  extended:true    (1 SP)  Double spell duration (max 24h)\n" +
+	"  heightened:true  (3 SP)  One target has disadvantage on first save\n" +
+	"  quickened:true   (2 SP)  Cast action spell as bonus action\n" +
+	"  subtle:true      (1 SP)  No V/S components (bypasses Silence & Counterspell)\n" +
+	"  twin:true        (Lvl SP) Second target for single-target spell (1 SP for cantrips)\n" +
 	"\n" +
-	"Only one option per cast (except --empowered, which stacks).\n" +
+	"Only one option per cast (except empowered, which stacks).\n" +
 	"\n" +
 	"Convert resources:\n" +
-	"  /bonus font-of-magic convert --slot N   Slot \u2192 SP (gain = slot level)\n" +
-	"  /bonus font-of-magic create --level N   SP \u2192 Slot (cost: 1st=2, 2nd=3, 3rd=5, 4th=6, 5th=7)\n" +
+	"  /bonus font-of-magic convert N   Convert a level-N slot \u2192 N sorcery points\n" +
+	"  /bonus font-of-magic create N    Create a level-N slot from SP (cost: 1st=2, 2nd=3, 3rd=5, 4th=6, 5th=7)\n" +
 	"\n" +
 	"Current SP: use /status to check    Recharge: long rest"
 
@@ -263,10 +262,10 @@ const helpCast = `/cast — Cast a Spell
 
 Usage:
   /cast [spell] [target]              Cast a spell at a target
-  /cast [spell] --level N             Upcast at a higher spell slot level
-  /cast [spell] --ritual              Ritual cast without expending a slot (out of combat)
+  /cast [spell] level:N               Upcast at a higher spell slot level
+  /cast [spell] ritual:true           Ritual cast without expending a slot (out of combat)
 
-Metamagic flags (Sorcerer only): --subtle, --twin, --careful, --heightened, --distant, --quickened, --empowered
+Metamagic options (Sorcerer only): subtle:true, twin:true, careful:true, heightened:true, distant:true, quickened:true, empowered:true
 Use /help metamagic for full metamagic details.`
 
 const helpMove = `/move — Move Your Character
@@ -281,10 +280,10 @@ const helpCheck = `/check — Make an Ability or Skill Check
 
 Usage:
   /check [skill]                      Roll a skill or ability check
-  /check [skill] --adv                Roll with advantage
-  /check [skill] --disadv             Roll with disadvantage
-  /check [skill] --target [id]        Check against a specific creature
-  /check [skill] --dc [N]             Set a difficulty class
+  /check [skill] adv:true             Roll with advantage
+  /check [skill] disadv:true          Roll with disadvantage
+  /check [skill] target:[id]          Check against a specific creature
+  /check [skill] dc:[N]               Set a difficulty class
 
 Proficiency, expertise, and modifiers are applied automatically.`
 
@@ -305,8 +304,8 @@ const helpEquip = `/equip — Equip an Item
 
 Usage:
   /equip [item]                       Equip an item from your inventory
-  /equip [item] --offhand             Equip in your off-hand
-  /equip [item] --armor               Equip as body armor`
+  /equip [item] offhand:true          Equip in your off-hand
+  /equip [item] armor:true            Equip as body armor`
 
 const helpInventory = `/inventory — Show Your Inventory
 
@@ -348,7 +347,7 @@ const helpRetire = `/retire — Retire Your Character
 
 Usage:
   /retire                             Retire your character from the campaign
-  /retire --reason [text]             Provide a reason for retirement`
+  /retire reason:[text]               Provide a reason for retirement`
 
 const helpRegister = `/register — Get a Character
 
@@ -458,7 +457,7 @@ const helpUndo = `/undo — Undo Last Action
 
 Usage:
   /undo                               Request to undo your last action
-  /undo --reason [text]               Provide a reason for the undo request`
+  /undo reason:[text]                 Provide a reason for the undo request`
 
 const helpHelpTopic = `/help — Command Help
 
