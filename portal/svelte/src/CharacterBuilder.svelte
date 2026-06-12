@@ -19,6 +19,7 @@
   } from './lib/builder-options.js';
   import { draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './lib/builder-draft.js';
   import { humanizeSubmitError } from './lib/submit-error.js';
+  import { submissionRequirements, canSubmit } from './lib/submission-requirements.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -491,6 +492,13 @@
   let spellSelectableLevels = $derived(
     !isCaster ? null : preview ? levelsUpTo(preview.max_spell_level) : previewError ? null : []
   );
+
+  // Submit-gate checklist: surfaces *why* Submit is disabled (instead of a dead
+  // button) and blocks submission until ability scores are actually rolled when
+  // the Roll method is chosen — default 8s would otherwise fail server-side
+  // (Finding: Player onboarding T38).
+  let requirements = $derived(submissionRequirements({ name, race, selectedClass, abilityMethod, abilityRolls }));
+  let submitReady = $derived(canSubmit(requirements));
 
   // Build the common snake_case submission object both modes POST. The API
   // factory layers on token / campaign_id per mode.
@@ -1273,7 +1281,20 @@
           <div id="submit-error" class="error submit-error" role="alert">{submitError}</div>
         {/if}
 
-        <button class="submit-btn" onclick={handleSubmit} disabled={submitting || !name || !race || !selectedClass}>
+        {#if !submitReady}
+          <div class="submit-checklist">
+            <p class="submit-checklist-head">Before you can submit:</p>
+            <ul>
+              {#each requirements as req (req.key)}
+                <li class:met={req.met}>
+                  <span class="check-mark" aria-hidden="true">{req.met ? '✓' : '○'}</span>{req.label}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        <button class="submit-btn" onclick={handleSubmit} disabled={submitting || !submitReady}>
           {#if submitting}
             {mode === 'dm' ? 'Creating...' : 'Submitting...'}
           {:else}
@@ -1379,6 +1400,12 @@
   .success h3 { color: #4caf50; }
   .error { background: #441111; border: 1px solid #ff4444; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; color: #ff8888; }
   .submit-error { margin-top: 1rem; }
+  .submit-checklist { margin-top: 1rem; padding: 0.75rem 1rem; background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; }
+  .submit-checklist-head { margin: 0 0 0.4rem; color: #e9a045; font-size: 0.9rem; }
+  .submit-checklist ul { margin: 0; padding-left: 0; list-style: none; }
+  .submit-checklist li { color: #e9a045; font-size: 0.9rem; padding: 0.1rem 0; }
+  .submit-checklist li.met { color: #4caf50; }
+  .submit-checklist .check-mark { display: inline-block; width: 1.2rem; font-weight: bold; }
   .equipment-section { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .equipment-section h4 { color: #e94560; margin-bottom: 0.5rem; }
   .equipment-choice { margin-bottom: 0.75rem; }
