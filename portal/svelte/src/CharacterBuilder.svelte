@@ -1517,4 +1517,13 @@
   .skill-option.bg-granted { color: #e0e0e0; }
   .bg-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .bg-feature { color: #aaa; font-size: 0.85rem; margin-top: 0.5rem; }
+
+  /* Phones (most players reach the builder via the Discord in-app browser):
+     the 2-column skill grid and 4-column class row are too cramped under
+     ~480px, so stack them into a single column (Finding: Player onboarding
+     T40). */
+  @media (max-width: 480px) {
+    .skill-grid { grid-template-columns: 1fr; }
+    .class-row { grid-template-columns: 1fr; }
+  }
 </style>
