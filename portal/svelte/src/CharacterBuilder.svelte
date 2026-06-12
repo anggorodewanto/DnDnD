@@ -20,6 +20,7 @@
   import { draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './lib/builder-draft.js';
   import { humanizeSubmitError } from './lib/submit-error.js';
   import { submissionRequirements, canSubmit } from './lib/submission-requirements.js';
+  import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState } from './lib/builder-steps.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -60,6 +61,11 @@
   let races = $state([]);
   let classes = $state([]);
   let spells = $state([]);
+  // Spell-list load status, kept distinct from an empty list so the Spells step
+  // can offer a Retry on a genuine load failure instead of misreporting "not a
+  // spellcaster" (Finding: Player onboarding T39).
+  let spellsLoading = $state(false);
+  let spellsError = $state('');
   let allEquipment = $state([]);
   let startingPacks = $state([]);
   let abilityMethods = $state(['point_buy', 'standard_array', 'roll']);
@@ -253,10 +259,15 @@
   });
 
   async function loadSpells(cls) {
+    spellsError = '';
+    spellsLoading = true;
     try {
       spells = await api.listSpells(cls);
     } catch (e) {
       spells = [];
+      spellsError = e.message || 'Failed to load spells.';
+    } finally {
+      spellsLoading = false;
     }
   }
 
@@ -276,12 +287,14 @@
     }
   }
 
+  // Step navigation skips the Spells step for non-casters (it would only show
+  // a misleading empty state) — see lib/builder-steps.js.
   function nextStep() {
-    if (currentStep < STEPS.length - 1) currentStep++;
+    currentStep = computeNextStep(currentStep, STEPS.length, isCaster);
   }
 
   function prevStep() {
-    if (currentStep > 0) currentStep--;
+    currentStep = computePrevStep(currentStep, isCaster);
   }
 
   function goToStep(i) {
@@ -663,14 +676,16 @@
     <!-- Step navigation -->
     <nav class="steps">
       {#each STEPS as step, i}
-        <button
-          class="step-btn"
-          class:active={i === currentStep}
-          class:completed={i < currentStep}
-          onclick={() => goToStep(i)}
-        >
-          {i + 1}. {step}
-        </button>
+        {#if isStepVisible(i, isCaster)}
+          <button
+            class="step-btn"
+            class:active={i === currentStep}
+            class:completed={i < currentStep}
+            onclick={() => goToStep(i)}
+          >
+            {i + 1}. {step}
+          </button>
+        {/if}
       {/each}
     </nav>
 
@@ -1112,22 +1127,28 @@
 
     <!-- Step 5: Spells -->
     {:else if currentStep === 5}
+      {@const spellState = spellStepState({ isCaster, loading: spellsLoading, error: spellsError, count: spells.length })}
       <div class="step-content">
         <h3>Spells</h3>
-        {#if spells.length === 0}
-          <p>No spells available for your class, or your class is not a spellcaster.</p>
+        {#if spellState === 'not-caster'}
+          <p>Your class doesn't cast spells — continue to Review.</p>
+        {:else if spellState === 'loading'}
+          <p class="muted">Loading spells…</p>
+        {:else if spellState === 'error'}
+          <p class="preview-error">Couldn't load the spell list. Check your connection and try again.</p>
+          <button type="button" class="nav-btn" onclick={() => loadSpells(selectedClass)}>Retry</button>
+        {:else if spellState === 'empty'}
+          <p>No spells are available for your class yet.</p>
         {:else}
-          {#if isCaster}
-            <p class="spell-cap-hint">
-              {#if cantripCap > 0}
-                Choose up to <strong>{cantripCap}</strong> cantrip{cantripCap === 1 ? '' : 's'} and
-                <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
-              {:else}
-                Choose up to <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
-              {/if}
-              Browse every level — you can only pick spells you have slots for.
-            </p>
-          {/if}
+          <p class="spell-cap-hint">
+            {#if cantripCap > 0}
+              Choose up to <strong>{cantripCap}</strong> cantrip{cantripCap === 1 ? '' : 's'} and
+              <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
+            {:else}
+              Choose up to <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
+            {/if}
+            Browse every level — you can only pick spells you have slots for.
+          </p>
           <SpellPicker
             {spells}
             bind:selected={selectedSpells}
