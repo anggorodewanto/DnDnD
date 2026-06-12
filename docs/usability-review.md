@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **46 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **46 / 53**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -88,6 +88,39 @@ single PR when each is trivial (noted per group).
 
 #### Tier 10 — Validation gate
 - [ ] **T52** · 🔵 · Run `docs/playtest-checklist.md` end-to-end and record a transcript (do **after** T49) · _Recommended order #7_
+
+#### Tier 11 — Follow-ups (deferred during review)
+- [ ] **T53** · 🟡 · Strip the `[✅ Resolve]` button when a `#dm-queue` item is
+  resolved/cancelled (deferred from T46) · _Live play_
+
+  **Why:** `dmqueue.DefaultNotifier.Resolve`/`Cancel` edit the message via
+  `Sender.Edit` → `ChannelMessageEdit`, which is content-only and **cannot**
+  strip components, so the resolve button lingers on a handled message. Today
+  the click is harmless (`DMQueueResolveHandler.ShowResolveModal` is idempotent
+  — a re-click on a non-pending item replies "already handled"), but a dead
+  button on every resolved post is a UX wart.
+
+  **Fix:** make the resolve/cancel edit component-aware so the button is
+  removed:
+  1. Add `ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error)`
+     to `internal/discord/session.go` (`Session`), implement on
+     `DiscordgoSession` (`internal/discord/adapter.go`) and the queueing-session
+     wrapper.
+  2. Add `ChannelMessageEditComplex` to `dmqueue.sessionAPI`
+     (`internal/dmqueue/sender.go`) and an optional `ComponentEditor` capability
+     (mirror the existing optional `ComponentSender`: type-assert in the
+     notifier, fall back to plain `Edit` so the ~11 `Sender` fakes stay
+     unchanged). To clear buttons, set `Components: &[]discordgo.MessageComponent{}`
+     on the `MessageEdit` (discordgo needs a non-nil empty slice pointer to
+     remove components, not nil).
+  3. In `DefaultNotifier.Resolve` **and** `Cancel`, when the sender supports
+     `ComponentEditor`, edit with empty components alongside the
+     `FormatResolved`/`FormatCancelled` text.
+  4. Test: a component-capable capture sender asserts the edit carries an empty
+     (non-nil) components slice on resolve and on cancel.
+
+  Keep the idempotent handler guard as the safety net for races (the edit and a
+  near-simultaneous click).
 
 ## TL;DR
 
