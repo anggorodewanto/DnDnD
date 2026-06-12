@@ -168,12 +168,15 @@ approval request to `#dm-queue` and the player gets an ephemeral
 
 From the dashboard:
 
-1. **Maps → Upload** a Tiled `.tmj` map. A 10×10 sample lives at
-   [`docs/testdata/sample.tmj`](testdata/sample.tmj) — upload it directly
+1. **Maps → + New Map → Import Tiled (.tmj + images)** and pick a Tiled
+   `.tmj` map. A 10×10 sample lives at
+   [`docs/testdata/sample.tmj`](testdata/sample.tmj) — import it directly
    if you don't have your own.
-2. **Encounters → New** → pick the map → drag the player and one or two SRD
-   monsters onto the grid.
-3. **Go Live** → the bot rolls initiative and posts the turn order to
+2. **Encounters → New** → pick the map → drag one or two SRD monsters onto
+   the grid. (You can't drag PCs onto the grid; they're seated automatically
+   when combat starts — into the map's player spawn zones if you painted
+   any.)
+3. **Start Combat** → the bot rolls initiative and posts the turn order to
    `#combat-log`.
 
 In Discord:
