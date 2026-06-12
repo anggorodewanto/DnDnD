@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **51 / 53**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **52 / 53**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -90,8 +90,8 @@ single PR when each is trivial (noted per group).
 - [ ] **T52** · 🔵 · Run `docs/playtest-checklist.md` end-to-end and record a transcript (do **after** T49) · _Recommended order #7_
 
 #### Tier 11 — Follow-ups (deferred during review)
-- [ ] **T53** · 🟡 · Strip the `[✅ Resolve]` button when a `#dm-queue` item is
-  resolved/cancelled (deferred from T46) · _Live play_
+- [x] **T53** · 🟡 · Strip the `[✅ Resolve]` button when a `#dm-queue` item is
+  resolved/cancelled (deferred from T46) · _Live play_ → `3050ba5`
 
   **Why:** `dmqueue.DefaultNotifier.Resolve`/`Cancel` edit the message via
   `Sender.Edit` → `ChannelMessageEdit`, which is content-only and **cannot**
