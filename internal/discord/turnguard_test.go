@@ -104,7 +104,7 @@ func TestMoveHandler_TurnGate_RejectsWrongOwner(t *testing.T) {
 		t.Fatal("expected ephemeral response on rejection")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected ErrNotYourTurn message, got: %s", content)
 	}
 	if !strings.Contains(content, "Aragorn") {
@@ -216,7 +216,7 @@ func TestFlyHandler_TurnGate_RejectsWrongOwner(t *testing.T) {
 		t.Fatalf("expected gate to fire once, got %d", gate.calls)
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 	if wrapped.updatePosCalls != 0 {
@@ -381,11 +381,11 @@ func TestFormatTurnGateError_AllCases(t *testing.T) {
 		{"not your turn", &combat.ErrNotYourTurn{
 			CurrentCharacterName: "Bob",
 			CurrentDiscordUserID: "u-123",
-		}, "It's not your turn. Current turn: **Bob** (@u-123)"},
+		}, "It's **Bob**'s turn, not yours — you'll be pinged when it's your turn."},
 		{"no active turn", combat.ErrNoActiveTurn, "No active turn."},
 		{"lock timeout", combat.ErrLockTimeout, "The server is busy processing the active turn — please try again."},
 		{"turn changed", combat.ErrTurnChanged, "It's no longer your turn."},
-		{"generic", errors.New("db down"), "Failed to validate turn ownership."},
+		{"generic", errors.New("db down"), "Couldn't verify whose turn it is right now — please try again in a moment."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -394,6 +394,21 @@ func TestFormatTurnGateError_AllCases(t *testing.T) {
 				t.Errorf("formatTurnGateError(%v) = %q, want %q", tt.err, got, tt.want)
 			}
 		})
+	}
+}
+
+// T42: the user-facing "not your turn" message must never leak the raw Discord
+// user ID of the current turn-holder.
+func TestFormatTurnGateError_NotYourTurn_HidesRawUserID(t *testing.T) {
+	got := formatTurnGateError(&combat.ErrNotYourTurn{
+		CurrentCharacterName: "Aria",
+		CurrentDiscordUserID: "123456789012345678",
+	})
+	if strings.Contains(got, "123456789012345678") {
+		t.Errorf("formatTurnGateError leaked raw user ID: %q", got)
+	}
+	if !strings.Contains(got, "Aria") {
+		t.Errorf("formatTurnGateError should name the current turn-holder, got %q", got)
 	}
 }
 
@@ -434,7 +449,7 @@ func TestAttackHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
 		t.Error("fn must NOT run when gate rejects")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 }
@@ -476,7 +491,7 @@ func TestBonusHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
 		t.Error("fn must NOT run when gate rejects")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 }
@@ -571,7 +586,7 @@ func TestInteractHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
 		t.Error("fn must NOT run when gate rejects")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 }
@@ -613,7 +628,7 @@ func TestCastHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
 		t.Error("fn must NOT run when gate rejects")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 }
@@ -655,7 +670,7 @@ func TestActionHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
 		t.Error("fn must NOT run when gate rejects")
 	}
 	content := sess.lastResponse.Data.Content
-	if !strings.Contains(content, "not your turn") {
+	if !strings.Contains(content, "not yours") {
 		t.Errorf("expected not-your-turn message, got: %s", content)
 	}
 }

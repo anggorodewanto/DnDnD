@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -71,7 +72,9 @@ func formatTurnGateError(err error) string {
 	}
 	var notYourTurn *combat.ErrNotYourTurn
 	if errors.As(err, &notYourTurn) {
-		return notYourTurn.Error()
+		// T42: name the current turn-holder and give a next step, but never
+		// surface their raw Discord user ID to the player.
+		return fmt.Sprintf("It's **%s**'s turn, not yours — you'll be pinged when it's your turn.", notYourTurn.CurrentCharacterName)
 	}
 	if errors.Is(err, combat.ErrNoActiveTurn) {
 		return "No active turn."
@@ -82,5 +85,5 @@ func formatTurnGateError(err error) string {
 	if errors.Is(err, combat.ErrTurnChanged) {
 		return "It's no longer your turn."
 	}
-	return "Failed to validate turn ownership."
+	return "Couldn't verify whose turn it is right now — please try again in a moment."
 }
