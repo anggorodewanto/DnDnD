@@ -168,7 +168,7 @@
     <tr><td class="cmd"><code>/attack</code></td><td>Attack a target with a weapon. <span class="arg req">target</span> <span class="arg">weapon</span> <span class="arg">gwm</span> <span class="arg">sharpshooter</span> <span class="arg">reckless</span> <span class="arg">offhand</span> <span class="arg">thrown</span> …</td></tr>
     <tr><td class="cmd"><code>/cast</code></td><td>Cast a spell, with metamagic &amp; slot options. <span class="arg req">spell</span> <span class="arg">target</span> <span class="arg">level</span> <span class="arg">ritual</span> …</td></tr>
     <tr><td class="cmd"><code>/bonus</code></td><td>Use a bonus action. <span class="arg req">action</span> <span class="arg">args</span></td></tr>
-    <tr><td class="cmd"><code>/action</code></td><td>Use an action on your turn. <span class="arg req">action</span> <span class="arg">spell</span> <span class="arg">slot</span></td></tr>
+    <tr><td class="cmd"><code>/action</code></td><td>Use an action on your turn. <span class="arg req">action</span> <span class="arg">args</span> <span class="arg">spell</span> <span class="arg">slot</span></td></tr>
     <tr><td class="cmd"><code>/shove</code></td><td>Shove a target (push, prone, or grapple). <span class="arg req">target</span> <span class="arg">mode</span></td></tr>
     <tr><td class="cmd"><code>/interact</code></td><td>Interact with an object. <span class="arg req">description</span></td></tr>
     <tr><td class="cmd"><code>/reaction</code></td><td>Declare, cancel, or clear reactions for the round.</td></tr>
@@ -179,7 +179,7 @@
 
   <h3>Checks, saves &amp; rest</h3>
   <table><tbody>
-    <tr><td class="cmd"><code>/check</code></td><td>Make an ability or skill check. <span class="arg req">skill</span> <span class="arg">adv</span> <span class="arg">disadv</span> <span class="arg">dc</span></td></tr>
+    <tr><td class="cmd"><code>/check</code></td><td>Make an ability or skill check. <span class="arg req">skill</span> <span class="arg">adv</span> <span class="arg">disadv</span> <span class="arg">target</span> <span class="arg">dc</span></td></tr>
     <tr><td class="cmd"><code>/save</code></td><td>Make a saving throw. <span class="arg req">ability</span></td></tr>
     <tr><td class="cmd"><code>/rest</code></td><td>Take a short or long rest. <span class="arg req">type</span></td></tr>
   </tbody></table>
@@ -193,7 +193,7 @@
     <tr><td class="cmd"><code>/give</code></td><td>Give an item to another creature. <span class="arg req">item</span> <span class="arg req">target</span></td></tr>
     <tr><td class="cmd"><code>/loot</code></td><td>Loot the area or a defeated creature.</td></tr>
     <tr><td class="cmd"><code>/attune</code> / <code>/unattune</code></td><td>Begin or end attunement with a magic item. <span class="arg req">item</span></td></tr>
-    <tr><td class="cmd"><code>/prepare</code></td><td>Prepare your spell list for the day. <span class="arg">spells</span> <span class="arg">class</span></td></tr>
+    <tr><td class="cmd"><code>/prepare</code></td><td>Prepare your spell list for the day. <span class="arg">spells</span> <span class="arg">class</span> <span class="arg">subclass</span></td></tr>
     <tr><td class="cmd"><code>/undo</code></td><td>Request to undo your last action. <span class="arg">reason</span></td></tr>
   </tbody></table>
 
@@ -220,7 +220,7 @@
 
   <footer>
     See also: <a href="setup.html">Setup guide</a> · <a href="tiled-maps.html">Building maps with Tiled</a>.
-    Command reference generated from <code>internal/discord/commands.go</code>.
+    Command reference is hand-maintained to mirror <code>internal/discord/commands.go</code>.
   </footer>
 
 </div>
