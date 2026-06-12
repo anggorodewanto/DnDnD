@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **45 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **46 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -77,7 +77,7 @@ single PR when each is trivial (noted per group).
 - [x] **T43** · 🟡 · Route both move-confirm variants through the same write/notify body (turnGate, log, snapshot, OA) · _Live play_ → `21caa4e`
 - [x] **T44** · 🟡 · Fix in-Discord help drift (`/reaction` subcommands, metamagic `twin`, `option:value` examples) · _Live play_ → `42ce41c`
 - [x] **T45** · 🟡 · `/status` shows HP/position (or correct the `/help status` text) · _Live play_ → `b5952ed`
-- [ ] **T46** · 🟡 · Gated `/check` echoes the raw roll _(done → `0675f88`)_; add resolve buttons to dm-queue messages _(pending — needs Sender-interface change + modal-based resolve + router/main.go wiring)_ · _Live play_
+- [x] **T46** · 🟡 · Gated `/check` echoes the raw roll; add resolve buttons to dm-queue messages · _Live play_ → `0675f88` (roll echo) + `0cccf50` (resolve button + modal)
 
 #### Tier 9 — Documentation drift — _batchable into one PR_
 - [ ] **T47** · 🟡 · Fix `#dm-private` → `#dm-queue` in quickstart · _Doc drift_
