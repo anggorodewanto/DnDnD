@@ -21,7 +21,7 @@ type mockStore struct {
 	listFn          func(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
 	updateFn        func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
 	deleteFn        func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
-	listCreaturesFn func(ctx context.Context) ([]refdata.Creature, error)
+	listCreaturesFn func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error)
 }
 
 func (m *mockStore) CreateEncounterTemplate(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error) {
@@ -39,9 +39,9 @@ func (m *mockStore) UpdateEncounterTemplate(ctx context.Context, arg refdata.Upd
 func (m *mockStore) DeleteEncounterTemplate(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
 	return m.deleteFn(ctx, arg)
 }
-func (m *mockStore) ListCreatures(ctx context.Context) ([]refdata.Creature, error) {
+func (m *mockStore) ListCreaturesForCampaign(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
 	if m.listCreaturesFn != nil {
-		return m.listCreaturesFn(ctx)
+		return m.listCreaturesFn(ctx, campaignID)
 	}
 	return []refdata.Creature{}, nil
 }
@@ -357,20 +357,24 @@ func TestNewService(t *testing.T) {
 	assert.NotNil(t, svc)
 }
 
-// --- TDD Cycle 12 (service): ListCreatures ---
+// --- TDD Cycle 12 (service): ListCreaturesForCampaign ---
 
-func TestService_ListCreatures(t *testing.T) {
+func TestService_ListCreaturesForCampaign(t *testing.T) {
 	store := successStore()
-	store.listCreaturesFn = func(ctx context.Context) ([]refdata.Creature, error) {
+	var gotCampaign uuid.NullUUID
+	store.listCreaturesFn = func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
+		gotCampaign = campaignID
 		return []refdata.Creature{
 			{ID: "goblin", Name: "Goblin"},
 		}, nil
 	}
 	svc := NewService(store)
-	creatures, err := svc.ListCreatures(context.Background())
+	want := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	creatures, err := svc.ListCreaturesForCampaign(context.Background(), want)
 	require.NoError(t, err)
 	assert.Len(t, creatures, 1)
 	assert.Equal(t, "Goblin", creatures[0].Name)
+	assert.Equal(t, want, gotCampaign, "campaign filter should be forwarded to the store")
 }
 
 func TestService_Create_RejectsNullMapID(t *testing.T) {

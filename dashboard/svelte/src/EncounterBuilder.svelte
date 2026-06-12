@@ -42,6 +42,7 @@
 
   // Creature library state
   let availableCreatures = $state([]);
+  let creatureLoadError = $state(null);
   let creatureSearch = $state('');
 
   // UI state
@@ -140,10 +141,12 @@
 
   async function loadCreatureLibrary() {
     try {
-      availableCreatures = await listCreatures();
+      availableCreatures = await listCreatures(campaignId);
+      creatureLoadError = null;
     } catch (e) {
-      // Creatures may not be available
+      // Surface the failure instead of masquerading as an empty library.
       availableCreatures = [];
+      creatureLoadError = e.message || 'Failed to load creatures.';
     }
   }
 
@@ -500,8 +503,13 @@
             {#if filteredCreatures.length === 0 && availableCreatures.length > 0}
               <p class="no-results">No creatures match your search.</p>
             {/if}
-            {#if availableCreatures.length === 0}
-              <p class="no-results">No creatures in library. Import stat blocks first.</p>
+            {#if availableCreatures.length === 0 && creatureLoadError}
+              <p class="no-results error">
+                Couldn't load the creature library: {creatureLoadError}
+                <button class="link-btn" onclick={loadCreatureLibrary}>Retry</button>
+              </p>
+            {:else if availableCreatures.length === 0}
+              <p class="no-results">No creatures in this library yet. Add homebrew or check that the SRD library is seeded.</p>
             {/if}
           </div>
         </div>
@@ -952,5 +960,16 @@
   .error {
     color: #ff4444;
     margin-bottom: 0.5rem;
+  }
+
+  .link-btn {
+    margin-left: 0.5rem;
+    background: none;
+    border: none;
+    color: #e94560;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
   }
 </style>

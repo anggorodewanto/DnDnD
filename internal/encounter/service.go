@@ -19,7 +19,7 @@ type Store interface {
 	ListEncounterTemplatesByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
 	UpdateEncounterTemplate(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
 	DeleteEncounterTemplate(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
-	ListCreatures(ctx context.Context) ([]refdata.Creature, error)
+	ListCreaturesForCampaign(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error)
 }
 
 // Service manages encounter template CRUD and validation.
@@ -119,9 +119,11 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID, campaignID uuid.UUID
 	return s.store.DeleteEncounterTemplate(ctx, refdata.DeleteEncounterTemplateParams{ID: id, CampaignID: campaignID})
 }
 
-// ListCreatures returns all available creatures from the stat block library.
-func (s *Service) ListCreatures(ctx context.Context) ([]refdata.Creature, error) {
-	return s.store.ListCreatures(ctx)
+// ListCreaturesForCampaign returns the creatures visible to the given
+// campaign: the global SRD library plus that campaign's homebrew. A zero
+// campaignID yields the SRD library only.
+func (s *Service) ListCreaturesForCampaign(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
+	return s.store.ListCreaturesForCampaign(ctx, campaignID)
 }
 
 // Duplicate creates a copy of an encounter template with a new name.

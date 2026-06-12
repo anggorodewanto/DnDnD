@@ -285,11 +285,16 @@ export async function duplicateEncounter(id) {
 }
 
 /**
- * List creatures (stat blocks).
+ * List creatures (stat blocks) visible to a campaign: the SRD library plus
+ * that campaign's homebrew. Without a campaignId only SRD creatures return.
+ * @param {string} [campaignId] - Campaign to scope homebrew to.
  * @returns {Promise<object[]>} Array of creatures.
  */
-export async function listCreatures() {
-  const res = await apiFetch('/api/creatures');
+export async function listCreatures(campaignId) {
+  const path = campaignId
+    ? `/api/creatures?campaign_id=${encodeURIComponent(campaignId)}`
+    : '/api/creatures';
+  const res = await apiFetch(path);
   return res.json();
 }
 

@@ -251,6 +251,67 @@ func (q *Queries) ListCreaturesByType(ctx context.Context, type_ string) ([]Crea
 	return items, nil
 }
 
+const listCreaturesForCampaign = `-- name: ListCreaturesForCampaign :many
+SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at, bonus_actions FROM creatures
+WHERE campaign_id IS NULL OR campaign_id = $1
+ORDER BY name
+`
+
+// Returns global SRD creatures (campaign_id IS NULL) plus the homebrew that
+// belongs to the given campaign. A NULL/invalid $1 yields SRD only, so
+// homebrew never leaks across campaigns.
+func (q *Queries) ListCreaturesForCampaign(ctx context.Context, campaignID uuid.NullUUID) ([]Creature, error) {
+	rows, err := q.db.QueryContext(ctx, listCreaturesForCampaign, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Creature{}
+	for rows.Next() {
+		var i Creature
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.Name,
+			&i.Size,
+			&i.Type,
+			&i.Alignment,
+			&i.Ac,
+			&i.AcType,
+			&i.HpFormula,
+			&i.HpAverage,
+			&i.Speed,
+			&i.AbilityScores,
+			&i.SavingThrows,
+			&i.Skills,
+			pq.Array(&i.DamageResistances),
+			pq.Array(&i.DamageImmunities),
+			pq.Array(&i.DamageVulnerabilities),
+			pq.Array(&i.ConditionImmunities),
+			&i.Senses,
+			pq.Array(&i.Languages),
+			&i.Cr,
+			&i.Attacks,
+			&i.Abilities,
+			&i.Homebrew,
+			&i.Source,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.BonusActions,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertCreature = `-- name: UpsertCreature :exec
 INSERT INTO creatures (id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, bonus_actions, homebrew, source)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)

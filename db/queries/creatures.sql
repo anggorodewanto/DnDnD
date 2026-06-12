@@ -4,6 +4,14 @@ SELECT * FROM creatures WHERE id = $1;
 -- name: ListCreatures :many
 SELECT * FROM creatures ORDER BY name;
 
+-- name: ListCreaturesForCampaign :many
+-- Returns global SRD creatures (campaign_id IS NULL) plus the homebrew that
+-- belongs to the given campaign. A NULL/invalid $1 yields SRD only, so
+-- homebrew never leaks across campaigns.
+SELECT * FROM creatures
+WHERE campaign_id IS NULL OR campaign_id = $1
+ORDER BY name;
+
 -- name: CountCreatures :one
 SELECT count(*) FROM creatures;
 

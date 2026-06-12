@@ -606,8 +606,10 @@ func TestHandler_Get_NullMapID(t *testing.T) {
 // --- TDD Cycle 26: GET /api/creatures ---
 
 func TestHandler_ListCreatures_Success(t *testing.T) {
+	var gotCampaign uuid.NullUUID
 	store := &mockStore{
-		listCreaturesFn: func(ctx context.Context) ([]refdata.Creature, error) {
+		listCreaturesFn: func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
+			gotCampaign = campaignID
 			return []refdata.Creature{
 				{ID: "goblin", Name: "Goblin", Cr: "1/4", Size: "Small", Type: "humanoid", Ac: 15, HpAverage: 7},
 				{ID: "ogre", Name: "Ogre", Cr: "2", Size: "Large", Type: "giant", Ac: 11, HpAverage: 59},
@@ -623,12 +625,15 @@ func TestHandler_ListCreatures_Success(t *testing.T) {
 
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/creatures", nil)
+	campaignID := uuid.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/creatures?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, uuid.NullUUID{UUID: campaignID, Valid: true}, gotCampaign,
+		"campaign_id query param should scope the creature library")
 
 	var resp []map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
@@ -638,9 +643,63 @@ func TestHandler_ListCreatures_Success(t *testing.T) {
 	assert.Equal(t, "1/4", resp[0]["cr"])
 }
 
+// Without a campaign_id, the handler must request the SRD-only library
+// (an invalid/empty NullUUID), never another campaign's homebrew.
+func TestHandler_ListCreatures_NoCampaignReturnsSRDOnly(t *testing.T) {
+	var gotCampaign uuid.NullUUID
+	store := &mockStore{
+		listCreaturesFn: func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
+			gotCampaign = campaignID
+			return []refdata.Creature{}, nil
+		},
+	}
+	store.createFn = successStore().createFn
+	store.getFn = successStore().getFn
+	store.listFn = successStore().listFn
+	store.updateFn = successStore().updateFn
+	store.deleteFn = successStore().deleteFn
+
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/creatures", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.False(t, gotCampaign.Valid, "absent campaign_id should not select any campaign's homebrew")
+}
+
+// A malformed campaign_id must not 500 or leak homebrew — it degrades to the
+// SRD-only library.
+func TestHandler_ListCreatures_InvalidCampaignIDFallsBackToSRD(t *testing.T) {
+	var gotCampaign uuid.NullUUID
+	store := &mockStore{
+		listCreaturesFn: func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
+			gotCampaign = campaignID
+			return []refdata.Creature{}, nil
+		},
+	}
+	store.createFn = successStore().createFn
+	store.getFn = successStore().getFn
+	store.listFn = successStore().listFn
+	store.updateFn = successStore().updateFn
+	store.deleteFn = successStore().deleteFn
+
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/creatures?campaign_id=not-a-uuid", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.False(t, gotCampaign.Valid, "malformed campaign_id should fall back to SRD only")
+}
+
 func TestHandler_ListCreatures_StoreError(t *testing.T) {
 	store := &mockStore{
-		listCreaturesFn: func(ctx context.Context) ([]refdata.Creature, error) {
+		listCreaturesFn: func(ctx context.Context, campaignID uuid.NullUUID) ([]refdata.Creature, error) {
 			return nil, errors.New("db error")
 		},
 	}

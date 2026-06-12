@@ -310,9 +310,18 @@ type creatureListItem struct {
 	HP   int    `json:"hp_average"`
 }
 
-// ListCreatures handles GET /api/creatures.
+// ListCreatures handles GET /api/creatures?campaign_id=X. The campaign filter
+// scopes homebrew to the requesting campaign; SRD creatures are always
+// included. A missing or unparseable campaign_id yields the SRD library only.
 func (h *Handler) ListCreatures(w http.ResponseWriter, r *http.Request) {
-	creatures, err := h.svc.ListCreatures(r.Context())
+	campaignID := uuid.NullUUID{}
+	if raw := r.URL.Query().Get("campaign_id"); raw != "" {
+		if parsed, err := uuid.Parse(raw); err == nil {
+			campaignID = uuid.NullUUID{UUID: parsed, Valid: true}
+		}
+	}
+
+	creatures, err := h.svc.ListCreaturesForCampaign(r.Context(), campaignID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
