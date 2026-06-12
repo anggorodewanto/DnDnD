@@ -128,7 +128,7 @@ In your test server, in any text channel:
 ```
 
 The bot creates the campaign channel structure (`#the-story`, `#combat-log`,
-`#dm-private`, etc.). This requires `Manage Channels` on the bot — the invite
+`#dm-queue`, etc.). This requires `Manage Channels` on the bot — the invite
 URL above already grants it.
 
 A player gets a character in one of three ways, and `/register` now
@@ -152,7 +152,7 @@ The bot replies with three buttons:
   character URL. Same as `/import ddb-url:<url>`.
 
 All three submit a registration with status `pending`: the bot posts an
-approval request to `#dm-private` and the player gets an ephemeral
+approval request to `#dm-queue` and the player gets an ephemeral
 "pending DM approval" confirmation.
 
 ## 6. Approve the character on the dashboard (≈ 3 min)
