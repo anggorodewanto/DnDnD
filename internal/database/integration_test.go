@@ -70,6 +70,7 @@ func TestIntegration_MigrateDown(t *testing.T) {
 
 	// Roll back migrations from most recent to oldest.
 	for _, name := range []string{
+		"create_dm_active_campaign",
 		"create_character_drafts",
 		"add_weapon_mastery",
 		"add_characters_level_index",
