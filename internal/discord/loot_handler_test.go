@@ -85,3 +85,55 @@ func TestLootHandler_NoEncounter(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "No completed encounter")
 }
+
+// T41: the #the-story claim announcement must never print a raw snowflake.
+// Because the /loot embed is ephemeral, the button-clicker is always the
+// character owner, so we resolve and show the character name; if that lookup
+// fails we fall back to a Discord <@id> mention (still not a raw snowflake).
+func TestLootHandler_claimantLabel(t *testing.T) {
+	campID := uuid.New()
+
+	t.Run("character name when resolved", func(t *testing.T) {
+		h := NewLootHandler(
+			&mockInventorySession{},
+			&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+			&mockInventoryCharacterLookup{char: refdata.Character{Name: "Aria"}},
+			&mockLootEncounterProvider{},
+			nil,
+		)
+		assert.Equal(t, "Aria", h.claimantLabel(context.Background(), "guild1", "user-123"))
+	})
+
+	t.Run("mention fallback when character lookup fails", func(t *testing.T) {
+		h := NewLootHandler(
+			&mockInventorySession{},
+			&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+			&mockInventoryCharacterLookup{err: errors.New("not found")},
+			&mockLootEncounterProvider{},
+			nil,
+		)
+		assert.Equal(t, "<@user-123>", h.claimantLabel(context.Background(), "guild1", "user-123"))
+	})
+
+	t.Run("mention fallback when campaign lookup fails", func(t *testing.T) {
+		h := NewLootHandler(
+			&mockInventorySession{},
+			&mockInventoryCampaignProvider{err: errors.New("no campaign")},
+			&mockInventoryCharacterLookup{char: refdata.Character{Name: "Aria"}},
+			&mockLootEncounterProvider{},
+			nil,
+		)
+		assert.Equal(t, "<@user-123>", h.claimantLabel(context.Background(), "guild1", "user-123"))
+	})
+
+	t.Run("mention fallback when name is empty", func(t *testing.T) {
+		h := NewLootHandler(
+			&mockInventorySession{},
+			&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+			&mockInventoryCharacterLookup{char: refdata.Character{Name: ""}},
+			&mockLootEncounterProvider{},
+			nil,
+		)
+		assert.Equal(t, "<@user-123>", h.claimantLabel(context.Background(), "guild1", "user-123"))
+	})
+}

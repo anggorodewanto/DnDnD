@@ -145,6 +145,22 @@ func (h *LootHandler) Handle(interaction *discordgo.Interaction) {
 	})
 }
 
+// claimantLabel resolves a human-friendly label for a loot claimant: the
+// claiming character's name when it can be looked up, falling back to a Discord
+// mention so #the-story never shows a raw snowflake. The /loot embed is
+// ephemeral, so the button-clicker is always the character owner. (T41)
+func (h *LootHandler) claimantLabel(ctx context.Context, guildID, userID string) string {
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return fmt.Sprintf("<@%s>", userID)
+	}
+	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
+	if err != nil || char.Name == "" {
+		return fmt.Sprintf("<@%s>", userID)
+	}
+	return char.Name
+}
+
 // ParseLootClaimData parses a "loot_claim:poolID:itemID:characterID" custom ID.
 func ParseLootClaimData(customID string) (poolID, itemID, characterID uuid.UUID, err error) {
 	parts := strings.SplitN(customID, ":", 4)
@@ -179,9 +195,12 @@ func (h *LootHandler) HandleLootClaim(interaction *discordgo.Interaction, poolID
 	// SR-007: refresh #character-cards for the claimant.
 	notifyCardUpdate(ctx, h.cardUpdater, characterID)
 
-	// F-24: announce claim in #the-story (best-effort).
+	// F-24 / T41: announce claim in #the-story (best-effort). Show the claiming
+	// character's name (never a raw snowflake) — the /loot embed is ephemeral so
+	// the button-clicker is always the character owner.
 	if interaction.GuildID != "" {
-		storyMsg := fmt.Sprintf("\U0001f4b0 %s claimed **%s**!", discordUserID(interaction), claimed.Name)
+		label := h.claimantLabel(ctx, interaction.GuildID, discordUserID(interaction))
+		storyMsg := fmt.Sprintf("\U0001f4b0 %s claimed **%s**!", label, claimed.Name)
 		if chID, err := resolveStoryChannel(h.session, interaction.GuildID); err == nil {
 			_, _ = h.session.ChannelMessageSend(chID, storyMsg)
 		}
