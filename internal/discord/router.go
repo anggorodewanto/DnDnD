@@ -35,12 +35,12 @@ type ErrorReportingHandler interface {
 
 // CommandRouter dispatches slash command interactions to the appropriate handler.
 type CommandRouter struct {
-	bot         *Bot
-	handlers    map[string]CommandHandler
-	moveHandler *MoveHandler
-	flyHandler  *FlyHandler
-	doneHandler *DoneHandler
-	restHandler *RestHandler
+	bot                   *Bot
+	handlers              map[string]CommandHandler
+	moveHandler           *MoveHandler
+	flyHandler            *FlyHandler
+	doneHandler           *DoneHandler
+	restHandler           *RestHandler
 	lootHandler           *LootHandler
 	shopHandler           *ShopHandler
 	dmQueueResolveHandler *DMQueueResolveHandler

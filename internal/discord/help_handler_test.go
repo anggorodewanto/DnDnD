@@ -222,7 +222,7 @@ func TestHelpHandler_NoStaleCommandSyntax(t *testing.T) {
 	// Substrings that must never appear: CLI --flag style and untypeable
 	// commands. Discord renders options as name:value, never --name.
 	forbidden := []string{
-		"--", // any double-dash CLI flag is drift; options use name:value
+		"--",                      // any double-dash CLI flag is drift; options use name:value
 		"/reaction uncanny-dodge", // not a registered subcommand (declare|cancel|cancel-all)
 		"--twinned",               // registered option is twin:true
 	}
