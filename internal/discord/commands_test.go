@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -204,6 +205,12 @@ func TestCommandDefinitions_SetupRequiresManageChannels(t *testing.T) {
 		}
 		if *cmd.DefaultMemberPermissions != discordgo.PermissionManageChannels {
 			t.Fatalf("expected ManageChannels permission, got %d", *cmd.DefaultMemberPermissions)
+		}
+		// T35: the command is exposed to Manage Channels holders, but
+		// first-time campaign creation requires Administrator (setup.go).
+		// The description must surface that so the gate isn't a silent trap.
+		if !strings.Contains(cmd.Description, "Administrator") {
+			t.Fatalf("setup description should mention the Administrator requirement, got %q", cmd.Description)
 		}
 		return
 	}

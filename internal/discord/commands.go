@@ -622,7 +622,7 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:                     "setup",
-			Description:              "Create the full channel structure for this campaign",
+			Description:              "Create this campaign's channel structure (first-time setup requires Administrator)",
 			DefaultMemberPermissions: &setupPermission,
 		},
 	}

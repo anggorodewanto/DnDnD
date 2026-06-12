@@ -15,7 +15,7 @@ func TestCommandDefinitions_IncludesSetup(t *testing.T) {
 	for _, cmd := range cmds {
 		if cmd.Name == "setup" {
 			found = true
-			assert.Equal(t, "Create the full channel structure for this campaign", cmd.Description)
+			assert.Equal(t, "Create this campaign's channel structure (first-time setup requires Administrator)", cmd.Description)
 			require.NotNil(t, cmd.DefaultMemberPermissions)
 			assert.Equal(t, int64(discordgo.PermissionManageChannels), *cmd.DefaultMemberPermissions)
 			break
