@@ -750,12 +750,42 @@ func (h *MoveHandler) resolveExplorationMover(ctx context.Context, all []refdata
 // update window. When the gate is unwired (legacy unit tests) the writes
 // still happen — only the serialization guarantee is lost.
 func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, costFt int) {
+	h.runMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt, "", 0)
+}
+
+// moveVerb returns the success-message prefix (emoji + verb) for a confirmed
+// move of the given mode. "" is a standard walk; "stand_and_move" stands a
+// prone combatant up first; "crawl" moves while staying prone. (T43)
+func moveVerb(mode string) string {
+	switch mode {
+	case "stand_and_move":
+		return "\U0001f3c3 Stood up and moved to"
+	case "crawl":
+		return "\U0001f41b Crawled to"
+	default:
+		return "\U0001f3c3 Moved to"
+	}
+}
+
+// runMoveConfirm is the single write/notify body shared by the standard move
+// confirm and the prone Stand&Move / Crawl confirm (T43). Routing both variants
+// through here guarantees every confirmed move gets the same treatment: the
+// turn-gate advisory lock around the write, the encounter-snapshot publish,
+// grappled-target drag sync, opportunity-attack detection, hidden-enemy reveal,
+// and the #combat-log mirror. mode is "" (walk), "stand_and_move", or "crawl";
+// standCostFt is the extra cost to stand and is added only for "stand_and_move".
+func (h *MoveHandler) runMoveConfirm(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, costFt int, mode string, standCostFt int) {
 	ctx := context.Background()
 
 	turn, err := h.turnProvider.GetTurn(ctx, turnID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Turn no longer active.")
 		return
+	}
+
+	totalCost := int32(costFt)
+	if mode == "stand_and_move" {
+		totalCost += int32(standCostFt)
 	}
 
 	// confirmMove is the lock-held write body. Errors map to a stable set
@@ -771,10 +801,13 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 
 	confirmMove := func(ctx context.Context) error {
 		var moveErr error
-		updatedTurn, moveErr = combat.UseMovement(turn, int32(costFt))
+		updatedTurn, moveErr = combat.UseMovement(turn, totalCost)
 		if moveErr != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot move: %v", moveErr))
 			return errAlreadyResponded
+		}
+		if mode == "stand_and_move" {
+			updatedTurn.HasStoodThisTurn = true
 		}
 
 		if _, txErr := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn)); txErr != nil {
@@ -790,13 +823,26 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 			moverFetchOK = true
 		}
 
+		// stand_and_move: clear the prone condition now that the combatant
+		// is standing. Best-effort — a failed condition write must not block
+		// the position update.
+		if mode == "stand_and_move" && getErr == nil {
+			if newConds, removeErr := combat.RemoveCondition(combatant.Conditions, "prone"); removeErr == nil {
+				_, _ = h.combatService.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+					ID:              combatantID,
+					Conditions:      newConds,
+					ExhaustionLevel: combatant.ExhaustionLevel,
+				})
+			}
+		}
+
 		if _, posErr := h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), currentAltitude); posErr != nil {
 			respondEphemeral(h.session, interaction, "Failed to update position.")
 			return errAlreadyResponded
 		}
 
 		remaining := combat.FormatRemainingResources(updatedTurn, nil)
-		responseMsg = fmt.Sprintf("\U0001f3c3 Moved to %s%d. %s", destLabel, destRow+1, remaining)
+		responseMsg = fmt.Sprintf("%s %s%d. %s", moveVerb(mode), destLabel, destRow+1, remaining)
 		return nil
 	}
 
@@ -1576,82 +1622,7 @@ func (h *MoveHandler) HandleProneCrawl(interaction *discordgo.Interaction, turnI
 // For stand_and_move, it deducts stand cost + path cost and sets HasStoodThisTurn.
 // For crawl, it deducts the crawl cost only.
 func (h *MoveHandler) HandleMoveConfirmWithMode(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, costFt int, mode string, standCostFt int) {
-	ctx := context.Background()
-
-	turn, err := h.turnProvider.GetTurn(ctx, turnID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Turn no longer active.")
-		return
-	}
-
-	totalCost := int32(costFt)
-	if mode == "stand_and_move" {
-		totalCost += int32(standCostFt)
-	}
-
-	updatedTurn, err := combat.UseMovement(turn, totalCost)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot move: %v", err))
-		return
-	}
-
-	if mode == "stand_and_move" {
-		updatedTurn.HasStoodThisTurn = true
-
-		// Remove prone condition from combatant
-		combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
-		if getErr == nil {
-			newConds, removeErr := combat.RemoveCondition(combatant.Conditions, "prone")
-			if removeErr == nil {
-				_, _ = h.combatService.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
-					ID:              combatantID,
-					Conditions:      newConds,
-					ExhaustionLevel: combatant.ExhaustionLevel,
-				})
-			}
-		}
-	}
-
-	_, err = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn))
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update turn resources.")
-		return
-	}
-
-	combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
-	currentAltitude := int32(0)
-	if getErr == nil {
-		currentAltitude = combatant.AltitudeFt
-	}
-
-	destLabel := renderer.ColumnLabel(destCol)
-	_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), currentAltitude)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update position.")
-		return
-	}
-
-	remaining := combat.FormatRemainingResources(updatedTurn, nil)
-	var msg string
-	if mode == "stand_and_move" {
-		msg = fmt.Sprintf("\U0001f3c3 Stood up and moved to %s%d. %s", destLabel, destRow+1, remaining)
-	} else {
-		msg = fmt.Sprintf("\U0001f41b Crawled to %s%d. %s", destLabel, destRow+1, remaining)
-	}
-
-	if getErr == nil {
-		if spotted := h.revealHiddenEnemiesByPassiveCheck(ctx, combatant, updatedTurn, destCol, destRow); spotted != "" {
-			msg += "\n" + spotted
-		}
-	}
-
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content:    msg,
-			Components: []discordgo.MessageComponent{},
-		},
-	})
+	h.runMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt, mode, standCostFt)
 }
 
 // ParseMoveConfirmData parses the custom ID of a move confirm button.

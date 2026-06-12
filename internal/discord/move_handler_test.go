@@ -2419,3 +2419,40 @@ func TestMoveHandler_HandleMoveConfirm_PublishesSnapshot(t *testing.T) {
 	require.Len(t, pub.calls, 1, "expected publisher to be called once after move confirm")
 	assert.Equal(t, encounterID, pub.calls[0], "publisher should receive the encounter ID from the turn")
 }
+
+// T43: the prone Stand&Move / Crawl confirm path must also publish an
+// encounter snapshot after the position write, like the standard move confirm.
+func TestMoveHandler_HandleMoveConfirmWithMode_PublishesSnapshot(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, encounterID, turnID, combatantID := setupProneMoveHandler(sess)
+
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				EncounterID:         encounterID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+
+	pub := &mockMovePublisher{}
+	handler.SetPublisher(pub)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "crawl", 0)
+
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	require.Len(t, pub.calls, 1, "expected publisher to be called once after prone move confirm")
+	assert.Equal(t, encounterID, pub.calls[0], "publisher should receive the encounter ID from the turn")
+}

@@ -369,6 +369,69 @@ func TestMoveHandler_HandleMoveConfirm_NilGate_StillWrites(t *testing.T) {
 	}
 }
 
+// T43: the prone Stand&Move / Crawl confirm path must run through the SAME
+// turn-gate as the standard move confirm — the write happens inside
+// AcquireAndRun (advisory lock held), and a stale-turn rejection blocks the
+// write entirely.
+func TestMoveHandler_HandleMoveConfirmWithMode_UsesAcquireAndRun(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	gate := &stubTurnGate{} // success
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "stand_and_move", 15)
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire exactly once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected the position write to run inside AcquireAndRun (lock held)")
+	}
+	if wrapped.updatePosCalls != 1 {
+		t.Errorf("expected exactly one position write inside the gated fn, got %d", wrapped.updatePosCalls)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_GateRejectsBeforeWrite(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	gate := &stubTurnGate{err: combat.ErrTurnChanged}
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "crawl", 0)
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire even on rejection, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	if wrapped.updatePosCalls != 0 {
+		t.Errorf("expected zero writes when gate rejects, got %d", wrapped.updatePosCalls)
+	}
+	if sess.lastResponse == nil || !strings.Contains(sess.lastResponse.Data.Content, "no longer your turn") {
+		t.Errorf("expected ErrTurnChanged message, got: %v", sess.lastResponse)
+	}
+}
+
 // --- formatTurnGateError exhaustive cases ---
 
 func TestFormatTurnGateError_AllCases(t *testing.T) {
