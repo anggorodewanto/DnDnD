@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **36 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **40 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -68,10 +68,10 @@ single PR when each is trivial (noted per group).
 - [x] **T34** · 🟡 · Next-step links in `/setup` success + dashboard Home (dashboard URL, "next: build a map") · _Campaign setup_ → `645ded0`
 - [x] **T35** · 🟡 · Align `/setup` gate (Manage Channels exposure vs Administrator requirement) · _Campaign setup_ → `3401438`
 - [x] **T36** · 🟡 · Stat-block library: filter by campaign, surface load errors, reword the empty state · _Campaign setup_ → `536f693`
-- [ ] **T37** · 🟡 · Submit errors: scroll into view / inline near button; humanize raw body text · _Player onboarding_
-- [ ] **T38** · 🟡 · Unmet-requirements checklist next to Submit; gate Review on rolled scores · _Player onboarding_
-- [ ] **T39** · 🟡 · Distinguish spell load-error (with retry) from genuinely empty; skip Spells step for non-casters · _Player onboarding_
-- [ ] **T40** · 🟡 · Mobile: collapse `.skill-grid` / `.class-row` to one column under 480px · _Player onboarding_
+- [x] **T37** · 🟡 · Submit errors: scroll into view / inline near button; humanize raw body text · _Player onboarding_ → `e190a5d`
+- [x] **T38** · 🟡 · Unmet-requirements checklist next to Submit; gate Review on rolled scores · _Player onboarding_ → `015845d`
+- [x] **T39** · 🟡 · Distinguish spell load-error (with retry) from genuinely empty; skip Spells step for non-casters · _Player onboarding_ → `1c78183`
+- [x] **T40** · 🟡 · Mobile: collapse `.skill-grid` / `.class-row` to one column under 480px · _Player onboarding_ → `8d92fa0`
 - [ ] **T41** · 🟡 · Loot claim shows `<@id>` / character name, not a raw snowflake · _Live play_
 - [ ] **T42** · 🟡 · "Not your turn" hides the raw user ID + gives a next step · _Live play_
 - [ ] **T43** · 🟡 · Route both move-confirm variants through the same write/notify body (turnGate, log, snapshot, OA) · _Live play_
