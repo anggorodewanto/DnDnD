@@ -1,4 +1,5 @@
 <script>
+  import { tick } from 'svelte';
   import { makeBuilderApi } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
@@ -17,6 +18,7 @@
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
   } from './lib/builder-options.js';
   import { draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './lib/builder-draft.js';
+  import { humanizeSubmitError } from './lib/submit-error.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -78,6 +80,11 @@
   let error = $state('');
   let submitted = $state(false);
   let submitting = $state(false);
+  // Submit failures render inline beside the Submit button (bottom of the long
+  // Review page) — not in the top-of-page `error` banner, which would scroll
+  // off-screen — and are humanized into actionable guidance (Finding: Player
+  // onboarding T37).
+  let submitError = $state('');
 
   // Load reference data on mount
   $effect(() => {
@@ -553,7 +560,7 @@
 
   async function handleSubmit() {
     submitting = true;
-    error = '';
+    submitError = '';
     try {
       await api.submitCharacter(gatherSubmission(), JSON.parse(serializeDraft(currentDraftSnapshot())));
       submitted = true;
@@ -562,7 +569,14 @@
       // the campaign — so a later "request changes" can still rehydrate the form.
       clearDraft();
     } catch (e) {
-      error = 'Submission failed: ' + e.message;
+      // Humanize the raw server body and surface it next to the button, then
+      // scroll it into view so a failure at the bottom of the Review page is
+      // never silent ("the button did nothing").
+      submitError = humanizeSubmitError(e.message);
+      await tick();
+      if (typeof document !== 'undefined') {
+        document.getElementById('submit-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     } finally {
       submitting = false;
     }
@@ -1255,6 +1269,10 @@
           </div>
         {/if}
 
+        {#if submitError}
+          <div id="submit-error" class="error submit-error" role="alert">{submitError}</div>
+        {/if}
+
         <button class="submit-btn" onclick={handleSubmit} disabled={submitting || !name || !race || !selectedClass}>
           {#if submitting}
             {mode === 'dm' ? 'Creating...' : 'Submitting...'}
@@ -1360,6 +1378,7 @@
   .success { padding: 2rem; text-align: center; }
   .success h3 { color: #4caf50; }
   .error { background: #441111; border: 1px solid #ff4444; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; color: #ff8888; }
+  .submit-error { margin-top: 1rem; }
   .equipment-section { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .equipment-section h4 { color: #e94560; margin-bottom: 0.5rem; }
   .equipment-choice { margin-bottom: 0.75rem; }
