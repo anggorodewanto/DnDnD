@@ -203,6 +203,41 @@ func TestStatusHandler_InCombat_WithConditions(t *testing.T) {
 	assertContains(t, content, "Shield if hit by ranged attack")
 }
 
+func TestStatusHandler_InCombat_ShowsHPAndPosition(t *testing.T) {
+	mock := newTestMock()
+	charID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	h := NewStatusHandler(
+		mock,
+		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
+		&mockStatusCharacterLookup{char: refdata.Character{
+			ID:      charID,
+			Name:    "Aria",
+			Classes: json.RawMessage(`[{"class":"Fighter","level":5}]`),
+		}},
+		&mockStatusEncounterProvider{encounterID: encounterID},
+		&mockStatusCombatantLookup{combatants: []refdata.Combatant{
+			{
+				ID:          combatantID,
+				ShortID:     "AR",
+				DisplayName: "Aria",
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				HpCurrent:   12,
+				HpMax:       30,
+				PositionCol: "D",
+				PositionRow: 4,
+			},
+		}},
+		&mockStatusConcentrationLookup{},
+		&mockStatusReactionLookup{},
+	)
+	content, _ := runStatusHandler(t, h, "guild-1", "user-1")
+	assertContains(t, content, "**HP:** 12/30")
+	assertContains(t, content, "**Position:** D4")
+}
+
 func TestStatusHandler_InCombat_WithRage(t *testing.T) {
 	mock := newTestMock()
 	charID := uuid.New()

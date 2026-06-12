@@ -77,6 +77,56 @@ func TestFormatStatus_TempHP(t *testing.T) {
 	}
 }
 
+func TestFormatStatus_HP(t *testing.T) {
+	info := Info{
+		CharacterName: "Aria",
+		ShortID:       "AR",
+		HpCurrent:     12,
+		HpMax:         30,
+	}
+	got := FormatStatus(info)
+	if !strings.Contains(got, "**HP:** 12/30") {
+		t.Errorf("got %q, want hp line", got)
+	}
+}
+
+func TestFormatStatus_OmitsHPWhenNoMax(t *testing.T) {
+	info := Info{
+		CharacterName: "Aria",
+		ShortID:       "AR",
+		Concentration: "Bless",
+	}
+	got := FormatStatus(info)
+	if strings.Contains(got, "**HP:**") {
+		t.Errorf("should omit HP when HpMax is 0, got %q", got)
+	}
+}
+
+func TestFormatStatus_Position(t *testing.T) {
+	info := Info{
+		CharacterName: "Aria",
+		ShortID:       "AR",
+		PositionCol:   "D",
+		PositionRow:   4,
+	}
+	got := FormatStatus(info)
+	if !strings.Contains(got, "**Position:** D4") {
+		t.Errorf("got %q, want position line", got)
+	}
+}
+
+func TestFormatStatus_OmitsPositionWhenNoCol(t *testing.T) {
+	info := Info{
+		CharacterName: "Aria",
+		ShortID:       "AR",
+		Concentration: "Bless",
+	}
+	got := FormatStatus(info)
+	if strings.Contains(got, "**Position:**") {
+		t.Errorf("should omit Position when PositionCol empty, got %q", got)
+	}
+}
+
 func TestFormatStatus_Exhaustion(t *testing.T) {
 	info := Info{
 		CharacterName:   "Aria",

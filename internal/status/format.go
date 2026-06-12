@@ -17,6 +17,10 @@ type Info struct {
 	ShortID       string
 
 	// Combat-specific state
+	HpCurrent       int
+	HpMax           int    // HP section renders only when > 0
+	PositionCol     string // grid column letter; position renders only when non-empty
+	PositionRow     int
 	Conditions      []ConditionEntry
 	Concentration   string // spell name, empty if none
 	TempHP          int
@@ -54,6 +58,14 @@ func FormatStatus(info Info) string {
 	}
 
 	var sections []string
+
+	if info.HpMax > 0 {
+		sections = append(sections, fmt.Sprintf("**HP:** %d/%d", info.HpCurrent, info.HpMax))
+	}
+
+	if info.PositionCol != "" {
+		sections = append(sections, fmt.Sprintf("**Position:** %s%d", info.PositionCol, info.PositionRow))
+	}
 
 	if len(info.Conditions) > 0 {
 		var parts []string

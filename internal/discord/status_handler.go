@@ -169,6 +169,13 @@ func (h *StatusHandler) populateCombatantState(info *status.Info, comb refdata.C
 		}
 	}
 
+	// HP and grid position (combat-only; omitted out of combat where there is
+	// no combatant). Help text for /status advertises both.
+	info.HpCurrent = int(comb.HpCurrent)
+	info.HpMax = int(comb.HpMax)
+	info.PositionCol = comb.PositionCol
+	info.PositionRow = int(comb.PositionRow)
+
 	// Temp HP
 	info.TempHP = int(comb.TempHp)
 
