@@ -16,6 +16,12 @@ type componentSender struct {
 	msgID      string
 	calls      int
 	plainCalls int
+
+	editCalls          int    // EditWithComponents (ComponentEditor) calls
+	plainEditCalls     int    // Edit (content-only) calls
+	editContent        string // content of the last edit (either path)
+	editComponents     []discordgo.MessageComponent
+	editComponentsSeen bool // EditWithComponents was given a components arg
 }
 
 func (c *componentSender) Send(channelID, content string) (string, error) {
@@ -25,7 +31,19 @@ func (c *componentSender) Send(channelID, content string) (string, error) {
 	return c.msgID, nil
 }
 
-func (c *componentSender) Edit(channelID, messageID, content string) error { return nil }
+func (c *componentSender) Edit(channelID, messageID, content string) error {
+	c.plainEditCalls++
+	c.editContent = content
+	return nil
+}
+
+func (c *componentSender) EditWithComponents(channelID, messageID, content string, components []discordgo.MessageComponent) error {
+	c.editCalls++
+	c.editContent = content
+	c.editComponents = components
+	c.editComponentsSeen = true
+	return nil
+}
 
 func (c *componentSender) SendWithComponents(channelID, content string, components []discordgo.MessageComponent) (string, error) {
 	c.calls++
@@ -86,5 +104,71 @@ func TestSessionSender_SendWithComponents(t *testing.T) {
 	}
 	if len(cs.complexComponents) == 0 {
 		t.Error("expected components forwarded to ChannelMessageSendComplex")
+	}
+}
+
+func TestResolve_StripsResolveButton(t *testing.T) {
+	cs := &componentSender{msgID: "disc-1"}
+	n := NewNotifier(cs, staticChannelResolver("chan-1"), func(id string) string { return "/q/" + id })
+
+	itemID, err := n.Post(context.Background(), Event{
+		Kind:       KindFreeformAction,
+		PlayerName: "Thorn",
+		Summary:    "flips the table",
+		GuildID:    "g1",
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+
+	if err := n.Resolve(context.Background(), itemID, "handled"); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if cs.editCalls != 1 {
+		t.Fatalf("expected EditWithComponents called once, got %d (plain Edit %d)", cs.editCalls, cs.plainEditCalls)
+	}
+	if cs.plainEditCalls != 0 {
+		t.Errorf("expected component-aware edit, not plain Edit (%d plain calls)", cs.plainEditCalls)
+	}
+	if !cs.editComponentsSeen || cs.editComponents == nil {
+		t.Fatal("expected a non-nil components slice so the resolve button is stripped")
+	}
+	if len(cs.editComponents) != 0 {
+		t.Errorf("expected empty (stripping) components, got %d", len(cs.editComponents))
+	}
+	item, _ := n.Get(itemID)
+	if want := FormatResolved(item.PostedText, "handled"); cs.editContent != want {
+		t.Errorf("edit content = %q want %q", cs.editContent, want)
+	}
+}
+
+func TestCancel_StripsResolveButton(t *testing.T) {
+	cs := &componentSender{msgID: "disc-1"}
+	n := NewNotifier(cs, staticChannelResolver("chan-1"), func(id string) string { return "/q/" + id })
+
+	itemID, err := n.Post(context.Background(), Event{
+		Kind:       KindFreeformAction,
+		PlayerName: "Thorn",
+		Summary:    "flips the table",
+		GuildID:    "g1",
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	item, _ := n.Get(itemID)
+
+	if err := n.Cancel(context.Background(), itemID, "changed mind"); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	if cs.editCalls != 1 || cs.plainEditCalls != 0 {
+		t.Fatalf("expected one component-aware edit, got EditWithComponents=%d Edit=%d", cs.editCalls, cs.plainEditCalls)
+	}
+	if !cs.editComponentsSeen || cs.editComponents == nil || len(cs.editComponents) != 0 {
+		t.Errorf("expected empty non-nil components to strip the button, got %v", cs.editComponents)
+	}
+	if want := FormatCancelled(item.PostedText); cs.editContent != want {
+		t.Errorf("edit content = %q want %q", cs.editContent, want)
 	}
 }

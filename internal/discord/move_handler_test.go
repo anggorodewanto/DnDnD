@@ -158,6 +158,9 @@ func (m *mockMoveSession) GuildChannelCreateComplex(string, discordgo.GuildChann
 func (m *mockMoveSession) ChannelMessageEdit(string, string, string) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockMoveSession) ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error) {
+	return nil, nil
+}
 func (m *mockMoveSession) GetState() *discordgo.State { return nil }
 
 // --- Helpers ---

@@ -63,6 +63,9 @@ func (m *mockInventorySession) FollowupMessageCreate(interaction *discordgo.Inte
 func (m *mockInventorySession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockInventorySession) ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error) {
+	return nil, nil
+}
 func (m *mockInventorySession) GetState() *discordgo.State {
 	return nil
 }

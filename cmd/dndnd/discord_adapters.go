@@ -1127,6 +1127,10 @@ func (q *queueingSession) ChannelMessageEdit(channelID, messageID, content strin
 	return q.inner.ChannelMessageEdit(channelID, messageID, content)
 }
 
+func (q *queueingSession) ChannelMessageEditComplex(m *discordgo.MessageEdit) (*discordgo.Message, error) {
+	return q.inner.ChannelMessageEditComplex(m)
+}
+
 func (q *queueingSession) GetState() *discordgo.State {
 	return q.inner.GetState()
 }

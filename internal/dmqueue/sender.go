@@ -8,6 +8,7 @@ type sessionAPI interface {
 	ChannelMessageSend(channelID, content string) (*discordgo.Message, error)
 	ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error)
 	ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error)
+	ChannelMessageEditComplex(m *discordgo.MessageEdit) (*discordgo.Message, error)
 }
 
 // ResolveButtonCustomIDPrefix is the custom-ID prefix carried by the [✅
@@ -23,6 +24,16 @@ const ResolveButtonCustomIDPrefix = "dmqueue_resolve:"
 // existing Sender fakes that don't need buttons keep working unchanged.
 type ComponentSender interface {
 	SendWithComponents(channelID, content string, components []discordgo.MessageComponent) (messageID string, err error)
+}
+
+// ComponentEditor is an optional Sender capability: editing a message's
+// content together with its components. DefaultNotifier.Resolve/Cancel use it
+// to strip the [✅ Resolve] button once an item is handled — by editing with
+// an empty component set — falling back to plain content-only Edit when the
+// concrete sender does not implement it, so existing Sender fakes keep working
+// unchanged.
+type ComponentEditor interface {
+	EditWithComponents(channelID, messageID, content string, components []discordgo.MessageComponent) error
 }
 
 // resolveButtonComponents builds the single-row [✅ Resolve] action attached
@@ -120,5 +131,23 @@ func lastNewline(s string) int {
 // Edit updates an existing message's content.
 func (s *SessionSender) Edit(channelID, messageID, content string) error {
 	_, err := s.session.ChannelMessageEdit(channelID, messageID, content)
+	return err
+}
+
+// EditWithComponents updates an existing message's content and components via
+// ChannelMessageEditComplex. Passing an empty (non-nil) components slice
+// strips any attached buttons: discordgo removes components only when handed a
+// non-nil pointer to an empty slice (a nil pointer leaves them untouched),
+// which this method guarantees even if the caller passes a nil slice.
+func (s *SessionSender) EditWithComponents(channelID, messageID, content string, components []discordgo.MessageComponent) error {
+	if components == nil {
+		components = []discordgo.MessageComponent{}
+	}
+	_, err := s.session.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		Channel:    channelID,
+		ID:         messageID,
+		Content:    &content,
+		Components: &components,
+	})
 	return err
 }

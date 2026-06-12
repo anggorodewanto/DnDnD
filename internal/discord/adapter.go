@@ -55,6 +55,10 @@ func (d *DiscordgoSession) ChannelMessageEdit(channelID, messageID, content stri
 	return d.S.ChannelMessageEdit(channelID, messageID, content)
 }
 
+func (d *DiscordgoSession) ChannelMessageEditComplex(m *discordgo.MessageEdit) (*discordgo.Message, error) {
+	return d.S.ChannelMessageEditComplex(m)
+}
+
 func (d *DiscordgoSession) GetState() *discordgo.State {
 	return d.S.State
 }

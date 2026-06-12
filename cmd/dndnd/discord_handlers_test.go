@@ -71,6 +71,9 @@ func (t *testSession) FollowupMessageCreate(interaction *discordgo.Interaction, 
 func (t *testSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return &discordgo.Message{}, nil
 }
+func (t *testSession) ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error) {
+	return &discordgo.Message{}, nil
+}
 func (t *testSession) GetState() *discordgo.State { return nil }
 
 // TestBuildDiscordHandlers_ConstructsAllPhase105Handlers ensures the Phase 105b

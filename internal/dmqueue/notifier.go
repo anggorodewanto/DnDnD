@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // Status of a dm-queue item.
@@ -227,7 +229,7 @@ func (n *DefaultNotifier) Cancel(ctx context.Context, itemID, reason string) err
 	if item.ChannelID == "" || item.MessageID == "" {
 		return nil // no channel, or Send failed: no Discord message to edit
 	}
-	return n.sender.Edit(item.ChannelID, item.MessageID, FormatCancelled(item.PostedText))
+	return n.editHandled(item.ChannelID, item.MessageID, FormatCancelled(item.PostedText))
 }
 
 // Resolve marks a pending item as resolved and edits the Discord message
@@ -246,7 +248,20 @@ func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) e
 	if item.ChannelID == "" || item.MessageID == "" {
 		return nil // no channel, or Send failed: no Discord message to edit
 	}
-	return n.sender.Edit(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
+	return n.editHandled(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
+}
+
+// editHandled rewrites a handled (resolved/cancelled) dm-queue message with
+// its final text and, when the sender supports it, strips the [✅ Resolve]
+// button by editing with an empty component set. Senders without the
+// ComponentEditor capability fall back to a content-only edit, leaving the
+// (now idempotent) button in place — the DMQueueResolveHandler guard makes a
+// stray click on an already-handled item harmless.
+func (n *DefaultNotifier) editHandled(channelID, messageID, content string) error {
+	if ce, ok := n.sender.(ComponentEditor); ok {
+		return ce.EditWithComponents(channelID, messageID, content, []discordgo.MessageComponent{})
+	}
+	return n.sender.Edit(channelID, messageID, content)
 }
 
 // Get returns a copy of the item by ID. The store is consulted with a

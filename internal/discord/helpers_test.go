@@ -89,6 +89,10 @@ func (m *MockSession) ChannelMessageEdit(channelID, messageID, content string) (
 	return &discordgo.Message{ID: messageID}, nil
 }
 
+func (m *MockSession) ChannelMessageEditComplex(me *discordgo.MessageEdit) (*discordgo.Message, error) {
+	return &discordgo.Message{ID: me.ID}, nil
+}
+
 func (m *MockSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
 	if m.FollowupMessageCreateFunc != nil {
 		return m.FollowupMessageCreateFunc(interaction, wait, data)

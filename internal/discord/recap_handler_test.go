@@ -53,6 +53,9 @@ func (m *mockRecapSession) GuildChannelCreateComplex(string, discordgo.GuildChan
 func (m *mockRecapSession) ChannelMessageEdit(string, string, string) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockRecapSession) ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error) {
+	return nil, nil
+}
 func (m *mockRecapSession) GetState() *discordgo.State { return nil }
 
 type mockRecapService struct {

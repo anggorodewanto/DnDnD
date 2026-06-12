@@ -33,6 +33,9 @@ const (
 	KindInteractionEdit
 	// KindChannelMessageEdit covers ChannelMessageEdit.
 	KindChannelMessageEdit
+	// KindChannelMessageEditComplex covers ChannelMessageEditComplex
+	// (content + component edits, e.g. stripping a resolve button).
+	KindChannelMessageEditComplex
 	// KindDirectMessage covers UserChannelCreate followed by a send.
 	KindDirectMessage
 )
@@ -48,6 +51,8 @@ func (k Kind) String() string {
 		return "interaction_edit"
 	case KindChannelMessageEdit:
 		return "channel_message_edit"
+	case KindChannelMessageEditComplex:
+		return "channel_message_edit_complex"
 	case KindDirectMessage:
 		return "direct_message"
 	default:
@@ -377,6 +382,25 @@ func (f *Fake) ChannelMessageEdit(channelID, messageID, content string) (*discor
 		Content:   content,
 	})
 	return &discordgo.Message{ID: messageID, ChannelID: channelID, Content: content}, nil
+}
+
+// ChannelMessageEditComplex records a content + component edit. Content and
+// Components are captured when present so tests can assert button stripping
+// (an empty, non-nil Components slice).
+func (f *Fake) ChannelMessageEditComplex(m *discordgo.MessageEdit) (*discordgo.Message, error) {
+	entry := Entry{
+		Kind:      KindChannelMessageEditComplex,
+		ChannelID: m.Channel,
+		MessageID: m.ID,
+	}
+	if m.Content != nil {
+		entry.Content = *m.Content
+	}
+	if m.Components != nil {
+		entry.Components = *m.Components
+	}
+	f.appendEntry(entry)
+	return &discordgo.Message{ID: m.ID, ChannelID: m.Channel, Content: entry.Content}, nil
 }
 
 // GetState returns a stable State stub; tests can swap it via SetState.
