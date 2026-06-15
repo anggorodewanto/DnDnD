@@ -131,6 +131,7 @@ var MutableTables = []string{
 	"error_log",
 	"character_drafts",
 	"dm_active_campaign",
+	"open5e_custom_sources",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.

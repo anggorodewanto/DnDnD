@@ -1172,3 +1172,34 @@ export async function updateCampaignOpen5eSources(campaignId, enabled) {
   });
   return res.json();
 }
+
+/**
+ * Add (or update) an admin-managed custom Open5e source. Extends the global
+ * catalog so the slug becomes selectable in every campaign's source toggle.
+ * DM-only server-side. The slug must be a canonical Open5e document slug
+ * (lowercase, hyphenated) and must not collide with a built-in entry.
+ *
+ * @param {{slug: string, title: string, publisher?: string, description?: string}} source
+ * @returns {Promise<{slug: string, title: string, publisher?: string, description?: string, builtin: boolean}>}
+ */
+export async function addOpen5eSource(source) {
+  const res = await apiFetch('/api/open5e/sources', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(source),
+  });
+  return res.json();
+}
+
+/**
+ * Delete an admin-added custom Open5e source from the global catalog. Built-in
+ * sources are protected server-side (409). DM-only. Resolves on success (204).
+ *
+ * @param {string} slug
+ * @returns {Promise<void>}
+ */
+export async function deleteOpen5eSource(slug) {
+  await apiFetch(`/api/open5e/sources/${encodeURIComponent(slug)}`, {
+    method: 'DELETE',
+  });
+}

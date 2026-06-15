@@ -1264,12 +1264,17 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		explorationHandler := exploration.NewDashboardHandler(explorationSvc, queries)
 		dashboard.RegisterExplorationRoutes(router, explorationHandler, dmAuthMw)
 
-		// F-8 sources mount: per-campaign Open5e source GET/PUT behind
-		// dmAuthMw. Mutating which third-party books a campaign trusts is
-		// strictly a DM concern (spec line 2546) — non-DM authenticated
-		// users must get 403 here rather than silently flipping flags.
+		// F-8 sources mount: per-campaign Open5e source GET/PUT plus the
+		// global catalog management (add/remove custom sources) behind
+		// dmAuthMw. Mutating which third-party books a campaign trusts — and
+		// extending the catalog itself — is strictly a DM concern (spec line
+		// 2546): non-DM authenticated users must get 403 here rather than
+		// silently flipping flags or injecting catalog entries. The catalog
+		// GET stays public (mounted above) so the SPA can render checkboxes.
 		router.Group(func(r chi.Router) {
 			r.Use(dmAuthMw)
+			r.Post("/api/open5e/sources", open5eSourcesHandler.AddCustomSource)
+			r.Delete("/api/open5e/sources/{slug}", open5eSourcesHandler.DeleteCustomSource)
 			r.Get("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.GetCampaignSources)
 			r.Put("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.UpdateCampaignSources)
 		})

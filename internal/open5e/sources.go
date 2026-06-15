@@ -9,6 +9,10 @@ type Source struct {
 	Title       string `json:"title"`
 	Publisher   string `json:"publisher,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Builtin marks the baseline catalog entries that ship in code and cannot
+	// be edited or deleted through the admin API. DB-backed custom sources
+	// report false so the dashboard can render a delete control only for them.
+	Builtin bool `json:"builtin"`
 }
 
 // catalog is the curated list of Open5e document slugs the dashboard
@@ -37,6 +41,9 @@ var catalog = []Source{
 func Catalog() []Source {
 	out := make([]Source, len(catalog))
 	copy(out, catalog)
+	for i := range out {
+		out[i].Builtin = true
+	}
 	return out
 }
 

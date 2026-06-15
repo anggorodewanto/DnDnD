@@ -400,6 +400,14 @@ type NarrationTemplate struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+type Open5eCustomSource struct {
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Publisher   string    `json:"publisher"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type PendingAction struct {
 	ID               uuid.UUID     `json:"id"`
 	EncounterID      uuid.UUID     `json:"encounter_id"`
