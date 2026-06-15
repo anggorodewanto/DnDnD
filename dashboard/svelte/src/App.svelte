@@ -28,6 +28,7 @@
   import { getCurrentUser } from './lib/api.js';
   import {
     dashboardNavItems,
+    dashboardNavSections,
     dashboardViewTitle,
     isDashboardNavItemActive,
   } from './lib/dashboardNavigation.js';
@@ -180,14 +181,19 @@
       <span>DnDnD</span>
     </a>
     <nav class="sidebar-nav">
-      {#each dashboardNavItems as item}
-        <a
-          href={item.hash}
-          class:active={isDashboardNavItemActive(item, currentView)}
-          onclick={(event) => { event.preventDefault(); navigateTo(item); }}
-        >
-          {item.label}
-        </a>
+      {#each dashboardNavSections as section}
+        <div class="sidebar-section">
+          <span class="sidebar-section-title">{section.title}</span>
+          {#each section.items as item}
+            <a
+              href={item.hash}
+              class:active={isDashboardNavItemActive(item, currentView)}
+              onclick={(event) => { event.preventDefault(); navigateTo(item); }}
+            >
+              {item.label}
+            </a>
+          {/each}
+        </div>
       {/each}
     </nav>
   </aside>
@@ -328,7 +334,23 @@
   .sidebar-nav {
     display: flex;
     flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
     gap: 0.25rem;
+  }
+
+  .sidebar-section-title {
+    padding: 0 0.75rem;
+    margin-bottom: 0.125rem;
+    color: #64748b;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .sidebar-nav a {

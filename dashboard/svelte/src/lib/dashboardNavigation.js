@@ -1,13 +1,17 @@
 export const dashboardNavItems = Object.freeze([
-  { id: 'home', label: 'Home', view: 'home', hash: '#home', group: ['home'] },
-  { id: 'campaigns', label: 'Campaigns', view: 'campaigns', hash: '#campaigns', group: ['campaigns'] },
-  { id: 'dashboard', label: 'Maps', view: 'list', hash: '#maps', group: ['list', 'editor'] },
-  { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', group: ['combat'] },
+  // Campaign — top-level context the DM starts from.
+  { id: 'home', label: 'Home', view: 'home', hash: '#home', section: 'Campaign', group: ['home'] },
+  { id: 'campaigns', label: 'Campaigns', view: 'campaigns', hash: '#campaigns', section: 'Campaign', group: ['campaigns'] },
+  { id: 'party', label: 'Party', view: 'party', hash: '#party', section: 'Campaign', group: ['party'] },
+
+  // Prep — content built before the session.
+  { id: 'dashboard', label: 'Maps', view: 'list', hash: '#maps', section: 'Prep', group: ['list', 'editor'] },
   {
     id: 'encounters',
     label: 'Encounters',
     view: 'encounter-list',
     hash: '#encounters',
+    section: 'Prep',
     group: ['encounter-list', 'encounter-editor'],
   },
   {
@@ -15,40 +19,69 @@ export const dashboardNavItems = Object.freeze([
     label: 'Shops',
     view: 'shop-list',
     hash: '#shops',
+    section: 'Prep',
     group: ['shop-list', 'shop-editor'],
   },
-  { id: 'narrate', label: 'Narrate', view: 'narrate', hash: '#narrate', group: ['narrate'] },
-  { id: 'homebrew', label: 'Homebrew', view: 'homebrew', hash: '#homebrew', group: ['homebrew'] },
-  { id: 'party', label: 'Party', view: 'party', hash: '#party', group: ['party'] },
+  { id: 'homebrew', label: 'Homebrew', view: 'homebrew', hash: '#homebrew', section: 'Prep', group: ['homebrew'] },
   {
     id: 'stat-block-library',
     label: 'Stat Blocks',
     view: 'stat-block-library',
     hash: '#stat-block-library',
+    section: 'Prep',
     group: ['stat-block-library'],
   },
-  {
-    id: 'message-player',
-    label: 'Message Player',
-    view: 'message-player',
-    hash: '#message-player',
-    group: ['message-player'],
-  },
+  { id: 'loot', label: 'Loot', view: 'loot', hash: '#loot', section: 'Prep', group: ['loot'] },
   {
     id: 'open5e-sources',
     label: 'Open5e Sources',
     view: 'open5e-sources',
     hash: '#open5e-sources',
+    section: 'Prep',
     group: ['open5e-sources'],
   },
-  { id: 'dm-queue', label: 'DM Queue', view: 'dm-queue', hash: '#dm-queue', group: ['dm-queue'] },
-  { id: 'approvals', label: 'Approvals', view: 'approvals', hash: '#approvals', group: ['approvals'] },
-  { id: 'loot', label: 'Loot', view: 'loot', hash: '#loot', group: ['loot'] },
-  { id: 'levelup', label: 'Level Up', view: 'levelup', hash: '#levelup', group: ['levelup'] },
-  { id: 'characters-new', label: 'Create Character', view: 'characters-new', hash: '#characters-new', group: ['characters-new'] },
-  { id: 'exploration', label: 'Exploration', view: 'exploration', hash: '#exploration', group: ['exploration'] },
-  { id: 'errors', label: 'Errors', view: 'errors', hash: '#errors', group: ['errors'] },
+
+  // Run Session — live at the table.
+  { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', section: 'Run Session', group: ['combat'] },
+  { id: 'exploration', label: 'Exploration', view: 'exploration', hash: '#exploration', section: 'Run Session', group: ['exploration'] },
+  { id: 'narrate', label: 'Narrate', view: 'narrate', hash: '#narrate', section: 'Run Session', group: ['narrate'] },
+  { id: 'dm-queue', label: 'DM Queue', view: 'dm-queue', hash: '#dm-queue', section: 'Run Session', group: ['dm-queue'] },
+
+  // Players — managing the people at the table.
+  { id: 'characters-new', label: 'Create Character', view: 'characters-new', hash: '#characters-new', section: 'Players', group: ['characters-new'] },
+  { id: 'levelup', label: 'Level Up', view: 'levelup', hash: '#levelup', section: 'Players', group: ['levelup'] },
+  { id: 'approvals', label: 'Approvals', view: 'approvals', hash: '#approvals', section: 'Players', group: ['approvals'] },
+  {
+    id: 'message-player',
+    label: 'Message Player',
+    view: 'message-player',
+    hash: '#message-player',
+    section: 'Players',
+    group: ['message-player'],
+  },
+
+  // System — operational tooling.
+  { id: 'errors', label: 'Errors', view: 'errors', hash: '#errors', section: 'System', group: ['errors'] },
 ]);
+
+/**
+ * dashboardNavSections groups dashboardNavItems into ordered, titled sections by
+ * walking the flat list and starting a new section whenever the `section` tag
+ * changes. Order and item identity are preserved, so the sidebar render stays a
+ * pure projection of dashboardNavItems.
+ * @type {ReadonlyArray<{ title: string, items: typeof dashboardNavItems[number][] }>}
+ */
+export const dashboardNavSections = Object.freeze(
+  dashboardNavItems.reduce((sections, item) => {
+    const current = sections[sections.length - 1];
+    if (current && current.title === item.section) {
+      current.items.push(item);
+      return sections;
+    }
+    sections.push({ title: item.section, items: [item] });
+    return sections;
+  }, []),
+);
 
 const VIEW_TITLES = Object.freeze({
   home: 'Campaign Home',

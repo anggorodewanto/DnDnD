@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dashboardNavItems,
+  dashboardNavSections,
   dashboardViewTitle,
   isDashboardNavItemActive,
 } from './dashboardNavigation.js';
@@ -37,6 +38,43 @@ describe('dashboardNavItems', () => {
   it('exposes the formerly Go-rendered pages as Svelte panel entries', () => {
     const ids = dashboardNavItems.map((item) => item.id);
     expect(ids).toEqual(expect.arrayContaining(['home', 'errors', 'exploration', 'characters-new']));
+  });
+});
+
+describe('dashboardNavSections', () => {
+  it('groups the sidebar into workflow-ordered sections with titles', () => {
+    expect(dashboardNavSections.map((section) => section.title)).toEqual([
+      'Campaign',
+      'Prep',
+      'Run Session',
+      'Players',
+      'System',
+    ]);
+  });
+
+  it('places every nav item in exactly one section, preserving overall order', () => {
+    const flattened = dashboardNavSections.flatMap((section) => section.items);
+    expect(flattened).toEqual([...dashboardNavItems]);
+  });
+
+  it('tags each item with the section it belongs to', () => {
+    const sectionFor = (id) =>
+      dashboardNavSections.find((section) => section.items.some((item) => item.id === id))?.title;
+    expect(sectionFor('home')).toBe('Campaign');
+    expect(sectionFor('party')).toBe('Campaign');
+    expect(sectionFor('dashboard')).toBe('Prep');
+    expect(sectionFor('open5e-sources')).toBe('Prep');
+    expect(sectionFor('combat')).toBe('Run Session');
+    expect(sectionFor('dm-queue')).toBe('Run Session');
+    expect(sectionFor('characters-new')).toBe('Players');
+    expect(sectionFor('message-player')).toBe('Players');
+    expect(sectionFor('errors')).toBe('System');
+  });
+
+  it('keeps every section non-empty', () => {
+    for (const section of dashboardNavSections) {
+      expect(section.items.length).toBeGreaterThan(0);
+    }
   });
 });
 
