@@ -20,6 +20,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -133,10 +135,76 @@ func TestE2E_ReplayDetectsDrift(t *testing.T) {
 	}
 }
 
+// replayPreconditions declares the seed state a transcript needs before
+// replay. It is loaded from a sidecar `<transcript>.preconditions.json`;
+// when no sidecar exists TestE2E_ReplayFromFile applies the legacy default
+// (a campaign plus one approved player "Gale") so existing transcripts keep
+// working without a manifest.
+type replayPreconditions struct {
+	Campaign              string               `json:"campaign"`
+	Player                string               `json:"player"` // dispatcher player ID
+	ApprovedPlayers       []approvedPlayerSeed `json:"approvedPlayers"`
+	PlaceholderCharacters []string             `json:"placeholderCharacters"`
+}
+
+type approvedPlayerSeed struct {
+	DiscordUserID string `json:"discordUserId"`
+	CharacterName string `json:"characterName"`
+}
+
+// preconditionsPath maps a transcript path to its sidecar manifest:
+// `foo.jsonl` -> `foo.preconditions.json`.
+func preconditionsPath(transcript string) string {
+	return strings.TrimSuffix(transcript, ".jsonl") + ".preconditions.json"
+}
+
+// loadPreconditions reads the sidecar manifest if present. It returns
+// (nil, nil) when no sidecar exists so the caller applies the default seed.
+func loadPreconditions(transcript string) (*replayPreconditions, error) {
+	data, err := os.ReadFile(preconditionsPath(transcript))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var pc replayPreconditions
+	if err := json.Unmarshal(data, &pc); err != nil {
+		return nil, err
+	}
+	return &pc, nil
+}
+
+// applyPreconditions seeds the harness from a manifest and returns the
+// dispatcher's player ID. With no manifest it applies the legacy default:
+// a campaign plus one approved player "Gale", dispatching as "user-file".
+func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) string {
+	t.Helper()
+	if pc == nil {
+		h.SeedCampaign("replay-file-campaign")
+		h.SeedApprovedPlayer("user-file", "Gale")
+		return "user-file"
+	}
+	if pc.Campaign != "" {
+		h.SeedCampaign(pc.Campaign)
+	}
+	for _, ap := range pc.ApprovedPlayers {
+		h.SeedApprovedPlayer(ap.DiscordUserID, ap.CharacterName)
+	}
+	for _, name := range pc.PlaceholderCharacters {
+		h.SeedCharacterOnly(name)
+	}
+	if pc.Player == "" {
+		return "user-file"
+	}
+	return pc.Player
+}
+
 // TestE2E_ReplayFromFile drives the harness from a JSON-lines
 // transcript on disk. PLAYTEST_TRANSCRIPT overrides the default path so
 // `make playtest-replay TRANSCRIPT=path/to/file.jsonl` plays an
-// arbitrary recording.
+// arbitrary recording. A sidecar `<transcript>.preconditions.json`, if
+// present, declares the seed state the transcript needs.
 func TestE2E_ReplayFromFile(t *testing.T) {
 	path := os.Getenv("PLAYTEST_TRANSCRIPT")
 	if path == "" {
@@ -151,11 +219,15 @@ func TestE2E_ReplayFromFile(t *testing.T) {
 		t.Fatalf("LoadTranscript: %v", err)
 	}
 
+	pc, err := loadPreconditions(path)
+	if err != nil {
+		t.Fatalf("load preconditions for %s: %v", path, err)
+	}
+
 	h := startE2EHarness(t)
 	defer h.Stop()
-	h.SeedCampaign("replay-file-campaign")
-	playerID := "user-file"
-	h.SeedApprovedPlayer(playerID, "Gale")
+
+	playerID := applyPreconditions(t, h, pc)
 
 	disp := &harnessDispatcher{h: h, playerID: playerID}
 	obs := &harnessObserver{fake: h.fake}

@@ -25,12 +25,19 @@ Record every settled decision here so a fresh agent doesn't re-litigate it.
 | 2026-06-19 | Harness goal = **all four** (bug hunting / acceptance / regression / living docs); achieved via the per-step lifecycle, not separate suites. |
 | 2026-06-19 | Autonomy = **interactive while building a case**, **unattended once crystallized**. |
 | 2026-06-19 | Discord-driving mechanism = **decide after exploration** (STEP-000 must recommend). |
+| 2026-06-19 | **(STEP-000)** Mechanism = **hybrid anchored on the in-process e2e harness**. Player actions via `InjectInteraction`/`PlayerCommand` + assert `fake.Transcript()`; crystallize to `.jsonl`, run with `make playtest-replay`. DM setup via `/setup` + `SeedCampaign`/dashboard APIs. Real Discord (`cmd/playtest-player` paste flow) = periodic human-assisted smoke only, never in the auto loop. *Why:* bot-to-bot slash invocation is forbidden + user-token automation violates ToS, so real-Discord player input can't be automated; the harness runs the real router/handlers/DB with only the Discord wire faked. (Awaiting user sign-off.) |
+| 2026-06-19 | **(STEP-000)** Crystallized cases = `.jsonl` in `internal/playtest/testdata/`, replayed by `TestE2E_ReplayFromFile`; `observed` `content` lines ARE the assertion (substring match after `DefaultNormalize`). |
+| 2026-06-19 | **Real-Discord lane = human-assisted manual smoke only** (playtest-player paste). **Rejected: automating discordo / any self-bot** — user-token automation violates Discord ToS + risks account ban; "avoid detection" jitter = enforcement evasion, out of scope. No compliant way to auto-invoke another app's slash commands as a user. |
+| 2026-06-19 | **Jitter / randomness / varied-content → build as a harness FUZZING + timing layer** (randomized inter-command timing + varied input on the in-process harness, to surface races/timing/input bugs). NOT a real-Discord evasion feature. Backlog item, after core steps. |
+| 2026-06-19 | **STEP-001 = Player `/register`** (first authored step). |
+| 2026-06-19 | **(STEP-001)** Crystallize route = **B**: per-transcript preconditions sidecar (`<transcript>.preconditions.json`) + `.jsonl` for Discord-visible assertions; DB row stays in the existing Go scenario. `.jsonl` replay can't assert DB — deferred replay-engine enhancement if ever needed. |
 
 ### Open questions awaiting answers
 
-- Q1: How does the AI drive Discord as DM + player(s)? → STEP-000.
-- Q2: Smallest first real-world step to author? (candidate: "DM creates a campaign") → STEP-000.
-- Q3: Crystallized-case format + location? (candidate: `internal/playtest/testdata/*.jsonl`) → STEP-000.
+- Q1: ~~How does the AI drive Discord?~~ **RESOLVED** by STEP-000 (see decisions). Awaiting user sign-off.
+- Q2: Smallest first real-world step to author? → proposed to user (STEP-000 QnA). Candidates: DM `/setup`, player `/register`, player `/move`.
+- Q3: ~~Crystallized-case format + location?~~ **RESOLVED**: `internal/playtest/testdata/*.jsonl`.
+- Q4 (new): Do we want a true real-Discord smoke lane at all, or harness-only? → ask user.
 
 ---
 
@@ -38,23 +45,39 @@ Record every settled decision here so a fresh agent doesn't re-litigate it.
 
 | ID | Real-world step | Phase | Artifact (test/case path) | Notes / bugs |
 | --- | --- | --- | --- | --- |
-| STEP-000 | Explore existing harness & refine the plan | `TODO` | — | First task. See README §8. No test authored here. |
+| STEP-000 | Explore existing harness & refine the plan | `DONE` | docs only | Inventory confirmed (README §6), mechanism recommended (README §7). 5 reference scenarios + record/replay already exist. |
+| STEP-001 | Player `/register` (create character) | `AUTOMATED` ✅ | `internal/playtest/testdata/register.jsonl` (+`.preconditions.json`) | `make playtest-replay TRANSCRIPT=…/register.jsonl` → PASS. Added per-transcript preconditions to `cmd/dndnd/e2e_replay_test.go`. DB row locked by `TestE2E_RegistrationScenario`. See [steps/STEP-001-player-register.md](steps/STEP-001-player-register.md). |
+| STEP-002 | *(next — pick via QnA)* | `TODO` | — | Backlog candidates: DM `/setup`, player `/move`. |
 
-### Candidate backlog (unstarted — order to be confirmed by STEP-000)
+### Refined backlog (smallest-first; mechanics noted)
 
-These are *guesses* at the real-world step sequence, smallest-first. STEP-000
-will confirm, reorder, and split them. Do not start any until STEP-000 is done.
+Order reflects the real play journey **and** harness mechanics. "Covered?" =
+whether a reference `TestE2E_*Scenario` already exists to template from.
 
-1. DM creates a campaign.
-2. DM creates / opens a play channel (or session).
-3. Player joins the campaign.
-4. Player rolls / creates a character.
-5. DM starts an encounter.
-6. DM places tokens / loads a map.
-7. Player moves one tile.
-8. Combat: initiative is rolled.
-9. Combat: a player takes one action (attack / cast).
-10. Combat: damage + condition applied.
+| # | Real-world step | How to drive | Covered? |
+| --- | --- | --- | --- |
+| pre | Campaign exists | `SeedCampaign` (dashboard API in real life) | n/a (seeded) |
+| 1 | DM runs `/setup` (build channel structure) | inject `/setup` interaction | no — net-new |
+| 2 | Player `/register` (create character) | `PlayerCommand` | yes (Registration) |
+| 3 | DM approves the character | dashboard API / seed `SeedApprovedPlayer` | partial |
+| 4 | DM starts an encounter | dashboard API / seed | partial |
+| 5 | DM loads a map / places tokens | dashboard API / seed | partial |
+| 6 | Player `/move` one tile | `PlayerCommand` | yes (Movement) |
+| 7 | Combat: initiative | inject/seed | no |
+| 8 | Player `/attack` or `/cast` (one action) | `PlayerCommand` | partial |
+| 9 | Damage + condition applied | assert transcript + DB | no |
+| 10 | Player `/loot`, `/give`, `/save`, `/recap` | `PlayerCommand` | yes (Loot/Save/Recap) |
+
+> Note: "Covered" scenarios are *reference examples*, not proof the journey is
+> regression-locked. Re-walking them as small authored steps is still valuable —
+> it confirms current behavior and turns each into a maintained `.jsonl` case.
+
+### Cross-cutting feature backlog (not a play step)
+
+- **Harness fuzzing + timing layer** — randomized inter-command timing (jitter)
+  and varied input content driven into the in-process harness to surface race
+  conditions / timing / input-handling bugs. Deterministic when seeded. Build
+  *after* a few core steps exist to fuzz against. (See decisions log, 2026-06-19.)
 
 ---
 
@@ -66,3 +89,5 @@ what's next.
 | Date | Step | What happened | Next |
 | --- | --- | --- | --- |
 | 2026-06-19 | — | Set up `docs/ai-playtest/` (README + this ledger). Captured mission, lifecycle, modes, rules. | Run STEP-000 (explore + refine plan). |
+| 2026-06-19 | STEP-000 | Explored harness via 2 read-only subagents + verified claims. Found in-process e2e harness (real router/DB, fake Discord wire) + record/replay + 5 reference scenarios. Recommended hybrid mechanism. Updated README §6/§7 + ledger. | User sign-off on mechanism + pick STEP-001 (QnA sent). |
+| 2026-06-19 | STEP-001 | EXPLORE'd `/register` (subagent). Hit harness limit: replay seeding fixed → built per-transcript preconditions feature. Crystallized `register.jsonl` (+sidecar); replay PASS first run; backward compat + gofmt/vet clean. | Commit/push (ask user), then pick STEP-002. |

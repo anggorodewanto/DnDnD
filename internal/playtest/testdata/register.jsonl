@@ -1,0 +1,3 @@
+{"ts":"2026-06-19T10:00:00Z","dir":"dispatch","channel_id":"ch-cmd","author":"user-register","command":"/register name:Aria"}
+{"ts":"2026-06-19T10:00:01Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":"Registration submitted — Aria is pending DM approval. You'll be pinged when approved."}
+{"ts":"2026-06-19T10:00:02Z","dir":"observed","channel_id":"ch-dmqueue","author":"DnDnD","content":"**Aria** registration by <@user-register> via /register. Pending approval."}

@@ -123,47 +123,74 @@ the current step's `steps/` note (if any) → continue.**
 
 ---
 
-## 6. What we already have (verify in Task 1, don't trust blindly)
+## 6. What we already have (confirmed by STEP-000, 2026-06-19)
 
-From the project's `CLAUDE.md` and `Makefile`:
+The **in-process e2e harness is the backbone** — it boots the *real* production
+app (real `CommandRouter`, real handlers, real testcontainers Postgres) and only
+**fakes the Discord transport**. This is what lets an AI drive play deterministically.
 
-- **`cmd/playtest-player/`** — a REPL that observes Discord channels and
-  validates / **records** player slash commands. Likely our recording front end.
-  (`live_session.go` is coverage-excluded — a real-Discord path may live here.)
-- **`internal/playtest/`** — playtest package; `testdata/sample.jsonl` is a
-  sample recorded transcript.
-- **`make e2e`** → `go test -tags e2e ./cmd/dndnd/ -run TestE2E_ -count=1 -v`,
-  against a freshly-spun testcontainers Postgres. The unattended suite.
-- **`make playtest-replay TRANSCRIPT=<path>`** → replays a recorded `.jsonl`
-  transcript through `TestE2E_ReplayFromFile` (the "Phase 120/121" e2e harness).
-  **This record→replay path is probably the backbone of CRYSTALLIZE.**
-- **`docs/playtest-quickstart.md`**, **`docs/playtest-checklist.md`** — human
-  playtest setup + scenario list. Good source for candidate real-world steps.
-- **`docs/testing.md`** — three-tier test pyramid, `internal/testutil` fixtures,
-  coverage-exclusion list.
-- **`make local-up`** — full app + Postgres stack (use this, not `make run`,
-  for a live bot gateway).
+- **`cmd/dndnd/e2e_harness_test.go`** — `e2eHarness`: boots production
+  `runWithOptions(...)` in-process with a fake Discord session + a fresh
+  testcontainers Postgres. Helpers: `SeedCampaign`, `SeedApprovedPlayer`,
+  `PlayerCommand(playerID, name, opts...)`, `AssertEphemeralContains`. **This is
+  where AUTHOR happens.**
+- **`internal/testutil/discordfake/fake.go`** — the fake `discord.Session`.
+  `SetInteractionHandler(router.Handle)` + `InjectInteraction(*discordgo.Interaction)`
+  dispatch a command **in-process, no real Discord**; `Transcript() []Entry`
+  captures every outbound message/embed for assertions. **This is the seam.**
+- **`internal/discord/router.go:362` — `CommandRouter.Handle(*discordgo.Interaction)`** —
+  the single dispatch boundary. Same code path for real Discord and the fake.
+- **`cmd/dndnd/main.go` `runWithOptions` / `withDiscordSession` / `withCommandRouterReady`** —
+  the production seam that injects the fake session and exposes the router.
+- **`internal/playtest/`** — record/replay. `recorder.go` `TranscriptEntry`
+  schema = `{ts, dir(dispatch|observed), channel_id, author, command, content}`.
+  The **`observed` `content` lines ARE the assertion** (substring match after
+  `DefaultNormalize`: UUIDs → `<uuid>`, whitespace collapsed). `parser.go` has a
+  `PlayerCommands` allow-list that **rejects `/setup` and other DM/admin commands** —
+  enforcing the DM/player split. Transcripts: `testdata/{sample,combat_round}.jsonl`.
+- **`cmd/playtest-player/`** — a REPL that connects to a **real Discord gateway**
+  (`live_session.go`, bot token). Because Discord forbids bot-to-bot slash
+  invocation, it prints `PASTE THIS` lines for a **human** to paste, then records
+  the round-trip the bot's response makes back through the gateway. Real-Discord,
+  human-in-the-loop only.
+- **`make e2e`** → `go test -tags e2e ./cmd/dndnd/ -run TestE2E_ -count=1 -v`.
+  5 reference scenarios already exist: `TestE2E_{Registration,Movement,Loot,Save,RecapEmpty}Scenario`.
+- **`make playtest-replay TRANSCRIPT=<path>`** → `TestE2E_ReplayFromFile` replays
+  a `.jsonl` transcript through the harness. **The backbone of AUTOMATED.**
+- **DM setup is split:** `/setup` (build channel structure) is a slash command;
+  but **campaign creation, character approval, encounter setup are dashboard HTTP
+  APIs** (`cmd/dndnd/dashboard_apis.go`, OAuth-gated), not slash commands. The
+  harness side-steps these with `SeedCampaign` / `SeedApprovedPlayer` / direct DB.
+- **`docs/playtest-checklist.md`** — 11 human scenarios = a good backlog source.
+- **`docs/testing.md`** — test pyramid, `internal/testutil`, coverage exclusions.
+- **`make local-up`** — full app + Postgres (live bot gateway, for real-Discord lane).
 
 ---
 
-## 7. Open questions (resolve in Task 1, record answers in `LEDGER.md`)
+## 7. How the AI drives Discord — RESOLVED (STEP-000, awaiting user sign-off)
 
-1. **How does the AI drive Discord as DM + player(s)?** *(decided: assess after
-   exploration.)* Discord normally forbids bots from invoking other bots' slash
-   commands, and user-token automation violates Discord ToS. Candidate
-   mechanisms to assess for feasibility:
-   - **Real Discord, live server** — a test bot/account issuing real commands.
-     Most realistic; check the bot-to-bot constraint and ToS hard limits first.
-   - **playtest-player record→replay** — drive `cmd/playtest-player`, capture
-     transcripts, replay via `make playtest-replay`. Deterministic; in-process.
-   - **Dashboard / browser automation** — Claude-in-Chrome on the web UI for
-     DM-side setup flows that have a dashboard.
-   - Likely answer is a **hybrid** (e.g. playtest-player for player commands +
-     dashboard for DM setup). **Task 1 must recommend one and explain why.**
-2. **What is the smallest first real-world step to author?** Candidate: *"DM
-   creates a campaign."* Confirm with the user.
-3. **Where do crystallized cases live and what format?** Confirm the `.jsonl`
-   transcript format and directory once Task 1 inspects `internal/playtest`.
+**Recommendation: a hybrid anchored on the in-process e2e harness.** Real
+Discord cannot drive *player* input automatically — bot-to-bot slash invocation
+is forbidden and user-token automation violates Discord ToS — so the automated
+pipeline runs in-process, and real Discord is a separate human-assisted lane.
+
+- **Player actions (the bulk):** in-process harness. AI builds an interaction,
+  calls `PlayerCommand` / `InjectInteraction`, asserts on `fake.Transcript()`.
+  Crystallize to a `.jsonl` transcript; `make playtest-replay` runs it unattended.
+  Exercises the *real* router/handlers/DB — only the Discord wire is faked.
+- **DM setup actions:** `/setup` is an injectable slash command. Campaign create
+  / approval / encounter setup are dashboard HTTP APIs — drive via the harness's
+  `SeedCampaign` / `SeedApprovedPlayer` / direct calls (browser automation of the
+  dashboard only if we want true UI coverage later).
+- **Real Discord lane (periodic, human-in-the-loop):** `cmd/playtest-player`
+  against `make local-up`. A human pastes the `PASTE THIS` lines; the round-trip
+  is recorded. Purpose: confirm the live gateway matches the fake. **Never** in
+  the automated regression loop.
+
+Settled sub-answers:
+- Crystallized cases = `.jsonl` transcripts in `internal/playtest/testdata/`,
+  replayed by `TestE2E_ReplayFromFile`. The `observed` lines are the assertions.
+- `/setup` is DM-only and rejected by the player REPL's `PlayerCommands` list.
 
 ---
 
