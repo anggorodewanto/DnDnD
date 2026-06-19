@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/refdata"
@@ -110,6 +112,62 @@ func TestE2E_RegistrationScenario(t *testing.T) {
 			strings.Contains(e.Content, "Aria")
 	}, 5*time.Second); err != nil {
 		t.Fatalf("expected approval DM to player: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+}
+
+// TestE2E_SetupScenario covers the DM /setup flow end-to-end:
+//  1. A campaign already exists for the guild (seeded). The DM runs /setup.
+//  2. The bot defers, creates the SYSTEM/NARRATION/COMBAT/REFERENCE channel
+//     structure (10 text channels) via GuildChannelCreateComplex, and edits the
+//     deferred response with a public "Channel structure created successfully!
+//     10 channels set up." message.
+//  3. Assert the public (non-ephemeral) success message.
+//  4. Assert the 10 channel IDs were persisted into campaign settings JSONB —
+//     the .jsonl replay (setup.jsonl) can only see the Discord message, so the
+//     DB-side lock lives here.
+func TestE2E_SetupScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	camp := h.SeedCampaign("setup-campaign")
+
+	// /setup is gated to the campaign DM (existing-campaign path checks
+	// invoker == DM, no admin bit needed). Dispatch as the seeded DM user id.
+	interactionID := h.PlayerCommand(camp.DmUserID, "setup")
+
+	// The success message is delivered by editing the deferred response.
+	entry, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindInteractionEdit &&
+			e.InteractionID == interactionID &&
+			strings.Contains(e.Content, "Channel structure created successfully! 10 channels set up.")
+	}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("expected /setup success edit: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+	if entry.Ephemeral {
+		t.Fatalf("expected /setup success to be public (non-ephemeral); got ephemeral\nContent: %q", entry.Content)
+	}
+
+	// Assert the 10 channel IDs were persisted into campaign settings JSONB.
+	got, err := h.queries.GetCampaignByGuildID(context.Background(), camp.GuildID)
+	if err != nil {
+		t.Fatalf("GetCampaignByGuildID: %v", err)
+	}
+	if !got.Settings.Valid {
+		t.Fatalf("expected campaign settings to be set after /setup")
+	}
+	var settings campaign.Settings
+	if err := json.Unmarshal(got.Settings.RawMessage, &settings); err != nil {
+		t.Fatalf("decoding campaign settings: %v", err)
+	}
+	if len(settings.ChannelIDs) != 10 {
+		t.Fatalf("expected 10 channel IDs persisted after /setup; got %d: %+v", len(settings.ChannelIDs), settings.ChannelIDs)
+	}
+	// Spot-check one channel from each of the four categories.
+	for _, name := range []string{"initiative-tracker", "the-story", "combat-map", "dm-queue"} {
+		if settings.ChannelIDs[name] == "" {
+			t.Fatalf("expected persisted channel id for %q; got %+v", name, settings.ChannelIDs)
+		}
 	}
 }
 

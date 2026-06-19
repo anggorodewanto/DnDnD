@@ -184,8 +184,14 @@ func TestE2E_ReplayDetectsDrift(t *testing.T) {
 // (a campaign plus one approved player "Gale") so existing transcripts keep
 // working without a manifest.
 type replayPreconditions struct {
-	Campaign              string               `json:"campaign"`
-	Player                string               `json:"player"` // dispatcher player ID
+	Campaign string `json:"campaign"`
+	Player   string `json:"player"` // dispatcher player ID
+	// DispatchAsDM re-targets the dispatcher at the seeded campaign's DM user
+	// id instead of Player. Needed for DM/admin commands like /setup whose
+	// permission gate checks invoker == campaign DM, since the DM id is random
+	// per seed (testutil.NewTestCampaign) and unknowable when authoring the
+	// transcript. Overrides Player when true.
+	DispatchAsDM          bool                 `json:"dispatchAsDM"`
 	ApprovedPlayers       []approvedPlayerSeed `json:"approvedPlayers"`
 	PlaceholderCharacters []string             `json:"placeholderCharacters"`
 	Encounter             *encounterSeed       `json:"encounter,omitempty"`
@@ -246,8 +252,12 @@ func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) st
 		h.SeedApprovedPlayer("user-file", "Gale")
 		return "user-file"
 	}
+	dispatcher := pc.Player
 	if pc.Campaign != "" {
-		h.SeedCampaign(pc.Campaign)
+		camp := h.SeedCampaign(pc.Campaign)
+		if pc.DispatchAsDM {
+			dispatcher = camp.DmUserID
+		}
 	}
 	charByPlayer := make(map[string]uuid.UUID)
 	for _, ap := range pc.ApprovedPlayers {
@@ -260,10 +270,10 @@ func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) st
 	if pc.Encounter != nil {
 		applyEncounter(t, h, pc.Encounter, charByPlayer)
 	}
-	if pc.Player == "" {
+	if dispatcher == "" {
 		return "user-file"
 	}
-	return pc.Player
+	return dispatcher
 }
 
 // applyEncounter seeds an active encounter from the manifest: a shell, an
