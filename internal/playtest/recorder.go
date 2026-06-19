@@ -21,6 +21,12 @@ const (
 	// DirectionObserved is a message the bot posted that the CLI saw via
 	// the gateway.
 	DirectionObserved Direction = "observed"
+	// DirectionClick is a component (button) interaction the player
+	// triggered. The Command field holds a stable selector (a CustomID
+	// prefix, e.g. "move_confirm:"); the replay surface resolves the real
+	// button from the system-under-test's recent output, since the live
+	// CustomID embeds runtime IDs not known at authoring time.
+	DirectionClick Direction = "click"
 )
 
 // TranscriptEntry is one line in the JSON-lines transcript file. The

@@ -1,0 +1,5 @@
+{"ts":"2026-06-20T10:00:00Z","dir":"dispatch","channel_id":"ch-cmd","author":"user-move","command":"/move coordinate:B1"}
+{"ts":"2026-06-20T10:00:01Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":"Move to B1 — 5ft, 25ft remaining after."}
+{"ts":"2026-06-20T10:00:02Z","dir":"click","channel_id":"ch-cmd","author":"user-move","command":"move_confirm:"}
+{"ts":"2026-06-20T10:00:03Z","dir":"observed","channel_id":"ch-combatlog","author":"DnDnD","content":"Mover moves to B1."}
+{"ts":"2026-06-20T10:00:04Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":"Moved to B1."}

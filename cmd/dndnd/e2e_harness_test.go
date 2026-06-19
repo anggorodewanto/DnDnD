@@ -366,6 +366,29 @@ func (h *e2eHarness) PlayerCommand(discordUserID, name string, opts ...slashOpt)
 	return interactionID
 }
 
+// ClickButton injects a message-component (button) interaction for the given
+// player, mirroring PlayerCommand's guild/channel/member wiring. Returns the
+// interaction ID so callers can await its response.
+func (h *e2eHarness) ClickButton(discordUserID, customID string) string {
+	h.t.Helper()
+	interactionID := uuid.NewString()
+	interaction := &discordgo.Interaction{
+		ID:        interactionID,
+		ChannelID: "ch-cmd-" + h.guildID,
+		GuildID:   h.guildID,
+		Type:      discordgo.InteractionMessageComponent,
+		Member: &discordgo.Member{
+			User: &discordgo.User{ID: discordUserID, Username: "player-" + discordUserID},
+		},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID:      customID,
+			ComponentType: discordgo.ButtonComponent,
+		},
+	}
+	h.fake.InjectInteraction(interaction)
+	return interactionID
+}
+
 // slashOpt is a tiny wrapper for typed string options used by PlayerCommand.
 type slashOpt struct {
 	name  string

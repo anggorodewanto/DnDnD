@@ -24,6 +24,14 @@ type Observer interface {
 	Wait(timeout time.Duration) (string, error)
 }
 
+// Clicker performs a component (button) interaction identified by a stable
+// selector (a CustomID prefix). The implementation resolves the actual
+// button from the system-under-test's recent output and triggers it. It is
+// only consulted for DirectionClick entries.
+type Clicker interface {
+	Click(selector string) error
+}
+
 // ReplayOptions configures Replay. WaitTimeout caps how long Replay
 // waits for each expected observation; Normalize is applied to both
 // the expected content (from the transcript) and the observed content
@@ -31,6 +39,10 @@ type Observer interface {
 type ReplayOptions struct {
 	WaitTimeout time.Duration
 	Normalize   func(string) string
+	// Clicker handles DirectionClick entries. It may be nil for transcripts
+	// that contain only dispatch/observed entries; a click entry with no
+	// Clicker configured is a replay error.
+	Clicker Clicker
 }
 
 // DefaultNormalize trims surrounding whitespace, collapses internal
@@ -50,8 +62,9 @@ var (
 )
 
 // Replay drives transcript through dispatcher + observer in order.
-// For each dispatch entry the parsed command is sent; for each
-// observed entry the next observation is awaited and compared
+// For each dispatch entry the parsed command is sent; for each click
+// entry the configured Clicker resolves and triggers the button; for
+// each observed entry the next observation is awaited and compared
 // (substring match after normalization). Returns nil if every entry
 // matched, otherwise an error pinpointing the first divergence.
 func Replay(transcript []TranscriptEntry, dispatcher Dispatcher, observer Observer, opts ReplayOptions) error {
@@ -70,6 +83,13 @@ func Replay(transcript []TranscriptEntry, dispatcher Dispatcher, observer Observ
 			}
 			if err := dispatcher.Dispatch(cmd); err != nil {
 				return fmt.Errorf("entry %d: dispatch %q: %w", i, e.Command, err)
+			}
+		case DirectionClick:
+			if opts.Clicker == nil {
+				return fmt.Errorf("entry %d: click %q but no Clicker configured", i, e.Command)
+			}
+			if err := opts.Clicker.Click(e.Command); err != nil {
+				return fmt.Errorf("entry %d: click %q: %w", i, e.Command, err)
 			}
 		case DirectionObserved:
 			got, err := observer.Wait(opts.WaitTimeout)

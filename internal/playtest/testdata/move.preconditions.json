@@ -1,0 +1,11 @@
+{
+  "campaign": "movement-campaign",
+  "player": "user-move",
+  "approvedPlayers": [{"discordUserId": "user-move", "characterName": "Mover"}],
+  "encounter": {
+    "withMap": true,
+    "combatants": [
+      {"player": "user-move", "displayName": "Mover", "col": "A", "row": 1, "turnHolder": true}
+    ]
+  }
+}

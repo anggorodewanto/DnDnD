@@ -31,6 +31,7 @@ Record every settled decision here so a fresh agent doesn't re-litigate it.
 | 2026-06-19 | **Jitter / randomness / varied-content → build as a harness FUZZING + timing layer** (randomized inter-command timing + varied input on the in-process harness, to surface races/timing/input bugs). NOT a real-Discord evasion feature. Backlog item, after core steps. |
 | 2026-06-19 | **STEP-001 = Player `/register`** (first authored step). |
 | 2026-06-19 | **(STEP-001)** Crystallize route = **B**: per-transcript preconditions sidecar (`<transcript>.preconditions.json`) + `.jsonl` for Discord-visible assertions; DB row stays in the existing Go scenario. `.jsonl` replay can't assert DB — deferred replay-engine enhancement if ever needed. |
+| 2026-06-20 | **(STEP-002)** Authored full `/move` in 2 increments (002a preconditions+confirm, 002b click model). Added transcript `click` direction (selector = CustomID **prefix**, since live CustomID embeds runtime UUIDs) + `Clicker` engine interface + `ClickButton` harness helper + preconditions `encounter` block. These generalize to all confirm-gated commands. |
 
 ### Open questions awaiting answers
 
@@ -47,7 +48,8 @@ Record every settled decision here so a fresh agent doesn't re-litigate it.
 | --- | --- | --- | --- | --- |
 | STEP-000 | Explore existing harness & refine the plan | `DONE` | docs only | Inventory confirmed (README §6), mechanism recommended (README §7). 5 reference scenarios + record/replay already exist. |
 | STEP-001 | Player `/register` (create character) | `AUTOMATED` ✅ | `internal/playtest/testdata/register.jsonl` (+`.preconditions.json`) | `make playtest-replay TRANSCRIPT=…/register.jsonl` → PASS. Added per-transcript preconditions to `cmd/dndnd/e2e_replay_test.go`. DB row locked by `TestE2E_RegistrationScenario`. See [steps/STEP-001-player-register.md](steps/STEP-001-player-register.md). |
-| STEP-002 | *(next — pick via QnA)* | `TODO` | — | Backlog candidates: DM `/setup`, player `/move`. |
+| STEP-002 | Player `/move` one tile (button-confirm) | `AUTOMATED` ✅ | `internal/playtest/testdata/move.jsonl` (+`.preconditions.json`) | Full confirm flow. Added: preconditions `encounter` block, transcript `click` direction, `Clicker`/`harnessClicker`, `ClickButton` helper. DB position locked by `TestE2E_MovementScenario`. See [steps/STEP-002-player-move.md](steps/STEP-002-player-move.md). |
+| STEP-003 | *(next — pick via QnA)* | `TODO` | — | Confirm-flow commands now cheap (reuse `click`/`Clicker`): `/attack`, `/cast`. Or DM `/setup`. |
 
 ### Refined backlog (smallest-first; mechanics noted)
 
@@ -91,3 +93,5 @@ what's next.
 | 2026-06-19 | — | Set up `docs/ai-playtest/` (README + this ledger). Captured mission, lifecycle, modes, rules. | Run STEP-000 (explore + refine plan). |
 | 2026-06-19 | STEP-000 | Explored harness via 2 read-only subagents + verified claims. Found in-process e2e harness (real router/DB, fake Discord wire) + record/replay + 5 reference scenarios. Recommended hybrid mechanism. Updated README §6/§7 + ledger. | User sign-off on mechanism + pick STEP-001 (QnA sent). |
 | 2026-06-19 | STEP-001 | EXPLORE'd `/register` (subagent). Hit harness limit: replay seeding fixed → built per-transcript preconditions feature. Crystallized `register.jsonl` (+sidecar); replay PASS first run; backward compat + gofmt/vet clean. | Commit/push (ask user), then pick STEP-002. |
+| 2026-06-19 | STEP-001 | Committed+pushed (489e0d1). Demo'd drift (red) on a temp copy to prove the assertion bites. | Start STEP-002. |
+| 2026-06-20 | STEP-002 | EXPLORE'd `/move` (subagent). Built encounter preconditions (002a, confirm ephemeral green) + transcript click model & Clicker (002b). `move.jsonl` PASS; full regression green (playtest unit, replay group, movement+registration scenarios). gofmt/vet clean. | Commit/push, pick STEP-003. |

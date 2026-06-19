@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -29,6 +30,8 @@ import (
 
 	"github.com/ab/dndnd/internal/playtest"
 	"github.com/ab/dndnd/internal/testutil/discordfake"
+	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 )
 
 // harnessDispatcher routes a ParsedCommand into the e2e harness's
@@ -71,6 +74,46 @@ func (o *harnessObserver) Wait(timeout time.Duration) (string, error) {
 	}
 	o.cursor++
 	return entry.Content, nil
+}
+
+// harnessClicker resolves a button by CustomID prefix from the most recent
+// outbound message that carries one, then clicks it as the dispatcher player.
+// It satisfies playtest.Clicker.
+type harnessClicker struct {
+	h        *e2eHarness
+	playerID string
+}
+
+func (c *harnessClicker) Click(selector string) error {
+	customID, ok := latestButtonCustomID(c.h.fake.Transcript(), selector)
+	if !ok {
+		return fmt.Errorf("no button with custom_id prefix %q in transcript", selector)
+	}
+	c.h.ClickButton(c.playerID, customID)
+	return nil
+}
+
+// latestButtonCustomID scans entries newest-first and returns the CustomID of
+// the first button whose CustomID has the given prefix.
+func latestButtonCustomID(entries []discordfake.Entry, prefix string) (string, bool) {
+	for i := len(entries) - 1; i >= 0; i-- {
+		for _, comp := range entries[i].Components {
+			row, ok := comp.(discordgo.ActionsRow)
+			if !ok {
+				continue
+			}
+			for _, child := range row.Components {
+				btn, ok := child.(discordgo.Button)
+				if !ok {
+					continue
+				}
+				if strings.HasPrefix(btn.CustomID, prefix) {
+					return btn.CustomID, true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 // TestE2E_ReplayRoundtrip records a synthesized session against the
@@ -145,11 +188,29 @@ type replayPreconditions struct {
 	Player                string               `json:"player"` // dispatcher player ID
 	ApprovedPlayers       []approvedPlayerSeed `json:"approvedPlayers"`
 	PlaceholderCharacters []string             `json:"placeholderCharacters"`
+	Encounter             *encounterSeed       `json:"encounter,omitempty"`
 }
 
 type approvedPlayerSeed struct {
 	DiscordUserID string `json:"discordUserId"`
 	CharacterName string `json:"characterName"`
+}
+
+// encounterSeed declares an active combat encounter: an optional map plus
+// one or more combatants placed on the grid. Exactly one combatant must be
+// the turn holder (the active turn points at it). Combatant.Player must name
+// a discord user listed in ApprovedPlayers so its character ID resolves.
+type encounterSeed struct {
+	WithMap    bool            `json:"withMap"`
+	Combatants []combatantSeed `json:"combatants"`
+}
+
+type combatantSeed struct {
+	Player      string `json:"player"` // discord user ID owning this combatant's character
+	DisplayName string `json:"displayName"`
+	Col         string `json:"col"`
+	Row         int32  `json:"row"`
+	TurnHolder  bool   `json:"turnHolder"`
 }
 
 // preconditionsPath maps a transcript path to its sidecar manifest:
@@ -188,16 +249,48 @@ func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) st
 	if pc.Campaign != "" {
 		h.SeedCampaign(pc.Campaign)
 	}
+	charByPlayer := make(map[string]uuid.UUID)
 	for _, ap := range pc.ApprovedPlayers {
-		h.SeedApprovedPlayer(ap.DiscordUserID, ap.CharacterName)
+		char, _ := h.SeedApprovedPlayer(ap.DiscordUserID, ap.CharacterName)
+		charByPlayer[ap.DiscordUserID] = char.ID
 	}
 	for _, name := range pc.PlaceholderCharacters {
 		h.SeedCharacterOnly(name)
+	}
+	if pc.Encounter != nil {
+		applyEncounter(t, h, pc.Encounter, charByPlayer)
 	}
 	if pc.Player == "" {
 		return "user-file"
 	}
 	return pc.Player
+}
+
+// applyEncounter seeds an active encounter from the manifest: a shell, an
+// optional map, the placed combatants, then promotion to active with the
+// turn pointing at the declared turn holder.
+func applyEncounter(t *testing.T, h *e2eHarness, enc *encounterSeed, charByPlayer map[string]uuid.UUID) {
+	t.Helper()
+	encShell := h.SeedEncounterShell()
+	if enc.WithMap {
+		mp := h.SeedMap()
+		h.AttachMapToEncounter(encShell.ID, mp.ID)
+	}
+	var turnHolder uuid.UUID
+	for _, cs := range enc.Combatants {
+		charID, ok := charByPlayer[cs.Player]
+		if !ok {
+			t.Fatalf("preconditions: combatant references unseeded player %q (add it to approvedPlayers)", cs.Player)
+		}
+		comb := h.SeedCombatant(encShell.ID, charID, cs.DisplayName, cs.Col, cs.Row)
+		if cs.TurnHolder {
+			turnHolder = comb.ID
+		}
+	}
+	if turnHolder == uuid.Nil {
+		t.Fatalf("preconditions: encounter has no combatant marked turnHolder")
+	}
+	h.PromoteEncounterToActive(encShell.ID, turnHolder)
 }
 
 // TestE2E_ReplayFromFile drives the harness from a JSON-lines
@@ -231,9 +324,11 @@ func TestE2E_ReplayFromFile(t *testing.T) {
 
 	disp := &harnessDispatcher{h: h, playerID: playerID}
 	obs := &harnessObserver{fake: h.fake}
+	clk := &harnessClicker{h: h, playerID: playerID}
 
 	if err := playtest.Replay(entries, disp, obs, playtest.ReplayOptions{
 		WaitTimeout: 5 * time.Second,
+		Clicker:     clk,
 	}); err != nil {
 		t.Fatalf("Replay (%s): %v\nTranscript dump:\n%s", path, err, h.RenderTranscript())
 	}
