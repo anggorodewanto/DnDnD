@@ -351,12 +351,14 @@ func TestServiceAttack_CleaveHitsSecondCreatureNoAbilityMod(t *testing.T) {
 	assert.Equal(t, 5, result.CleaveAttack.DamageTotal)
 	assert.Equal(t, 8, result.DamageTotal, "primary still adds STR +3 (d12=5 + 3)")
 
-	// Cleave applies the secondary damage itself (Service.Attack does not write
-	// primary HP — the caller does). Second takes 5 (no mod) → 20-5 = 15.
+	// Cleave applies the secondary damage itself; the second creature takes 5
+	// (no mod) → 20-5 = 15.
 	require.NotEmpty(t, hpWrites[secondID], "second creature should take cleave damage")
 	assert.Equal(t, int32(15), hpWrites[secondID][len(hpWrites[secondID])-1])
-	// The primary's HP is NOT written by Service.Attack.
-	assert.Empty(t, hpWrites[primaryID], "Service.Attack does not write primary HP")
+	// The primary hit now applies its damage to the primary's HP too: the
+	// greataxe deals d12(5) + STR 3 = 8, so the primary drops 20 → 12.
+	require.NotEmpty(t, hpWrites[primaryID], "primary creature should take the primary-hit damage")
+	assert.Equal(t, int32(12), hpWrites[primaryID][len(hpWrites[primaryID])-1])
 }
 
 func TestServiceAttack_CleaveNoSecondCreatureInRange(t *testing.T) {

@@ -1,0 +1,12 @@
+{
+  "campaign": "attack-campaign",
+  "player": "user-attack",
+  "approvedPlayers": [{"discordUserId": "user-attack", "characterName": "Striker"}],
+  "encounter": {
+    "withMap": true,
+    "combatants": [
+      {"player": "user-attack", "displayName": "Striker", "col": "A", "row": 1, "turnHolder": true},
+      {"displayName": "Goblin", "col": "B", "row": 1, "isNpc": true}
+    ]
+  }
+}

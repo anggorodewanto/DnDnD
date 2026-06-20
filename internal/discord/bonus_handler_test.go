@@ -320,6 +320,7 @@ type bonusOffhandCommandPathStore struct {
 	attacker   refdata.Combatant
 	target     refdata.Combatant
 	savedTurns []refdata.UpdateTurnActionsParams
+	hpWrites   []refdata.UpdateCombatantHPParams
 }
 
 func (s *bonusOffhandCommandPathStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -372,6 +373,21 @@ func (s *bonusOffhandCommandPathStore) ListCombatantsByEncounterID(_ context.Con
 
 func (s *bonusOffhandCommandPathStore) ListEncounterZonesByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.EncounterZone, error) {
 	return nil, nil
+}
+
+// UpdateCombatantHP records the off-hand hit's HP write. The embedded nil
+// combat.Store cannot service this call, so the off-hand ApplyDamage pipeline
+// (added when every primary hit began applying its damage) needs a faithful
+// implementation here that returns a non-nil combatant.
+func (s *bonusOffhandCommandPathStore) UpdateCombatantHP(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+	s.hpWrites = append(s.hpWrites, arg)
+	return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+}
+
+// GetCombatantConcentration is consulted by the ApplyDamage → concentration
+// pipeline. The target holds no concentration, so return an empty row.
+func (s *bonusOffhandCommandPathStore) GetCombatantConcentration(_ context.Context, _ uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+	return refdata.GetCombatantConcentrationRow{}, nil
 }
 
 func TestBonusHandler_OffhandCommandPathConsumesBonusActionAndOmitsDamageMod(t *testing.T) {

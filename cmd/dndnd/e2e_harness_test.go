@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
@@ -49,6 +50,12 @@ type e2eHarness struct {
 	guildID    string
 	campaignID uuid.UUID
 }
+
+// e2eDefaultRoll is the harness's deterministic die: every die rolls its
+// maximum face. A d20 therefore yields a natural 20 (auto-hit, auto-crit),
+// which keeps attack output independent of attacker modifiers and target AC,
+// so dice-driven commands (/attack, ...) produce replayable output.
+func e2eDefaultRoll(max int) int { return max }
 
 // startE2EHarness constructs and boots a fresh harness. Callers must defer
 // h.Stop(). Failure is reported via t.Fatalf.
@@ -79,6 +86,9 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	go func() {
 		doneCh <- runWithOptions(ctx, io.Discard, addr,
 			withDiscordSession(fake),
+			// Inject a deterministic always-max roller so dice-driven commands
+			// (/attack, ...) produce replayable output.
+			withRoller(dice.NewRoller(e2eDefaultRoll)),
 			withCommandRouterReady(func(r *discord.CommandRouter) {
 				// Hook the router into the fake so InjectInteraction calls
 				// hit the production handler chain.
@@ -330,6 +340,40 @@ func (h *e2eHarness) SeedCombatant(encounterID, characterID uuid.UUID, displayNa
 	})
 	if err != nil {
 		h.t.Fatalf("seed combatant: %v", err)
+	}
+	return comb
+}
+
+// SeedNPCCombatant creates a non-player combatant (no linked character,
+// is_npc=true) in the encounter at the given grid position. Used as an
+// /attack target. Target it by grid coordinate (ResolveTarget matches the
+// cell) since the ShortID is randomised per seed. Seeded with InitiativeOrder
+// 2 so it sits after a turn-holding player at order 1.
+func (h *e2eHarness) SeedNPCCombatant(encounterID uuid.UUID, displayName, posCol string, posRow int32) refdata.Combatant {
+	h.t.Helper()
+	short := "n-" + uuid.NewString()[:8]
+	comb, err := h.queries.CreateCombatant(context.Background(), refdata.CreateCombatantParams{
+		EncounterID:     encounterID,
+		CharacterID:     uuid.NullUUID{Valid: false},
+		ShortID:         short,
+		DisplayName:     displayName,
+		InitiativeRoll:  5,
+		InitiativeOrder: 2,
+		PositionCol:     posCol,
+		PositionRow:     posRow,
+		AltitudeFt:      0,
+		HpMax:           20,
+		HpCurrent:       20,
+		TempHp:          0,
+		Ac:              13,
+		Conditions:      []byte(`[]`),
+		ExhaustionLevel: 0,
+		IsVisible:       true,
+		IsAlive:         true,
+		IsNpc:           true,
+	})
+	if err != nil {
+		h.t.Fatalf("SeedNPCCombatant: %v", err)
 	}
 	return comb
 }

@@ -741,6 +741,20 @@ type runConfig struct {
 	// e2e harness uses it to capture router.Handle and re-deliver injected
 	// interactions through the fake session.
 	onRouterReady func(*discord.CommandRouter)
+	// roller, when non-nil, replaces the crypto/rand dice roller that the
+	// combat HTTP handler and the slash-command handlers would otherwise
+	// build. The e2e harness injects a deterministic roller so dice-driven
+	// commands (/attack, /cast, /save, ...) produce replayable output.
+	roller *dice.Roller
+}
+
+// newRoller returns the configured deterministic roller, or a fresh
+// crypto/rand roller when none was injected (the production default).
+func (c *runConfig) newRoller() *dice.Roller {
+	if c.roller != nil {
+		return c.roller
+	}
+	return dice.NewRoller(nil)
 }
 
 // runOption mutates a runConfig. Defined as a function-typed option to keep
@@ -758,6 +772,13 @@ func withDiscordSession(s discord.Session) runOption {
 // router.Handle so the fake session can deliver injected interactions.
 func withCommandRouterReady(cb func(*discord.CommandRouter)) runOption {
 	return func(c *runConfig) { c.onRouterReady = cb }
+}
+
+// withRoller injects a deterministic dice roller in place of the env-derived
+// crypto/rand one. Used by the e2e harness so /attack, /cast, /save and other
+// dice-driven commands produce replayable output. Production leaves it unset.
+func withRoller(r *dice.Roller) runOption {
+	return func(c *runConfig) { c.roller = r }
 }
 
 // run starts the HTTP server and blocks until the context is cancelled.
@@ -1052,7 +1073,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		combatStore := combat.NewStoreAdapter(queries)
 		combatSvc := combat.NewService(combatStore)
 		combatSvc.SetPublisher(publisher)
-		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
+		combatHandler := combat.NewHandler(combatSvc, cfg.newRoller())
 
 		// Phase 22 wiring (high-10): the campaign-settings provider resolves
 		// encounter-id -> channel_ids map for the DM combat-log poster
@@ -1655,7 +1676,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				queries:                  queries,
 				db:                       db, // Phase 27 turn-gate (combat.TxBeginner)
 				combatService:            combatSvc,
-				roller:                   dice.NewRoller(nil),
+				roller:                   cfg.newRoller(),
 				resolver:                 newDiscordUserEncounterResolver(queries),
 				campaignSettings:         campaignSettingsProvider,
 				enemyTurnEncounterLookup: combatSvc,

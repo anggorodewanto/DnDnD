@@ -219,11 +219,14 @@ type encounterSeed struct {
 }
 
 type combatantSeed struct {
-	Player      string `json:"player"` // discord user ID owning this combatant's character
+	Player      string `json:"player"` // discord user ID owning this combatant's character (ignored when isNpc)
 	DisplayName string `json:"displayName"`
 	Col         string `json:"col"`
 	Row         int32  `json:"row"`
 	TurnHolder  bool   `json:"turnHolder"`
+	// IsNpc seeds a non-player combatant (no linked character) as an attack
+	// target. Target it by grid coordinate. NPCs cannot be the turn holder.
+	IsNpc bool `json:"isNpc"`
 }
 
 // preconditionsPath maps a transcript path to its sidecar manifest:
@@ -299,6 +302,10 @@ func applyEncounter(t *testing.T, h *e2eHarness, enc *encounterSeed, charByPlaye
 	}
 	var turnHolder uuid.UUID
 	for _, cs := range enc.Combatants {
+		if cs.IsNpc {
+			h.SeedNPCCombatant(encShell.ID, cs.DisplayName, cs.Col, cs.Row)
+			continue
+		}
 		charID, ok := charByPlayer[cs.Player]
 		if !ok {
 			t.Fatalf("preconditions: combatant references unseeded player %q (add it to approvedPlayers)", cs.Player)

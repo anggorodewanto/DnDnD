@@ -337,6 +337,74 @@ func TestE2E_MovementScenario(t *testing.T) {
 	}
 }
 
+// TestE2E_AttackScenario covers /attack <target> end-to-end in active combat:
+//  1. Seed an active encounter: player "Striker" (turn holder) at A1, an NPC
+//     "Goblin" at B1.
+//  2. Player runs /attack target:B1 weapon:longsword. The harness's default
+//     always-max roller forces a natural 20, so the longsword crit is fully
+//     deterministic: doubled 2d8 (16) + STR 3 = 19 slashing.
+//  3. Assert the ephemeral + #combat-log carry the crit attack line.
+//  4. Assert the attack resource was spent (AttacksRemaining 1 → 0).
+//  5. Assert the target's HP dropped 20 → 1 (the bug fix: a hit now applies its
+//     damage to the target through combat.ApplyDamage). The goblin survives at
+//     1 HP, documenting the announce + apply contract.
+func TestE2E_AttackScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	h.SeedCampaign("attack-campaign")
+	playerID := "user-attack"
+
+	char, _ := h.SeedApprovedPlayer(playerID, "Striker")
+	mp := h.SeedMap()
+	encShell := h.SeedEncounterShell()
+	h.AttachMapToEncounter(encShell.ID, mp.ID)
+
+	comb := h.SeedCombatant(encShell.ID, char.ID, "Striker", "A", 1)
+	npc := h.SeedNPCCombatant(encShell.ID, "Goblin", "B", 1)
+	_, turn := h.PromoteEncounterToActive(encShell.ID, comb.ID)
+
+	atkID := h.PlayerCommand(playerID, "attack",
+		stringOpt("target", "B1"), stringOpt("weapon", "longsword"))
+
+	// Ephemeral: the deterministic crit attack line.
+	h.AssertEphemeralContains(atkID,
+		"Striker attacks Goblin with Longsword",
+		"NAT 20 — CRITICAL HIT!",
+		"19 slashing")
+
+	// #combat-log mirrors the same line.
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-combatlog-"+h.guildID &&
+			strings.Contains(e.Content, "Striker attacks Goblin with Longsword") &&
+			strings.Contains(e.Content, "NAT 20")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected #combat-log attack message: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+
+	// Attack resource spent: AttacksRemaining 1 → 0.
+	updatedTurn, err := h.queries.GetTurn(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("GetTurn after attack: %v", err)
+	}
+	if updatedTurn.AttacksRemaining != 0 {
+		t.Fatalf("expected AttacksRemaining 0 after attack; got %d", updatedTurn.AttacksRemaining)
+	}
+
+	// Bug-fix lock: the hit applied its damage to the target. Goblin 20 - 19 = 1.
+	updatedNPC, err := h.queries.GetCombatant(context.Background(), npc.ID)
+	if err != nil {
+		t.Fatalf("GetCombatant after attack: %v", err)
+	}
+	if updatedNPC.HpCurrent != 1 {
+		t.Fatalf("expected target HP 1 after 19 crit damage (20-19); got %d", updatedNPC.HpCurrent)
+	}
+	if !updatedNPC.IsAlive {
+		t.Fatalf("expected target alive at 1 HP after attack; got is_alive=false")
+	}
+}
+
 // TestE2E_LootScenario covers DM-places-loot → /loot → claim flow:
 //  1. Harness completes an encounter and seeds a loot pool with one item.
 //  2. Player runs /loot. The bot responds with an embed + a Claim button per

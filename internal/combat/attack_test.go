@@ -3656,3 +3656,101 @@ func TestServiceAttack_NotWildShapedUsesDruidStr(t *testing.T) {
 	// Druid STR 8 → -1 mod. d8 → 4. Total damage = 4 - 1 = 3.
 	assert.Equal(t, 3, result.DamageTotal, "non-wild-shaped druid must use own STR")
 }
+
+// TestServiceAttack_PrimaryHitAppliesDamageToTargetHP guards the core /attack
+// invariant: a successful primary hit must reduce the target's HP through the
+// Service.ApplyDamage pipeline (UpdateCombatantHP), exactly like Graze/Cleave
+// secondary damage does. Before the fix, the attack rolled damage and reported
+// it but never wrote the target's reduced HP.
+func TestServiceAttack_PrimaryHitAppliesDamageToTargetHP(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword") // STR 16 → +3
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "longsword" {
+			return makeLongsword(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	// Capture the HP write so we can assert the target's HP was reduced.
+	var hpUpdates []refdata.UpdateCombatantHPParams
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates = append(hpUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// d20 rolls 15 → 15 + 3(STR) + 2(prof) = 20 vs AC 13 → hit. d8 rolls 6 → 6 + 3 = 9 damage.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin #1",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpMax:       20,
+		HpCurrent:   20,
+		IsAlive:     true,
+		IsVisible:   true,
+		IsNpc:       true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               turnID,
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit)
+	require.Equal(t, 9, result.DamageTotal) // d8(6) + 3 STR
+
+	// The primary hit must have applied damage to the target's HP: 20 - 9 = 11.
+	var targetHPUpdate *refdata.UpdateCombatantHPParams
+	for i := range hpUpdates {
+		if hpUpdates[i].ID == targetID {
+			targetHPUpdate = &hpUpdates[i]
+		}
+	}
+	require.NotNil(t, targetHPUpdate, "expected UpdateCombatantHP to be called for the target on a hit")
+	assert.Equal(t, int32(11), targetHPUpdate.HpCurrent, "target HP must be reduced by the primary hit damage (20 - 9)")
+}
