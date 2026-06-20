@@ -246,7 +246,7 @@ func (f *fakeSetupQueries) CreateCampaign(ctx context.Context, arg refdata.Creat
 	return c, nil
 }
 
-func TestSetupCampaignLookup_GetCampaignForSetup_ReturnsDMUserID(t *testing.T) {
+func TestSetupCampaignLookup_FindCampaignForSetup_ReturnsDMUserID(t *testing.T) {
 	q := &fakeSetupQueries{
 		campaignsByGuild: map[string]refdata.Campaign{
 			"guild-1": {ID: uuid.New(), GuildID: "guild-1", DmUserID: "dm-user-9"},
@@ -254,33 +254,47 @@ func TestSetupCampaignLookup_GetCampaignForSetup_ReturnsDMUserID(t *testing.T) {
 	}
 	lookup := newSetupCampaignLookup(q)
 
-	info, err := lookup.GetCampaignForSetup("guild-1", "invoker-ignored")
+	info, exists, err := lookup.FindCampaignForSetup("guild-1")
 	require.NoError(t, err)
+	assert.True(t, exists, "existing campaign should be reported as existing")
 	assert.Equal(t, "dm-user-9", info.DMUserID)
-	assert.False(t, info.AutoCreated, "existing campaign should not be flagged auto-created")
-	assert.Empty(t, q.createCalls, "existing campaign should not trigger a create")
+	assert.Empty(t, q.createCalls, "find must never trigger a create")
 }
 
-func TestSetupCampaignLookup_GetCampaignForSetup_PropagatesError(t *testing.T) {
+func TestSetupCampaignLookup_FindCampaignForSetup_PropagatesError(t *testing.T) {
 	boom := errors.New("db down")
 	q := &fakeSetupQueries{campaignErr: boom}
 	lookup := newSetupCampaignLookup(q)
 
-	_, err := lookup.GetCampaignForSetup("guild-1", "invoker-1")
+	_, _, err := lookup.FindCampaignForSetup("guild-1")
 	require.ErrorIs(t, err, boom)
 }
 
-// med-41: when the guild has no campaign row yet, /setup auto-creates one
-// with the invoker as DM and default settings (closes the Phase 11 dead end
-// that used to error out with "no campaign found for this server").
-func TestSetupCampaignLookup_GetCampaignForSetup_AutoCreatesOnNoRows(t *testing.T) {
+// When no campaign row exists yet, Find reports exists=false WITHOUT creating a
+// row — the /setup handler gates on server-admin before any persistence so a
+// non-admin can't conjure a campaign just by running /setup (the bug fixed in
+// STEP-004; previously the row was auto-created here, before the gate).
+func TestSetupCampaignLookup_FindCampaignForSetup_NotExistsOnNoRows(t *testing.T) {
 	q := &fakeSetupQueries{}
 	lookup := newSetupCampaignLookup(q)
 
-	info, err := lookup.GetCampaignForSetup("guild-new", "dm-77")
+	info, exists, err := lookup.FindCampaignForSetup("guild-new")
+	require.NoError(t, err)
+	assert.False(t, exists, "missing campaign should be reported as not existing")
+	assert.Empty(t, info.DMUserID)
+	assert.Empty(t, q.createCalls, "find must not create a campaign on no-rows")
+}
+
+// med-41: an admin on a fresh guild creates the campaign with the invoker as DM
+// and default settings (closes the Phase 11 "no campaign found" dead end), now
+// via the explicit CreateCampaignForSetup step gated behind the admin check.
+func TestSetupCampaignLookup_CreateCampaignForSetup_CreatesRow(t *testing.T) {
+	q := &fakeSetupQueries{}
+	lookup := newSetupCampaignLookup(q)
+
+	info, err := lookup.CreateCampaignForSetup("guild-new", "dm-77")
 	require.NoError(t, err)
 	assert.Equal(t, "dm-77", info.DMUserID)
-	assert.True(t, info.AutoCreated)
 
 	require.Len(t, q.createCalls, 1)
 	created := q.createCalls[0]
@@ -295,22 +309,22 @@ func TestSetupCampaignLookup_GetCampaignForSetup_AutoCreatesOnNoRows(t *testing.
 	assert.Equal(t, "standard", saved.DiagonalRule)
 }
 
-func TestSetupCampaignLookup_GetCampaignForSetup_AutoCreate_RequiresInvoker(t *testing.T) {
+func TestSetupCampaignLookup_CreateCampaignForSetup_RequiresInvoker(t *testing.T) {
 	q := &fakeSetupQueries{}
 	lookup := newSetupCampaignLookup(q)
 
-	_, err := lookup.GetCampaignForSetup("guild-new", "")
+	_, err := lookup.CreateCampaignForSetup("guild-new", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invoker")
 	assert.Empty(t, q.createCalls, "must not create campaign with empty DM user id")
 }
 
-func TestSetupCampaignLookup_GetCampaignForSetup_AutoCreate_PropagatesCreateError(t *testing.T) {
+func TestSetupCampaignLookup_CreateCampaignForSetup_PropagatesCreateError(t *testing.T) {
 	boom := errors.New("create failed")
 	q := &fakeSetupQueries{createErr: boom}
 	lookup := newSetupCampaignLookup(q)
 
-	_, err := lookup.GetCampaignForSetup("guild-new", "dm-1")
+	_, err := lookup.CreateCampaignForSetup("guild-new", "dm-1")
 	require.ErrorIs(t, err, boom)
 }
 

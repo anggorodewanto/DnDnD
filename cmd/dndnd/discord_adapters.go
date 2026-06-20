@@ -142,21 +142,28 @@ func defaultAutoCreatedCampaignName(guildID string) string {
 	return fmt.Sprintf("Campaign for guild %s", guildID)
 }
 
-// GetCampaignForSetup returns the campaign info /setup needs (the DM's
-// Discord user id, used for permission overwrites on private channels).
-// When no row exists yet for the guild, the row is auto-created with the
-// invoking user as DM and default settings.
-func (l *setupCampaignLookup) GetCampaignForSetup(guildID, invokerUserID string) (discord.SetupCampaignInfo, error) {
-	ctx := context.Background()
-	c, err := l.queries.GetCampaignByGuildID(ctx, guildID)
+// FindCampaignForSetup returns the campaign info /setup needs (the DM's Discord
+// user id, used for permission overwrites on private channels) and whether a
+// campaign row already exists for the guild. It never creates a row: the /setup
+// handler gates on server-admin before calling CreateCampaignForSetup, so a
+// non-admin can't trigger campaign creation just by invoking /setup.
+func (l *setupCampaignLookup) FindCampaignForSetup(guildID string) (discord.SetupCampaignInfo, bool, error) {
+	c, err := l.queries.GetCampaignByGuildID(context.Background(), guildID)
 	if err == nil {
-		return discord.SetupCampaignInfo{DMUserID: c.DmUserID}, nil
+		return discord.SetupCampaignInfo{DMUserID: c.DmUserID}, true, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return discord.SetupCampaignInfo{}, fmt.Errorf("campaign lookup for guild %q: %w", guildID, err)
+	if errors.Is(err, sql.ErrNoRows) {
+		return discord.SetupCampaignInfo{}, false, nil
 	}
+	return discord.SetupCampaignInfo{}, false, fmt.Errorf("campaign lookup for guild %q: %w", guildID, err)
+}
+
+// CreateCampaignForSetup inserts a new campaign for the guild with invokerUserID
+// as DM and default settings. The /setup handler calls this only after the
+// server-admin gate passes, so the rejected non-admin path never persists a row.
+func (l *setupCampaignLookup) CreateCampaignForSetup(guildID, invokerUserID string) (discord.SetupCampaignInfo, error) {
 	if invokerUserID == "" {
-		return discord.SetupCampaignInfo{}, fmt.Errorf("auto-create campaign for guild %q: invoker user id is empty", guildID)
+		return discord.SetupCampaignInfo{}, fmt.Errorf("create campaign for guild %q: invoker user id is empty", guildID)
 	}
 
 	settings := campaign.DefaultSettings()
@@ -164,16 +171,16 @@ func (l *setupCampaignLookup) GetCampaignForSetup(guildID, invokerUserID string)
 	if err != nil {
 		return discord.SetupCampaignInfo{}, fmt.Errorf("encoding default settings for new campaign: %w", err)
 	}
-	created, err := l.queries.CreateCampaign(ctx, refdata.CreateCampaignParams{
+	created, err := l.queries.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
 		GuildID:  guildID,
 		DmUserID: invokerUserID,
 		Name:     defaultAutoCreatedCampaignName(guildID),
 		Settings: pqtype.NullRawMessage{RawMessage: raw, Valid: true},
 	})
 	if err != nil {
-		return discord.SetupCampaignInfo{}, fmt.Errorf("auto-creating campaign for guild %q: %w", guildID, err)
+		return discord.SetupCampaignInfo{}, fmt.Errorf("creating campaign for guild %q: %w", guildID, err)
 	}
-	return discord.SetupCampaignInfo{DMUserID: created.DmUserID, AutoCreated: true}, nil
+	return discord.SetupCampaignInfo{DMUserID: created.DmUserID}, nil
 }
 
 // playerDirectMessenger is the subset of discord.DirectMessenger that

@@ -186,21 +186,31 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 // SetupCampaignInfo holds the campaign info needed by the setup handler.
 type SetupCampaignInfo struct {
 	DMUserID string
-	// AutoCreated is true when the lookup had to create the campaign row
-	// because none existed for this guild yet (med-41 / Phase 11 wiring).
-	// The setup handler uses this purely to vary the success message.
-	AutoCreated bool
 }
 
 // CampaignLookup provides campaign data for the setup handler.
 //
-// Implementations MUST auto-create the campaign row when no row exists for
-// the guild yet (med-41 / Phase 11): the invoker of /setup is taken to be
-// the DM and a row with default settings is inserted. This closes the
-// "no campaign found for this server" dead-end the playtest quickstart used
-// to hit before any encounter could be built.
+// Find and Create are split so the handler can enforce the server-admin gate
+// BEFORE any campaign row is persisted. A non-admin who runs /setup on a guild
+// with no campaign must be rejected without a row being created — otherwise the
+// rejected user is silently made DM of a real campaign (the auto-create
+// originally happened inside the lookup, before the gate ran).
+//
+// When no campaign exists for the guild yet, the invoker of /setup (if a server
+// admin) is taken to be the DM and a row with default settings is inserted via
+// CreateCampaignForSetup. This closes the "no campaign found for this server"
+// dead-end the playtest quickstart used to hit before any encounter could be
+// built (med-41 / Phase 11).
 type CampaignLookup interface {
-	GetCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error)
+	// FindCampaignForSetup returns the existing campaign's setup info.
+	// exists is false (with a nil error) when no campaign row exists for the
+	// guild yet; the handler then gates on server-admin before calling
+	// CreateCampaignForSetup. Implementations MUST NOT create a row here.
+	FindCampaignForSetup(guildID string) (info SetupCampaignInfo, exists bool, err error)
+	// CreateCampaignForSetup inserts a new campaign with invokerUserID as DM and
+	// default settings, returning its setup info. Called only after the
+	// server-admin gate passes.
+	CreateCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error)
 	SaveChannelIDs(guildID string, channelIDs map[string]string) error
 }
 
@@ -235,19 +245,27 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
-	info, err := h.campaignLookup.GetCampaignForSetup(guildID, invokerUserID)
+	info, exists, err := h.campaignLookup.FindCampaignForSetup(guildID)
 	if err != nil {
 		h.editResponse(interaction, fmt.Sprintf("Error resolving campaign: %s", err))
 		return
 	}
 
-	if !info.AutoCreated && invokerUserID != info.DMUserID {
+	if exists && invokerUserID != info.DMUserID {
 		h.editResponse(interaction, "⛔ Only the campaign DM can run /setup for this server.")
 		return
 	}
-	if info.AutoCreated && !setupInvokerIsAdmin(interaction) {
+	if !exists && !setupInvokerIsAdmin(interaction) {
 		h.editResponse(interaction, "⛔ Only a server administrator can create a new campaign via /setup.")
 		return
+	}
+	if !exists {
+		created, createErr := h.campaignLookup.CreateCampaignForSetup(guildID, invokerUserID)
+		if createErr != nil {
+			h.editResponse(interaction, fmt.Sprintf("Error creating campaign: %s", createErr))
+			return
+		}
+		info = created
 	}
 
 	channelIDs, err := SetupChannels(s, guildID, botUserIDFromState(s), info.DMUserID)
@@ -268,7 +286,7 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	prefix := "Channel structure created successfully!"
-	if info.AutoCreated {
+	if !exists {
 		prefix = "Campaign created and channel structure set up!"
 	}
 	h.editResponse(interaction, fmt.Sprintf("%s %d channels set up.\n\n%s", prefix, len(channelIDs), h.nextStep()))

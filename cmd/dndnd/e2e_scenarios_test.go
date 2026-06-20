@@ -20,7 +20,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -168,6 +170,88 @@ func TestE2E_SetupScenario(t *testing.T) {
 		if settings.ChannelIDs[name] == "" {
 			t.Fatalf("expected persisted channel id for %q; got %+v", name, settings.ChannelIDs)
 		}
+	}
+}
+
+// TestE2E_SetupAutoCreateScenario covers the /setup auto-create happy path
+// end-to-end (admin on a fresh guild):
+//  1. No campaign exists for the guild. A server admin runs /setup.
+//  2. The bot auto-creates the campaign (admin becomes DM), builds the 10-text-
+//     channel structure, and edits the deferred response with the public
+//     "Campaign created and channel structure set up! 10 channels set up."
+//     message (distinct from the existing-campaign "Channel structure created
+//     successfully!" wording).
+//  3. Assert the DB side the .jsonl replay cannot see: a campaign row now exists
+//     with the admin as DM and 10 channel IDs persisted in settings JSONB.
+func TestE2E_SetupAutoCreateScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	// No SeedCampaign: the guild starts empty. SeedCampaign is what normally
+	// sets h.guildID, so set a stable id directly for the no-campaign path.
+	h.guildID = "guild-autocreate"
+	adminUser := "admin-user"
+
+	interactionID := h.PlayerCommandWithPermissions(adminUser, "setup", int64(discordgo.PermissionAdministrator))
+
+	entry, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindInteractionEdit &&
+			e.InteractionID == interactionID &&
+			strings.Contains(e.Content, "Campaign created and channel structure set up! 10 channels set up.")
+	}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("expected /setup auto-create success edit: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+	if entry.Ephemeral {
+		t.Fatalf("expected /setup success to be public (non-ephemeral); got ephemeral\nContent: %q", entry.Content)
+	}
+
+	got, err := h.queries.GetCampaignByGuildID(context.Background(), h.guildID)
+	if err != nil {
+		t.Fatalf("expected auto-created campaign for guild; GetCampaignByGuildID: %v", err)
+	}
+	if got.DmUserID != adminUser {
+		t.Fatalf("expected auto-created campaign DM = %q (the admin invoker); got %q", adminUser, got.DmUserID)
+	}
+	if !got.Settings.Valid {
+		t.Fatalf("expected campaign settings to be set after /setup")
+	}
+	var settings campaign.Settings
+	if err := json.Unmarshal(got.Settings.RawMessage, &settings); err != nil {
+		t.Fatalf("decoding campaign settings: %v", err)
+	}
+	if len(settings.ChannelIDs) != 10 {
+		t.Fatalf("expected 10 channel IDs persisted after /setup; got %d: %+v", len(settings.ChannelIDs), settings.ChannelIDs)
+	}
+}
+
+// TestE2E_SetupRejectsNonAdminWithoutCreatingCampaign locks the /setup
+// auto-create authorization gate end-to-end:
+//  1. No campaign exists for the guild. A non-admin member runs /setup.
+//  2. The bot rejects with the public "⛔ Only a server administrator can
+//     create a new campaign via /setup." message.
+//  3. CRITICALLY no campaign row is created — the admin gate must run BEFORE any
+//     persistence. Regression lock for the bug where the campaign was
+//     auto-created during lookup (before the gate), silently making the rejected
+//     non-admin the DM of a real campaign.
+func TestE2E_SetupRejectsNonAdminWithoutCreatingCampaign(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	h.guildID = "guild-no-campaign"
+
+	interactionID := h.PlayerCommand("non-admin-user", "setup") // Permissions == 0
+
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindInteractionEdit &&
+			e.InteractionID == interactionID &&
+			strings.Contains(e.Content, "Only a server administrator can create a new campaign")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected non-admin /setup reject: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+
+	if _, err := h.queries.GetCampaignByGuildID(context.Background(), h.guildID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected NO campaign created on non-admin reject; GetCampaignByGuildID err = %v (want sql.ErrNoRows)", err)
 	}
 }
 

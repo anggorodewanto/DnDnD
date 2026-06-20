@@ -340,6 +340,16 @@ func (h *e2eHarness) SeedCombatant(encounterID, characterID uuid.UUID, displayNa
 // so the scenario can later assert on it via Transcript filtering.
 func (h *e2eHarness) PlayerCommand(discordUserID, name string, opts ...slashOpt) string {
 	h.t.Helper()
+	return h.PlayerCommandWithPermissions(discordUserID, name, 0, opts...)
+}
+
+// PlayerCommandWithPermissions is PlayerCommand with an explicit
+// Member.Permissions bitmask on the invoker. Needed for DM/admin commands
+// like /setup whose gate reads interaction.Member.Permissions (e.g.
+// discordgo.PermissionAdministrator). PlayerCommand passes 0 (no permissions),
+// matching a regular non-privileged member.
+func (h *e2eHarness) PlayerCommandWithPermissions(discordUserID, name string, permissions int64, opts ...slashOpt) string {
+	h.t.Helper()
 	interactionID := uuid.NewString()
 	options := make([]*discordgo.ApplicationCommandInteractionDataOption, 0, len(opts))
 	for _, o := range opts {
@@ -355,7 +365,8 @@ func (h *e2eHarness) PlayerCommand(discordUserID, name string, opts ...slashOpt)
 		GuildID:   h.guildID,
 		Type:      discordgo.InteractionApplicationCommand,
 		Member: &discordgo.Member{
-			User: &discordgo.User{ID: discordUserID, Username: "player-" + discordUserID},
+			User:        &discordgo.User{ID: discordUserID, Username: "player-" + discordUserID},
+			Permissions: permissions,
 		},
 		Data: discordgo.ApplicationCommandInteractionData{
 			Name:    name,
