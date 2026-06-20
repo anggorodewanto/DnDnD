@@ -55,13 +55,12 @@ future DM-gated command whose check is `invoker == campaign DM`.
   `GuildChannelCreateComplex` — so channel-creation side effects are invisible to
   the transcript; the DB query in `TestE2E_SetupScenario` is what locks them.
 
-### Coverage notes / deferred (backlog)
+### Coverage notes / deferred (backlog) — ✅ RESOLVED by STEP-004
 
-- **Auto-create admin path** (`AutoCreated && !isAdmin`) is **not** covered — it
-  needs the harness to set `interaction.Member.Permissions`
-  (`PlayerCommand`/`ClickButton` hardcode it unset). A small harness extension
-  (`PermissionsOpt` or similar) would unlock both the admin-success and the two
-  rejection paths (non-DM, non-admin). Candidate STEP.
-- Permission **rejection** messages (`⛔ Only the campaign DM…`,
-  `⛔ Only a server administrator…`) are unit-tested in
-  `internal/discord/setup_test.go`; not yet e2e.
+- ~~**Auto-create admin path** needs the harness to set
+  `interaction.Member.Permissions`.~~ Done in STEP-004 via
+  `PlayerCommandWithPermissions` + the `dispatchAsAdmin` precondition.
+- ~~Permission **rejection** messages are unit-only.~~ Now e2e too (3 replay
+  transcripts + scenarios). STEP-004 also **fixed an auth bug** found while
+  authoring this path (non-admin reject silently created a campaign). See
+  [STEP-004-dm-setup-permissions.md](STEP-004-dm-setup-permissions.md).

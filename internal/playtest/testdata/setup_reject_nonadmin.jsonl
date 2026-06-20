@@ -1,0 +1,3 @@
+{"ts":"2026-06-20T12:10:00Z","dir":"dispatch","channel_id":"ch-cmd","author":"normie","command":"/setup"}
+{"ts":"2026-06-20T12:10:01Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":""}
+{"ts":"2026-06-20T12:10:02Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":"⛔ Only a server administrator can create a new campaign via /setup."}

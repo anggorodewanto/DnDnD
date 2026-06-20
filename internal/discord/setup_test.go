@@ -388,15 +388,28 @@ func setupMockResponder(mock *MockSession) *string {
 }
 
 type mockCampaignLookup struct {
-	getCampaignFunc    func(guildID, invokerUserID string) (SetupCampaignInfo, error)
+	findCampaignFunc   func(guildID string) (SetupCampaignInfo, bool, error)
+	createCampaignFunc func(guildID, invokerUserID string) (SetupCampaignInfo, error)
 	updateSettingsFunc func(guildID string, channelIDs map[string]string) error
+	// createCalled records whether CreateCampaignForSetup ran — lets a test
+	// assert the admin gate rejected before any campaign was persisted.
+	createCalled bool
 }
 
-func (m *mockCampaignLookup) GetCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error) {
-	if m.getCampaignFunc != nil {
-		return m.getCampaignFunc(guildID, invokerUserID)
+func (m *mockCampaignLookup) FindCampaignForSetup(guildID string) (SetupCampaignInfo, bool, error) {
+	if m.findCampaignFunc != nil {
+		return m.findCampaignFunc(guildID)
 	}
-	return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
+	// Default: an existing campaign whose DM is "dm-user-1".
+	return SetupCampaignInfo{DMUserID: "dm-user-1"}, true, nil
+}
+
+func (m *mockCampaignLookup) CreateCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+	m.createCalled = true
+	if m.createCampaignFunc != nil {
+		return m.createCampaignFunc(guildID, invokerUserID)
+	}
+	return SetupCampaignInfo{DMUserID: invokerUserID}, nil
 }
 
 func (m *mockCampaignLookup) SaveChannelIDs(guildID string, channelIDs map[string]string) error {
@@ -458,13 +471,13 @@ func TestHandleSetupCommand_Success(t *testing.T) {
 	assert.Len(t, savedChannelIDs, 10) // 10 text channels
 }
 
-func TestHandleSetupCommand_NoCampaign(t *testing.T) {
+func TestHandleSetupCommand_FindCampaignError(t *testing.T) {
 	mock := newTestMock()
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
-			return SetupCampaignInfo{}, fmt.Errorf("no campaign found")
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
+			return SetupCampaignInfo{}, false, fmt.Errorf("db down")
 		},
 	}
 
@@ -472,7 +485,8 @@ func TestHandleSetupCommand_NoCampaign(t *testing.T) {
 	handler := NewSetupHandler(bot, campaignLookup)
 	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
-	assert.Contains(t, *editContent, "no campaign")
+	assert.Contains(t, *editContent, "Error resolving campaign")
+	assert.False(t, campaignLookup.createCalled, "must not create a campaign when the lookup errors")
 }
 
 // med-41: when the lookup auto-creates the campaign, the success message
@@ -496,9 +510,12 @@ func TestHandleSetupCommand_AutoCreatedCampaign(t *testing.T) {
 
 	gotInvoker := ""
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
+			return SetupCampaignInfo{}, false, nil
+		},
+		createCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
 			gotInvoker = invokerUserID
-			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+			return SetupCampaignInfo{DMUserID: invokerUserID}, nil
 		},
 	}
 
@@ -509,7 +526,7 @@ func TestHandleSetupCommand_AutoCreatedCampaign(t *testing.T) {
 		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-99"}, Permissions: int64(discordgo.PermissionAdministrator)},
 	})
 
-	assert.Equal(t, "dm-99", gotInvoker, "invoker user id should propagate to lookup")
+	assert.Equal(t, "dm-99", gotInvoker, "invoker user id should propagate to create")
 	assert.Contains(t, *editContent, "Campaign created")
 }
 
@@ -630,9 +647,9 @@ func TestHandleSetupCommand_RejectsNonDMWhenCampaignExists(t *testing.T) {
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
 			// Campaign exists, DM is "dm-user-1" but invoker is "random-user"
-			return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
+			return SetupCampaignInfo{DMUserID: "dm-user-1"}, true, nil
 		},
 	}
 
@@ -647,6 +664,7 @@ func TestHandleSetupCommand_RejectsNonDMWhenCampaignExists(t *testing.T) {
 	})
 
 	assert.Contains(t, *editContent, "Only the campaign DM")
+	assert.False(t, campaignLookup.createCalled, "rejecting a non-DM must not create or recreate a campaign")
 }
 
 func TestHandleSetupCommand_RejectsNonAdminAutoCreate(t *testing.T) {
@@ -654,9 +672,9 @@ func TestHandleSetupCommand_RejectsNonAdminAutoCreate(t *testing.T) {
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
-			// Auto-created: invoker would become DM
-			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
+			// No campaign exists yet → the auto-create (admin-gated) path.
+			return SetupCampaignInfo{}, false, nil
 		},
 	}
 
@@ -671,6 +689,9 @@ func TestHandleSetupCommand_RejectsNonAdminAutoCreate(t *testing.T) {
 	})
 
 	assert.Contains(t, *editContent, "administrator")
+	// Core of the fix: the admin gate must run BEFORE any persistence, so a
+	// rejected non-admin never causes a campaign to be created.
+	assert.False(t, campaignLookup.createCalled, "rejecting a non-admin must not create a campaign")
 }
 
 func TestHandleSetupCommand_AllowsDMWhenCampaignExists(t *testing.T) {
@@ -690,8 +711,8 @@ func TestHandleSetupCommand_AllowsDMWhenCampaignExists(t *testing.T) {
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
-			return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
+			return SetupCampaignInfo{DMUserID: "dm-user-1"}, true, nil
 		},
 	}
 
@@ -726,8 +747,11 @@ func TestHandleSetupCommand_AllowsAdminAutoCreate(t *testing.T) {
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
-			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+		findCampaignFunc: func(guildID string) (SetupCampaignInfo, bool, error) {
+			return SetupCampaignInfo{}, false, nil
+		},
+		createCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			return SetupCampaignInfo{DMUserID: invokerUserID}, nil
 		},
 	}
 
@@ -743,6 +767,7 @@ func TestHandleSetupCommand_AllowsAdminAutoCreate(t *testing.T) {
 
 	assert.Contains(t, *editContent, "Campaign created")
 	assert.NotContains(t, *editContent, "administrator")
+	assert.True(t, campaignLookup.createCalled, "an admin on a fresh guild should create the campaign")
 }
 
 func TestSetupChannels_PartialFailureReturnsCreatedChannels(t *testing.T) {

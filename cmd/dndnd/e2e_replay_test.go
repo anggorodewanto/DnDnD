@@ -38,8 +38,9 @@ import (
 // PlayerCommand seam. The player ID is fixed at construction time so a
 // transcript can be re-targeted at a different player without rewriting.
 type harnessDispatcher struct {
-	h        *e2eHarness
-	playerID string
+	h           *e2eHarness
+	playerID    string
+	permissions int64 // Member.Permissions bitmask for every dispatched interaction
 }
 
 func (d *harnessDispatcher) Dispatch(cmd playtest.ParsedCommand) error {
@@ -47,7 +48,7 @@ func (d *harnessDispatcher) Dispatch(cmd playtest.ParsedCommand) error {
 	for k, v := range cmd.NamedArgs {
 		opts = append(opts, stringOpt(k, v))
 	}
-	d.h.PlayerCommand(d.playerID, cmd.Name, opts...)
+	d.h.PlayerCommandWithPermissions(d.playerID, cmd.Name, d.permissions, opts...)
 	return nil
 }
 
@@ -191,7 +192,13 @@ type replayPreconditions struct {
 	// permission gate checks invoker == campaign DM, since the DM id is random
 	// per seed (testutil.NewTestCampaign) and unknowable when authoring the
 	// transcript. Overrides Player when true.
-	DispatchAsDM          bool                 `json:"dispatchAsDM"`
+	DispatchAsDM bool `json:"dispatchAsDM"`
+	// DispatchAsAdmin sets the Administrator permission bit on the dispatched
+	// interaction's Member.Permissions. Needed for /setup's auto-create path,
+	// which gates new-campaign creation on a server-admin bit
+	// (setupInvokerIsAdmin). Orthogonal to DispatchAsDM/Player: it sets
+	// permissions, not invoker identity.
+	DispatchAsAdmin       bool                 `json:"dispatchAsAdmin"`
 	ApprovedPlayers       []approvedPlayerSeed `json:"approvedPlayers"`
 	PlaceholderCharacters []string             `json:"placeholderCharacters"`
 	Encounter             *encounterSeed       `json:"encounter,omitempty"`
@@ -245,12 +252,16 @@ func loadPreconditions(transcript string) (*replayPreconditions, error) {
 // applyPreconditions seeds the harness from a manifest and returns the
 // dispatcher's player ID. With no manifest it applies the legacy default:
 // a campaign plus one approved player "Gale", dispatching as "user-file".
-func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) string {
+func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) (string, int64) {
 	t.Helper()
 	if pc == nil {
 		h.SeedCampaign("replay-file-campaign")
 		h.SeedApprovedPlayer("user-file", "Gale")
-		return "user-file"
+		return "user-file", 0
+	}
+	var permissions int64
+	if pc.DispatchAsAdmin {
+		permissions = int64(discordgo.PermissionAdministrator)
 	}
 	dispatcher := pc.Player
 	if pc.Campaign != "" {
@@ -271,9 +282,9 @@ func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) st
 		applyEncounter(t, h, pc.Encounter, charByPlayer)
 	}
 	if dispatcher == "" {
-		return "user-file"
+		return "user-file", permissions
 	}
-	return dispatcher
+	return dispatcher, permissions
 }
 
 // applyEncounter seeds an active encounter from the manifest: a shell, an
@@ -330,9 +341,9 @@ func TestE2E_ReplayFromFile(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
 
-	playerID := applyPreconditions(t, h, pc)
+	playerID, permissions := applyPreconditions(t, h, pc)
 
-	disp := &harnessDispatcher{h: h, playerID: playerID}
+	disp := &harnessDispatcher{h: h, playerID: playerID, permissions: permissions}
 	obs := &harnessObserver{fake: h.fake}
 	clk := &harnessClicker{h: h, playerID: playerID}
 
