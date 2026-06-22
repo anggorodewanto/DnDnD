@@ -792,6 +792,85 @@ func TestServiceMartialArtsBonusAttack_HappyPath(t *testing.T) {
 	assert.Equal(t, "bludgeoning", result.DamageType)
 }
 
+// TestServiceMartialArtsBonusAttack_AppliesDamageToTargetHP guards the same
+// invariant STEP-005 locked for /attack: a landed bonus unarmed strike must
+// reduce the target's HP through the Service.ApplyDamage pipeline
+// (UpdateCombatantHP). Before the fix this path rolled + reported damage but
+// never wrote the target's reduced HP.
+func TestServiceMartialArtsBonusAttack_AppliesDamageToTargetHP(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeMonkCharacter(10, 16, 5) // DEX +3, Monk 5 → 1d6 martial arts die
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	var hpUpdates []refdata.UpdateCombatantHPParams
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates = append(hpUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, IsAlive: arg.IsAlive, IsNpc: true, Ac: 13, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// d20 rolls 15 → 15 + 3(DEX) + 2(prof) = 20 vs AC 13 → hit (not a crit). d6 rolls 4 → 4 + 3 = 7.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 4
+	})
+
+	result, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			EncounterID: encounterID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			EncounterID: encounterID,
+			DisplayName: "Goblin #1",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, HpMax: 20, HpCurrent: 20,
+			IsAlive: true, IsVisible: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               turnID,
+			EncounterID:      encounterID,
+			CombatantID:      attackerID,
+			AttacksRemaining: 1,
+			ActionUsed:       true,
+		},
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit)
+	require.Equal(t, 7, result.DamageTotal)
+
+	var targetHPUpdate *refdata.UpdateCombatantHPParams
+	for i := range hpUpdates {
+		if hpUpdates[i].ID == targetID {
+			targetHPUpdate = &hpUpdates[i]
+		}
+	}
+	require.NotNil(t, targetHPUpdate, "expected UpdateCombatantHP to be called for the target on a hit")
+	assert.Equal(t, int32(13), targetHPUpdate.HpCurrent, "target HP must be reduced by the bonus strike damage (20 - 7)")
+}
+
 func TestServiceMartialArtsBonusAttack_NotACharacter(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(defaultMockStore())
@@ -1172,6 +1251,88 @@ func TestServiceFlurryOfBlows_HappyPath(t *testing.T) {
 	var uses map[string]character.FeatureUse
 	require.NoError(t, json.Unmarshal(updatedFeatureUses.RawMessage, &uses))
 	assert.Equal(t, 4, uses["ki"].Current)
+}
+
+// TestServiceFlurryOfBlows_AppliesDamageToTargetHP guards that BOTH flurry
+// strikes reduce the target's HP through Service.ApplyDamage, and that the
+// damage stacks sequentially (the 2nd strike must compute from the HP left by
+// the 1st, not from the original snapshot). Before the fix, flurry resolved two
+// hits and reported them but applied 0 HP.
+func TestServiceFlurryOfBlows_AppliesDamageToTargetHP(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DEX +3, Monk 5 → 1d6, 5 ki
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+	}
+
+	// Echo the written HP back as the combatant so the second strike threads
+	// off the post-first-strike HP (production UpdateCombatantHP returns the
+	// full updated row).
+	var targetHPWrites []int32
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		if arg.ID == targetID {
+			targetHPWrites = append(targetHPWrites, arg.HpCurrent)
+		}
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, HpMax: 20, TempHp: arg.TempHp, IsAlive: arg.IsAlive, IsNpc: true, Ac: 13, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// d20 rolls 15 → hit (not crit). d6 rolls 3 → 3 + 3(DEX) = 6 per strike.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			EncounterID: encounterID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			EncounterID: encounterID,
+			DisplayName: "Goblin #1",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, HpMax: 20, HpCurrent: 20,
+			IsAlive: true, IsVisible: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               turnID,
+			EncounterID:      encounterID,
+			CombatantID:      attackerID,
+			AttacksRemaining: 1,
+			ActionUsed:       true,
+		},
+	}, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Attacks, 2)
+
+	// Both strikes must persist to the target, stacking: 20 → 14 → 8.
+	require.Len(t, targetHPWrites, 2, "expected both flurry strikes to write the target's HP")
+	assert.Equal(t, int32(14), targetHPWrites[0], "first strike: 20 - 6")
+	assert.Equal(t, int32(8), targetHPWrites[1], "second strike must stack: 14 - 6")
 }
 
 func TestServiceFlurryOfBlows_BonusActionSpent(t *testing.T) {

@@ -405,6 +405,138 @@ func TestE2E_AttackScenario(t *testing.T) {
 	}
 }
 
+// TestE2E_MartialArtsBonusAttackScenario covers the monk /bonus martial-arts
+// path end-to-end in active combat and locks the STEP-006 bug fix:
+//  1. Seed an active encounter with monk "Kira" (turn holder, Attack action
+//     already used) at A1 and an NPC "Goblin" at B1.
+//  2. Player runs /bonus action:martial-arts args:B1. The always-max roller
+//     forces a natural 20, so the unarmed strike crit is deterministic:
+//     doubled 2d6 (12) + STR 3 = 15 bludgeoning.
+//  3. Assert the ephemeral + #combat-log carry the crit unarmed-strike line.
+//  4. Assert the bonus action was spent.
+//  5. Bug-fix lock: the bonus strike applied its damage to the target — Goblin
+//     20 - 15 = 5 HP. Before the fix this path announced the hit + spent the
+//     bonus action but never reduced the target's HP.
+func TestE2E_MartialArtsBonusAttackScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	h.SeedCampaign("martial-arts-campaign")
+	playerID := "user-monk"
+
+	char, _ := h.SeedApprovedMonk(playerID, "Kira", 5, 0)
+	mp := h.SeedMap()
+	encShell := h.SeedEncounterShell()
+	h.AttachMapToEncounter(encShell.ID, mp.ID)
+
+	comb := h.SeedCombatant(encShell.ID, char.ID, "Kira", "A", 1)
+	npc := h.SeedNPCCombatant(encShell.ID, "Goblin", "B", 1)
+	_, turn := h.PromoteEncounterToActive(encShell.ID, comb.ID)
+	h.MarkTurnActionUsed(turn.ID)
+
+	bonusID := h.PlayerCommand(playerID, "bonus",
+		stringOpt("action", "martial-arts"), stringOpt("args", "B1"))
+
+	h.AssertEphemeralContains(bonusID,
+		"Kira attacks Goblin with Unarmed Strike",
+		"NAT 20 — CRITICAL HIT!")
+
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-combatlog-"+h.guildID &&
+			strings.Contains(e.Content, "Kira attacks Goblin with Unarmed Strike") &&
+			strings.Contains(e.Content, "NAT 20")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected #combat-log martial-arts message: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+
+	// Bonus action spent.
+	updatedTurn, err := h.queries.GetTurn(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("GetTurn after bonus: %v", err)
+	}
+	if !updatedTurn.BonusActionUsed {
+		t.Fatalf("expected BonusActionUsed=true after martial-arts; got false")
+	}
+
+	// Bug-fix lock: the bonus strike applied damage. Goblin 20 - 15 = 5.
+	updatedNPC, err := h.queries.GetCombatant(context.Background(), npc.ID)
+	if err != nil {
+		t.Fatalf("GetCombatant after bonus: %v", err)
+	}
+	if updatedNPC.HpCurrent != 5 {
+		t.Fatalf("expected target HP 5 after 15 crit bonus damage (20-15); got %d", updatedNPC.HpCurrent)
+	}
+	if !updatedNPC.IsAlive {
+		t.Fatalf("expected target alive at 5 HP; got is_alive=false")
+	}
+}
+
+// TestE2E_FlurryOfBlowsScenario covers the monk /bonus flurry-of-blows path and
+// locks that BOTH strikes apply damage (the STEP-006 sibling bug):
+//  1. Seed an active encounter with monk "Kira" (turn holder, 5 ki, Attack
+//     action already used) at A1 and an NPC "Goblin" at B1.
+//  2. Player runs /bonus action:flurry args:B1. Two unarmed strikes, each a
+//     deterministic crit: 2d6 (12) + STR 3 = 15. The two strikes stack: Goblin
+//     20 → 5 → 0 (dead).
+//  3. Assert the ephemeral + #combat-log carry the flurry line + ki spend.
+//  4. Assert the bonus action was spent and 1 ki deducted (5 → 4).
+//  5. Bug-fix lock: both strikes applied damage — the target is dead at 0 HP.
+//     Before the fix flurry rolled + announced two hits but applied 0 HP.
+func TestE2E_FlurryOfBlowsScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+
+	h.SeedCampaign("flurry-campaign")
+	playerID := "user-monk"
+
+	char, _ := h.SeedApprovedMonk(playerID, "Kira", 5, 5)
+	mp := h.SeedMap()
+	encShell := h.SeedEncounterShell()
+	h.AttachMapToEncounter(encShell.ID, mp.ID)
+
+	comb := h.SeedCombatant(encShell.ID, char.ID, "Kira", "A", 1)
+	npc := h.SeedNPCCombatant(encShell.ID, "Goblin", "B", 1)
+	_, turn := h.PromoteEncounterToActive(encShell.ID, comb.ID)
+	h.MarkTurnActionUsed(turn.ID)
+
+	bonusID := h.PlayerCommand(playerID, "bonus",
+		stringOpt("action", "flurry"), stringOpt("args", "B1"))
+
+	h.AssertEphemeralContains(bonusID,
+		"uses Flurry of Blows",
+		"1 ki spent, 4 remaining")
+
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-combatlog-"+h.guildID &&
+			strings.Contains(e.Content, "uses Flurry of Blows")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected #combat-log flurry message: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+
+	// Bonus action spent + 1 ki deducted.
+	updatedTurn, err := h.queries.GetTurn(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("GetTurn after flurry: %v", err)
+	}
+	if !updatedTurn.BonusActionUsed {
+		t.Fatalf("expected BonusActionUsed=true after flurry; got false")
+	}
+
+	// Bug-fix lock: both strikes applied damage. Goblin 20 - 15 - 15 → 0, dead.
+	updatedNPC, err := h.queries.GetCombatant(context.Background(), npc.ID)
+	if err != nil {
+		t.Fatalf("GetCombatant after flurry: %v", err)
+	}
+	if updatedNPC.HpCurrent != 0 {
+		t.Fatalf("expected target HP 0 after two 15-dmg crits; got %d", updatedNPC.HpCurrent)
+	}
+	if updatedNPC.IsAlive {
+		t.Fatalf("expected target dead at 0 HP after flurry; got is_alive=true")
+	}
+}
+
 // TestE2E_LootScenario covers DM-places-loot → /loot → claim flow:
 //  1. Harness completes an encounter and seeds a loot pool with one item.
 //  2. Player runs /loot. The bot responds with an embed + a Claim button per

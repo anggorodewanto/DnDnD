@@ -1,0 +1,3 @@
+{"ts":"2026-06-22T10:00:00Z","dir":"dispatch","channel_id":"ch-cmd","author":"user-monk","command":"/bonus action:flurry args:B1"}
+{"ts":"2026-06-22T10:00:01Z","dir":"observed","channel_id":"ch-combatlog","author":"DnDnD","content":"uses Flurry of Blows! (1 ki spent, 4 remaining)"}
+{"ts":"2026-06-22T10:00:02Z","dir":"observed","channel_id":"ch-cmd","author":"DnDnD","content":"uses Flurry of Blows! (1 ki spent, 4 remaining)"}

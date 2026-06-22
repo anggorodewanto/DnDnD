@@ -960,21 +960,25 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 // ApplyDamage pipeline (R/I/V, temp HP, death-saves, concentration,
 // unconscious-at-0, card refresh) — the same seam Graze/Cleave use. No-op on a
 // miss or zero damage, so it never double-applies with the miss-only Graze or
-// the different-target Cleave paths.
-func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result AttackResult) error {
+// the different-target Cleave paths. Returns the post-damage target so callers
+// that land multiple strikes on one target in a single command (Flurry of
+// Blows) can thread the reduced HP into the next strike; on a no-op the target
+// is returned unchanged.
+func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result AttackResult) (refdata.Combatant, error) {
 	if !result.Hit || result.DamageTotal <= 0 {
-		return nil
+		return target, nil
 	}
-	if _, err := s.ApplyDamage(ctx, ApplyDamageInput{
+	out, err := s.ApplyDamage(ctx, ApplyDamageInput{
 		EncounterID: encounterID,
 		Target:      target,
 		RawDamage:   result.DamageTotal,
 		DamageType:  result.DamageType,
 		IsCritical:  result.CriticalHit,
-	}); err != nil {
-		return fmt.Errorf("applying attack damage: %w", err)
+	})
+	if err != nil {
+		return target, fmt.Errorf("applying attack damage: %w", err)
 	}
-	return nil
+	return out.Updated, nil
 }
 
 // Attack is the service-level method that orchestrates a full attack:
@@ -1138,7 +1142,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return result, err
 	}
 
-	if err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 
@@ -1289,7 +1293,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	if err != nil {
 		return result, err
 	}
-	if err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 	// SR-010 — mirror Service.Attack: improvised hits that produce a
@@ -1435,7 +1439,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if err != nil {
 		return result, err
 	}
-	if err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 	// 2024 Weapon Mastery — Nick: mark the free off-hand spent for this turn so

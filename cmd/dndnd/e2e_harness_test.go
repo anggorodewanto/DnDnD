@@ -27,6 +27,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/dice"
@@ -161,6 +162,45 @@ func (h *e2eHarness) SeedApprovedPlayer(discordUserID, charName string) (refdata
 	char := testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, 3)
 	pc := testutil.NewTestPlayerCharacter(h.t, h.queries, h.campaignID, char.ID, discordUserID)
 	return char, pc
+}
+
+// SeedApprovedMonk seeds an approved player whose character is a Monk of the
+// given level with `ki` ki points. testutil.NewTestCharacter builds a fighter,
+// so the monk class is patched in via raw SQL (classes has no cheap typed
+// writer — UpdateCharacter would need every column — so this follows the
+// SeedCampaign / AttachMapToEncounter single-column patch idiom). Ki uses the
+// dedicated UpdateCharacterFeatureUses sqlc writer. Used by the /bonus
+// martial-arts + flurry-of-blows scenarios, which gate on Monk class and (for
+// flurry) available ki. The returned character's ID is all callers consume.
+func (h *e2eHarness) SeedApprovedMonk(discordUserID, charName string, monkLevel, ki int) (refdata.Character, refdata.PlayerCharacter) {
+	h.t.Helper()
+	char := testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, monkLevel)
+	classes := fmt.Sprintf(`[{"class":"monk","level":%d}]`, monkLevel)
+	if _, err := h.db.Exec("UPDATE characters SET classes=$1 WHERE id=$2", classes, char.ID); err != nil {
+		h.t.Fatalf("SeedApprovedMonk: patch classes: %v", err)
+	}
+	if ki > 0 {
+		featureUses := fmt.Sprintf(`{"ki":{"current":%d,"max":%d,"recharge":"long"}}`, ki, ki)
+		if _, err := h.queries.UpdateCharacterFeatureUses(context.Background(), refdata.UpdateCharacterFeatureUsesParams{
+			ID:          char.ID,
+			FeatureUses: pqtype.NullRawMessage{RawMessage: []byte(featureUses), Valid: true},
+		}); err != nil {
+			h.t.Fatalf("SeedApprovedMonk: patch feature_uses: %v", err)
+		}
+	}
+	pc := testutil.NewTestPlayerCharacter(h.t, h.queries, h.campaignID, char.ID, discordUserID)
+	return char, pc
+}
+
+// MarkTurnActionUsed flips a turn's action_used flag to true. CreateTurnParams
+// has no action_used field, so the harness patches it via raw SQL. Needed by
+// the monk bonus-action scenarios: Martial Arts bonus attack + Flurry of Blows
+// both require the Attack action to have been used this turn.
+func (h *e2eHarness) MarkTurnActionUsed(turnID uuid.UUID) {
+	h.t.Helper()
+	if _, err := h.db.Exec("UPDATE turns SET action_used=true WHERE id=$1", turnID); err != nil {
+		h.t.Fatalf("MarkTurnActionUsed(%s): %v", turnID, err)
+	}
 }
 
 // SeedCharacterOnly creates a DM-curated character with no player_character

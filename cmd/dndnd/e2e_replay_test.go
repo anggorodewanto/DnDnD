@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/ab/dndnd/internal/playtest"
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil/discordfake"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -207,6 +208,13 @@ type replayPreconditions struct {
 type approvedPlayerSeed struct {
 	DiscordUserID string `json:"discordUserId"`
 	CharacterName string `json:"characterName"`
+	// Class selects a non-default character build. "" (or "fighter") uses the
+	// stock SeedApprovedPlayer (level-3 fighter); "monk" seeds a Monk via
+	// SeedApprovedMonk at Level with Ki points — needed by the /bonus
+	// martial-arts + flurry-of-blows transcripts.
+	Class string `json:"class,omitempty"`
+	Level int    `json:"level,omitempty"`
+	Ki    int    `json:"ki,omitempty"`
 }
 
 // encounterSeed declares an active combat encounter: an optional map plus
@@ -216,6 +224,11 @@ type approvedPlayerSeed struct {
 type encounterSeed struct {
 	WithMap    bool            `json:"withMap"`
 	Combatants []combatantSeed `json:"combatants"`
+	// TurnHolderActionUsed marks the active turn's action as already spent
+	// (action_used=true). Needed by bonus-action transcripts whose service
+	// gate requires the Attack action to have been taken this turn (monk
+	// Martial Arts bonus attack, Flurry of Blows).
+	TurnHolderActionUsed bool `json:"turnHolderActionUsed"`
 }
 
 type combatantSeed struct {
@@ -275,7 +288,12 @@ func applyPreconditions(t *testing.T, h *e2eHarness, pc *replayPreconditions) (s
 	}
 	charByPlayer := make(map[string]uuid.UUID)
 	for _, ap := range pc.ApprovedPlayers {
-		char, _ := h.SeedApprovedPlayer(ap.DiscordUserID, ap.CharacterName)
+		var char refdata.Character
+		if strings.EqualFold(ap.Class, "monk") {
+			char, _ = h.SeedApprovedMonk(ap.DiscordUserID, ap.CharacterName, ap.Level, ap.Ki)
+		} else {
+			char, _ = h.SeedApprovedPlayer(ap.DiscordUserID, ap.CharacterName)
+		}
 		charByPlayer[ap.DiscordUserID] = char.ID
 	}
 	for _, name := range pc.PlaceholderCharacters {
@@ -318,7 +336,10 @@ func applyEncounter(t *testing.T, h *e2eHarness, enc *encounterSeed, charByPlaye
 	if turnHolder == uuid.Nil {
 		t.Fatalf("preconditions: encounter has no combatant marked turnHolder")
 	}
-	h.PromoteEncounterToActive(encShell.ID, turnHolder)
+	_, turn := h.PromoteEncounterToActive(encShell.ID, turnHolder)
+	if enc.TurnHolderActionUsed {
+		h.MarkTurnActionUsed(turn.ID)
+	}
 }
 
 // TestE2E_ReplayFromFile drives the harness from a JSON-lines

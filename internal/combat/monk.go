@@ -89,6 +89,11 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 	if err != nil {
 		return result, err
 	}
+
+	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+		return result, err
+	}
+
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
 	return result, nil
@@ -151,6 +156,12 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
 
 	var attacks []AttackResult
+	// Both strikes land on the same target, so thread the post-damage combatant
+	// into the next swing's damage application — otherwise the second strike
+	// would compute its HP write from the original (pre-first-strike) snapshot
+	// and overwrite it. The to-hit/damage roll still reads cmd.Target: AC,
+	// position, and size are unchanged by the first strike.
+	dmgTarget := cmd.Target
 	for i := range 2 {
 		input := buildAttackInput(
 			cmd.Attacker, cmd.Target, weapon, scores, int(char.ProficiencyBonus), distFt,
@@ -164,6 +175,11 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 			return FlurryOfBlowsResult{}, fmt.Errorf("resolving flurry attack %d: %w", i+1, err)
 		}
 		attacks = append(attacks, result)
+
+		dmgTarget, err = s.applyHitDamage(ctx, cmd.Attacker.EncounterID, dmgTarget, result)
+		if err != nil {
+			return FlurryOfBlowsResult{}, fmt.Errorf("applying flurry attack %d damage: %w", i+1, err)
+		}
 	}
 
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {

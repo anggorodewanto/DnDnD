@@ -1,0 +1,15 @@
+{
+  "campaign": "flurry-campaign",
+  "player": "user-monk",
+  "approvedPlayers": [
+    {"discordUserId": "user-monk", "characterName": "Kira", "class": "monk", "level": 5, "ki": 5}
+  ],
+  "encounter": {
+    "withMap": true,
+    "turnHolderActionUsed": true,
+    "combatants": [
+      {"player": "user-monk", "displayName": "Kira", "col": "A", "row": 1, "turnHolder": true},
+      {"displayName": "Goblin", "col": "B", "row": 1, "isNpc": true}
+    ]
+  }
+}
