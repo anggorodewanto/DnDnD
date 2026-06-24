@@ -11,7 +11,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | --- | --- | --- | --- | --- | --- |
 | ISSUE-001 | 2026-06-24 | builder / spellcasting | major | FIXED | L3 warlock builder offers only cantrips — no leveled "spells known" selectable (Pact Magic ignored in max-spell-level derivation). |
 | ISSUE-002 | 2026-06-24 | builder / persistence | major | FIXED | Full/half-caster `spell_slots` dropped at creation — `CreateCharacterRecord` never set it → portal-built wizard/cleric/etc. **could not cast leveled spells**. Fixed: persist standard slots in the canonical string-keyed `{current,max}` shape the `/cast` reader expects. |
-| ISSUE-003 | 2026-06-24 | builder / spellcasting (frontend) | major | OPEN | Eldritch Knight (Fighter) & Arcane Trickster (Rogue) not recognized as casters by the frontend (`CASTER_ABILITY` is base-class-only) → **Spells step skipped entirely**, no picker. Server math is already correct; UI discards it. Warlock-style, worse. |
+| ISSUE-003 | 2026-06-24 | builder / spellcasting (frontend) | major | FIXED | Eldritch Knight (Fighter) & Arcane Trickster (Rogue) not recognized as casters by the frontend → **Spells step skipped entirely**. Fixed: subclass-aware `isSpellcaster`/budgets in JS + Go (INT third-casters from L3, EK/AT cantrip + spells-known + leveled tables); Spells step now shows with correct caps; server validation accepts the selections. |
 | ISSUE-004 | 2026-06-24 | builder / AC | major | OPEN | Unarmored Defense never wired: builder never sets `ac_formula`, so Barbarian (10+DEX+CON) & Monk (10+DEX+WIS) get **AC = 10+DEX** at creation and every play-time recompute. Seed `mechanical_effect` + `ac_formula` column exist; builder has zero writers. Exact ISSUE-001 signature. |
 | ISSUE-005 | 2026-06-24 | builder / proficiency | minor→major | OPEN | Expertise (Rogue/Bard) never wired: combat reads an `"expertise"` proficiency key but the builder never collects it and `character.Proficiencies` has no Expertise field → wrong skill modifiers in play. |
 | ISSUE-006 | 2026-06-24 | builder / spellcasting | minor | OPEN | Level-1 Paladin/Ranger get a phantom L1 spell slot — `CalculateSpellSlots` half path uses `(level+1)/2` → 1 at L1 (half-casters get nothing until L2). Masked in the builder UI by an independent leveled-cap of 0, but wrong `spell_slots`/`max_spell_level` is stored and consumed elsewhere. |
@@ -87,6 +87,32 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   whether `/cast` / the sheet shows spell slots. If empty → real bug; fix by
   persisting `DeriveStats.SpellSlots` in the adapter (mirroring the pact fix). If
   slots appear → they're derived on read somewhere; close as INFO.
+
+### ISSUE-003 — EK/AT not recognized as casters in the builder (FIXED)
+- **Date:** 2026-06-24
+- **Area:** portal character builder (frontend gate + Go validation)
+- **Severity:** major — an Eldritch Knight (Fighter) or Arcane Trickster (Rogue)
+  built via the web builder got **no spell picker** (Spells step skipped). Worse
+  than the warlock bug (warlock at least showed cantrips).
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** `CASTER_ABILITY` / `isSpellcaster` (`portal/svelte/src/lib/
+  spellcasting.js`) keyed only on base class → `isCaster` false for fighter/rogue
+  → `builder-steps.js` hid/skipped the Spells step. The Go spell-budget
+  (`internal/portal/spellbudget.go`, used by `validateSpellCount`) likewise
+  returned 0 for fighter/rogue, so even a shown picker would have been rejected on
+  submit. Server `max_spell_level` (via `isThirdCasterSubclass` →
+  `CalculateCasterLevel`) was already correct and untouched.
+- **Fix:** made both sides subclass-aware. JS: `isThirdCaster(subclass, level)`
+  (EK/AT slugs, level ≥ 3 = INT caster), `isSpellcaster`/
+  `spellcastingAbilityForClass`/`cantripsKnown`/`leveledSpellCap` fall through to
+  third-caster tables (EK 2→3 cantrips, AT 3→4, shared spells-known table);
+  threaded subclass + level into `CharacterBuilder.svelte`. Go: mirrored
+  `isThirdCaster` + third-caster tables in `spellbudget.go`; `spellCountCap`
+  (`builder_service.go`) no longer bails for `SlotProgression=="none"` when EK/AT.
+  Tests: Go `spellbudget_test.go` (EK/AT budgets + `validateSpellCount`), JS
+  `spellcasting.test.js` (EK/AT casters, plain fighter/EK-L2 not). `npm test`
+  441/441, `make cover-check` green (portal 89.12%). **Svelte bundle rebuilt**
+  (`vite build`) since `internal/portal/assets/` is git-tracked.
 
 ### ISSUE-002 — Full/half-caster spell_slots dropped at creation (FIXED)
 - **Date:** 2026-06-24

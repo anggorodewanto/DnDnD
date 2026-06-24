@@ -127,3 +127,72 @@ describe('leveledSpellCap', () => {
     expect(leveledSpellCap('fighter', 5, 5)).toBe(0);
   });
 });
+
+describe('third-caster subclasses (Eldritch Knight / Arcane Trickster)', () => {
+  describe('spellcastingAbilityForClass', () => {
+    it('treats a Fighter/Eldritch Knight at level >= 3 as an INT caster', () => {
+      expect(spellcastingAbilityForClass('fighter', 'eldritch-knight', 3)).toBe('int');
+      expect(spellcastingAbilityForClass('fighter', 'Eldritch Knight', 3)).toBe('int');
+    });
+    it('treats a Rogue/Arcane Trickster at level >= 3 as an INT caster', () => {
+      expect(spellcastingAbilityForClass('rogue', 'arcane-trickster', 3)).toBe('int');
+      expect(spellcastingAbilityForClass('rogue', 'Arcane Trickster', 3)).toBe('int');
+    });
+    it('is not a caster below level 3 (subclass not yet chosen)', () => {
+      expect(spellcastingAbilityForClass('fighter', 'eldritch-knight', 2)).toBe(null);
+      expect(spellcastingAbilityForClass('rogue', 'arcane-trickster', 1)).toBe(null);
+    });
+    it('is not a caster without the EK/AT subclass', () => {
+      expect(spellcastingAbilityForClass('fighter', '', 3)).toBe(null);
+      expect(spellcastingAbilityForClass('fighter', 'champion', 3)).toBe(null);
+      expect(spellcastingAbilityForClass('rogue', 'thief', 5)).toBe(null);
+    });
+    it('still maps base caster classes ignoring subclass', () => {
+      expect(spellcastingAbilityForClass('wizard', 'evocation', 3)).toBe('int');
+    });
+  });
+
+  describe('isSpellcaster', () => {
+    it('is true for Fighter/EK and Rogue/AT at level >= 3', () => {
+      expect(isSpellcaster('fighter', 'eldritch-knight', 3)).toBe(true);
+      expect(isSpellcaster('rogue', 'arcane-trickster', 3)).toBe(true);
+    });
+    it('is false for a plain Fighter and a Fighter/EK at level 2', () => {
+      expect(isSpellcaster('fighter')).toBe(false);
+      expect(isSpellcaster('fighter', 'champion', 3)).toBe(false);
+      expect(isSpellcaster('fighter', 'eldritch-knight', 2)).toBe(false);
+    });
+  });
+
+  describe('cantripsKnown', () => {
+    it('returns EK cantrips (2 at L3, 3 at L10)', () => {
+      expect(cantripsKnown('fighter', 3, 'eldritch-knight')).toBe(2);
+      expect(cantripsKnown('fighter', 9, 'eldritch-knight')).toBe(2);
+      expect(cantripsKnown('fighter', 10, 'eldritch-knight')).toBe(3);
+    });
+    it('returns AT cantrips (3 at L3, 4 at L10)', () => {
+      expect(cantripsKnown('rogue', 3, 'arcane-trickster')).toBe(3);
+      expect(cantripsKnown('rogue', 10, 'arcane-trickster')).toBe(4);
+    });
+    it('returns 0 below level 3 and for non-EK/AT subclasses', () => {
+      expect(cantripsKnown('fighter', 2, 'eldritch-knight')).toBe(0);
+      expect(cantripsKnown('fighter', 5, 'champion')).toBe(0);
+      expect(cantripsKnown('fighter', 5)).toBe(0);
+    });
+  });
+
+  describe('leveledSpellCap', () => {
+    it('uses the third-caster Spells Known table for EK/AT (ability mod ignored)', () => {
+      expect(leveledSpellCap('fighter', 3, 5, 'eldritch-knight')).toBe(3);
+      expect(leveledSpellCap('fighter', 4, 5, 'eldritch-knight')).toBe(4);
+      expect(leveledSpellCap('fighter', 7, 5, 'eldritch-knight')).toBe(5);
+      expect(leveledSpellCap('fighter', 20, 5, 'eldritch-knight')).toBe(13);
+      expect(leveledSpellCap('rogue', 3, 0, 'arcane-trickster')).toBe(3);
+    });
+    it('returns 0 below level 3 and for non-EK/AT subclasses', () => {
+      expect(leveledSpellCap('fighter', 2, 5, 'eldritch-knight')).toBe(0);
+      expect(leveledSpellCap('fighter', 5, 5, 'champion')).toBe(0);
+      expect(leveledSpellCap('fighter', 5, 5)).toBe(0);
+    });
+  });
+});

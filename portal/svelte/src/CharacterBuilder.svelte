@@ -492,16 +492,20 @@
   // drifts from the authoritative slot math. While the preview is still loading
   // we gate all leveled spells (cantrips stay selectable); if it errors we drop
   // the level gate and lean on the server-side count cap.
-  let isCaster = $derived(isSpellcaster(selectedClass));
-  let spellAbility = $derived(spellcastingAbilityForClass(selectedClass));
   let primaryLevel = $derived(Number(classEntries[0]?.level) || 1);
+  // The Fighter/Eldritch Knight and Rogue/Arcane Trickster subclasses turn an
+  // otherwise non-casting base class into an INT third-caster at class level 3,
+  // so the caster gate and every spell budget below must consider the selected
+  // subclass + level, not just the base class.
+  let isCaster = $derived(isSpellcaster(selectedClass, subclass, primaryLevel));
+  let spellAbility = $derived(spellcastingAbilityForClass(selectedClass, subclass, primaryLevel));
   // Cantrips and leveled spells have separate budgets: cantrips known is a flat
   // per-class/level count, while leveled spells use the class's prepared cap
   // (ability mod + level) or Spells Known table. Counting cantrips against the
   // leveled cap blocked legal builds (Finding 5), so they are tracked apart.
   let spellMod = $derived(isCaster ? abilityModifier(finalScores()[spellAbility]) : 0);
-  let cantripCap = $derived(isCaster ? cantripsKnown(selectedClass, primaryLevel) : Infinity);
-  let leveledCap = $derived(isCaster ? leveledSpellCap(selectedClass, primaryLevel, spellMod) : Infinity);
+  let cantripCap = $derived(isCaster ? cantripsKnown(selectedClass, primaryLevel, subclass) : Infinity);
+  let leveledCap = $derived(isCaster ? leveledSpellCap(selectedClass, primaryLevel, spellMod, subclass) : Infinity);
   let spellSelectableLevels = $derived(
     !isCaster ? null : preview ? levelsUpTo(preview.max_spell_level) : previewError ? null : []
   );

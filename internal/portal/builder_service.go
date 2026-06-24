@@ -125,12 +125,15 @@ func spellCountCap(s CharacterSubmission) (int, bool) {
 	if primary == nil {
 		return 0, false
 	}
+	// A non-casting base class still casts if it carries the EK/AT third-caster
+	// subclass at level >= 3, so don't bail on SlotProgression "none" until the
+	// subclass has been ruled out.
 	sc := classSpellcasting(primary.Class)
-	if sc.SlotProgression == "none" {
+	if sc.SlotProgression == "none" && !isThirdCaster(primary.Subclass, primary.Level) {
 		return 0, false
 	}
-	abilityMod := abilityModForCaster(primary.Class, s.AbilityScores.Character())
-	return spellBudget(primary.Class, primary.Level, abilityMod), true
+	abilityMod := abilityModForCaster(primary.Class, primary.Subclass, s.AbilityScores.Character())
+	return spellBudget(primary.Class, primary.Level, abilityMod, primary.Subclass), true
 }
 
 // hasNonEmptyClass reports whether any multiclass entry names a class.

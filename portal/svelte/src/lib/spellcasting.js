@@ -20,23 +20,59 @@ const CASTER_ABILITY = {
 };
 
 /**
- * Returns the spellcasting ability slug ('int'|'wis'|'cha') for a class, or
- * null when the class is not a spellcaster.
- * @param {string} className
- * @returns {string|null}
+ * The two martial third-caster subclasses (Fighter/Eldritch Knight and
+ * Rogue/Arcane Trickster). They cast with INT and gain spellcasting only when
+ * the subclass is chosen at class level 3. Both spaced and hyphenated slugs are
+ * accepted to mirror character.isThirdCasterSubclass on the Go side.
+ * @type {Set<string>}
  */
-export function spellcastingAbilityForClass(className) {
-  if (!className) return null;
-  return CASTER_ABILITY[String(className).toLowerCase()] ?? null;
+const THIRD_CASTER_SUBCLASSES = new Set([
+  'eldritch-knight', 'eldritch knight', 'arcane-trickster', 'arcane trickster',
+]);
+
+/** Class level at which an EK/AT subclass first grants spellcasting. */
+const THIRD_CASTER_MIN_LEVEL = 3;
+
+/**
+ * Whether the given subclass at the given level is a spellcasting third-caster
+ * (EK/AT at class level >= 3).
+ * @param {string} subclass
+ * @param {number} level
+ * @returns {boolean}
+ */
+export function isThirdCaster(subclass, level) {
+  if (!subclass) return false;
+  if ((Number(level) || 0) < THIRD_CASTER_MIN_LEVEL) return false;
+  return THIRD_CASTER_SUBCLASSES.has(String(subclass).toLowerCase());
 }
 
 /**
- * Whether a class is a spellcaster.
+ * Returns the spellcasting ability slug ('int'|'wis'|'cha') for a class, or
+ * null when the class is not a spellcaster. A Fighter/Eldritch Knight or
+ * Rogue/Arcane Trickster at level >= 3 is an INT caster even though the base
+ * class is not; pass the selected subclass + level to detect them.
  * @param {string} className
+ * @param {string} [subclass]
+ * @param {number} [level]
+ * @returns {string|null}
+ */
+export function spellcastingAbilityForClass(className, subclass, level) {
+  const base = className ? CASTER_ABILITY[String(className).toLowerCase()] ?? null : null;
+  if (base !== null) return base;
+  if (isThirdCaster(subclass, level)) return 'int';
+  return null;
+}
+
+/**
+ * Whether a class is a spellcaster, accounting for the EK/AT third-caster
+ * subclasses (which only cast at class level >= 3).
+ * @param {string} className
+ * @param {string} [subclass]
+ * @param {number} [level]
  * @returns {boolean}
  */
-export function isSpellcaster(className) {
-  return spellcastingAbilityForClass(className) !== null;
+export function isSpellcaster(className, subclass, level) {
+  return spellcastingAbilityForClass(className, subclass, level) !== null;
 }
 
 /**
@@ -75,20 +111,50 @@ export function levelsUpTo(maxLevel) {
 const CANTRIP_BASE = { bard: 2, cleric: 3, druid: 2, sorcerer: 4, warlock: 2, wizard: 3 };
 
 /**
+ * Cantrips known by the EK/AT third-casters: Eldritch Knight knows 2 at L3 and
+ * 3 at L10; Arcane Trickster knows 3 at L3 and 4 at L10. Keyed by normalized
+ * subclass slug. Mirrors thirdCasterCantrips in internal/portal/spellbudget.go.
+ * @type {Record<string,{base:number,atTen:number}>}
+ */
+const THIRD_CASTER_CANTRIPS = {
+  'eldritch-knight': { base: 2, atTen: 3 },
+  'eldritch knight': { base: 2, atTen: 3 },
+  'arcane-trickster': { base: 3, atTen: 4 },
+  'arcane trickster': { base: 3, atTen: 4 },
+};
+
+/**
+ * Per-class-level leveled (non-cantrip) spells known for EK/AT third-casters
+ * (index 0 == class level 1). Both subclasses share the PHB third-caster Spells
+ * Known column; levels 1–2 are 0 because the subclass is not yet chosen.
+ * Mirrors thirdCasterSpellsKnown in internal/portal/spellbudget.go.
+ * @type {number[]}
+ */
+const THIRD_CASTER_SPELLS_KNOWN = [
+  0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13,
+];
+
+/**
  * Number of cantrips a class knows at the given class level. 0 for classes
- * that learn no cantrips.
+ * that learn no cantrips. A Fighter/EK or Rogue/AT (level >= 3) uses the
+ * third-caster cantrip counts; pass the selected subclass.
  * @param {string} className
  * @param {number} level
+ * @param {string} [subclass]
  * @returns {number}
  */
-export function cantripsKnown(className, level) {
+export function cantripsKnown(className, level, subclass) {
   const base = CANTRIP_BASE[String(className || '').toLowerCase()];
-  if (base == null) return 0;
-  const lvl = Math.max(1, Number(level) || 1);
-  let n = base;
-  if (lvl >= 4) n += 1;
-  if (lvl >= 10) n += 1;
-  return n;
+  if (base != null) {
+    const lvl = Math.max(1, Number(level) || 1);
+    let n = base;
+    if (lvl >= 4) n += 1;
+    if (lvl >= 10) n += 1;
+    return n;
+  }
+  if (!isThirdCaster(subclass, level)) return 0;
+  const tc = THIRD_CASTER_CANTRIPS[String(subclass).toLowerCase()];
+  return (Number(level) || 0) >= 10 ? tc.atTen : tc.base;
 }
 
 /**
@@ -129,9 +195,10 @@ export function spellsKnown(className, level) {
  * @param {string} className
  * @param {number} level
  * @param {number} abilityMod
+ * @param {string} [subclass]
  * @returns {number}
  */
-export function leveledSpellCap(className, level, abilityMod) {
+export function leveledSpellCap(className, level, abilityMod, subclass) {
   const known = spellsKnown(className, level);
   if (known != null) return known;
   const cls = String(className || '').toLowerCase();
@@ -144,6 +211,7 @@ export function leveledSpellCap(className, level, abilityMod) {
     case 'paladin':
       return lvl < 2 ? 0 : spellPrepCap(abilityMod, Math.floor(lvl / 2));
     default:
-      return 0;
+      if (!isThirdCaster(subclass, level)) return 0;
+      return THIRD_CASTER_SPELLS_KNOWN[Math.min(20, lvl) - 1];
   }
 }
