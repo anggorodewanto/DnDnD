@@ -164,6 +164,17 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		return "", fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
 	}
 
+	// ISSUE-004: persist the Unarmored Defense ac_formula so an unarmored
+	// Barbarian/Monk gets the right AC at creation and on every play-time
+	// recompute (combat.RecalculateAC reads char.AcFormula). Shield detection
+	// mirrors the inventory builder (EquipmentToInventoryWithEquipped marks any
+	// "shield" item equipped). NULL for armored characters and non-UD classes
+	// so fighters/wizards/etc. are unchanged.
+	var acFormula sql.NullString
+	if f := unarmoredDefenseFormula(classEntries, p.WornArmor, hasEquipmentItem(p.Equipment, "shield")); f != "" {
+		acFormula = sql.NullString{String: f, Valid: true}
+	}
+
 	// characters.languages is TEXT[] NOT NULL. pq.Array of a nil slice writes
 	// SQL NULL, which violates the constraint and 500s the create. The builder
 	// does not yet collect concrete languages, so default to a non-nil empty
@@ -184,6 +195,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		HpCurrent:        int32(p.HPMax),
 		TempHp:           0,
 		Ac:               int32(p.AC),
+		AcFormula:        acFormula,
 		SpeedFt:          int32(p.SpeedFt),
 		ProficiencyBonus: int32(p.ProfBonus),
 		EquippedMainHand: equippedMainHand,

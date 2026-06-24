@@ -924,3 +924,119 @@ func TestBuilderStoreAdapter_LoadCharacterDraft_BadCampaignID(t *testing.T) {
 	_, err := adapter.LoadCharacterDraft(context.Background(), "not-a-uuid", "user-1", "player")
 	require.Error(t, err)
 }
+
+// --- ISSUE-004: CreateCharacterRecord wires ac_formula for Unarmored Defense ---
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_BarbarianACFormula(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Grog",
+		Race:          "Human",
+		Class:         "Barbarian",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+		HPMax:         15,
+		AC:            15,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.AcFormula.Valid, "barbarian should set ac_formula")
+	assert.Equal(t, "10 + DEX + CON", creator.capturedParams.AcFormula.String)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_MonkACFormula(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Zen",
+		Race:          "Human",
+		Class:         "Monk",
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 8, WIS: 14, CHA: 10},
+		HPMax:         9,
+		AC:            15,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.AcFormula.Valid, "monk should set ac_formula")
+	assert.Equal(t, "10 + DEX + WIS", creator.capturedParams.AcFormula.String)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_MonkWithShield_NoACFormula(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Zen",
+		Race:          "Human",
+		Class:         "Monk",
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 8, WIS: 14, CHA: 10},
+		HPMax:         9,
+		AC:            15,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Equipment:     []string{"shield"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.AcFormula.Valid, "monk with shield loses Unarmored Defense")
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_ArmoredBarbarian_NoACFormula(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Grog",
+		Race:          "Human",
+		Class:         "Barbarian",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+		HPMax:         15,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		WornArmor:     "chain-mail",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.AcFormula.Valid, "armored barbarian uses armor, not Unarmored Defense")
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_Fighter_NoACFormula(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Aragorn",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 13},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.AcFormula.Valid, "fighter has no ac_formula (NULL)")
+}

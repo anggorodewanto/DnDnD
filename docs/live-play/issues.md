@@ -12,7 +12,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-001 | 2026-06-24 | builder / spellcasting | major | FIXED | L3 warlock builder offers only cantrips — no leveled "spells known" selectable (Pact Magic ignored in max-spell-level derivation). |
 | ISSUE-002 | 2026-06-24 | builder / persistence | major | FIXED | Full/half-caster `spell_slots` dropped at creation — `CreateCharacterRecord` never set it → portal-built wizard/cleric/etc. **could not cast leveled spells**. Fixed: persist standard slots in the canonical string-keyed `{current,max}` shape the `/cast` reader expects. |
 | ISSUE-003 | 2026-06-24 | builder / spellcasting (frontend) | major | FIXED | Eldritch Knight (Fighter) & Arcane Trickster (Rogue) not recognized as casters by the frontend → **Spells step skipped entirely**. Fixed: subclass-aware `isSpellcaster`/budgets in JS + Go (INT third-casters from L3, EK/AT cantrip + spells-known + leveled tables); Spells step now shows with correct caps; server validation accepts the selections. |
-| ISSUE-004 | 2026-06-24 | builder / AC | major | OPEN | Unarmored Defense never wired: builder never sets `ac_formula`, so Barbarian (10+DEX+CON) & Monk (10+DEX+WIS) get **AC = 10+DEX** at creation and every play-time recompute. Seed `mechanical_effect` + `ac_formula` column exist; builder has zero writers. Exact ISSUE-001 signature. |
+| ISSUE-004 | 2026-06-24 | builder / AC | major | FIXED | Unarmored Defense never wired: builder never set `ac_formula`, so Barbarian (10+DEX+CON) & Monk (10+DEX+WIS) got **AC = 10+DEX**. Fixed: `unarmoredDefenseFormula` derives `"10 + DEX + CON"`/`"10 + DEX + WIS"` (the form `CalculateAC`/combat `RecalculateAC` parse, not the seed label) for unarmored barb/monk; fed into `DeriveStats` AC + persisted as `ac_formula`. Monk's UD voids shield bonus; armored falls back to armor AC. |
 | ISSUE-005 | 2026-06-24 | builder / proficiency | minor→major | OPEN | Expertise (Rogue/Bard) never wired: combat reads an `"expertise"` proficiency key but the builder never collects it and `character.Proficiencies` has no Expertise field → wrong skill modifiers in play. |
 | ISSUE-006 | 2026-06-24 | builder / spellcasting | minor | OPEN | Level-1 Paladin/Ranger get a phantom L1 spell slot — `CalculateSpellSlots` half path uses `(level+1)/2` → 1 at L1 (half-casters get nothing until L2). Masked in the builder UI by an independent leveled-cap of 0, but wrong `spell_slots`/`max_spell_level` is stored and consumed elsewhere. |
 | ISSUE-007 | 2026-06-24 | builder / spellcasting (frontend) | unknown | OPEN (unconfirmed) | Multiclass spell *budget* in the UI (`cantripsKnown`/`leveledSpellCap`) computed from `classEntries[0]` only → secondary classes ignored, budget can be too low. Server `max_spell_level` is correct. Needs check on whether multiclass is exposed in the player builder. |
@@ -87,6 +87,32 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   whether `/cast` / the sheet shows spell slots. If empty → real bug; fix by
   persisting `DeriveStats.SpellSlots` in the adapter (mirroring the pact fix). If
   slots appear → they're derived on read somewhere; close as INFO.
+
+### ISSUE-004 — Unarmored Defense AC never wired (Barbarian/Monk) (FIXED)
+- **Date:** 2026-06-24
+- **Area:** portal character builder / AC derivation + persistence
+- **Severity:** major — unarmored Barbarian/Monk got AC = 10 + DEX (missing
+  CON/WIS), wrong at creation and at every combat AC recompute.
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** `DeriveStats` called `CalculateAC(..., "")` with an empty
+  formula and `CreateCharacterRecord` never set `ac_formula`; combat
+  `RecalculateAC` (`internal/combat/equip.go:387-419`) reads only `char.AcFormula`
+  for unarmored defense. Only the Discord REST + DDB paths wrote it before.
+- **Contract correction:** the live `ac_formula` value is the token form
+  **`"10 + DEX + CON"` / `"10 + DEX + WIS"`** parsed by `evaluateACFormula`
+  (`internal/character/stats.go:98`, mirrored in `equip.go:450`) — NOT the seed
+  `mechanical_effect` label `ac_10_plus_dex_plus_con` (that label only drives
+  feature definitions). A shield adds +2 unless the formula contains `WIS`
+  (Monk UD voids it) — identical guard in `stats.go:70` and `equip.go:417`.
+- **Fix:** `unarmoredDefenseFormula(classEntries, wornArmor, hasShield)` in
+  `derive_stats.go` returns the CON form for an unarmored barbarian (shield ok),
+  the WIS form for an unarmored, shieldless monk, else `""` (multiclass barb+monk
+  prefers barbarian). `DeriveStats` feeds it to `CalculateAC`; `CreateCharacterRecord`
+  persists it as `sql.NullString` (NULL for armored/non-UD). Tests in
+  `derive_stats_test.go` + `builder_store_adapter_test.go` (barb 15, monk 15,
+  barb+shield 17, armored barb → armor AC, fighter unchanged; persistence cases).
+  `make cover-check` green (portal 89.30%). `DeriveAC` left untouched (no live
+  callers).
 
 ### ISSUE-003 — EK/AT not recognized as casters in the builder (FIXED)
 - **Date:** 2026-06-24

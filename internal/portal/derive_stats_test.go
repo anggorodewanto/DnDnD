@@ -1040,3 +1040,102 @@ func TestBackgroundSkillProficiencies(t *testing.T) {
 		})
 	}
 }
+
+// --- ISSUE-004: Unarmored Defense (Barbarian / Monk) ---
+
+func TestDeriveStats_UnarmoredBarbarian_UsesConDefense(t *testing.T) {
+	sub := CharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 1},
+		},
+		// DEX 14 (+2), CON 16 (+3): 10 + 2 + 3 = 15
+		AbilityScores: PointBuyScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 15, stats.AC, "unarmored barbarian = 10 + DEX + CON")
+}
+
+func TestDeriveStats_UnarmoredMonk_UsesWisDefense(t *testing.T) {
+	sub := CharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Monk", Level: 1},
+		},
+		// DEX 16 (+3), WIS 14 (+2): 10 + 3 + 2 = 15
+		AbilityScores: PointBuyScores{STR: 10, DEX: 16, CON: 12, INT: 8, WIS: 14, CHA: 10},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 15, stats.AC, "unarmored monk = 10 + DEX + WIS")
+}
+
+func TestDeriveStats_UnarmoredBarbarian_WithShield_AddsTwo(t *testing.T) {
+	sub := CharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 1},
+		},
+		AbilityScores: PointBuyScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+		Equipment:     []string{"shield"},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 17, stats.AC, "unarmored barbarian + shield = 15 + 2")
+}
+
+func TestDeriveStats_ArmoredBarbarian_IgnoresUnarmoredDefense(t *testing.T) {
+	sub := CharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 1},
+		},
+		// chain-mail is AC 16 flat (no DEX); UD would only give 15 → armor wins.
+		AbilityScores: PointBuyScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+		WornArmor:     "chain-mail",
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 16, stats.AC, "armored barbarian uses armor AC, not Unarmored Defense")
+}
+
+func TestDeriveStats_Fighter_NoUnarmoredDefense(t *testing.T) {
+	sub := CharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		// 10 + DEX(+2) = 12; CON must not be folded in.
+		AbilityScores: PointBuyScores{STR: 16, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 10},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 12, stats.AC, "fighter has no Unarmored Defense")
+}
+
+func TestUnarmoredDefenseFormula(t *testing.T) {
+	barb := []character.ClassEntry{{Class: "Barbarian", Level: 1}}
+	monk := []character.ClassEntry{{Class: "Monk", Level: 1}}
+	fighter := []character.ClassEntry{{Class: "Fighter", Level: 1}}
+
+	tests := []struct {
+		name      string
+		classes   []character.ClassEntry
+		wornArmor string
+		hasShield bool
+		want      string
+	}{
+		{"unarmored barbarian", barb, "", false, "10 + DEX + CON"},
+		{"unarmored barbarian + shield", barb, "", true, "10 + DEX + CON"},
+		{"armored barbarian", barb, "chain-mail", false, ""},
+		{"unarmored monk", monk, "", false, "10 + DEX + WIS"},
+		{"unarmored monk + shield (UD void)", monk, "", true, ""},
+		{"armored monk", monk, "leather", false, ""},
+		{"fighter", fighter, "", false, ""},
+		// Multiclass barbarian+monk prefers barbarian (shield-compatible).
+		{"barbarian+monk", append(append([]character.ClassEntry{}, barb...), monk...), "", false, "10 + DEX + CON"},
+		{"barbarian+monk + shield", append(append([]character.ClassEntry{}, barb...), monk...), "", true, "10 + DEX + CON"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := unarmoredDefenseFormula(tc.classes, tc.wornArmor, tc.hasShield)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

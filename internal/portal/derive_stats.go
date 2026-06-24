@@ -79,7 +79,8 @@ func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStat
 
 	armor := lookupArmorInfo(sub.WornArmor)
 	hasShield := hasEquipmentItem(sub.Equipment, "shield")
-	ac := character.CalculateAC(scores, armor, hasShield, "")
+	acFormula := unarmoredDefenseFormula(classes, sub.WornArmor, hasShield)
+	ac := character.CalculateAC(scores, armor, hasShield, acFormula)
 
 	saveProficiencies := classSaveProficiencies(classes)
 	saves := make(map[string]int, 6)
@@ -162,6 +163,42 @@ func spellSlotsForClasses(classes []character.ClassEntry) map[string]character.S
 		out[strconv.Itoa(level)] = character.SlotInfo{Current: count, Max: count}
 	}
 	return out
+}
+
+// unarmoredDefenseFormula returns the ac_formula string for a class list's
+// Unarmored Defense, or "" when none applies. The returned strings are the
+// exact forms character.CalculateAC / combat.RecalculateAC parse ("10 + DEX +
+// CON", "10 + DEX + WIS") — NOT the seed mechanical_effect labels
+// ("ac_10_plus_dex_plus_con"), which are only used for feature definitions.
+//
+// Rules (SRD):
+//   - Barbarian: 10 + DEX + CON while wearing no armor (a shield still applies).
+//   - Monk: 10 + DEX + WIS while wearing no armor AND wielding no shield.
+//
+// A multiclass barbarian+monk prefers the barbarian formula because it is
+// shield-compatible; choosing monk would silently void the bonus the moment a
+// shield is equipped.
+func unarmoredDefenseFormula(classes []character.ClassEntry, wornArmor string, hasShield bool) string {
+	if wornArmor != "" {
+		return ""
+	}
+	hasBarbarian := false
+	hasMonk := false
+	for _, c := range classes {
+		switch strings.ToLower(c.Class) {
+		case "barbarian":
+			hasBarbarian = true
+		case "monk":
+			hasMonk = true
+		}
+	}
+	if hasBarbarian {
+		return "10 + DEX + CON"
+	}
+	if hasMonk && !hasShield {
+		return "10 + DEX + WIS"
+	}
+	return ""
 }
 
 // CollectFeatures gathers features from racial traits, class features, and
