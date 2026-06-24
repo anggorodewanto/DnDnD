@@ -123,6 +123,8 @@ func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class, campaignI
 			Level:       int(s.Level),
 			School:      s.School,
 			CastingTime: s.CastingTime,
+			Range:       formatSpellRange(s),
+			Components:  s.Components,
 			Duration:    s.Duration,
 			Description: s.Description,
 			Classes:     s.Classes,

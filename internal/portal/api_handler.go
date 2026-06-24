@@ -61,6 +61,8 @@ type SpellInfo struct {
 	Level       int      `json:"level"`
 	School      string   `json:"school"`
 	CastingTime string   `json:"casting_time,omitempty"`
+	Range       string   `json:"range,omitempty"`
+	Components  []string `json:"components,omitempty"`
 	Duration    string   `json:"duration,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Classes     []string `json:"classes"`

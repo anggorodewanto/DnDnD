@@ -2,6 +2,7 @@ package portal_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -175,7 +176,11 @@ func (e *armorErrorQueries) ListArmor(_ context.Context) ([]refdata.Armor, error
 func TestRefDataAdapter_ListSpellsByClass(t *testing.T) {
 	mq := &mockQueries{
 		spells: []refdata.Spell{
-			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "evocation", Classes: []string{"wizard"}},
+			{
+				ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "evocation",
+				RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 120, Valid: true},
+				Components: []string{"V", "S"}, Classes: []string{"wizard"},
+			},
 		},
 	}
 	adapter := portal.NewRefDataAdapter(mq)
@@ -184,6 +189,39 @@ func TestRefDataAdapter_ListSpellsByClass(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spells, 1)
 	assert.Equal(t, "Fire Bolt", spells[0].Name)
+	assert.Equal(t, "120ft", spells[0].Range)
+	assert.Equal(t, []string{"V", "S"}, spells[0].Components)
+}
+
+func TestRefDataAdapter_ListSpellsByClass_RangeFormatting(t *testing.T) {
+	cases := []struct {
+		name      string
+		rangeType string
+		rangeFt   sql.NullInt32
+		want      string
+	}{
+		{"ranged with feet", "ranged", sql.NullInt32{Int32: 30, Valid: true}, "30ft"},
+		{"ranged without feet falls back to type", "ranged", sql.NullInt32{}, "ranged"},
+		{"self", "self", sql.NullInt32{}, "Self"},
+		{"touch", "touch", sql.NullInt32{}, "Touch"},
+		{"sight", "sight", sql.NullInt32{}, "sight"},
+		{"unlimited", "unlimited", sql.NullInt32{}, "unlimited"},
+		{"empty type", "", sql.NullInt32{}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mq := &mockQueries{
+				spells: []refdata.Spell{
+					{ID: "s", Name: "S", School: "evocation", RangeType: tc.rangeType, RangeFt: tc.rangeFt, Classes: []string{"wizard"}},
+				},
+			}
+			adapter := portal.NewRefDataAdapter(mq)
+			spells, err := adapter.ListSpellsByClass(context.Background(), "wizard", "")
+			require.NoError(t, err)
+			require.Len(t, spells, 1)
+			assert.Equal(t, tc.want, spells[0].Range)
+		})
+	}
 }
 
 func TestRefDataAdapter_ListEquipment_CampaignFiltering(t *testing.T) {
