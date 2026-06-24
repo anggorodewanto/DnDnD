@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
@@ -50,6 +51,10 @@ type e2eHarness struct {
 	doneCh     chan error
 	guildID    string
 	campaignID uuid.UUID
+	// combatService is the real, fully-wired production combat.Service,
+	// captured via withCombatServiceReady. Scenarios use it to drive
+	// DM/dashboard flows with no slash command — e.g. StartCombat (STEP-007).
+	combatService *combat.Service
 }
 
 // e2eDefaultRoll is the harness's deterministic die: every die rolls its
@@ -84,12 +89,20 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	doneCh := make(chan error, 1)
 	routerReady := make(chan struct{})
 
+	// Captured by withCombatServiceReady before routerReady closes (both fire
+	// synchronously in run's goroutine, combat-service first); the routerReady
+	// channel close provides the happens-before for reading it below.
+	var combatSvc *combat.Service
+
 	go func() {
 		doneCh <- runWithOptions(ctx, io.Discard, addr,
 			withDiscordSession(fake),
 			// Inject a deterministic always-max roller so dice-driven commands
 			// (/attack, ...) produce replayable output.
 			withRoller(dice.NewRoller(e2eDefaultRoll)),
+			withCombatServiceReady(func(s *combat.Service) {
+				combatSvc = s
+			}),
 			withCommandRouterReady(func(r *discord.CommandRouter) {
 				// Hook the router into the fake so InjectInteraction calls
 				// hit the production handler chain.
@@ -114,12 +127,13 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	// Constructed against the side-channel connection so seeding helpers
 	// share the same schema view.
 	return &e2eHarness{
-		t:       t,
-		db:      db,
-		queries: refdata.New(db),
-		fake:    fake,
-		cancel:  cancel,
-		doneCh:  doneCh,
+		t:             t,
+		db:            db,
+		queries:       refdata.New(db),
+		fake:          fake,
+		cancel:        cancel,
+		doneCh:        doneCh,
+		combatService: combatSvc,
 	}
 }
 
@@ -160,6 +174,22 @@ func (h *e2eHarness) SeedCampaign(name string) refdata.Campaign {
 func (h *e2eHarness) SeedApprovedPlayer(discordUserID, charName string) (refdata.Character, refdata.PlayerCharacter) {
 	h.t.Helper()
 	char := testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, 3)
+	pc := testutil.NewTestPlayerCharacter(h.t, h.queries, h.campaignID, char.ID, discordUserID)
+	return char, pc
+}
+
+// SeedApprovedPlayerWithDex is SeedApprovedPlayer with a controllable DEX
+// score, so initiative order is deterministic under the always-max roller
+// (every d20 = 20, so order is driven by DEX modifier). Follows the
+// SeedApprovedMonk raw-SQL ability-patch idiom. Used by the initiative
+// scenario (STEP-007) to prove SortByInitiative actually reorders.
+func (h *e2eHarness) SeedApprovedPlayerWithDex(discordUserID, charName string, dex int) (refdata.Character, refdata.PlayerCharacter) {
+	h.t.Helper()
+	char := testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, 3)
+	scores := fmt.Sprintf(`{"str":10,"dex":%d,"con":12,"int":10,"wis":12,"cha":8}`, dex)
+	if _, err := h.db.Exec("UPDATE characters SET ability_scores=$1 WHERE id=$2", scores, char.ID); err != nil {
+		h.t.Fatalf("SeedApprovedPlayerWithDex: patch ability_scores: %v", err)
+	}
 	pc := testutil.NewTestPlayerCharacter(h.t, h.queries, h.campaignID, char.ID, discordUserID)
 	return char, pc
 }
@@ -314,6 +344,31 @@ func (h *e2eHarness) SeedCompletedEncounter() refdata.Encounter {
 		h.t.Fatalf("SeedCompletedEncounter: CreateEncounter: %v", err)
 	}
 	return enc
+}
+
+// SeedEncounterTemplate inserts an encounter_templates row with the given
+// creatures JSONB so the real combat.Service.StartCombat flow can build an
+// encounter from it (STEP-007). mapID may be the zero uuid.NullUUID for a
+// map-less template (creature positions are then unvalidated and PCs need
+// explicit positions). DisplayName is set to name so the initiative tracker
+// shows it.
+func (h *e2eHarness) SeedEncounterTemplate(name string, mapID uuid.NullUUID, creatures ...combat.TemplateCreature) refdata.EncounterTemplate {
+	h.t.Helper()
+	creaturesJSON, err := json.Marshal(creatures)
+	if err != nil {
+		h.t.Fatalf("SeedEncounterTemplate: marshal creatures: %v", err)
+	}
+	tmpl, err := h.queries.CreateEncounterTemplate(context.Background(), refdata.CreateEncounterTemplateParams{
+		CampaignID:  h.campaignID,
+		MapID:       mapID,
+		Name:        name,
+		DisplayName: sql.NullString{String: name, Valid: true},
+		Creatures:   creaturesJSON,
+	})
+	if err != nil {
+		h.t.Fatalf("SeedEncounterTemplate: %v", err)
+	}
+	return tmpl
 }
 
 // SeedEncounterShell creates a "preparing" encounter with no current turn.

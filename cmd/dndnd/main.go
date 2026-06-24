@@ -741,6 +741,12 @@ type runConfig struct {
 	// e2e harness uses it to capture router.Handle and re-deliver injected
 	// interactions through the fake session.
 	onRouterReady func(*discord.CommandRouter)
+	// onCombatServiceReady, when non-nil, is invoked exactly once after the
+	// combat.Service has been fully wired (publisher + every notifier). The
+	// e2e harness uses it to drive DM/dashboard-side flows that have no slash
+	// command — e.g. StartCombat / RollInitiative — against the real
+	// production service instance. No-op in production.
+	onCombatServiceReady func(*combat.Service)
 	// roller, when non-nil, replaces the crypto/rand dice roller that the
 	// combat HTTP handler and the slash-command handlers would otherwise
 	// build. The e2e harness injects a deterministic roller so dice-driven
@@ -772,6 +778,14 @@ func withDiscordSession(s discord.Session) runOption {
 // router.Handle so the fake session can deliver injected interactions.
 func withCommandRouterReady(cb func(*discord.CommandRouter)) runOption {
 	return func(c *runConfig) { c.onRouterReady = cb }
+}
+
+// withCombatServiceReady installs a callback that fires once the combat.Service
+// is fully wired (publisher + notifiers). The e2e harness uses it to drive the
+// real StartCombat / RollInitiative flow, which has no slash command (it is a
+// dashboard REST action). No-op in production.
+func withCombatServiceReady(cb func(*combat.Service)) runOption {
+	return func(c *runConfig) { c.onCombatServiceReady = cb }
 }
 
 // withRoller injects a deterministic dice roller in place of the env-derived
@@ -1837,6 +1851,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// interactions through cmdRouter.Handle. No-op in production.
 			if cfg.onRouterReady != nil {
 				cfg.onRouterReady(cmdRouter)
+			}
+
+			// STEP-007 seam: hand the fully-wired combat.Service to the e2e
+			// harness so it can drive StartCombat / RollInitiative directly
+			// (no slash command exists for the DM "start combat" action).
+			if cfg.onCombatServiceReady != nil {
+				cfg.onCombatServiceReady(combatSvc)
 			}
 		}
 

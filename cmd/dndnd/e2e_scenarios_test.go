@@ -32,6 +32,8 @@ import (
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil/discordfake"
@@ -534,6 +536,142 @@ func TestE2E_FlurryOfBlowsScenario(t *testing.T) {
 	}
 	if updatedNPC.IsAlive {
 		t.Fatalf("expected target dead at 0 HP after flurry; got is_alive=true")
+	}
+}
+
+// TestE2E_InitiativeScenario covers the DM "start combat" flow end-to-end
+// (STEP-007). Initiative has no slash command — it is the dashboard REST action
+// POST /api/combat/start → combat.Service.StartCombat — so the harness drives
+// the real, fully-wired production service directly via h.combatService.
+//
+// It seeds a template (one SRD goblin) + two PCs with distinct DEX, then runs
+// StartCombat and asserts the real RollInitiative result. Under the always-max
+// roller every d20 = 20, so initiative order is driven purely by DEX modifier
+// (roll = 20 + dexMod). Bram (DEX 20, +5 → 25) is added AFTER the goblin yet
+// lands at order 1 — proving SortByInitiative actually reorders, not just
+// preserves insertion order. Alice (DEX 6, −2 → 18) lands last.
+func TestE2E_InitiativeScenario(t *testing.T) {
+	h := startE2EHarness(t)
+	defer h.Stop()
+	ctx := context.Background()
+
+	h.SeedCampaign("initiative-campaign")
+
+	// Two PCs whose DEX brackets the goblin's so the order is deterministic
+	// regardless of the SRD goblin's exact DEX (25 > goblin > 18).
+	bram, _ := h.SeedApprovedPlayerWithDex("user-bram", "Bram", 20)   // +5 → 25
+	alice, _ := h.SeedApprovedPlayerWithDex("user-alice", "Alice", 6) // −2 → 18
+
+	// Map-less template with one goblin; PCs get explicit positions below so we
+	// don't depend on spawn-zone seeding (irrelevant to initiative).
+	tmpl := h.SeedEncounterTemplate("Goblin Ambush", uuid.NullUUID{}, combat.TemplateCreature{
+		CreatureRefID: "goblin",
+		ShortID:       "G",
+		DisplayName:   "Goblin",
+		PositionCol:   "B",
+		PositionRow:   1,
+		Quantity:      1,
+	})
+
+	// Drive the REAL start-combat flow with the deterministic always-max roller.
+	result, err := h.combatService.StartCombat(ctx, combat.StartCombatInput{
+		TemplateID:   tmpl.ID,
+		CharacterIDs: []uuid.UUID{bram.ID, alice.ID},
+		CharacterPositions: map[uuid.UUID]combat.Position{
+			bram.ID:  {Col: "A", Row: 1},
+			alice.ID: {Col: "C", Row: 1},
+		},
+	}, dice.NewRoller(e2eDefaultRoll))
+	if err != nil {
+		t.Fatalf("StartCombat: %v", err)
+	}
+
+	// The goblin's expected roll comes from its real SRD DEX so the assertion
+	// is robust to the seeded stat block.
+	goblin, err := h.queries.GetCreature(ctx, "goblin")
+	if err != nil {
+		t.Fatalf("GetCreature(goblin): %v", err)
+	}
+	gScores, err := combat.ParseAbilityScores(goblin.AbilityScores)
+	if err != nil {
+		t.Fatalf("ParseAbilityScores(goblin): %v", err)
+	}
+	goblinRoll := int32(20 + combat.AbilityModifier(gScores.Dex))
+
+	// Real DB state: combatants come back ordered by initiative_order ASC.
+	combatants, err := h.queries.ListCombatantsByEncounterID(ctx, result.Encounter.ID)
+	if err != nil {
+		t.Fatalf("ListCombatantsByEncounterID: %v", err)
+	}
+	if len(combatants) != 3 {
+		t.Fatalf("expected 3 combatants; got %d", len(combatants))
+	}
+
+	type want struct {
+		name  string
+		order int32
+		roll  int32
+		isNPC bool
+	}
+	wants := []want{
+		{"Bram", 1, 25, false},          // DEX 20 (+5), added after goblin → still first
+		{"Goblin", 2, goblinRoll, true}, // SRD goblin DEX, between the two PCs
+		{"Alice", 3, 18, false},         // DEX 6 (−2) → last
+	}
+	for i, w := range wants {
+		c := combatants[i]
+		if c.DisplayName != w.name {
+			got := make([]string, len(combatants))
+			for j, cc := range combatants {
+				got[j] = cc.DisplayName
+			}
+			t.Fatalf("order slot %d: expected %s; got %s (full order: %s)", i+1, w.name, c.DisplayName, strings.Join(got, ", "))
+		}
+		if c.InitiativeOrder != w.order {
+			t.Fatalf("%s: expected initiative_order %d; got %d", w.name, w.order, c.InitiativeOrder)
+		}
+		if c.InitiativeRoll != w.roll {
+			t.Fatalf("%s: expected initiative_roll %d; got %d", w.name, w.roll, c.InitiativeRoll)
+		}
+		if c.IsNpc != w.isNPC {
+			t.Fatalf("%s: expected is_npc %v; got %v", w.name, w.isNPC, c.IsNpc)
+		}
+	}
+
+	// Encounter activated at round 1 with a current turn pointing at the winner.
+	enc, err := h.queries.GetEncounter(ctx, result.Encounter.ID)
+	if err != nil {
+		t.Fatalf("GetEncounter: %v", err)
+	}
+	if enc.Status != "active" {
+		t.Fatalf("expected encounter status active; got %q", enc.Status)
+	}
+	if enc.RoundNumber != 1 {
+		t.Fatalf("expected round_number 1; got %d", enc.RoundNumber)
+	}
+	if !enc.CurrentTurnID.Valid {
+		t.Fatalf("expected current_turn_id set after StartCombat")
+	}
+
+	// First turn belongs to the initiative winner (Bram, order 1).
+	bramComb := combatants[0]
+	if result.FirstTurn.CombatantID != bramComb.ID {
+		t.Fatalf("expected first turn for Bram (%s); got %s", bramComb.ID, result.FirstTurn.CombatantID)
+	}
+	turn, err := h.queries.GetTurn(ctx, enc.CurrentTurnID.UUID)
+	if err != nil {
+		t.Fatalf("GetTurn(current): %v", err)
+	}
+	if turn.CombatantID != bramComb.ID {
+		t.Fatalf("expected current turn combatant Bram (%s); got %s", bramComb.ID, turn.CombatantID)
+	}
+
+	// The initiative tracker announces round 1 and pings the winner.
+	if !strings.Contains(result.InitiativeTracker, "Round 1") {
+		t.Fatalf("expected tracker to mention Round 1; got:\n%s", result.InitiativeTracker)
+	}
+	if !strings.Contains(result.InitiativeTracker, "@Bram — it's your turn!") {
+		t.Fatalf("expected tracker to ping Bram as turn holder; got:\n%s", result.InitiativeTracker)
 	}
 }
 
