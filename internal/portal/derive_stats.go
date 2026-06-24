@@ -2,6 +2,7 @@ package portal
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -142,6 +143,25 @@ func pactMagicSlotsForClasses(classes []character.ClassEntry) *character.PactMag
 	}
 	slots := character.PactMagicSlotsForLevel(pactLevel)
 	return &slots
+}
+
+// spellSlotsForClasses returns the standard (non-pact) spell slots for the
+// class list in the canonical stored shape: string-keyed slot levels mapping
+// to {current,max} objects (character.SlotInfo). This matches what the play
+// read path (combat.ParseSpellSlots / parseIntKeyedSlots) and the dashboard
+// character sheet expect. Returns nil for non-casters (empty slot map) so the
+// caller can leave spell_slots NULL. A freshly created caster starts with all
+// slots full (current == max).
+func spellSlotsForClasses(classes []character.ClassEntry) map[string]character.SlotInfo {
+	slots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
+	if len(slots) == 0 {
+		return nil
+	}
+	out := make(map[string]character.SlotInfo, len(slots))
+	for level, count := range slots {
+		out[strconv.Itoa(level)] = character.SlotInfo{Current: count, Max: count}
+	}
+	return out
 }
 
 // CollectFeatures gathers features from racial traits, class features, and

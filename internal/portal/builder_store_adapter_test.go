@@ -530,6 +530,104 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_NoPactMagicSlots_NonWarlock(t
 	assert.False(t, creator.capturedParams.PactMagicSlots.Valid, "non-warlock should not persist pact magic slots")
 }
 
+// TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpellSlots_FullCaster
+// (ISSUE-002) verifies a created full caster persists spell_slots in the
+// canonical string-keyed {current,max} shape the play/read path expects.
+// Without this the stored character has spell_slots = NULL and cannot cast
+// leveled spells until a later level-up backfills the column.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpellSlots_FullCaster(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Gandalf",
+		Race:          "Human",
+		Class:         "Wizard",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 10, CHA: 10},
+		HPMax:         18,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Wizard", Level: 3}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.SpellSlots.Valid, "SpellSlots should be set for a full caster")
+
+	// Read path (combat.ParseSpellSlots / dashboard characterToPartyInfo) unmarshals
+	// into map[string]character.SlotInfo — assert the persisted bytes match that shape.
+	var slots map[string]character.SlotInfo
+	require.NoError(t, json.Unmarshal(creator.capturedParams.SpellSlots.RawMessage, &slots))
+
+	// Wizard L3 == caster level 3 == {level1:4, level2:2}.
+	assert.Equal(t, character.SlotInfo{Current: 4, Max: 4}, slots["1"])
+	assert.Equal(t, character.SlotInfo{Current: 2, Max: 2}, slots["2"])
+	assert.Len(t, slots, 2, "Wizard L3 has exactly level-1 and level-2 slots")
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_NoSpellSlots_NonCaster
+// (ISSUE-002) verifies a non-caster leaves spell_slots NULL — unchanged
+// behavior for fighters/rogues/barbarians.
+func TestBuilderStoreAdapter_CreateCharacterRecord_NoSpellSlots_NonCaster(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Conan",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 8, WIS: 10, CHA: 10},
+		HPMax:         28,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Fighter", Level: 3}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.SpellSlots.Valid, "non-caster should not persist spell slots")
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpellSlots_HalfCaster
+// (ISSUE-002) verifies a half caster at level 2 (paladin) persists level-1
+// slots in the canonical shape. Stays at level 2 to avoid the separate
+// level-1 phantom-slot bug (ISSUE-006).
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpellSlots_HalfCaster(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Aric",
+		Race:          "Human",
+		Class:         "Paladin",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 10, CON: 14, INT: 8, WIS: 10, CHA: 14},
+		HPMax:         20,
+		AC:            18,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Paladin", Level: 2}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.SpellSlots.Valid, "SpellSlots should be set for a half caster at level 2")
+
+	var slots map[string]character.SlotInfo
+	require.NoError(t, json.Unmarshal(creator.capturedParams.SpellSlots.RawMessage, &slots))
+
+	// Paladin L2 == caster level 1 == {level1:2}.
+	assert.Equal(t, character.SlotInfo{Current: 2, Max: 2}, slots["1"])
+	assert.Len(t, slots, 1, "Paladin L2 has only level-1 slots")
+}
+
 func TestDeriveCharacterSpeed_Default(t *testing.T) {
 	// classHitDie is tested indirectly; test the exported DeriveSpeed.
 	assert.Equal(t, 30, portal.DeriveSpeed("human"))

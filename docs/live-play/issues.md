@@ -10,7 +10,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | # | Date | Area | Severity | Status | Summary |
 | --- | --- | --- | --- | --- | --- |
 | ISSUE-001 | 2026-06-24 | builder / spellcasting | major | FIXED | L3 warlock builder offers only cantrips — no leveled "spells known" selectable (Pact Magic ignored in max-spell-level derivation). |
-| ISSUE-002 | 2026-06-24 | builder / persistence | major | OPEN (CONFIRMED) | Full/half-caster `spell_slots` dropped at creation — `CreateCharacterRecord` never sets it → portal-built wizard/cleric/etc. **cannot cast leveled spells** until a level-up backfills the column. Read paths trust the stored NULL; nothing recomputes. |
+| ISSUE-002 | 2026-06-24 | builder / persistence | major | FIXED | Full/half-caster `spell_slots` dropped at creation — `CreateCharacterRecord` never set it → portal-built wizard/cleric/etc. **could not cast leveled spells**. Fixed: persist standard slots in the canonical string-keyed `{current,max}` shape the `/cast` reader expects. |
 | ISSUE-003 | 2026-06-24 | builder / spellcasting (frontend) | major | OPEN | Eldritch Knight (Fighter) & Arcane Trickster (Rogue) not recognized as casters by the frontend (`CASTER_ABILITY` is base-class-only) → **Spells step skipped entirely**, no picker. Server math is already correct; UI discards it. Warlock-style, worse. |
 | ISSUE-004 | 2026-06-24 | builder / AC | major | OPEN | Unarmored Defense never wired: builder never sets `ac_formula`, so Barbarian (10+DEX+CON) & Monk (10+DEX+WIS) get **AC = 10+DEX** at creation and every play-time recompute. Seed `mechanical_effect` + `ac_formula` column exist; builder has zero writers. Exact ISSUE-001 signature. |
 | ISSUE-005 | 2026-06-24 | builder / proficiency | minor→major | OPEN | Expertise (Rogue/Bard) never wired: combat reads an `"expertise"` proficiency key but the builder never collects it and `character.Proficiencies` has no Expertise field → wrong skill modifiers in play. |
@@ -18,6 +18,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-007 | 2026-06-24 | builder / spellcasting (frontend) | unknown | OPEN (unconfirmed) | Multiclass spell *budget* in the UI (`cantripsKnown`/`leveledSpellCap`) computed from `classEntries[0]` only → secondary classes ignored, budget can be too low. Server `max_spell_level` is correct. Needs check on whether multiclass is exposed in the player builder. |
 | ISSUE-008 | 2026-06-24 | builder / persistence | blocker | FIXED (adapter) | Portal submit 500s — `characters.languages` is `TEXT[] NOT NULL`, builder sends no languages, `pq.Array(nil)` → SQL NULL → constraint violation. Blocked **all** portal builds. Coerced nil→`[]` in `CreateCharacterRecord`. Underlying collection gap tracked as ISSUE-009. |
 | ISSUE-009 | 2026-06-24 | builder / language selection | minor | OPEN | Builder collects **no concrete languages** — `backgrounds.js` carries only a *count* of bonus languages, never the strings. Characters persist with an empty language list instead of race base + background + chosen languages. Cosmetic today (languages unused in combat); fix = add a language-selection step + populate `submission.Languages`. |
+| ISSUE-010 | 2026-06-24 | levelup / persistence | major | OPEN | Level-up persists `spell_slots` as `map[int]int` → `{"1":4}` (`levelup/levelup.go:14`, `service.go:243`), but the cast reader `ParseSpellSlots` (`combat/divine_smite.go:71`) unmarshals into `map[string]SlotInfo` (`{current,max}`). `{"1":4}` fails to unmarshal → `/cast` errors. Surfaced while fixing ISSUE-002. Needs a runtime confirm, but the shape mismatch is clear in code. Fix = level-up should write the `{current,max}` shape (or share the portal converter). |
 
 ---
 
@@ -86,6 +87,25 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   whether `/cast` / the sheet shows spell slots. If empty → real bug; fix by
   persisting `DeriveStats.SpellSlots` in the adapter (mirroring the pact fix). If
   slots appear → they're derived on read somewhere; close as INFO.
+
+### ISSUE-002 — Full/half-caster spell_slots dropped at creation (FIXED)
+- **Date:** 2026-06-24
+- **Area:** portal character builder / persistence
+- **Severity:** major — portal-built wizard/cleric/sorcerer/druid/bard/paladin/
+  ranger stored with `spell_slots = NULL`; `/cast` rejected them (no slots).
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** `DeriveStats` computes `SpellSlots` but the adapter
+  `CreateCharacterRecord` (`internal/portal/builder_store_adapter.go`) only
+  persisted `pact_magic_slots`, never standard `SpellSlots` → SQL NULL. Read paths
+  (`/cast` → `parseIntKeyedSlots` → `ParseSpellSlots`) trust the stored column.
+- **Fix:** added `spellSlotsForClasses` (`internal/portal/derive_stats.go`) that
+  reuses `character.CalculateSpellSlots` and emits the canonical **string-keyed
+  `{current,max}`** shape (fresh caster starts full, `current==max`); set
+  `SpellSlots` in `CreateCharacterRecord` (NULL for non-casters). 3 red→green
+  tests (Wizard L3, Paladin L2, Fighter L3 non-caster). `make cover-check` green
+  (portal 89.05%, overall 90.66%). Verified the shape matches `ParseSpellSlots`
+  (`combat/divine_smite.go:71`) + the dashboard `map[string]character.SlotInfo`
+  reader, not level-up's incompatible `map[int]int` (→ ISSUE-010).
 
 ### ISSUE-008 — Portal submit 500s: languages NOT NULL violated (FIXED at write; collection gap OPEN)
 - **Date:** 2026-06-24

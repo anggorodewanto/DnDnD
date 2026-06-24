@@ -122,6 +122,15 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		pactMagicMsg = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
 	}
 
+	// Standard spell slots (ISSUE-002). Persist in the canonical string-keyed
+	// {current,max} shape the play/read path consumes; leave NULL for
+	// non-casters so fighters/rogues/barbarians are unaffected.
+	var spellSlotsMsg pqtype.NullRawMessage
+	if slots := spellSlotsForClasses(classEntries); slots != nil {
+		slotsJSON, _ := json.Marshal(slots)
+		spellSlotsMsg = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+	}
+
 	var featuresMsg pqtype.NullRawMessage
 	if len(p.Features) > 0 {
 		featJSON, _ := json.Marshal(p.Features)
@@ -181,6 +190,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		EquippedArmor:    equippedArmor,
 		HitDiceRemaining: hitDiceJSON,
 		FeatureUses:      featureUsesMsg,
+		SpellSlots:       spellSlotsMsg,
 		PactMagicSlots:   pactMagicMsg,
 		Features:         featuresMsg,
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
