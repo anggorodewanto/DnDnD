@@ -116,6 +116,12 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		featureUsesMsg = pqtype.NullRawMessage{RawMessage: fuJSON, Valid: true}
 	}
 
+	var pactMagicMsg pqtype.NullRawMessage
+	if pact := pactMagicSlotsForClasses(classEntries); pact != nil {
+		pactJSON, _ := json.Marshal(pact)
+		pactMagicMsg = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
+	}
+
 	var featuresMsg pqtype.NullRawMessage
 	if len(p.Features) > 0 {
 		featJSON, _ := json.Marshal(p.Features)
@@ -149,6 +155,15 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		return "", fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
 	}
 
+	// characters.languages is TEXT[] NOT NULL. pq.Array of a nil slice writes
+	// SQL NULL, which violates the constraint and 500s the create. The builder
+	// does not yet collect concrete languages, so default to a non-nil empty
+	// array. (Real race/background language population is a follow-up.)
+	languages := p.Languages
+	if languages == nil {
+		languages = []string{}
+	}
+
 	ch, err := a.q.CreateCharacter(ctx, refdata.CreateCharacterParams{
 		CampaignID:       campID,
 		Name:             p.Name,
@@ -166,9 +181,10 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		EquippedArmor:    equippedArmor,
 		HitDiceRemaining: hitDiceJSON,
 		FeatureUses:      featureUsesMsg,
+		PactMagicSlots:   pactMagicMsg,
 		Features:         featuresMsg,
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
-		Languages:        p.Languages,
+		Languages:        languages,
 		Inventory:        inventoryMsg,
 		CharacterData:    charDataMsg,
 		Gold:             0,

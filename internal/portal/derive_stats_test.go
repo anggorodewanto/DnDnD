@@ -828,6 +828,72 @@ func TestDeriveDMStats_MaxSpellLevel_Fighter5(t *testing.T) {
 	assert.Equal(t, 0, stats.MaxSpellLevel)
 }
 
+// TestDeriveDMStats_MaxSpellLevel_Warlock3 covers the pact-magic bug: a
+// single-class warlock has no standard spell slots ("pact" progression), so
+// MaxSpellLevel was stuck at 0 and the builder blocked every leveled spell.
+// A level-3 warlock can cast up to 2nd-level spells.
+func TestDeriveDMStats_MaxSpellLevel_Warlock3(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Warlock", Level: 3},
+		},
+		AbilityScores: PointBuyScores{STR: 8, DEX: 14, CON: 12, INT: 10, WIS: 12, CHA: 16},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Equal(t, 2, stats.MaxSpellLevel)
+
+	require.NotNil(t, stats.PactMagicSlots, "warlock should have pact magic slots")
+	assert.Equal(t, 2, stats.PactMagicSlots.SlotLevel)
+	assert.Equal(t, 2, stats.PactMagicSlots.Current)
+	assert.Equal(t, 2, stats.PactMagicSlots.Max)
+}
+
+// TestDeriveDMStats_PactMagicSlots_NonCasterNil ensures non-pact classes leave
+// the PactMagicSlots field unset.
+func TestDeriveDMStats_PactMagicSlots_NonCasterNil(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 5},
+		},
+		AbilityScores: PointBuyScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Nil(t, stats.PactMagicSlots)
+}
+
+// TestDeriveDMStats_PactMagicSlots_FullCasterNil ensures standard full casters
+// do not get pact magic slots.
+func TestDeriveDMStats_PactMagicSlots_FullCasterNil(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 3},
+		},
+		AbilityScores: PointBuyScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 10, CHA: 10},
+	}
+	stats := DeriveStats(sub, nil)
+	assert.Nil(t, stats.PactMagicSlots)
+}
+
+// TestDeriveDMStats_MaxSpellLevel_WarlockWizardMulticlass verifies the pact
+// slot level is combined (via max) with the standard-caster slot level. A
+// Warlock 5 grants 3rd-level pact slots; a Wizard 3 grants 2nd-level standard
+// slots — the higher (3) must win.
+func TestDeriveDMStats_MaxSpellLevel_WarlockWizardMulticlass(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Warlock", Level: 5},
+			{Class: "Wizard", Level: 3},
+		},
+		AbilityScores: PointBuyScores{STR: 8, DEX: 14, CON: 12, INT: 14, WIS: 10, CHA: 16},
+	}
+	stats := DeriveStats(sub, nil)
+	// Warlock 5 pact slot level = 3; standard caster level (warlock contributes
+	// 0, wizard 3) => max standard slot level 2. Combined max = 3.
+	assert.Equal(t, 3, stats.MaxSpellLevel)
+	require.NotNil(t, stats.PactMagicSlots)
+	assert.Equal(t, 3, stats.PactMagicSlots.SlotLevel)
+}
+
 func TestDeriveDMStats_SpellSlots_FullCasterWizard(t *testing.T) {
 	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{

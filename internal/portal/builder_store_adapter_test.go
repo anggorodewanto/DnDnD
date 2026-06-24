@@ -238,6 +238,58 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) 
 	assert.Equal(t, []string{"fire-bolt", "mage-hand", "magic-missile", "shield"}, spells)
 }
 
+// A submission with no languages (the portal builder does not yet collect
+// concrete languages) must still persist a non-nil array: the characters.
+// languages column is TEXT[] NOT NULL, and pq.Array of a nil slice writes
+// SQL NULL, which 500s the create. Guarantee a non-nil (possibly empty) slice.
+func TestBuilderStoreAdapter_CreateCharacterRecord_NilLanguagesPersistsEmptyArray(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Mute",
+		Race:          "Human",
+		Class:         "Warlock",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 10, WIS: 13, CHA: 16},
+		HPMax:         9,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Languages:     nil, // builder sent none
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.NotNil(t, creator.capturedParams.Languages, "Languages must be non-nil to satisfy NOT NULL column")
+	assert.Empty(t, creator.capturedParams.Languages, "no languages submitted → empty array")
+}
+
+// Submitted languages pass through unchanged.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PassesThroughLanguages(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Polyglot",
+		Race:          "Elf",
+		Class:         "Wizard",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10},
+		HPMax:         8,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Languages:     []string{"Common", "Elvish", "Draconic"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Common", "Elvish", "Draconic"}, creator.capturedParams.Languages)
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_RejectsBadCampaignID(t *testing.T) {
 	for _, campaignID := range []string{"", "not-a-uuid"} {
 		creator := &captureCharacterCreator{}
@@ -415,6 +467,67 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_NoFeatures(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, creator.capturedParams.Features.Valid, "Features should not be set when empty")
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_PersistsPactMagicSlots_Warlock
+// verifies a created single-class warlock persists pact_magic_slots equal to
+// PactMagicSlotsForLevel(totalWarlockLevel). Without this the stored character
+// has no pact slots and cannot cast leveled spells in play.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsPactMagicSlots_Warlock(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Mordenkainen",
+		Race:          "Human",
+		Class:         "Warlock",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 10, WIS: 12, CHA: 16},
+		HPMax:         24,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Warlock", Level: 3}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.PactMagicSlots.Valid, "PactMagicSlots should be set for a warlock")
+
+	var slots character.PactMagicSlots
+	require.NoError(t, json.Unmarshal(creator.capturedParams.PactMagicSlots.RawMessage, &slots))
+
+	want := character.PactMagicSlotsForLevel(3)
+	assert.Equal(t, want, slots)
+	assert.Equal(t, 2, slots.SlotLevel)
+	assert.Equal(t, 2, slots.Current)
+	assert.Equal(t, 2, slots.Max)
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_NoPactMagicSlots_NonWarlock
+// verifies non-pact classes do not write pact_magic_slots.
+func TestBuilderStoreAdapter_CreateCharacterRecord_NoPactMagicSlots_NonWarlock(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Gandalf",
+		Race:          "Human",
+		Class:         "Wizard",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 10, CHA: 10},
+		HPMax:         8,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Wizard", Level: 3}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.PactMagicSlots.Valid, "non-warlock should not persist pact magic slots")
 }
 
 func TestDeriveCharacterSpeed_Default(t *testing.T) {

@@ -11,18 +11,21 @@ import (
 // It is used both for the live preview endpoint and to populate the stored
 // character record at creation time.
 type DerivedStats struct {
-	HPMax             int                 `json:"hp_max"`
-	AC                int                 `json:"ac"`
-	SpeedFt           int                 `json:"speed_ft"`
-	TotalLevel        int                 `json:"total_level"`
-	ProficiencyBonus  int                 `json:"proficiency_bonus"`
-	SaveProficiencies []string            `json:"save_proficiencies"`
-	Saves             map[string]int      `json:"saves"`
-	Skills            map[string]int      `json:"skills"`
-	HitDiceRemaining  map[string]int      `json:"hit_dice_remaining"`
-	SpellSlots        map[int]int         `json:"spell_slots,omitempty"`
-	MaxSpellLevel     int                 `json:"max_spell_level"`
-	Features          []character.Feature `json:"features,omitempty"`
+	HPMax             int            `json:"hp_max"`
+	AC                int            `json:"ac"`
+	SpeedFt           int            `json:"speed_ft"`
+	TotalLevel        int            `json:"total_level"`
+	ProficiencyBonus  int            `json:"proficiency_bonus"`
+	SaveProficiencies []string       `json:"save_proficiencies"`
+	Saves             map[string]int `json:"saves"`
+	Skills            map[string]int `json:"skills"`
+	HitDiceRemaining  map[string]int `json:"hit_dice_remaining"`
+	SpellSlots        map[int]int    `json:"spell_slots,omitempty"`
+	// PactMagicSlots holds Warlock pact-magic slots when the character has any
+	// pact-progression levels; nil otherwise.
+	PactMagicSlots *character.PactMagicSlots `json:"pact_magic_slots,omitempty"`
+	MaxSpellLevel  int                       `json:"max_spell_level"`
+	Features       []character.Feature       `json:"features,omitempty"`
 }
 
 // FeatureProvider supplies class/subclass/racial feature data for creation.
@@ -102,6 +105,11 @@ func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStat
 		}
 	}
 
+	pactSlots := pactMagicSlotsForClasses(classes)
+	if pactSlots != nil && pactSlots.SlotLevel > maxSpellLevel {
+		maxSpellLevel = pactSlots.SlotLevel
+	}
+
 	return DerivedStats{
 		HPMax:             hp,
 		AC:                ac,
@@ -113,8 +121,27 @@ func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStat
 		Skills:            skills,
 		HitDiceRemaining:  hitDiceRemaining,
 		SpellSlots:        spellSlots,
+		PactMagicSlots:    pactSlots,
 		MaxSpellLevel:     maxSpellLevel,
 	}
+}
+
+// pactMagicSlotsForClasses returns the Warlock pact-magic slots for the total
+// pact-progression level across the class list, or nil when no class uses pact
+// progression. Pact levels stack (multiple pact classes are not a real 5e
+// scenario, but summing keeps the table lookup well-defined).
+func pactMagicSlotsForClasses(classes []character.ClassEntry) *character.PactMagicSlots {
+	pactLevel := 0
+	for _, c := range classes {
+		if classSpellcasting(c.Class).SlotProgression == "pact" {
+			pactLevel += c.Level
+		}
+	}
+	if pactLevel < 1 {
+		return nil
+	}
+	slots := character.PactMagicSlotsForLevel(pactLevel)
+	return &slots
 }
 
 // CollectFeatures gathers features from racial traits, class features, and
