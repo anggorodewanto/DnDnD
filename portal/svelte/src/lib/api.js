@@ -242,5 +242,18 @@ export function makeBuilderApi(mode, { campaignId = '', token = '' } = {}) {
       });
       return res.json();
     },
+    // Edit mode: load an existing character as { campaign_id, character }
+    // (a builder submission) for prefill, and PUT an edited submission back.
+    async editData(characterId) {
+      return (await apiFetch(`${API_BASE}/characters/${encodeURIComponent(characterId)}/edit-data`)).json();
+    },
+    async updateCharacter(characterId, submission) {
+      const res = await apiFetch(`${API_BASE}/characters/${encodeURIComponent(characterId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
+      return res.json();
+    },
   };
 }

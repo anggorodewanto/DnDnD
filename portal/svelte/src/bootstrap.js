@@ -17,6 +17,7 @@ export function bootstrap(doc, mountFn, { CharacterBuilder, SpellPrep }) {
   const prepCharacterId = doc.getElementById('prep-character-id')?.value || '';
   const token = doc.getElementById('portal-token')?.value || '';
   const campaignId = doc.getElementById('campaign-id')?.value || '';
+  const editCharacterId = doc.getElementById('edit-character-id')?.value || '';
 
   // svelte's mount() appends without clearing, so wipe the server-rendered
   // placeholder first, then mount into the empty container.
@@ -28,6 +29,6 @@ export function bootstrap(doc, mountFn, { CharacterBuilder, SpellPrep }) {
 
   return mountFn(CharacterBuilder, {
     target,
-    props: { mode: 'player', token, campaignId },
+    props: { mode: 'player', token, campaignId, editCharacterId },
   });
 }

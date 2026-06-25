@@ -24,19 +24,28 @@
   import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState } from './lib/builder-steps.js';
   import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
 
-  let { mode = 'player', token = '', campaignId = '' } = $props();
+  let { mode = 'player', token = '', campaignId = '', editCharacterId = '' } = $props();
+
+  // Edit mode reuses this builder to modify an existing character. The campaign
+  // is unknown at mount (no token) and is resolved from the edit-data response,
+  // so the campaign used by the API/draft is held in state rather than the prop.
+  const editMode = editCharacterId !== '';
+  // Seeded from the mount-time prop; in edit mode it is replaced by the
+  // campaign resolved from edit-data. The initial-value capture is intentional.
+  // svelte-ignore state_referenced_locally
+  let campaign = $state(campaignId);
 
   // Mode-aware API client. The portal and DM dashboard share this component
   // but hit different URL prefixes / request shapes; the factory hides that.
   // Derived so prop reads stay reactive (props are fixed at mount in practice,
   // but this keeps the component warning-clean and correct either way).
-  let api = $derived(makeBuilderApi(mode, { campaignId, token }));
+  let api = $derived(makeBuilderApi(mode, { campaignId: campaign, token }));
 
   // localStorage draft is keyed by campaign (not the single-use token) so a
   // reissued /create-character link restores the in-progress draft instead of a
   // blank form; the mode prefix keeps player and DM drafts for the same
   // campaign from colliding in shared localStorage. See draftScope().
-  let draftIdentity = $derived(draftScope(mode, campaignId, token));
+  let draftIdentity = $derived(draftScope(mode, campaign, token));
 
   // Steps
   const STEPS = ['Basics', 'Class', 'Ability Scores', 'Skills', 'Equipment', 'Spells', 'Review'];
@@ -267,14 +276,73 @@
     });
   }
 
-  // Restore once, synchronously during init (before any effect runs).
-  const restoredDraft = parseDraft(readDraftRaw());
-  if (restoredDraft) applyDraft(restoredDraft);
-  // No usable local draft (blank page / different device / cleared on submit)?
-  // Fall back to the server-persisted draft so a player who re-ran
-  // /create-character after a "request changes" lands on their work, not a
-  // blank form (usability T11 / Finding 4·b).
-  if (!draftHasContent(restoredDraft)) hydrateFromServerDraft();
+  // Restore once, synchronously during init (before any effect runs). Edit mode
+  // never uses drafts — it prefills from the saved character instead.
+  if (!editMode) {
+    const restoredDraft = parseDraft(readDraftRaw());
+    if (restoredDraft) applyDraft(restoredDraft);
+    // No usable local draft (blank page / different device / cleared on submit)?
+    // Fall back to the server-persisted draft so a player who re-ran
+    // /create-character after a "request changes" lands on their work, not a
+    // blank form (usability T11 / Finding 4·b).
+    if (!draftHasContent(restoredDraft)) hydrateFromServerDraft();
+  }
+
+  // Edit-mode prefill: fetch the saved character once, resolve its campaign,
+  // and map it into the wizard. Plain flag (not $state) so the effect that
+  // kicks it off never re-runs.
+  let editStarted = false;
+  let editLoadError = $state('');
+  async function loadEditData() {
+    try {
+      const data = await api.editData(editCharacterId);
+      campaign = data.campaign_id || '';
+      applyEditData(data.character || {});
+    } catch (e) {
+      editLoadError = e.message || 'Failed to load this character for editing.';
+    }
+  }
+  $effect(() => {
+    if (editMode && !editStarted) {
+      editStarted = true;
+      loadEditData();
+    }
+  });
+
+  // Map an edit-data submission (snake_case API shape) into wizard state. The
+  // inverse of gatherSubmission. Equipment is restored flat into manualEquipment
+  // (pack provenance isn't persisted); gatherSubmission re-emits it on save.
+  function applyEditData(ch) {
+    name = ch.name || '';
+    race = ch.race || '';
+    subrace = ch.subrace || '';
+    background = ch.background || '';
+    appearance = ch.appearance || '';
+    backstory = ch.backstory || '';
+    if (Array.isArray(ch.classes) && ch.classes.length > 0) {
+      classEntries = ch.classes.map((c) => ({
+        class: c.class || '',
+        subclass: c.subclass || '',
+        level: c.level || 1,
+      }));
+    }
+    if (ch.ability_scores) {
+      const s = ch.ability_scores;
+      scores = { str: s.str ?? 8, dex: s.dex ?? 8, con: s.con ?? 8, int: s.int ?? 8, wis: s.wis ?? 8, cha: s.cha ?? 8 };
+    }
+    // The generation method isn't persisted; an edit re-validates as point-buy.
+    abilityMethod = 'point_buy';
+    selectedSkills = Array.isArray(ch.skills) ? ch.skills : [];
+    selectedExpertise = Array.isArray(ch.expertise) ? ch.expertise : [];
+    selectedSpells = Array.isArray(ch.spells) ? ch.spells : [];
+    selectedMasteries = Array.isArray(ch.weapon_masteries) ? ch.weapon_masteries : [];
+    chosenLanguages = Array.isArray(ch.languages) ? ch.languages : [];
+    manualEquipment = Array.isArray(ch.equipment) ? ch.equipment : [];
+    packChoices = {};
+    wornArmor = ch.worn_armor || '';
+    equippedWeapon = ch.equipped_weapon || '';
+    lastClassForPacks = ch.classes?.[0]?.class || '';
+  }
 
   async function hydrateFromServerDraft() {
     let serverDraft;
@@ -293,10 +361,11 @@
     applyDraft(parsed);
   }
 
-  // Persist on every change to a tracked field; never write after submit.
+  // Persist on every change to a tracked field; never write after submit. Edit
+  // mode does not touch drafts (it would clobber the player's create draft).
   $effect(() => {
     const snapshot = currentDraftSnapshot();
-    if (submitted) return;
+    if (submitted || editMode) return;
     writeDraftRaw(serializeDraft(snapshot));
   });
 
@@ -685,6 +754,11 @@
     submitting = true;
     submitError = '';
     try {
+      if (editMode) {
+        await api.updateCharacter(editCharacterId, gatherSubmission());
+        submitted = true;
+        return;
+      }
       await api.submitCharacter(gatherSubmission(), JSON.parse(serializeDraft(currentDraftSnapshot())));
       submitted = true;
       // Clear only the local draft. The server-side draft is intentionally left
@@ -764,7 +838,10 @@
 <div class="builder">
   {#if submitted}
     <div class="success">
-      {#if mode === 'dm'}
+      {#if editMode}
+        <h3>Changes Saved!</h3>
+        <p>The character <strong>{name}</strong> has been updated. A player's edit is sent back to the DM for re-approval.</p>
+      {:else if mode === 'dm'}
         <h3>Character Created!</h3>
         <p>The character <strong>{name}</strong> has been created and added to the campaign.</p>
       {:else}
@@ -793,6 +870,9 @@
 
     {#if error}
       <div class="error">{error}</div>
+    {/if}
+    {#if editLoadError}
+      <div class="error" role="alert">{editLoadError}</div>
     {/if}
 
     <!-- Step 0: Basics -->
@@ -1518,7 +1598,9 @@
 
         <button class="submit-btn" onclick={handleSubmit} disabled={submitting || !submitReady}>
           {#if submitting}
-            {mode === 'dm' ? 'Creating...' : 'Submitting...'}
+            {editMode ? 'Saving...' : mode === 'dm' ? 'Creating...' : 'Submitting...'}
+          {:else if editMode}
+            Save changes
           {:else}
             {mode === 'dm' ? 'Create Character' : 'Submit for DM Approval'}
           {/if}
