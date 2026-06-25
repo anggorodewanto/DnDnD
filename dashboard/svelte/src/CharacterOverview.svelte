@@ -94,6 +94,13 @@
           {#if c.ddb_url}
             <a href={c.ddb_url} target="_blank" rel="noopener">D&amp;D Beyond sheet</a>
           {/if}
+          <a
+            class="edit-link"
+            data-testid="character-edit-{c.character_id}"
+            href={`/portal/character/${c.character_id}/edit`}
+            target="_blank"
+            rel="noopener"
+          >Edit character</a>
           <button
             class="msg-toggle"
             data-testid="character-message-toggle-{c.character_id}"
@@ -175,6 +182,20 @@
   }
   a {
     color: #e94560;
+  }
+  .edit-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: #0f3460;
+    color: #e94560;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .edit-link:hover {
+    background: #1a4a8a;
   }
   .msg-toggle {
     margin-top: 0.5rem;
