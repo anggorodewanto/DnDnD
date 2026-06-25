@@ -121,5 +121,15 @@ Concretely each turn:
   DM adjudicates against that number (does 15 beat AC 12?), but **must not roll
   the player's dice**. Roll only for NPCs/monsters and DM-side checks. (This is
   the single most common correction the human DM gives — honor it.)
+- **Enemy HP and AC are secret — never reveal exact numbers to players.** The bot
+  already hides them (the #initiative-tracker masks NPC HP, NPCs get no character
+  card, the damage endpoint posts nothing). The leak risk is *the DM's own
+  prose* — narration, and especially **whisper/queue replies** (`dm_queue_items.outcome`
+  is DM'd straight to the player). Describe enemy state, don't quote it: say
+  *"it staggers, bloodied"* / *"barely scratched"* / *"reeling"*, **never**
+  *"15/22 HP"* or *"AC is 12"*. Confirm hit/miss outcomes (a hit implies you
+  cleared its AC) without stating the AC value, and never hand out the precise
+  HP fraction. (Real correction: a damage whisper-reply leaked a ghoul's `15/22`
+  HP **and** `AC 12` to the player — exactly the kind of slip this rule prevents.)
 </content>
 </invoke>
