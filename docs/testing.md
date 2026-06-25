@@ -152,6 +152,8 @@ exclusions and rationale:
 | `cmd/dndnd/notifier.go`              | Wire-up between concrete services and adapters.                  |
 | `internal/discord/adapter.go`        | Pure pass-through to `discordgo.Session` methods.                |
 | `scripts/coverage_check/main.go`     | CI tool; covered by its own `scripts/coverage_check_test.go`.    |
+| `scripts/sqlc_drift_check/main.go`   | CI drift tool; exercised end-to-end by `make sqlc-check`.        |
+| `scripts/gen_backgrounds/main.go`    | Build-time codegen tool; exercised end-to-end by `make backgrounds-check` (regenerate + git-diff guard). |
 | `internal/testutil/*.go`             | Test scaffolding (containers, fixtures). The remaining uncovered branches are `t.Fatalf` paths inside helpers — only reachable on container/DB failure, no production signal. |
 
 Adding a new exclusion requires updating `Makefile` (`COVER_EXCLUDE`). The

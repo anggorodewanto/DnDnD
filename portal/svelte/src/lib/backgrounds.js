@@ -1,27 +1,27 @@
+import BACKGROUNDS from './backgrounds.json';
+
 /**
- * PHB Background skill proficiencies.
+ * SINGLE SOURCE OF TRUTH: ./backgrounds.json.
  *
- * Each background grants two fixed skill proficiencies (per the PHB).
- * The builder uses this map to auto-add background skills onto the
- * character's skill list, deduped against any class-skill picks.
+ * The JSON is the canonical PHB background data shared by both sides of the
+ * stack. This frontend file derives its maps from it; the Go backend generates
+ * its maps from the same JSON (`scripts/gen_backgrounds` -> internal/portal/
+ * backgrounds_gen.go, drift-guarded by `make backgrounds-check`). Editing the
+ * JSON is the ONLY place background data should change — never hand-edit a
+ * derived map here or a generated map in Go (that drift caused the
+ * guild-artisan / folk-hero 400; see docs/live-play ISSUE-013).
  *
- * IDs match the slugs used elsewhere in the portal (lowercase, kebab-case).
+ * Slugs are lowercase kebab-case and must match CharacterBuilder.svelte
+ * BACKGROUNDS.
  */
-export const BACKGROUND_SKILLS = {
-  acolyte: ['insight', 'religion'],
-  charlatan: ['deception', 'sleight-of-hand'],
-  criminal: ['deception', 'stealth'],
-  entertainer: ['acrobatics', 'performance'],
-  'folk-hero': ['animal-handling', 'survival'],
-  'guild-artisan': ['insight', 'persuasion'],
-  hermit: ['medicine', 'religion'],
-  noble: ['history', 'persuasion'],
-  outlander: ['athletics', 'survival'],
-  sage: ['arcana', 'history'],
-  sailor: ['athletics', 'perception'],
-  soldier: ['athletics', 'intimidation'],
-  urchin: ['sleight-of-hand', 'stealth'],
-};
+
+/**
+ * PHB Background skill proficiencies (two fixed skills each). The builder uses
+ * this map to auto-add background skills, deduped against class-skill picks.
+ */
+export const BACKGROUND_SKILLS = Object.fromEntries(
+  Object.entries(BACKGROUNDS).map(([id, b]) => [id, b.skills]),
+);
 
 /**
  * Structured PHB mechanical grants per background, beyond the two skills.
@@ -30,115 +30,13 @@ export const BACKGROUND_SKILLS = {
  *   languages — count of bonus languages of the player's choice
  *   feature   — { name, description }; descriptions are brief original
  *               paraphrases (NOT copied PHB/SRD prose) capturing the gist.
- *
- * Slugs mirror BACKGROUND_SKILLS exactly.
  */
-export const BACKGROUND_DETAILS = {
-  acolyte: {
-    tools: [],
-    languages: 2,
-    feature: {
-      name: 'Shelter of the Faithful',
-      description: 'Temples of your faith give you free care and a place to rest.',
-    },
-  },
-  charlatan: {
-    tools: ['Disguise kit', 'Forgery kit'],
-    languages: 0,
-    feature: {
-      name: 'False Identity',
-      description: 'You maintain a convincing second identity with forged documents.',
-    },
-  },
-  criminal: {
-    tools: ["Thieves' tools", 'One gaming set'],
-    languages: 0,
-    feature: {
-      name: 'Criminal Contact',
-      description: 'You know a reliable contact who links you to the criminal network.',
-    },
-  },
-  entertainer: {
-    tools: ['Disguise kit', 'One musical instrument'],
-    languages: 0,
-    feature: {
-      name: 'By Popular Demand',
-      description: 'Your performances earn welcome, lodging, and food wherever you play.',
-    },
-  },
-  'folk-hero': {
-    tools: ["One type of artisan's tools", 'Vehicles (land)'],
-    languages: 0,
-    feature: {
-      name: 'Rustic Hospitality',
-      description: 'Common folk shelter and shield you as one of their own.',
-    },
-  },
-  'guild-artisan': {
-    tools: ["One type of artisan's tools"],
-    languages: 1,
-    feature: {
-      name: 'Guild Membership',
-      description: 'Your guild offers lodging, contacts, and political backing.',
-    },
-  },
-  hermit: {
-    tools: ['Herbalism kit'],
-    languages: 1,
-    feature: {
-      name: 'Discovery',
-      description: 'Your seclusion granted a unique, powerful secret or revelation.',
-    },
-  },
-  noble: {
-    tools: ['One gaming set'],
-    languages: 1,
-    feature: {
-      name: 'Position of Privilege',
-      description: 'Your noble standing earns deference, audiences, and easy welcome.',
-    },
-  },
-  outlander: {
-    tools: ['One musical instrument'],
-    languages: 1,
-    feature: {
-      name: 'Wanderer',
-      description: 'You recall terrain and can find food and water in the wild.',
-    },
-  },
-  sage: {
-    tools: [],
-    languages: 2,
-    feature: {
-      name: 'Researcher',
-      description: 'You know where or from whom to seek almost any lore.',
-    },
-  },
-  sailor: {
-    tools: ["Navigator's tools", 'Vehicles (water)'],
-    languages: 0,
-    feature: {
-      name: "Ship's Passage",
-      description: 'You can secure free passage aboard ships for yourself and allies.',
-    },
-  },
-  soldier: {
-    tools: ['One gaming set', 'Vehicles (land)'],
-    languages: 0,
-    feature: {
-      name: 'Military Rank',
-      description: 'Soldiers recognize your former rank and defer to its authority.',
-    },
-  },
-  urchin: {
-    tools: ['Disguise kit', "Thieves' tools"],
-    languages: 0,
-    feature: {
-      name: 'City Secrets',
-      description: 'You know hidden city paths and travel them at double speed.',
-    },
-  },
-};
+export const BACKGROUND_DETAILS = Object.fromEntries(
+  Object.entries(BACKGROUNDS).map(([id, b]) => [
+    id,
+    { tools: b.tools, languages: b.languages, feature: b.feature },
+  ]),
+);
 
 /**
  * Returns the canonical skill list for a background id, or an empty

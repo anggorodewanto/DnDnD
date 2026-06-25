@@ -1,0 +1,132 @@
+{
+  "acolyte": {
+    "skills": ["insight", "religion"],
+    "equipment": ["holy-symbol", "prayer-book", "incense:5", "vestments", "common-clothes"],
+    "tools": [],
+    "languages": 2,
+    "feature": {
+      "name": "Shelter of the Faithful",
+      "description": "Temples of your faith give you free care and a place to rest."
+    }
+  },
+  "charlatan": {
+    "skills": ["deception", "sleight-of-hand"],
+    "equipment": ["fine-clothes", "disguise-kit", "con-tools"],
+    "tools": ["Disguise kit", "Forgery kit"],
+    "languages": 0,
+    "feature": {
+      "name": "False Identity",
+      "description": "You maintain a convincing second identity with forged documents."
+    }
+  },
+  "criminal": {
+    "skills": ["deception", "stealth"],
+    "equipment": ["crowbar", "dark-common-clothes", "thieves-tools"],
+    "tools": ["Thieves' tools", "One gaming set"],
+    "languages": 0,
+    "feature": {
+      "name": "Criminal Contact",
+      "description": "You know a reliable contact who links you to the criminal network."
+    }
+  },
+  "entertainer": {
+    "skills": ["acrobatics", "performance"],
+    "equipment": ["musical-instrument", "costume", "common-clothes"],
+    "tools": ["Disguise kit", "One musical instrument"],
+    "languages": 0,
+    "feature": {
+      "name": "By Popular Demand",
+      "description": "Your performances earn welcome, lodging, and food wherever you play."
+    }
+  },
+  "folk-hero": {
+    "skills": ["animal-handling", "survival"],
+    "equipment": ["artisans-tools", "shovel", "iron-pot", "common-clothes"],
+    "tools": ["One type of artisan's tools", "Vehicles (land)"],
+    "languages": 0,
+    "feature": {
+      "name": "Rustic Hospitality",
+      "description": "Common folk shelter and shield you as one of their own."
+    }
+  },
+  "guild-artisan": {
+    "skills": ["insight", "persuasion"],
+    "equipment": ["artisans-tools", "letter-of-introduction", "travelers-clothes"],
+    "tools": ["One type of artisan's tools"],
+    "languages": 1,
+    "feature": {
+      "name": "Guild Membership",
+      "description": "Your guild offers lodging, contacts, and political backing."
+    }
+  },
+  "hermit": {
+    "skills": ["medicine", "religion"],
+    "equipment": ["scroll-case", "winter-blanket", "herbalism-kit", "common-clothes"],
+    "tools": ["Herbalism kit"],
+    "languages": 1,
+    "feature": {
+      "name": "Discovery",
+      "description": "Your seclusion granted a unique, powerful secret or revelation."
+    }
+  },
+  "noble": {
+    "skills": ["history", "persuasion"],
+    "equipment": ["fine-clothes", "signet-ring", "scroll-of-pedigree"],
+    "tools": ["One gaming set"],
+    "languages": 1,
+    "feature": {
+      "name": "Position of Privilege",
+      "description": "Your noble standing earns deference, audiences, and easy welcome."
+    }
+  },
+  "outlander": {
+    "skills": ["athletics", "survival"],
+    "equipment": ["staff", "hunting-trap", "trophy", "travelers-clothes"],
+    "tools": ["One musical instrument"],
+    "languages": 1,
+    "feature": {
+      "name": "Wanderer",
+      "description": "You recall terrain and can find food and water in the wild."
+    }
+  },
+  "sage": {
+    "skills": ["arcana", "history"],
+    "equipment": ["ink-bottle", "quill", "small-knife", "letter", "common-clothes"],
+    "tools": [],
+    "languages": 2,
+    "feature": {
+      "name": "Researcher",
+      "description": "You know where or from whom to seek almost any lore."
+    }
+  },
+  "sailor": {
+    "skills": ["athletics", "perception"],
+    "equipment": ["belaying-pin", "silk-rope-50ft", "common-clothes"],
+    "tools": ["Navigator's tools", "Vehicles (water)"],
+    "languages": 0,
+    "feature": {
+      "name": "Ship's Passage",
+      "description": "You can secure free passage aboard ships for yourself and allies."
+    }
+  },
+  "soldier": {
+    "skills": ["athletics", "intimidation"],
+    "equipment": ["insignia-of-rank", "trophy", "dice-set", "common-clothes"],
+    "tools": ["One gaming set", "Vehicles (land)"],
+    "languages": 0,
+    "feature": {
+      "name": "Military Rank",
+      "description": "Soldiers recognize your former rank and defer to its authority."
+    }
+  },
+  "urchin": {
+    "skills": ["sleight-of-hand", "stealth"],
+    "equipment": ["small-knife", "map-of-city", "pet-mouse", "token", "common-clothes"],
+    "tools": ["Disguise kit", "Thieves' tools"],
+    "languages": 0,
+    "feature": {
+      "name": "City Secrets",
+      "description": "You know hidden city paths and travel them at double speed."
+    }
+  }
+}
