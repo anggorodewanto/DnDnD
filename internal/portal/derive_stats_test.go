@@ -338,6 +338,57 @@ func TestClassSkillProficiencies_AllClasses(t *testing.T) {
 	}
 }
 
+// TestBackgroundSkillProficiencies_AllBuilderBackgrounds locks the Go map to
+// the exact 13 slugs the builder offers (CharacterBuilder.svelte BACKGROUNDS /
+// backgrounds.js BACKGROUND_SKILLS). Any drift — a missing background or a
+// space-vs-hyphen slug mismatch — drops the background's locked skills, which
+// then get rejected as off-list class picks at submit time (the guild-artisan /
+// folk-hero 400 regression).
+func TestBackgroundSkillProficiencies_AllBuilderBackgrounds(t *testing.T) {
+	tests := []struct {
+		background string
+		skills     []string
+	}{
+		{"acolyte", []string{"insight", "religion"}},
+		{"charlatan", []string{"deception", "sleight-of-hand"}},
+		{"criminal", []string{"deception", "stealth"}},
+		{"entertainer", []string{"acrobatics", "performance"}},
+		{"folk-hero", []string{"animal-handling", "survival"}},
+		{"guild-artisan", []string{"insight", "persuasion"}},
+		{"hermit", []string{"medicine", "religion"}},
+		{"noble", []string{"history", "persuasion"}},
+		{"outlander", []string{"athletics", "survival"}},
+		{"sage", []string{"arcana", "history"}},
+		{"sailor", []string{"athletics", "perception"}},
+		{"soldier", []string{"athletics", "intimidation"}},
+		{"urchin", []string{"sleight-of-hand", "stealth"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.background, func(t *testing.T) {
+			assert.Equal(t, tc.skills, backgroundSkillProficiencies(tc.background),
+				"background %q must grant exactly its two PHB skills", tc.background)
+		})
+	}
+
+	t.Run("unknown", func(t *testing.T) {
+		assert.Nil(t, backgroundSkillProficiencies("not-a-background"))
+	})
+	t.Run("empty", func(t *testing.T) {
+		assert.Nil(t, backgroundSkillProficiencies(""))
+	})
+}
+
+// TestValidateSkillSelection_BarbarianGuildArtisan is the friend's exact 400
+// case: a hill-dwarf barbarian/guild-artisan whose insight+persuasion come from
+// the background. With the background skills locked, the selection is legal.
+func TestValidateSkillSelection_BarbarianGuildArtisan(t *testing.T) {
+	submitted := []string{"insight", "persuasion", "athletics", "intimidation"}
+	locked := backgroundSkillProficiencies("guild-artisan") // insight, persuasion
+	classFrom, classChoose := classSkillChoices([]character.ClassEntry{{Class: "barbarian", Level: 3}})
+	err := validateSkillSelection(submitted, locked, classFrom, classChoose, 0)
+	assert.NoError(t, err)
+}
+
 func TestRaceSpeed(t *testing.T) {
 	tests := []struct {
 		race  string
@@ -1055,34 +1106,6 @@ func TestDeriveDMStats_BackgroundSkillProficiencies_Acolyte(t *testing.T) {
 	assert.Equal(t, 4, stats.Skills["insight"])
 	// religion: INT mod(+0) + prof(+2) = +2
 	assert.Equal(t, 2, stats.Skills["religion"])
-}
-
-func TestBackgroundSkillProficiencies(t *testing.T) {
-	tests := []struct {
-		bg     string
-		skills []string
-	}{
-		{"Acolyte", []string{"insight", "religion"}},
-		{"Criminal", []string{"deception", "stealth"}},
-		{"Folk Hero", []string{"animal-handling", "survival"}},
-		{"Noble", []string{"history", "persuasion"}},
-		{"Sage", []string{"arcana", "history"}},
-		{"Soldier", []string{"athletics", "intimidation"}},
-		{"Charlatan", []string{"deception", "sleight-of-hand"}},
-		{"Entertainer", []string{"acrobatics", "performance"}},
-		{"Hermit", []string{"medicine", "religion"}},
-		{"Outlander", []string{"athletics", "survival"}},
-		{"Sailor", []string{"athletics", "perception"}},
-		{"Urchin", []string{"sleight-of-hand", "stealth"}},
-		{"Unknown", nil},
-		{"", nil},
-	}
-	for _, tc := range tests {
-		t.Run(tc.bg, func(t *testing.T) {
-			result := backgroundSkillProficiencies(tc.bg)
-			assert.Equal(t, tc.skills, result)
-		})
-	}
 }
 
 // --- ISSUE-004: Unarmored Defense (Barbarian / Monk) ---

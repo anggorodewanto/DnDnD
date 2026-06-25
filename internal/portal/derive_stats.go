@@ -310,30 +310,38 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 }
 
 // backgroundSkillProficiencies returns the skills granted by a background.
+//
+// Slugs MUST match the builder's BACKGROUNDS list (CharacterBuilder.svelte) and
+// portal/svelte/src/lib/backgrounds.js BACKGROUND_SKILLS exactly — kebab-case,
+// lowercase. A missing or mis-slugged background drops its locked skills, which
+// then fail submit-time skill validation as off-list class picks.
+// TestBackgroundSkillProficiencies_AllBuilderBackgrounds guards this contract.
 func backgroundSkillProficiencies(background string) []string {
 	switch strings.ToLower(background) {
 	case "acolyte":
 		return []string{"insight", "religion"}
-	case "criminal":
-		return []string{"deception", "stealth"}
-	case "folk hero":
-		return []string{"animal-handling", "survival"}
-	case "noble":
-		return []string{"history", "persuasion"}
-	case "sage":
-		return []string{"arcana", "history"}
-	case "soldier":
-		return []string{"athletics", "intimidation"}
 	case "charlatan":
 		return []string{"deception", "sleight-of-hand"}
+	case "criminal":
+		return []string{"deception", "stealth"}
 	case "entertainer":
 		return []string{"acrobatics", "performance"}
+	case "folk-hero":
+		return []string{"animal-handling", "survival"}
+	case "guild-artisan":
+		return []string{"insight", "persuasion"}
 	case "hermit":
 		return []string{"medicine", "religion"}
+	case "noble":
+		return []string{"history", "persuasion"}
 	case "outlander":
 		return []string{"athletics", "survival"}
+	case "sage":
+		return []string{"arcana", "history"}
 	case "sailor":
 		return []string{"athletics", "perception"}
+	case "soldier":
+		return []string{"athletics", "intimidation"}
 	case "urchin":
 		return []string{"sleight-of-hand", "stealth"}
 	default:
