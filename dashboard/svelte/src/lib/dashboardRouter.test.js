@@ -13,6 +13,8 @@ describe('resolveDashboardViewFromHash', () => {
     expect(resolveDashboardViewFromHash('#errors')).toBe('errors');
     expect(resolveDashboardViewFromHash('#exploration')).toBe('exploration');
     expect(resolveDashboardViewFromHash('#characters-new')).toBe('characters-new');
+    expect(resolveDashboardViewFromHash('#dm-console')).toBe('dm-console');
+    expect(resolveDashboardViewFromHash('#dm-queue')).toBe('dm-queue');
   });
 
   it('preserves the turn-builder hash prefix', () => {

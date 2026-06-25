@@ -15,6 +15,7 @@ const HASH_TO_VIEW = Object.freeze({
   '#stat-block-library': 'stat-block-library',
   '#message-player': 'message-player',
   '#open5e-sources': 'open5e-sources',
+  '#dm-console': 'dm-console',
   '#dm-queue': 'dm-queue',
   '#loot': 'loot',
   '#levelup': 'levelup',
