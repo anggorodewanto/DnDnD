@@ -137,3 +137,45 @@ func AssignPCsToSpawnZones(zones []SpawnZone, pcIDs []string) (map[string]TilePo
 	}
 	return positions, nil
 }
+
+// AssignPCsToOpenTiles is the fallback seater used when a map has no authored
+// player spawn zones (e.g. a blank dashboard "New Map"). It seats each PC, in
+// input order, into the first open in-bounds tile scanned row-major
+// (left-to-right, then top-to-bottom), skipping any tile in occupied — typically
+// the monster positions already placed from the encounter template. This
+// guarantees every PC gets a valid, distinct grid position so combat tokens
+// never fall to the zero-value position (col "", row 0), which the map renderer
+// skips, leaving the token invisible.
+//
+// Returns an error if width or height is non-positive, and ErrNotEnoughSpawnTiles
+// if there are fewer open tiles than PCs.
+func AssignPCsToOpenTiles(width, height int, pcIDs []string, occupied []TilePos) (map[string]TilePos, error) {
+	positions := make(map[string]TilePos, len(pcIDs))
+	if len(pcIDs) == 0 {
+		return positions, nil
+	}
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid map dimensions: %dx%d", width, height)
+	}
+
+	blocked := make(map[TilePos]bool, len(occupied))
+	for _, t := range occupied {
+		blocked[t] = true
+	}
+
+	i := 0
+	for row := 0; row < height && i < len(pcIDs); row++ {
+		for col := 0; col < width && i < len(pcIDs); col++ {
+			tile := TilePos{Col: col, Row: row}
+			if blocked[tile] {
+				continue
+			}
+			positions[pcIDs[i]] = tile
+			i++
+		}
+	}
+	if i < len(pcIDs) {
+		return nil, fmt.Errorf("%w: seated %d of %d PCs in open tiles", ErrNotEnoughSpawnTiles, i, len(pcIDs))
+	}
+	return positions, nil
+}

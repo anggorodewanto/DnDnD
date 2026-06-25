@@ -1709,6 +1709,115 @@ func TestService_StartCombat_SeatsPCsIntoPlayerSpawnZones(t *testing.T) {
 	assert.Equal(t, int32(2), seats[pc2].row)
 }
 
+// TestService_StartCombat_SeatsPCsIntoOpenTilesWhenNoSpawnZones covers maps
+// built without authored spawn zones (e.g. a blank dashboard "New Map"). The
+// spawn-zone seater can't place PCs there, so they must fall back to open
+// in-bounds tiles — never the zero-value position (col "", row 0), which the
+// map renderer skips, leaving combat tokens invisible on #combat-map.
+func TestService_StartCombat_SeatsPCsIntoOpenTilesWhenNoSpawnZones(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	pc1 := uuid.New()
+	pc2 := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: campaignID,
+			MapID:     uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:      "Blank Room",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	// Blank 10x10 map: dimensions present, but NO spawn_zones layer.
+	store.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{
+			ID: mapID, WidthSquares: 10, HeightSquares: 10,
+			TiledJson: json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[]}`),
+		}, nil
+	}
+	names := map[uuid.UUID]string{pc1: "Aria", pc2: "Borin"}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: names[id], HpMax: 30, HpCurrent: 30, Ac: 15, SpeedFt: 30, AbilityScores: json.RawMessage(`{"str":12,"dex":14,"con":12,"int":10,"wis":10,"cha":10}`)}, nil
+	}
+
+	type seat struct {
+		col string
+		row int32
+	}
+	seats := map[uuid.UUID]seat{}
+	createdIDs := []uuid.UUID{}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: campaignID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdIDs = append(createdIDs, cID)
+		if arg.CharacterID.Valid {
+			seats[arg.CharacterID.UUID] = seat{arg.PositionCol, arg.PositionRow}
+		}
+		return refdata.Combatant{ID: cID, EncounterID: arg.EncounterID, CharacterID: arg.CharacterID, ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax, HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		// During seating (the fallback's occupiedTiles call) no combatants
+		// exist yet — the empty template has no monsters and PCs aren't added
+		// until after seating. Mirror that so the seater sees an empty board.
+		if len(createdIDs) < 2 {
+			return []refdata.Combatant{}, nil
+		}
+		return []refdata.Combatant{
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Aria", ShortID: "AR", IsAlive: true, HpMax: 30, HpCurrent: 30, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: pc1, Valid: true}},
+			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Borin", ShortID: "BO", IsAlive: true, HpMax: 30, HpCurrent: 30, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: pc2, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	turnID := uuid.New()
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	svc := NewService(store)
+
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:         templateID,
+		CharacterIDs:       []uuid.UUID{pc1, pc2},
+		CharacterPositions: map[uuid.UUID]Position{},
+	}, roller)
+	require.NoError(t, err)
+
+	// Fallback seats row-major from the top-left: (0,0)->"A"/1, (1,0)->"B"/1.
+	// The key invariant: never the zero-value col ""/row 0.
+	assert.NotEmpty(t, seats[pc1].col, "pc1 must get a real column, not the empty zero-value")
+	assert.NotEmpty(t, seats[pc2].col, "pc2 must get a real column, not the empty zero-value")
+	assert.GreaterOrEqual(t, seats[pc1].row, int32(1), "pc1 row must be a valid 1-indexed row")
+	assert.GreaterOrEqual(t, seats[pc2].row, int32(1), "pc2 row must be a valid 1-indexed row")
+	assert.NotEqual(t, seats[pc1], seats[pc2], "PCs must not stack on the same tile")
+	assert.Equal(t, "A", seats[pc1].col)
+	assert.Equal(t, int32(1), seats[pc1].row)
+	assert.Equal(t, "B", seats[pc2].col)
+	assert.Equal(t, int32(1), seats[pc2].row)
+}
+
 // --- TDD Cycle 30: StartCombat template error ---
 
 func TestService_StartCombat_TemplateError(t *testing.T) {

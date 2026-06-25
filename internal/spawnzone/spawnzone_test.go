@@ -181,3 +181,59 @@ func TestAssignPCsToSpawnZones_NoPCs(t *testing.T) {
 		t.Fatalf("got %d positions, want 0", len(positions))
 	}
 }
+
+func TestAssignPCsToOpenTiles_DeterministicRowMajor(t *testing.T) {
+	positions, err := spawnzone.AssignPCsToOpenTiles(3, 3, []string{"alpha", "bravo"}, nil)
+	if err != nil {
+		t.Fatalf("AssignPCsToOpenTiles: %v", err)
+	}
+	want := map[string]spawnzone.TilePos{
+		"alpha": {Col: 0, Row: 0},
+		"bravo": {Col: 1, Row: 0},
+	}
+	for id, pos := range want {
+		if got := positions[id]; got != pos {
+			t.Errorf("%s: got %+v want %+v", id, got, pos)
+		}
+	}
+}
+
+func TestAssignPCsToOpenTiles_SkipsOccupied(t *testing.T) {
+	// Tiles (0,0) and (1,0) are taken by monsters; the lone PC must land on
+	// the next open tile row-major: (2,0).
+	occupied := []spawnzone.TilePos{{Col: 0, Row: 0}, {Col: 1, Row: 0}}
+	positions, err := spawnzone.AssignPCsToOpenTiles(3, 3, []string{"alpha"}, occupied)
+	if err != nil {
+		t.Fatalf("AssignPCsToOpenTiles: %v", err)
+	}
+	if got := positions["alpha"]; got != (spawnzone.TilePos{Col: 2, Row: 0}) {
+		t.Errorf("alpha: got %+v want {2 0}", got)
+	}
+}
+
+func TestAssignPCsToOpenTiles_NotEnoughOpenTiles(t *testing.T) {
+	// 1x1 map with its only tile occupied: no room for the PC.
+	_, err := spawnzone.AssignPCsToOpenTiles(1, 1, []string{"alpha"}, []spawnzone.TilePos{{Col: 0, Row: 0}})
+	if err == nil {
+		t.Fatal("expected error when there are no open tiles")
+	}
+}
+
+func TestAssignPCsToOpenTiles_InvalidDimensions(t *testing.T) {
+	if _, err := spawnzone.AssignPCsToOpenTiles(0, 5, []string{"alpha"}, nil); err == nil {
+		t.Fatal("expected error for non-positive width")
+	}
+	if _, err := spawnzone.AssignPCsToOpenTiles(5, 0, []string{"alpha"}, nil); err == nil {
+		t.Fatal("expected error for non-positive height")
+	}
+}
+
+func TestAssignPCsToOpenTiles_NoPCs(t *testing.T) {
+	positions, err := spawnzone.AssignPCsToOpenTiles(5, 5, nil, nil)
+	if err != nil {
+		t.Fatalf("AssignPCsToOpenTiles with no PCs: %v", err)
+	}
+	if len(positions) != 0 {
+		t.Fatalf("got %d positions, want 0", len(positions))
+	}
+}

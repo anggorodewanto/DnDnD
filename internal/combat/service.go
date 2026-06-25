@@ -1032,24 +1032,61 @@ func (s *Service) seatPCsInSpawnZones(ctx context.Context, enc refdata.Encounter
 	if err != nil {
 		return positions
 	}
-	zones, err := spawnzone.ParseSpawnZones(m.TiledJson)
-	if err != nil {
-		return positions
-	}
 
 	keys := make([]string, len(needSeat))
 	for i, id := range needSeat {
 		keys[i] = id.String()
 	}
-	assigned, err := spawnzone.AssignPCsToSpawnZones(zones, keys)
+
+	// Prefer authored player spawn zones (the same zones exploration mode uses).
+	if zones, err := spawnzone.ParseSpawnZones(m.TiledJson); err == nil {
+		if assigned, err := spawnzone.AssignPCsToSpawnZones(zones, keys); err == nil {
+			applyTilePositions(positions, needSeat, keys, assigned)
+			return positions
+		}
+	}
+
+	// Fallback: maps built without authored player spawn zones (e.g. a blank
+	// dashboard "New Map") fail the seater above. Seat PCs into open in-bounds
+	// tiles instead so they never fall to the zero-value position (col "",
+	// row 0) — which the map renderer skips, leaving combat tokens invisible on
+	// #combat-map. Existing combatants (the template's monsters) are excluded so
+	// a PC doesn't spawn on top of one.
+	assigned, err := spawnzone.AssignPCsToOpenTiles(int(m.WidthSquares), int(m.HeightSquares), keys, s.occupiedTiles(ctx, enc.ID))
 	if err != nil {
-		return positions // no player zones / not enough tiles: leave unseated
+		return positions // map too small / unusable: leave unseated
 	}
-	for i, id := range needSeat {
-		tile := assigned[keys[i]]
-		positions[id] = Position{Col: indexToColLabel(tile.Col), Row: int32(tile.Row + 1)}
-	}
+	applyTilePositions(positions, needSeat, keys, assigned)
 	return positions
+}
+
+// applyTilePositions writes 0-based tile assignments back into the 1-based,
+// letter-column Position map keyed by character UUID.
+func applyTilePositions(out map[uuid.UUID]Position, ids []uuid.UUID, keys []string, assigned map[string]spawnzone.TilePos) {
+	for i, id := range ids {
+		tile := assigned[keys[i]]
+		out[id] = Position{Col: indexToColLabel(tile.Col), Row: int32(tile.Row + 1)}
+	}
+}
+
+// occupiedTiles returns the 0-based grid tiles already taken by combatants in
+// the encounter (typically the monsters placed from the template) so the
+// fallback seater doesn't drop a PC on top of one. Combatants with an empty or
+// unparseable column are skipped. Best-effort: a store error yields no
+// exclusions rather than failing placement.
+func (s *Service) occupiedTiles(ctx context.Context, encID uuid.UUID) []spawnzone.TilePos {
+	cs, err := s.store.ListCombatantsByEncounterID(ctx, encID)
+	if err != nil {
+		return nil
+	}
+	out := make([]spawnzone.TilePos, 0, len(cs))
+	for _, c := range cs {
+		if c.PositionCol == "" {
+			continue
+		}
+		out = append(out, spawnzone.TilePos{Col: ColToIndex(c.PositionCol), Row: int(c.PositionRow) - 1})
+	}
+	return out
 }
 
 // StartCombat orchestrates the full start-combat flow:
