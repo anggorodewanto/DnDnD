@@ -637,8 +637,14 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	}
 	if isBonusAction {
 		turn.BonusActionSpellCast = true
-	} else if spellLevel > 0 {
-		turn.ActionSpellCast = true
+	} else {
+		// Casting a spell with your action is the Cast-a-Spell action, not the
+		// Attack action — zero the seeded attack count so /done and the resource
+		// summary don't report a phantom attack (mirrors Service.Cast).
+		turn.AttacksRemaining = 0
+		if spellLevel > 0 {
+			turn.ActionSpellCast = true
+		}
 	}
 
 	// 15. Persist turn state

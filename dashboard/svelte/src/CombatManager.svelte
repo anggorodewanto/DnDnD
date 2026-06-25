@@ -21,6 +21,7 @@
     STANDARD_CONDITIONS,
     addCondition,
     removeCondition,
+    conditionName,
     colToIndex,
     indexToCol,
     tokenOpacity,
@@ -1205,11 +1206,11 @@
               <div class="condition-list" data-testid="condition-list">
                 {#each currentConditions() as cond}
                   <span class="condition-tag">
-                    {cond}
+                    {conditionName(cond)}
                     <button
                       class="remove-cond-btn"
                       onclick={() => handleRemoveCondition(cond)}
-                      data-testid="remove-condition-{cond}"
+                      data-testid="remove-condition-{conditionName(cond)}"
                     >x</button>
                   </span>
                 {/each}

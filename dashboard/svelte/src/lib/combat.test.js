@@ -6,6 +6,7 @@ import {
   STANDARD_CONDITIONS,
   addCondition,
   removeCondition,
+  conditionName,
   colToIndex,
   indexToCol,
   tokenOpacity,
@@ -138,6 +139,30 @@ describe('removeCondition', () => {
 
   it('returns empty array when removing last condition', () => {
     expect(removeCondition(['Blinded'], 'Blinded')).toEqual([]);
+  });
+});
+
+// ISSUE-015 (display half): the combat engine stores conditions as objects
+// ({condition: "paralyzed", ...}); the dashboard's own add path stores bare
+// strings. conditionName must render either as a Title-Cased label so an
+// object never shows as "[object Object]" in the Combat Manager.
+describe('conditionName', () => {
+  it('renders an engine object condition as a Title-Cased name', () => {
+    expect(conditionName({ condition: 'paralyzed', duration_rounds: 0 })).toBe('Paralyzed');
+  });
+
+  it('passes a bare string condition through (already Title-Cased)', () => {
+    expect(conditionName('Stunned')).toBe('Stunned');
+  });
+
+  it('Title-Cases a lowercase string', () => {
+    expect(conditionName('prone')).toBe('Prone');
+  });
+
+  it('returns empty string for malformed / empty entries', () => {
+    expect(conditionName({})).toBe('');
+    expect(conditionName(null)).toBe('');
+    expect(conditionName(undefined)).toBe('');
   });
 });
 

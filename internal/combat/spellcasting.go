@@ -729,8 +729,15 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 	if isBonusAction {
 		turn.BonusActionSpellCast = true
-	} else if spellLevel > 0 {
-		turn.ActionSpellCast = true
+	} else {
+		// Casting a spell with your action is the Cast-a-Spell action, not the
+		// Attack action — so there is no weapon attack left to make. Zero the
+		// seeded attack count (a cantrip cast as an action counts too) so /done
+		// and the resource summary don't report a phantom attack.
+		turn.AttacksRemaining = 0
+		if spellLevel > 0 {
+			turn.ActionSpellCast = true
+		}
 	}
 
 	// 14. Persist turn state

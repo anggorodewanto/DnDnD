@@ -97,6 +97,18 @@ export function removeCondition(conditions, condition) {
 }
 
 /**
+ * Display name for a condition entry. The combat engine stores conditions as
+ * objects ({condition: "paralyzed", ...}); the dashboard's own add path stores
+ * bare strings. Tolerate both and return a Title-Cased label so an object never
+ * renders as "[object Object]" in the Combat Manager (ISSUE-015 display half).
+ */
+export function conditionName(c) {
+  const raw = typeof c === 'string' ? c : (c && c.condition) || '';
+  if (!raw) return '';
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+/**
  * Returns the opacity for a combatant token on the DM map.
  * Invisible combatants are rendered with reduced opacity.
  */
