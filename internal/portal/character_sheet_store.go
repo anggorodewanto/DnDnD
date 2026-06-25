@@ -140,6 +140,10 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 	data.HitDiceRemaining = parseHitDiceRemaining(ch.HitDiceRemaining)
 	data.Spells = extractSpells(ch.CharacterData)
 
+	profile := character.ProfileFromCharacterData(ch.CharacterData.RawMessage)
+	data.Appearance = profile.Appearance
+	data.Backstory = profile.Backstory
+
 	return data, nil
 }
 

@@ -211,6 +211,9 @@ const characterSheetTemplate = `<!DOCTYPE html>
         .lang-tag { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
         .attune-item { padding: 0.25rem 0; }
         .empty-msg { color: #666; font-style: italic; }
+        .desc-block { margin-bottom: 0.75rem; }
+        .desc-label { color: #a0a0b0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+        .desc-text { color: #c0c0d0; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; }
         @media (max-width: 700px) {
             .grid-2 { grid-template-columns: 1fr; }
             .ability-grid { grid-template-columns: repeat(3, 1fr); }
@@ -256,6 +259,24 @@ const characterSheetTemplate = `<!DOCTYPE html>
                 <div class="stat-value">{{.Gold}}gp</div>
             </div>
         </div>
+
+        {{if or .Appearance .Backstory}}
+        <div class="section">
+            <h3>Description</h3>
+            {{if .Appearance}}
+            <div class="desc-block">
+                <div class="desc-label">Appearance</div>
+                <div class="desc-text">{{.Appearance}}</div>
+            </div>
+            {{end}}
+            {{if .Backstory}}
+            <div class="desc-block">
+                <div class="desc-label">Backstory</div>
+                <div class="desc-text">{{.Backstory}}</div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
 
         {{if .HitDiceRemaining}}
         <div class="section">

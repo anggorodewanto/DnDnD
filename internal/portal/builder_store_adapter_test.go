@@ -346,6 +346,66 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsWeaponMasteries(t *te
 	assert.Equal(t, []string{"longsword", "shortbow", "greatsword"}, masteries)
 }
 
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsDescription(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Vale",
+		Race:          "Tiefling",
+		Class:         "Warlock",
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 14, INT: 12, WIS: 10, CHA: 16},
+		HPMax:         8,
+		AC:            11,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Appearance:    "  horns, ash-grey skin, ember eyes  ",
+		Backstory:     "fled a pact gone wrong",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.CharacterData.Valid, "CharacterData should be valid")
+	var charData map[string]string
+	require.NoError(t, json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData))
+
+	// Stored trimmed under the appearance/backstory keys.
+	assert.Equal(t, "horns, ash-grey skin, ember eyes", charData["appearance"])
+	assert.Equal(t, "fled a pact gone wrong", charData["backstory"])
+
+	// And it round-trips through the shared reader.
+	profile := character.ProfileFromCharacterData(creator.capturedParams.CharacterData.RawMessage)
+	assert.Equal(t, "horns, ash-grey skin, ember eyes", profile.Appearance)
+	assert.Equal(t, "fled a pact gone wrong", profile.Backstory)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_BlankDescriptionOmitted(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Fighter",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Appearance:    "   ", // whitespace-only — must be dropped, not stored
+		Backstory:     "",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// No spells/background/description → character_data stays unset.
+	assert.False(t, creator.capturedParams.CharacterData.Valid, "blank description must not create a character_data blob")
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_NoSpells(t *testing.T) {
 	creator := &captureCharacterCreator{}
 	adapter := portal.NewBuilderStoreAdapter(creator, nil)

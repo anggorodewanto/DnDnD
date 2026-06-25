@@ -232,11 +232,14 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 	conditions, concentration, exhaustion := s.fetchCombatantState(ctx, char.ID)
 	asiFeatPending := s.hasPendingASI(ctx, char.ID)
 
+	profile := character.ProfileFromCharacterData(char.CharacterData.RawMessage)
+
 	return CardData{
 		Name:               char.Name,
 		ShortID:            shortID,
 		Level:              int(char.Level),
 		Race:               char.Race,
+		Appearance:         profile.Appearance,
 		Classes:            classes,
 		HpCurrent:          int(char.HpCurrent),
 		HpMax:              int(char.HpMax),

@@ -165,6 +165,56 @@ func TestServeCharacterSheet_HitDiceRemaining(t *testing.T) {
 	assert.Contains(t, body, "3")
 }
 
+func TestServeCharacterSheet_Description(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Vale",
+			Race:             "Tiefling",
+			Level:            3,
+			ClassSummary:     "Warlock 3",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			Appearance:       "horns, ash-grey skin, ember eyes",
+			Backstory:        "fled a pact gone wrong",
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Description")
+	assert.Contains(t, body, "Appearance")
+	assert.Contains(t, body, "horns, ash-grey skin, ember eyes")
+	assert.Contains(t, body, "Backstory")
+	assert.Contains(t, body, "fled a pact gone wrong")
+}
+
+func TestServeCharacterSheet_NoDescriptionSection(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Forge",
+			Race:             "Dwarf",
+			Level:            3,
+			ClassSummary:     "Barbarian 3",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// The Description section header must be absent when there's no description.
+	assert.NotContains(t, rec.Body.String(), "<h3>Description</h3>")
+}
+
 func TestServeCharacterSheet_FeatureUses(t *testing.T) {
 	svc := &fakeCharacterSheetService{
 		data: &portal.CharacterSheetData{

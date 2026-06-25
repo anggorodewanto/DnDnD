@@ -49,6 +49,11 @@ type CharacterSubmission struct {
 	Languages       []string               `json:"languages,omitempty"`
 	EquippedWeapon  string                 `json:"equipped_weapon,omitempty"`
 	WornArmor       string                 `json:"worn_armor,omitempty"`
+	// Appearance and Backstory are optional free-form descriptive text. They
+	// are display-only flavor (never validated, never queried) — persisted in
+	// the character_data JSONB bag. See character.CharacterProfile.
+	Appearance string `json:"appearance,omitempty"`
+	Backstory  string `json:"backstory,omitempty"`
 }
 
 // CreateMode selects the character-creation workflow.
@@ -226,6 +231,8 @@ type CreateCharacterParams struct {
 	Features        []character.Feature
 	EquippedWeapon  string
 	WornArmor       string
+	Appearance      string
+	Backstory       string
 }
 
 // CreatePlayerCharacterParams holds params for the player_characters record.
@@ -515,6 +522,8 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		Features:        features,
 		EquippedWeapon:  sub.EquippedWeapon,
 		WornArmor:       sub.WornArmor,
+		Appearance:      sub.Appearance,
+		Backstory:       sub.Backstory,
 	}
 
 	if in.mode == ModePlayer {

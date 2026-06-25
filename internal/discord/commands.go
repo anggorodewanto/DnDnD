@@ -578,7 +578,15 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:        "character",
-			Description: "Show your character sheet summary",
+			Description: "Show a character sheet summary — yours or a party member's",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "target",
+					Description: "View a party member's character (leave blank for your own)",
+					Required:    false,
+				},
+			},
 		},
 		{
 			Name:        "recap",

@@ -207,6 +207,62 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells(t *testing
 	assert.Equal(t, "Self", byID["shield"].Range)
 }
 
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_Description(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 14, INT: 12, WIS: 10, CHA: 16})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Warlock", Level: 3}})
+	charDataJSON, _ := json.Marshal(map[string]any{
+		"background": "entertainer",
+		"appearance": "tall tiefling, ember eyes",
+		"backstory":  "ran from a pact gone wrong",
+	})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Vale",
+			Race:          "Tiefling",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Equal(t, "tall tiefling, ember eyes", data.Appearance)
+	assert.Equal(t, "ran from a pact gone wrong", data.Backstory)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_NoDescription(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Forge",
+			Race:          "Dwarf",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Empty(t, data.Appearance)
+	assert.Empty(t, data.Backstory)
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T) {
 	charID := uuid.New()
 

@@ -31,6 +31,8 @@ const DRAFT_FIELDS = [
   'race',
   'subrace',
   'background',
+  'appearance',
+  'backstory',
   'classEntries',
   'scores',
   'abilityMethod',

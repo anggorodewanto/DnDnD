@@ -47,6 +47,10 @@
   let race = $state('');
   let subrace = $state('');
   let background = $state('');
+  // Free-form flavor text — optional, persisted in the draft and sent in the
+  // submission payload as `appearance` / `backstory`.
+  let appearance = $state('');
+  let backstory = $state('');
   // Multi-class entries — the first row drives the primary class for spell
   // list / starting equipment loading. selectedClass / subclass are kept as
   // derived mirrors of classEntries[0] for compatibility with the existing
@@ -231,6 +235,8 @@
     if (d.race !== undefined) race = d.race;
     if (d.subrace !== undefined) subrace = d.subrace;
     if (d.background !== undefined) background = d.background;
+    if (d.appearance !== undefined) appearance = d.appearance;
+    if (d.backstory !== undefined) backstory = d.backstory;
     if (Array.isArray(d.classEntries) && d.classEntries.length > 0) classEntries = d.classEntries;
     if (d.scores !== undefined) scores = d.scores;
     if (d.abilityMethod !== undefined) abilityMethod = d.abilityMethod;
@@ -254,7 +260,7 @@
   // and the submit/hydration paths so they can never drift apart.
   function currentDraftSnapshot() {
     return $state.snapshot({
-      currentStep, name, race, subrace, background,
+      currentStep, name, race, subrace, background, appearance, backstory,
       classEntries, scores, abilityMethod, abilityRolls,
       selectedSkills, selectedExpertise, selectedSpells, chosenLanguages, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
@@ -627,6 +633,8 @@
       race,
       subrace,
       background,
+      appearance,
+      backstory,
       class: selectedClass,
       subclass,
       classes,
@@ -891,6 +899,22 @@
             <p class="bg-feature"><strong>{bd.feature.name}</strong> — {bd.feature.description}</p>
           </div>
         {/if}
+        <label>
+          Appearance (optional)
+          <textarea
+            bind:value={appearance}
+            rows="3"
+            placeholder="Height, build, hair, eyes, skin, distinguishing marks…"
+          ></textarea>
+        </label>
+        <label>
+          Backstory (optional)
+          <textarea
+            bind:value={backstory}
+            rows="4"
+            placeholder="Where they're from, what drives them, why they're adventuring…"
+          ></textarea>
+        </label>
       </div>
 
     <!-- Step 1: Class (with multiclass support) -->
@@ -1526,10 +1550,11 @@
   .step-content { margin-bottom: 1.5rem; }
   .step-content h3 { color: #e94560; margin-bottom: 1rem; }
   label { display: block; margin-bottom: 0.75rem; }
-  input[type="text"], select {
+  input[type="text"], select, textarea {
     display: block; width: 100%; padding: 0.5rem; margin-top: 0.25rem;
     background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; border-radius: 4px;
   }
+  textarea { font-family: inherit; resize: vertical; box-sizing: border-box; }
   .points-remaining { font-size: 1.1rem; margin-bottom: 1rem; }
   .overspent { color: #ff4444; }
   .method-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }

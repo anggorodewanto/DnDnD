@@ -244,4 +244,17 @@ describe('round trip', () => {
     };
     expect(parseDraft(serializeDraft(input))).toEqual(expected);
   });
+
+  it('round-trips the optional appearance and backstory flavor fields', () => {
+    // The Basics-step free-form description fields must survive save -> restore
+    // so a resumed / "request changes" build repopulates them.
+    const input = {
+      name: 'Gimli',
+      appearance: 'Stout dwarf, red beard, battle-scarred.',
+      backstory: 'Last of his clan, seeking the lost halls of Khazad-dûm.',
+    };
+    const restored = parseDraft(serializeDraft(input));
+    expect(restored.appearance).toBe(input.appearance);
+    expect(restored.backstory).toBe(input.backstory);
+  });
 });

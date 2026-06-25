@@ -161,6 +161,16 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	if p.Background != "" {
 		charData["background"] = p.Background
 	}
+	// Optional free-form description (display-only flavor). Stashed here under
+	// the same no-dedicated-column rationale as subrace/background; trimmed so
+	// whitespace-only input does not bloat the blob. Read back via
+	// character.ProfileFromCharacterData on the sheet, card, and /character.
+	if appearance := strings.TrimSpace(p.Appearance); appearance != "" {
+		charData["appearance"] = appearance
+	}
+	if backstory := strings.TrimSpace(p.Backstory); backstory != "" {
+		charData["backstory"] = backstory
+	}
 	var charDataMsg pqtype.NullRawMessage
 	if len(charData) > 0 {
 		charDataJSON, _ := json.Marshal(charData)

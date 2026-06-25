@@ -548,6 +548,216 @@ func TestCharacterHandler_WarlockPactSlots(t *testing.T) {
 	}
 }
 
+// userOption builds an ApplicationCommandOptionUser option whose value is the
+// snowflake string Discord sends over the wire.
+func userOption(name, snowflake string) *discordgo.ApplicationCommandInteractionDataOption {
+	return &discordgo.ApplicationCommandInteractionDataOption{
+		Name:  name,
+		Type:  discordgo.ApplicationCommandOptionUser,
+		Value: snowflake,
+	}
+}
+
+func approvedLookup(t *testing.T, discordUserID, name string) *mockCharacterLookup {
+	t.Helper()
+	charID := uuid.New()
+	campID := uuid.New()
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 5}})
+	return &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: discordUserID,
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          name,
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpMax:         42,
+			HpCurrent:     35,
+			Ac:            18,
+			SpeedFt:       30,
+			Languages:     []string{"Common"},
+		},
+	}
+}
+
+func TestCharacterHandler_SelfView_IncludesPortalLink(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := approvedLookup(t, "player-1", "Thorn")
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	// No target option -> self view.
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+	if !strings.Contains(rc.Content, "https://portal.dndnd.app/portal/character/") {
+		t.Errorf("expected portal link for self view, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected ephemeral response")
+	}
+}
+
+func TestCharacterHandler_TargetView_ApprovedMember_NoPortalLink(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	// The mock resolves whatever lookup ID is passed; the target's character.
+	lookup := approvedLookup(t, "player-2", "Aria")
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1", userOption("target", "player-2")))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds for approved target view")
+	}
+	if !strings.Contains(rc.Embeds[0].Title, "Aria") {
+		t.Errorf("expected target's character in embed, got title: %s", rc.Embeds[0].Title)
+	}
+	if strings.Contains(rc.Content, "/portal/character/") {
+		t.Errorf("did not expect portal link when viewing a target, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected ephemeral response for target view")
+	}
+}
+
+func TestCharacterHandler_TargetView_NoCharacter_FriendlyMessage(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := &mockCharacterLookup{pcErr: sql.ErrNoRows}
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1", userOption("target", "player-2")))
+
+	if !strings.Contains(rc.Content, "doesn't have a character in this campaign") {
+		t.Errorf("expected friendly target-missing message, got: %s", rc.Content)
+	}
+	// Must not fall back to the self-oriented register hint.
+	if strings.Contains(rc.Content, "/register") {
+		t.Errorf("did not expect self register hint for a target, got: %s", rc.Content)
+	}
+}
+
+func TestCharacterHandler_TargetView_NotApproved_HidesDMFeedback(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	const secretFeedback = "Please pick a subclass"
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			Status:        "changes_requested",
+			CharacterID:   uuid.New(),
+			DiscordUserID: "player-2",
+			DmFeedback:    sql.NullString{String: secretFeedback, Valid: true},
+		},
+	}
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1", userOption("target", "player-2")))
+
+	if !strings.Contains(rc.Content, "hasn't been approved yet") {
+		t.Errorf("expected generic not-approved message, got: %s", rc.Content)
+	}
+	if strings.Contains(rc.Content, secretFeedback) {
+		t.Errorf("DM feedback leaked to a non-owner, got: %s", rc.Content)
+	}
+	if strings.Contains(rc.Content, "DM feedback") {
+		t.Errorf("did not expect DM feedback label for a target, got: %s", rc.Content)
+	}
+}
+
+func TestCharacterHandler_EmbedIncludesAppearanceAndBackstory(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 5}})
+	charData := map[string]any{
+		"appearance": "Tall   and\nscarred",
+		"backstory":  "Orphaned at sea, raised by smugglers.",
+	}
+	charDataJSON, _ := json.Marshal(charData)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Thorn",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+	desc := rc.Embeds[0].Description
+	if !strings.Contains(desc, "Appearance: Tall and scarred") {
+		t.Errorf("expected collapsed appearance line, got: %s", desc)
+	}
+	if !strings.Contains(desc, "Backstory: Orphaned at sea, raised by smugglers.") {
+		t.Errorf("expected backstory line, got: %s", desc)
+	}
+}
+
+func TestCharacterHandler_EmbedOmitsAppearanceAndBackstoryWhenAbsent(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := approvedLookup(t, "player-1", "Thorn")
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+	desc := rc.Embeds[0].Description
+	if strings.Contains(desc, "Appearance:") {
+		t.Errorf("did not expect appearance line when absent, got: %s", desc)
+	}
+	if strings.Contains(desc, "Backstory:") {
+		t.Errorf("did not expect backstory line when absent, got: %s", desc)
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	// Shorter than the limit is returned unchanged.
+	if got := truncate("hello", 10); got != "hello" {
+		t.Errorf("expected unchanged short string, got: %q", got)
+	}
+	// Exactly at the limit is unchanged (no ellipsis).
+	if got := truncate("hello", 5); got != "hello" {
+		t.Errorf("expected unchanged at-limit string, got: %q", got)
+	}
+	// Longer than the limit is cut and gets an ellipsis.
+	got := truncate("hello world", 5)
+	if got != "hello…" {
+		t.Errorf("expected truncated string with ellipsis, got: %q", got)
+	}
+}
+
 func TestCharacterHandler_FullCasterStandardSlots(t *testing.T) {
 	mock := newTestMock()
 	rc := captureFullResponse(mock)

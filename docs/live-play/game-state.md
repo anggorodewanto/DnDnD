@@ -4,7 +4,8 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-25 (session 1 — scene live; Vale opened the cellar door)._
+_Last updated: 2026-06-25 (session 1 — 2nd player joined; Forge approved + woven into
+the scene; the cellar thing is climbing toward the light)._
 
 ## Stack status
 
@@ -88,8 +89,16 @@ _Last updated: 2026-06-25 (session 1 — scene live; Vale opened the cellar door
     Infernal Legacy also grants 1/day hellish rebuke @ L2 (free, CHA).
   - Tiefling: **resistance to fire** (Hellish Resistance), darkvision.
   - Kit: dagger, light crossbow + bolts, arcane focus, dungeoneer's pack,
-    entertainer's pack (instrument, costume), leather armor (unequipped). Languages
-    empty (ISSUE-009 cosmetic gap).
+    entertainer's pack (instrument, costume), leather armor (now equipped → AC 11).
+    Languages empty (ISSUE-009 cosmetic gap).
+
+- **Forge Anvilbearer** — Hill-Dwarf **Barbarian 3** (Path of the Berserker),
+  guild-artisan background. **APPROVED** 2026-06-25 (the DM's friend; the remote
+  2nd player, in via the cloudflared tunnel after the ISSUE-013 slug-drift fix went
+  live). Character card auto-posted to #character-cards on approval.
+  - HP **32/32**, AC **14**, speed 25 (dwarf).
+  - Skills: athletics, intimidation (class) + insight, persuasion (guild-artisan bg).
+  - Player-controlled — narrate his *arrival/world*, not his choices/dialogue.
 
 ## Encounter / combat
 
@@ -115,14 +124,17 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-- **Scene is live.** Opening narration + the cellar-open beat are both posted to
-  `#the-story`. Vale cast **mage hand** and opened the cellar door (unbarred → no
-  roll); it's now standing open onto dark stone steps, a slow dragging *scrape*
-  heard from below.
-1. **Player (Vale):** next move — descend / cast light / listen / retreat / talk.
-   Descending toward the scrape = the fight is ready (import the 10×10 waystation
-   map for the cellar).
-2. **Claude (DM):** respond to Vale's move via the Narrate tool (`#the-story`).
-   If she descends and combat starts: import the map, build the encounter, open
-   combat. Whatever's in the cellar clawed to get *out* — pick/stat the threat.
+- **Scene is live, party of two.** Latest beat posted to `#the-story` (10:26 AM):
+  Vale set the mage hand as a guard at the cellar mouth and called *"hello?"* down
+  the steps → the dragging *scrape* answered, paused (it *heard her*), and is now
+  **climbing toward the light** — "maybe two turns from the top." On that beat,
+  **Forge Anvilbearer** shoves in through the waystation's front door (his entrance
+  into the scene — the world delivering the 2nd PC; his choices belong to his player).
+1. **Players (Vale + Forge):** declare next moves in `#in-character`. Forge has not
+   acted IC yet — this is his first beat. Descending / meeting the climbing thing =
+   the fight is ready (import the 10×10 waystation map for the cellar).
+2. **Claude (DM):** respond via the Narrate tool (`#the-story`). When the thing
+   reaches the top (≈2 beats) or a PC closes with it, combat starts: import the map,
+   build the encounter (it clawed to get *out* — pick/stat the threat), open combat
+   with both PCs in initiative.
 </content>

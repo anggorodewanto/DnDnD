@@ -9,6 +9,10 @@ import (
 	"github.com/ab/dndnd/internal/character"
 )
 
+// appearanceMaxRunes caps the public card's appearance line so cards stay lean
+// (a one-line teaser, not a backstory).
+const appearanceMaxRunes = 100
+
 // ConditionInfo describes an active condition on a character.
 type ConditionInfo struct {
 	Name            string `json:"name"`
@@ -21,6 +25,7 @@ type CardData struct {
 	ShortID            string
 	Level              int
 	Race               string
+	Appearance         string
 	Classes            []character.ClassEntry
 	HpCurrent          int
 	HpMax              int
@@ -58,6 +63,11 @@ func FormatCard(d CardData) string {
 	b.WriteByte('\n')
 	if d.ASIFeatPending {
 		b.WriteString("⏳ ASI/Feat pending\n")
+	}
+
+	// Appearance (one short line, near the top; omitted when blank)
+	if appearance := oneLine(d.Appearance, appearanceMaxRunes); appearance != "" {
+		fmt.Fprintf(&b, "Appearance: %s\n", appearance)
 	}
 
 	// HP line
@@ -121,6 +131,19 @@ func FormatCard(d CardData) string {
 	b.WriteString(strings.Join(d.Languages, ", "))
 
 	return b.String()
+}
+
+// oneLine flattens s to a single line — newlines, tabs, and runs of spaces
+// collapse to single spaces, leading/trailing whitespace is trimmed — and
+// truncates it to max runes, appending "…" when it had to cut. An all-blank or
+// empty input yields "".
+func oneLine(s string, max int) string {
+	flat := strings.Join(strings.Fields(s), " ")
+	runes := []rune(flat)
+	if len(runes) <= max {
+		return flat
+	}
+	return string(runes[:max]) + "…"
 }
 
 func formatEquipped(main, off string) string {

@@ -217,6 +217,30 @@ func TestService_PostCharacterCard_WithSpells(t *testing.T) {
 	assert.Contains(t, session.sentContent, "Spells: 2 prepared / 3 known")
 }
 
+func TestService_PostCharacterCard_WithAppearance(t *testing.T) {
+	char := newTestCharacter()
+
+	// Appearance lives in the character_data JSONB bag under "appearance".
+	charData := map[string]any{
+		"appearance": "horns, ash-grey skin, ember eyes",
+	}
+	charDataJSON, _ := json.Marshal(charData)
+	char.CharacterData = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
+
+	campaign := newTestCampaign()
+	store := &mockStore{
+		character: char,
+		campaign:  campaign,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Appearance: horns, ash-grey skin, ember eyes")
+}
+
 func TestService_PostCharacterCard_WithPortalSpells(t *testing.T) {
 	char := newTestCharacter()
 

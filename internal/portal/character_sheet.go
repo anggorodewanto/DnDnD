@@ -50,6 +50,11 @@ type CharacterSheetData struct {
 	ExhaustionLevel  int
 	ConcentrationOn  string // spell name if concentrating, empty otherwise
 
+	// Optional free-form description (display-only flavor). Empty when the
+	// player wrote none; the template hides the section in that case.
+	Appearance string
+	Backstory  string
+
 	Spells []SpellDisplayEntry
 
 	// Computed fields for display

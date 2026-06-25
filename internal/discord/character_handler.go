@@ -41,7 +41,18 @@ func NewCharacterHandler(session Session, campaignProv CampaignProvider, lookup 
 
 // Handle processes a /character interaction.
 func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
-	userID := interactionUserID(interaction)
+	callerID := interactionUserID(interaction)
+	targetID := characterTargetOption(interaction)
+
+	// lookupID is whose character we resolve: the explicit target if one was
+	// supplied, otherwise the caller's own. viewingSelf gates owner-only
+	// behavior (DM feedback, portal link).
+	lookupID := callerID
+	viewingSelf := true
+	if targetID != "" {
+		lookupID = targetID
+		viewingSelf = targetID == callerID
+	}
 
 	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
@@ -51,14 +62,23 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 
 	pc, err := h.lookup.GetPlayerCharacterByDiscordUser(context.Background(), refdata.GetPlayerCharacterByDiscordUserParams{
 		CampaignID:    campaign.ID,
-		DiscordUserID: userID,
+		DiscordUserID: lookupID,
 	})
 	if err != nil {
+		if !viewingSelf {
+			respondEphemeral(h.session, interaction, "That player doesn't have a character in this campaign.")
+			return
+		}
 		respondEphemeral(h.session, interaction, "No character found. Use /register, /import, or /create-character first.")
 		return
 	}
 
 	if pc.Status != "approved" {
+		// Never leak the DM's private feedback to anyone but the owner.
+		if !viewingSelf {
+			respondEphemeral(h.session, interaction, "That player's character hasn't been approved yet.")
+			return
+		}
 		respondEphemeral(h.session, interaction, buildNotApprovedMessage(pc))
 		return
 	}
@@ -70,16 +90,39 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	embed := h.buildCharacterEmbed(ch)
-	portalLink := fmt.Sprintf("%s/portal/character/%s", h.portalBaseURL, ch.ID.String())
+
+	// The portal sheet route is owner-gated (403 for non-owners), so only
+	// surface the link when the caller is looking at their own character.
+	content := ""
+	if viewingSelf {
+		portalLink := fmt.Sprintf("%s/portal/character/%s", h.portalBaseURL, ch.ID.String())
+		content = fmt.Sprintf("View full character sheet: %s", portalLink)
+	}
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("View full character sheet: %s", portalLink),
+			Content: content,
 			Embeds:  []*discordgo.MessageEmbed{embed},
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
+}
+
+// characterTargetOption returns the snowflake ID of the optional "target" user
+// option, or "" when absent. ApplicationCommandOptionUser values arrive over the
+// wire as a string snowflake, so the value is read as a string rather than via
+// discordgo's resolved-user helper (which needs the gateway's resolved data).
+func characterTargetOption(interaction *discordgo.Interaction) string {
+	for _, opt := range interaction.ApplicationCommandData().Options {
+		if opt.Name != "target" {
+			continue
+		}
+		if id, ok := opt.Value.(string); ok {
+			return id
+		}
+	}
+	return ""
 }
 
 // buildNotApprovedMessage produces the ephemeral text shown when a player runs
@@ -127,6 +170,17 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 
 	if len(ch.Languages) > 0 {
 		fmt.Fprintf(&desc, "Languages: %s\n", strings.Join(ch.Languages, ", "))
+	}
+
+	profile := character.ProfileFromCharacterData(ch.CharacterData.RawMessage)
+	if profile.Appearance != "" {
+		// Collapse internal newlines so the appearance reads as one tidy line.
+		appearance := strings.Join(strings.Fields(profile.Appearance), " ")
+		fmt.Fprintf(&desc, "Appearance: %s\n", truncate(appearance, 180))
+	}
+	if profile.Backstory != "" {
+		// Backstory may keep its newlines; only the length is capped.
+		fmt.Fprintf(&desc, "Backstory: %s\n", truncate(profile.Backstory, 400))
 	}
 
 	if slotSummary := buildSpellSlotSummary(ch); slotSummary != "" {
@@ -273,6 +327,17 @@ func buildSpellSlotSummary(ch refdata.Character) string {
 	}
 
 	return strings.Join(parts, " | ")
+}
+
+// truncate clamps s to at most n runes, appending "…" when it had to cut. It
+// counts runes (not bytes) so multibyte appearance/backstory text isn't sliced
+// mid-character. Strings already within the limit are returned unchanged.
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // slotOrdinal converts a number to ordinal string.

@@ -519,6 +519,125 @@ func TestFormatCard_NoPactMagicForNonCaster(t *testing.T) {
 	assert.NotContains(t, result, "Pact Magic")
 }
 
+func TestFormatCard_Appearance(t *testing.T) {
+	data := CardData{
+		Name:    "Zara",
+		ShortID: "ZA",
+		Level:   4,
+		Race:    "Tiefling",
+		Classes: []character.ClassEntry{
+			{Class: "Warlock", Level: 4},
+		},
+		HpCurrent:     28,
+		HpMax:         28,
+		AC:            13,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 14, WIS: 10, INT: 12, CHA: 18},
+		Appearance:    "horns, ash-grey skin, ember eyes",
+		Gold:          15,
+		Languages:     []string{"Common", "Infernal"},
+	}
+
+	result := FormatCard(data)
+	assert.Contains(t, result, "Appearance: horns, ash-grey skin, ember eyes")
+
+	// Appearance must render near the top, before the HP/AC line.
+	idxAppearance := strings.Index(result, "Appearance:")
+	idxHP := strings.Index(result, "HP:")
+	assert.GreaterOrEqual(t, idxAppearance, 0, "Appearance line should be present")
+	assert.Greater(t, idxHP, idxAppearance, "Appearance should come before the HP line")
+}
+
+func TestFormatCard_NoAppearance(t *testing.T) {
+	data := CardData{
+		Name:    "Plain",
+		ShortID: "PL",
+		Level:   1,
+		Race:    "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		HpCurrent:     10,
+		HpMax:         10,
+		AC:            16,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, WIS: 10, INT: 10, CHA: 10},
+		Gold:          10,
+		Languages:     []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.NotContains(t, result, "Appearance:")
+}
+
+func TestFormatCard_AppearanceCollapsedAndTruncated(t *testing.T) {
+	longAppearance := "A very tall and imposing figure\nwith\twindswept silver hair, " +
+		"piercing violet eyes, an ornate filigree breastplate, and a long flowing crimson cloak"
+
+	data := CardData{
+		Name:    "Long",
+		ShortID: "LO",
+		Level:   1,
+		Race:    "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		HpCurrent:     10,
+		HpMax:         10,
+		AC:            16,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, WIS: 10, INT: 10, CHA: 10},
+		Appearance:    longAppearance,
+		Gold:          10,
+		Languages:     []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	// Collapsed to a single line: no raw newline/tab carried through.
+	assert.NotContains(t, result, "figure\nwith")
+	assert.NotContains(t, result, "\t")
+	// Truncated with an ellipsis.
+	assert.Contains(t, result, "…")
+	// The opening words survive, on one line.
+	assert.Contains(t, result, "Appearance: A very tall and imposing figure with windswept")
+}
+
+func TestOneLine(t *testing.T) {
+	t.Run("short string unchanged", func(t *testing.T) {
+		assert.Equal(t, "hello world", oneLine("hello world", 100))
+	})
+
+	t.Run("newlines and tabs collapse to single spaces", func(t *testing.T) {
+		assert.Equal(t, "a b c d", oneLine("a\nb\r\nc\t\td", 100))
+	})
+
+	t.Run("runs of spaces collapse", func(t *testing.T) {
+		assert.Equal(t, "a b", oneLine("a     b", 100))
+	})
+
+	t.Run("leading/trailing whitespace trimmed", func(t *testing.T) {
+		assert.Equal(t, "hello", oneLine("  hello  ", 100))
+	})
+
+	t.Run("long string truncated with ellipsis", func(t *testing.T) {
+		got := oneLine("abcdefghij", 5)
+		assert.Equal(t, "abcde…", got)
+	})
+
+	t.Run("exactly max length not truncated", func(t *testing.T) {
+		assert.Equal(t, "abcde", oneLine("abcde", 5))
+	})
+
+	t.Run("empty stays empty", func(t *testing.T) {
+		assert.Equal(t, "", oneLine("", 100))
+	})
+
+	t.Run("multibyte runes counted by rune not byte", func(t *testing.T) {
+		// 5 runes, each multi-byte; max 5 means no truncation.
+		assert.Equal(t, "héllo", oneLine("héllo", 5))
+	})
+}
+
 func TestParsePactMagicSlots(t *testing.T) {
 	validJSON, err := json.Marshal(character.PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2})
 	require.NoError(t, err)
