@@ -7,3 +7,5 @@ node_modules/
 /playtest-player
 code-review-*.md
 dashboard/svelte/coverage/
+.tunnel/
+.env.bak.preTunnel

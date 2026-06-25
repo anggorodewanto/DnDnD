@@ -98,6 +98,22 @@ history; `game-state.md` is the current snapshot.
 - App **redeployed** (`docker compose up -d --build app`) — 002..006 + `/equip`
   help live; a second redeploy folds in 011/012.
 
-**Next:** Vale takes her first action in the scene; DM responds. Import the 10×10
-waystation map if/when the cellar fight starts.
+**First action — Vale opens the cellar (2026-06-25)**
+
+- Player (as Vale) posted in `#in-character`: *"i cast mage hand to open the cellar
+  door."* In-world roleplay, not a slash command. Ruled the door unlocked/unbarred
+  (the clawing was from the *inside*, trying to get out) → mage hand opens it, no
+  roll. DM narration posted to `#the-story` (player-confirmed): spectral hand lifts
+  the latch, door groans open; inner face gouged + planks bowed **outward**; cold
+  air, wet-stone/sweet-wrong smell, stone steps into full dark, a slow dragging
+  *scrape* below, then silence. Hand hovers at the threshold. Awaiting Vale's next
+  move (descend / cast light / listen / retreat).
+- **Stack hiccup:** both containers were found `Exited (0)` (graceful stop ~3 min
+  before the post — first Narrate click failed "Failed to fetch"). Restarted with
+  `docker compose up -d` (no rebuild; running image preserved). App healthy in 1s:
+  HTTP 307, `discord session opened`, `channel-bindings passed`. Retried the post
+  → landed once (no dup; the failed attempt never reached the server).
+
+**Next:** Vale acts on the open cellar; DM responds. Import the 10×10 waystation map
+if/when the cellar fight starts.
 </content>

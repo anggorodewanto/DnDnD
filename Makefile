@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check local-env local-up local-down local-logs local-reset
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check local-env local-up local-down local-logs local-reset tunnel-up tunnel-down tunnel-status
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
@@ -48,6 +48,18 @@ local-down:
 
 local-logs:
 	docker compose logs -f app
+
+# Expose the local app over a public cloudflared tunnel (for a remote player).
+# tunnel-up points .env at the tunnel + restarts the app; tunnel-down restores it.
+# The trycloudflare URL is ephemeral: re-register the OAuth callback each `up`.
+tunnel-up:
+	@scripts/tunnel.sh up
+
+tunnel-down:
+	@scripts/tunnel.sh down
+
+tunnel-status:
+	@scripts/tunnel.sh status
 
 local-reset: local-env
 	docker compose down -v

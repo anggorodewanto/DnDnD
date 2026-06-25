@@ -4,13 +4,40 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-25 (session 1 — Vale approved; scene about to open)._
+_Last updated: 2026-06-25 (session 1 — scene live; Vale opened the cellar door)._
 
 ## Stack status
 
 - **UP** via `make local-up` (docker compose). App `localhost:8080`, DB
   `localhost:5432`. Bot `DnDnD` (id `1507904367301496862`) connected to guild
   `DnDnD`.
+
+### Remote-player access (cloudflared tunnel) — 2026-06-25
+
+- A second player (the DM's friend) is joining remotely. The local app is exposed
+  via a **cloudflared quick tunnel** so he can reach the web character builder +
+  Discord OAuth from his own location.
+- **Managed by `make tunnel-up` / `make tunnel-down` / `make tunnel-status`**
+  (`scripts/tunnel.sh`). `tunnel-up` auto-installs cloudflared to `bin/`, opens the
+  tunnel, repoints `.env`, restarts the app, and prints the OAuth callback to
+  register. `tunnel-down` stops it and restores `.env`. State lives in `.tunnel/`
+  (gitignored). The current live tunnel was started manually this session and
+  adopted into that state, so the make targets manage it.
+- **Public URL (EPHEMERAL):** `https://pillow-reproduction-centers-feel.trycloudflare.com`
+  — changes every time the tunnel restarts. On change, `make tunnel-up` redoes the
+  `.env` repoint + app restart automatically; you still must re-register the new
+  `…/portal/auth/callback` in the Discord dev portal.
+- `.env` changed: `BASE_URL` + `OAUTH_REDIRECT_URL` now point at the tunnel
+  (backup: `.env.bak.preTunnel`). App restarted; OAuth `redirect_uri` confirmed =
+  `<tunnel>/portal/auth/callback`.
+- **Manual step still owed by the DM:** register
+  `https://pillow-reproduction-centers-feel.trycloudflare.com/portal/auth/callback`
+  in Discord Developer Portal → app (`DISCORD_CLIENT_ID` 1507…) → OAuth2 →
+  Redirects (Discord rejects unlisted redirect URIs → login fails without it).
+- **Teardown after the test:** `make tunnel-down` (stops cloudflared, restores
+  `.env` from `.env.bak.preTunnel`, restarts the app). App is publicly reachable
+  while the tunnel is up (login gated by OAuth; build gated by a minted token;
+  dashboard gated by DM auth).
 
 ## Campaign
 
@@ -88,10 +115,14 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-1. **Claude (DM):** open the scene — tailor "Ashfall Waystation" to Vale (Tiefling
-   Fiend-pact warlock, entertainer). Deliver opening narration to `#the-story`
-   (via the dashboard **Narrate** tool — confirm with the player before the first
-   post).
-2. **Player (Vale):** react to the scene — investigate / talk / search / force the
-   cellar. Force the cellar = the fight is ready (10×10 waystation map to import).
+- **Scene is live.** Opening narration + the cellar-open beat are both posted to
+  `#the-story`. Vale cast **mage hand** and opened the cellar door (unbarred → no
+  roll); it's now standing open onto dark stone steps, a slow dragging *scrape*
+  heard from below.
+1. **Player (Vale):** next move — descend / cast light / listen / retreat / talk.
+   Descending toward the scrape = the fight is ready (import the 10×10 waystation
+   map for the cellar).
+2. **Claude (DM):** respond to Vale's move via the Narrate tool (`#the-story`).
+   If she descends and combat starts: import the map, build the encounter, open
+   combat. Whatever's in the cellar clawed to get *out* — pick/stat the threat.
 </content>
