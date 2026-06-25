@@ -259,8 +259,8 @@ const characterSheetTemplate = `<!DOCTYPE html>
         .spell-entry { border-bottom: 1px solid #0f346033; }
         .spell-summary { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.3rem 0; cursor: pointer; list-style: none; }
         .spell-summary::-webkit-details-marker { display: none; }
-        .spell-summary::before { content: '\25B8'; color: #6a6a80; margin-right: 0.4rem; font-size: 0.75rem; }
-        details[open] > .spell-summary::before { content: '\25BE'; }
+        .spell-summary > span:first-child::before { content: '\25B8'; color: #6a6a80; margin-right: 0.4rem; font-size: 0.75rem; }
+        details[open] > .spell-summary > span:first-child::before { content: '\25BE'; }
         .spell-detail-body { padding: 0.25rem 0 0.65rem 1.15rem; }
         .spell-headline { color: #a0a0b0; font-size: 0.85rem; margin: 0 0 0.4rem; }
         .conc-tag { background: #3a2a4e; color: #c9a9ff; border-radius: 3px; padding: 0 0.35rem; font-size: 0.7rem; margin-left: 0.4rem; }
