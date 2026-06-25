@@ -6,7 +6,7 @@
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks, applyAbilityBonuses } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
-  import { spellcastingAbilityForClass, isSpellcaster, cantripsKnown, leveledSpellCap, levelsUpTo } from './lib/spellcasting.js';
+  import { anyCaster, multiclassCantripCap, multiclassLeveledCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
   import { raceGrantedSkills } from './lib/race-skills.js';
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
@@ -516,16 +516,25 @@
   // The Fighter/Eldritch Knight and Rogue/Arcane Trickster subclasses turn an
   // otherwise non-casting base class into an INT third-caster at class level 3,
   // so the caster gate and every spell budget below must consider the selected
-  // subclass + level, not just the base class.
-  let isCaster = $derived(isSpellcaster(selectedClass, subclass, primaryLevel));
-  let spellAbility = $derived(spellcastingAbilityForClass(selectedClass, subclass, primaryLevel));
+  // subclass + level, not just the base class. In a multiclass build the gate
+  // and budgets aggregate across ALL caster entries — a non-caster primary must
+  // not hide the Spells step when a secondary casts (e.g. Fighter 1 / Wizard 3).
+  let isCaster = $derived(anyCaster(classEntries));
+  // Per-class spell counts use that class's own spellcasting ability, so pass
+  // the modifier for each casting ability and let the helper pick per entry.
+  let spellMods = $derived({
+    int: abilityModifier(finalScores().int),
+    wis: abilityModifier(finalScores().wis),
+    cha: abilityModifier(finalScores().cha),
+  });
   // Cantrips and leveled spells have separate budgets: cantrips known is a flat
   // per-class/level count, while leveled spells use the class's prepared cap
   // (ability mod + level) or Spells Known table. Counting cantrips against the
-  // leveled cap blocked legal builds (Finding 5), so they are tracked apart.
-  let spellMod = $derived(isCaster ? abilityModifier(finalScores()[spellAbility]) : 0);
-  let cantripCap = $derived(isCaster ? cantripsKnown(selectedClass, primaryLevel, subclass) : Infinity);
-  let leveledCap = $derived(isCaster ? leveledSpellCap(selectedClass, primaryLevel, spellMod, subclass) : Infinity);
+  // leveled cap blocked legal builds (Finding 5), so they are tracked apart. In
+  // a multiclass build each is summed over the caster entries (5e computes
+  // known/prepared/cantrip counts per class; only spell slots combine).
+  let cantripCap = $derived(isCaster ? multiclassCantripCap(classEntries) : Infinity);
+  let leveledCap = $derived(isCaster ? multiclassLeveledCap(classEntries, spellMods) : Infinity);
   let spellSelectableLevels = $derived(
     !isCaster ? null : preview ? levelsUpTo(preview.max_spell_level) : previewError ? null : []
   );

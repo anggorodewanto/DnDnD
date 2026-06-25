@@ -15,7 +15,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-004 | 2026-06-24 | builder / AC | major | FIXED | Unarmored Defense never wired: builder never set `ac_formula`, so Barbarian (10+DEX+CON) & Monk (10+DEX+WIS) got **AC = 10+DEX**. Fixed: `unarmoredDefenseFormula` derives `"10 + DEX + CON"`/`"10 + DEX + WIS"` (the form `CalculateAC`/combat `RecalculateAC` parse, not the seed label) for unarmored barb/monk; fed into `DeriveStats` AC + persisted as `ac_formula`. Monk's UD voids shield bonus; armored falls back to armor AC. |
 | ISSUE-005 | 2026-06-24 | builder / proficiency | minor→major | FIXED | Expertise (Rogue/Bard) never wired: combat reads an `"expertise"` proficiency key but the builder never collects it and `character.Proficiencies` has no Expertise field → wrong skill modifiers in play. **Fixed (TDD, `main` 6806bde):** added `Expertise []string` + `JackOfAllTrades` to `character.Proficiencies` (the JSONB `expertise` key `standard_actions.go:567` parses; `SkillModifier` `modifiers.go:25` doubles when a skill is in both expertise+proficient sets); builder collects N expert skills from proficient skills (Rogue L1=2, Bard L3=2) and persists them via `CreateCharacterRecord`; dashboard sheet + a latent levelup round-trip drop also closed. No schema change. Svelte bundle rebuilt. 452 vitest + cover-check green. (Out of scope: thieves'-tools expertise, ddbimport.) |
 | ISSUE-006 | 2026-06-24 | builder / spellcasting | minor | FIXED | Level-1 Paladin/Ranger get a phantom L1 spell slot — `CalculateSpellSlots` half path uses `(level+1)/2` → 1 at L1 (half-casters get nothing until L2). Masked in the builder UI by an independent leveled-cap of 0, but wrong `spell_slots`/`max_spell_level` is stored and consumed elsewhere. **Fixed (TDD, `main` 558b2d4):** half-caster branch early-returns `nil` below level 2 (L1 Paladin/Ranger → no slots, max spell level 0); L2+ unchanged (L2 2×L1, L3 3×L1, L5 4×L1+2×L2). Downstream derive_stats / levelup verified. cover-check green. |
-| ISSUE-007 | 2026-06-24 | builder / spellcasting (frontend) | unknown | OPEN (unconfirmed) | Multiclass spell *budget* in the UI (`cantripsKnown`/`leveledSpellCap`) computed from `classEntries[0]` only → secondary classes ignored, budget can be too low. Server `max_spell_level` is correct. Needs check on whether multiclass is exposed in the player builder. |
+| ISSUE-007 | 2026-06-24 | builder / spellcasting (frontend+server) | major | FIXED | Multiclass **is** exposed (up to 4 class rows) and the spell *count* budget used the **primary class only** — frontend (`classEntries[0]`) and server (`primaryClassEntry`) — so secondary caster levels were ignored (budget too low) and a **non-caster primary hid the Spells step entirely** (e.g. Fighter 1 / Wizard 3). **Fixed (TDD, both sides, `main`):** `anyCaster` / `multiclassCantripCap` / `multiclassLeveledCap` (`spellcasting.js`) + `multiclassSpellBudget` (`spellbudget.go`) sum each class's own budget over **every** caster entry (5e computes known/prepared/cantrip counts per class; only spell *slots* combine); `CharacterBuilder.svelte` gate + caps now aggregate across `classEntries`. `max_spell_level` was already multiclass-correct (`DeriveStats` passes all classes) and was left untouched. 473 vitest + `make cover-check` green (overall 90.67%, portal 89.23%). Bundle rebuilt. |
 | ISSUE-008 | 2026-06-24 | builder / persistence | blocker | FIXED (adapter) | Portal submit 500s — `characters.languages` is `TEXT[] NOT NULL`, builder sends no languages, `pq.Array(nil)` → SQL NULL → constraint violation. Blocked **all** portal builds. Coerced nil→`[]` in `CreateCharacterRecord`. Underlying collection gap tracked as ISSUE-009. |
 | ISSUE-009 | 2026-06-24 | builder / language selection | minor | OPEN | Builder collects **no concrete languages** — `backgrounds.js` carries only a *count* of bonus languages, never the strings. Characters persist with an empty language list instead of race base + background + chosen languages. Cosmetic today (languages unused in combat); fix = add a language-selection step + populate `submission.Languages`. |
 | ISSUE-010 | 2026-06-24 | levelup / persistence | major | OPEN | Level-up persists `spell_slots` as `map[int]int` → `{"1":4}` (`levelup/levelup.go:14`, `service.go:243`), but the cast reader `ParseSpellSlots` (`combat/divine_smite.go:71`) unmarshals into `map[string]SlotInfo` (`{current,max}`). `{"1":4}` fails to unmarshal → `/cast` errors. Surfaced while fixing ISSUE-002. Needs a runtime confirm, but the shape mismatch is clear in code. Fix = level-up should write the `{current,max}` shape (or share the portal converter). |
@@ -205,6 +205,41 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   `db/migrations/20260310120003:30`), let the player pick N background/class bonus
   languages, and populate `submission.Languages`. Persist them through the
   existing `CreateCharacterRecord` path (already wired). TDD + `make cover-check`.
+
+### ISSUE-007 — Multiclass spell count budget used primary class only (FIXED)
+- **Date:** 2026-06-24 (fixed 2026-06-25)
+- **Area:** portal character builder (frontend gate + budget) + server count cap
+- **Severity:** major — confirmed: the builder exposes multiclass (an "add class"
+  button, up to 4 class rows, `CharacterBuilder.svelte:882`).
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** the spell *count* budget was derived from the primary class
+  only on both sides. Frontend: `isCaster` / `cantripCap` / `leveledCap` read
+  `classEntries[0]` (`CharacterBuilder.svelte:520-528`). Server:
+  `spellCountCap` read `primaryClassEntry` (`builder_service.go`). Two symptoms —
+  (a) a multiclass caster (e.g. Wizard 3 / Cleric 1) got a budget too low because
+  the secondary's cantrips/known/prepared were never added; (b) worse, a
+  non-caster *primary* with a caster *secondary* (Fighter 1 / Wizard 3) made
+  `isCaster` false → `builder-steps.js` hid the Spells step entirely.
+- **Not the max spell level:** `DeriveStats` already passes **all** classes to
+  `character.CalculateSpellSlots` (`derive_stats.go:102`), so `max_spell_level` /
+  `spellSelectableLevels` (which spell *levels* are selectable) were already
+  multiclass-correct. Left untouched.
+- **Fix:** sum each class's own budget across **every** caster entry — 5e computes
+  known/prepared/cantrip counts per class (only spell *slots* combine on the
+  shared caster-level table). JS: new `anyCaster`, `multiclassCantripCap`,
+  `multiclassLeveledCap` (`spellcasting.js`); the component's gate + caps now
+  aggregate over `classEntries` and pass a per-ability modifier map so each entry
+  uses its own casting ability. Go: new `multiclassSpellBudget`
+  (`spellbudget.go`) reusing the exact `SlotProgression=="none" && !isThirdCaster`
+  guard; `spellCountCap` delegates to it. Single-class behaviour is the one-term
+  sum, unchanged.
+- **Tests:** JS `spellcasting.test.js` (`anyCaster`, multiclass cantrip/leveled
+  caps incl. non-caster-primary); Go `spellbudget_test.go`
+  (`TestMulticlassSpellBudget`, `TestSpellCountCap_Multiclass`,
+  `TestValidateSpellCount_Multiclass` — a Fighter1/Wizard3 submission at the
+  wizard's budget now passes where the primary-only cap rejected it). 473 vitest +
+  `make cover-check` green (overall 90.67%, portal 89.23%). Svelte bundle rebuilt
+  (`internal/portal/assets/` is git-tracked).
 
 <!-- Append a section per issue:
 

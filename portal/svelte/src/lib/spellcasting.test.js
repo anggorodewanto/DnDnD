@@ -7,6 +7,9 @@ import {
   cantripsKnown,
   spellsKnown,
   leveledSpellCap,
+  anyCaster,
+  multiclassCantripCap,
+  multiclassLeveledCap,
 } from './spellcasting.js';
 
 describe('spellcastingAbilityForClass', () => {
@@ -125,6 +128,84 @@ describe('leveledSpellCap', () => {
   });
   it('returns 0 for non-casters', () => {
     expect(leveledSpellCap('fighter', 5, 5)).toBe(0);
+  });
+});
+
+describe('multiclass spell budget', () => {
+  describe('anyCaster', () => {
+    it('is true when any entry is a spellcaster', () => {
+      expect(anyCaster([{ class: 'fighter', level: 1 }, { class: 'wizard', level: 3 }])).toBe(true);
+      expect(anyCaster([{ class: 'wizard', level: 1 }])).toBe(true);
+    });
+    it('counts an EK/AT secondary at level >= 3', () => {
+      expect(anyCaster([
+        { class: 'rogue', level: 5 },
+        { class: 'fighter', level: 3, subclass: 'eldritch-knight' },
+      ])).toBe(true);
+    });
+    it('is false when no entry casts', () => {
+      expect(anyCaster([{ class: 'fighter', level: 5 }, { class: 'barbarian', level: 3 }])).toBe(false);
+      expect(anyCaster([{ class: 'fighter', level: 2, subclass: 'eldritch-knight' }])).toBe(false);
+    });
+    it('handles empty / undefined input', () => {
+      expect(anyCaster([])).toBe(false);
+      expect(anyCaster(undefined)).toBe(false);
+    });
+  });
+
+  describe('multiclassCantripCap', () => {
+    it('sums cantrips known across caster entries', () => {
+      // wizard L3: 3 cantrips, cleric L1: 3 cantrips -> 6
+      expect(multiclassCantripCap([
+        { class: 'wizard', level: 3 },
+        { class: 'cleric', level: 1 },
+      ])).toBe(6);
+    });
+    it('ignores non-caster entries', () => {
+      // fighter contributes 0; wizard L3 -> 3
+      expect(multiclassCantripCap([
+        { class: 'fighter', level: 1 },
+        { class: 'wizard', level: 3 },
+      ])).toBe(3);
+    });
+    it('is 0 when no entry casts', () => {
+      expect(multiclassCantripCap([{ class: 'fighter', level: 1 }])).toBe(0);
+      expect(multiclassCantripCap([])).toBe(0);
+      expect(multiclassCantripCap(undefined)).toBe(0);
+    });
+  });
+
+  describe('multiclassLeveledCap', () => {
+    it('sums each caster entry using its own ability modifier', () => {
+      // wizard L1 prepares int(3)+1 = 4; cleric L1 prepares wis(2)+1 = 3 -> 7
+      expect(multiclassLeveledCap(
+        [{ class: 'wizard', level: 1 }, { class: 'cleric', level: 1 }],
+        { int: 3, wis: 2, cha: 0 },
+      )).toBe(7);
+    });
+    it('uses the Spells Known table for known casters (ability mod ignored)', () => {
+      // bard L1 known = 4; sorcerer L1 known = 2 -> 6, regardless of mods
+      expect(multiclassLeveledCap(
+        [{ class: 'bard', level: 1 }, { class: 'sorcerer', level: 1 }],
+        { cha: 5 },
+      )).toBe(6);
+    });
+    it('skips non-caster entries (non-caster primary)', () => {
+      // fighter1/wizard3: fighter 0 + wizard L3 prepares int(3)+3 = 6 -> 6
+      expect(multiclassLeveledCap(
+        [{ class: 'fighter', level: 1 }, { class: 'wizard', level: 3 }],
+        { int: 3 },
+      )).toBe(6);
+    });
+    it('defaults a missing ability modifier to 0', () => {
+      // wizard L1 prepares max(1, 0+1) = 1 when int is absent from mods
+      expect(multiclassLeveledCap([{ class: 'wizard', level: 1 }], {})).toBe(1);
+    });
+    it('is 0 when no entry casts', () => {
+      expect(multiclassLeveledCap([{ class: 'fighter', level: 5 }], { int: 3 })).toBe(0);
+      expect(multiclassLeveledCap([], {})).toBe(0);
+      expect(multiclassLeveledCap(undefined, {})).toBe(0);
+    });
   });
 });
 

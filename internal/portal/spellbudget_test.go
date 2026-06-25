@@ -154,6 +154,115 @@ func TestSpellBudget_ThirdCasterSubclasses(t *testing.T) {
 	}
 }
 
+func TestMulticlassSpellBudget(t *testing.T) {
+	scores := character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 14, CHA: 12}
+	wizardBudget := spellBudget("wizard", 1, character.AbilityModifier(scores.INT), "")  // 3 cantrips + (3+1) prepared = 7
+	clericBudget := spellBudget("cleric", 1, character.AbilityModifier(scores.WIS), "")  // 3 cantrips + (2+1) prepared = 6
+	wizard3Budget := spellBudget("wizard", 3, character.AbilityModifier(scores.INT), "") // 3 cantrips + (3+3) prepared = 9
+
+	cases := []struct {
+		name    string
+		classes []character.ClassEntry
+		wantCap int
+		wantOK  bool
+	}{
+		{
+			name:    "single-class wizard matches spellBudget",
+			classes: []character.ClassEntry{{Class: "wizard", Level: 1}},
+			wantCap: wizardBudget,
+			wantOK:  true,
+		},
+		{
+			name:    "wizard1 + cleric1 sums both budgets",
+			classes: []character.ClassEntry{{Class: "wizard", Level: 1, IsPrimary: true}, {Class: "cleric", Level: 1}},
+			wantCap: wizardBudget + clericBudget,
+			wantOK:  true,
+		},
+		{
+			name:    "non-caster primary + caster secondary uses the caster budget",
+			classes: []character.ClassEntry{{Class: "fighter", Level: 1, IsPrimary: true}, {Class: "wizard", Level: 3}},
+			wantCap: wizard3Budget,
+			wantOK:  true,
+		},
+		{
+			name:    "two non-casters yield no cap",
+			classes: []character.ClassEntry{{Class: "fighter", Level: 1, IsPrimary: true}, {Class: "barbarian", Level: 1}},
+			wantCap: 0,
+			wantOK:  false,
+		},
+		{
+			name:    "empty class list yields no cap",
+			classes: nil,
+			wantCap: 0,
+			wantOK:  false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotCap, gotOK := multiclassSpellBudget(c.classes, scores)
+			if gotCap != c.wantCap || gotOK != c.wantOK {
+				t.Errorf("multiclassSpellBudget = (%d, %v), want (%d, %v)", gotCap, gotOK, c.wantCap, c.wantOK)
+			}
+		})
+	}
+}
+
+// TestValidateSpellCount_Multiclass proves the bug fix: a Fighter1/Wizard3 build
+// (non-caster primary) must surface the wizard's full budget. A submission whose
+// spell count lands between the old primary-only cap (0, fighter) and the new
+// summed cap now passes instead of being rejected.
+func TestValidateSpellCount_Multiclass(t *testing.T) {
+	scores := PointBuyScores{STR: 14, DEX: 12, CON: 14, INT: 16, WIS: 10, CHA: 10}
+	wizard3Budget := spellBudget("wizard", 3, character.AbilityModifier(scores.Character().INT), "") // 9
+	spells := make([]string, wizard3Budget)
+	for i := range spells {
+		spells[i] = "s"
+	}
+	sub := CharacterSubmission{
+		Name:          "Gish",
+		Race:          "human",
+		Classes:       []character.ClassEntry{{Class: "fighter", Level: 1, IsPrimary: true}, {Class: "wizard", Level: 3}},
+		AbilityScores: scores,
+		Spells:        spells,
+	}
+	if errs := validateSpellCount(sub); len(errs) != 0 {
+		t.Errorf("validateSpellCount(fighter1/wizard3, %d spells) = %v, want no errors", wizard3Budget, errs)
+	}
+	// One over the summed budget must still be rejected.
+	sub.Spells = append(sub.Spells, "extra")
+	if errs := validateSpellCount(sub); len(errs) == 0 {
+		t.Errorf("validateSpellCount(fighter1/wizard3, %d spells) = no errors, want a too-many-spells error", len(sub.Spells))
+	}
+}
+
+// TestSpellCountCap_Multiclass checks the summed cap through the submission entry
+// point (wizard1 + cleric1) and that two non-casters report no cap.
+func TestSpellCountCap_Multiclass(t *testing.T) {
+	scores := PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 14, CHA: 12}
+	wizardBudget := spellBudget("wizard", 1, character.AbilityModifier(scores.Character().INT), "")
+	clericBudget := spellBudget("cleric", 1, character.AbilityModifier(scores.Character().WIS), "")
+
+	caster := CharacterSubmission{
+		Name:          "Cleric-Wizard",
+		Race:          "human",
+		Classes:       []character.ClassEntry{{Class: "wizard", Level: 1, IsPrimary: true}, {Class: "cleric", Level: 1}},
+		AbilityScores: scores,
+	}
+	if cap, ok := spellCountCap(caster); !ok || cap != wizardBudget+clericBudget {
+		t.Errorf("spellCountCap(wizard1/cleric1) = (%d, %v), want (%d, true)", cap, ok, wizardBudget+clericBudget)
+	}
+
+	nonCasters := CharacterSubmission{
+		Name:          "Brute",
+		Race:          "human",
+		Classes:       []character.ClassEntry{{Class: "fighter", Level: 1, IsPrimary: true}, {Class: "barbarian", Level: 1}},
+		AbilityScores: scores,
+	}
+	if cap, ok := spellCountCap(nonCasters); ok || cap != 0 {
+		t.Errorf("spellCountCap(fighter1/barbarian1) = (%d, %v), want (0, false)", cap, ok)
+	}
+}
+
 // TestValidateSpellCount_EldritchKnight verifies the end-to-end validation path:
 // an EK L3 with 2 cantrips + 3 spells (= 5, the budget) passes, but 6 is rejected.
 func TestValidateSpellCount_EldritchKnight(t *testing.T) {

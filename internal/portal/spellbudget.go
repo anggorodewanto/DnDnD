@@ -145,6 +145,30 @@ func spellBudget(class string, level, abilityMod int, subclass string) int {
 	return cantripsKnown(class, level, subclass) + leveledSpellCap(class, level, abilityMod, subclass)
 }
 
+// multiclassSpellBudget returns the combined spell-count ceiling for a
+// multiclass build: the sum of spellBudget over every caster class entry, each
+// computed with that class's own level, subclass, and spellcasting-ability
+// modifier. In 5e, known/prepared/cantrip counts are per-class (only spell
+// *slots* use the combined caster level), so the budgets add independently. The
+// second return value is false when no entry is a spellcaster (no classes, or
+// none cast) — single-class behaviour is the one-term sum, unchanged.
+func multiclassSpellBudget(classes []character.ClassEntry, scores character.AbilityScores) (int, bool) {
+	total := 0
+	anyCaster := false
+	for _, c := range classes {
+		sc := classSpellcasting(c.Class)
+		if sc.SlotProgression == "none" && !isThirdCaster(c.Subclass, c.Level) {
+			continue
+		}
+		anyCaster = true
+		total += spellBudget(c.Class, c.Level, abilityModForCaster(c.Class, c.Subclass, scores), c.Subclass)
+	}
+	if !anyCaster {
+		return 0, false
+	}
+	return total, true
+}
+
 // abilityModForCaster resolves a submission's spellcasting-ability modifier for
 // the given primary class, mirroring the lookup used by spellCountCap. A
 // non-casting base class carrying the EK/AT subclass casts with INT.

@@ -215,3 +215,58 @@ export function leveledSpellCap(className, level, abilityMod, subclass) {
       return THIRD_CASTER_SPELLS_KNOWN[Math.min(20, lvl) - 1];
   }
 }
+
+/**
+ * A multiclass entry: a class slug, its level in that class, and the optional
+ * chosen subclass. Mirrors character.ClassEntry on the Go side.
+ * @typedef {{class: string, level: number, subclass?: string}} ClassEntry
+ */
+
+/**
+ * Whether any class entry is a spellcaster. In a multiclass build the Spells
+ * step (and every spell budget) must open when ANY entry casts — even when the
+ * primary class is a non-caster but a secondary is (e.g. Fighter 1 / Wizard 3),
+ * or when an EK/AT subclass turns a martial entry into a caster at level >= 3.
+ * @param {ClassEntry[]} [classEntries]
+ * @returns {boolean}
+ */
+export function anyCaster(classEntries) {
+  if (!Array.isArray(classEntries)) return false;
+  return classEntries.some((c) => isSpellcaster(c.class, c.subclass, c.level));
+}
+
+/**
+ * Combined cantrips-known cap across a multiclass build: the sum of
+ * cantripsKnown over the caster entries, each using that class's own level and
+ * subclass. Non-caster entries contribute 0. In 5e, cantrip counts are per-class
+ * (only spell *slots* combine), so the budgets add independently.
+ * @param {ClassEntry[]} [classEntries]
+ * @returns {number}
+ */
+export function multiclassCantripCap(classEntries) {
+  if (!Array.isArray(classEntries)) return 0;
+  return classEntries.reduce((total, c) => {
+    if (!isSpellcaster(c.class, c.subclass, c.level)) return total;
+    return total + cantripsKnown(c.class, c.level, c.subclass);
+  }, 0);
+}
+
+/**
+ * Combined leveled-spell cap across a multiclass build: the sum of
+ * leveledSpellCap over the caster entries, each using its own level, subclass,
+ * and spellcasting-ability modifier. The ability is resolved per class via
+ * spellcastingAbilityForClass ('int'|'wis'|'cha') and looked up in `mods`
+ * (default 0 when missing). Non-caster entries contribute 0.
+ * @param {ClassEntry[]} [classEntries]
+ * @param {Record<string,number>} mods ability-slug -> modifier (e.g. {int:2, wis:0, cha:3})
+ * @returns {number}
+ */
+export function multiclassLeveledCap(classEntries, mods) {
+  if (!Array.isArray(classEntries)) return 0;
+  return classEntries.reduce((total, c) => {
+    const ability = spellcastingAbilityForClass(c.class, c.subclass, c.level);
+    if (ability === null) return total;
+    const mod = Number(mods?.[ability]) || 0;
+    return total + leveledSpellCap(c.class, c.level, mod, c.subclass);
+  }, 0);
+}

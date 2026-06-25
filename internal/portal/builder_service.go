@@ -113,28 +113,20 @@ func validateSpellCount(s CharacterSubmission) []string {
 	return []string{fmt.Sprintf("too many spells selected: %d chosen, maximum %d", len(s.Spells), maxSpells)}
 }
 
-// spellCountCap returns the maximum number of spells the submission's primary
-// class may have. The second return value is false when no cap applies: either
-// there is no primary class or the primary class is not a spellcaster.
+// spellCountCap returns the maximum number of spells the submission may have,
+// summed across every caster class in a multiclass build. The second return
+// value is false when no cap applies: there are no classes, or none of them
+// casts.
 //
-// The cap is the class's full spell budget — cantrips known plus the leveled
-// allowance (prepared = ability modifier + level, or the class's Spells Known
-// table) — so cantrips are no longer counted against the leveled cap. See
-// spellBudget for the precision trade-off this combined ceiling makes.
+// The cap is each caster class's full spell budget — cantrips known plus the
+// leveled allowance (prepared = ability modifier + level, or the class's Spells
+// Known table) — so cantrips are no longer counted against the leveled cap. In
+// 5e, those per-bucket counts are computed per class (only spell *slots* use the
+// combined caster level), so a Wizard 3 / Cleric 1 budget is the wizard's plus
+// the cleric's, and a non-caster primary never zeroes out a caster secondary.
+// See spellBudget for the precision trade-off this combined ceiling makes.
 func spellCountCap(s CharacterSubmission) (int, bool) {
-	primary := primaryClassEntry(SubmissionClasses(s))
-	if primary == nil {
-		return 0, false
-	}
-	// A non-casting base class still casts if it carries the EK/AT third-caster
-	// subclass at level >= 3, so don't bail on SlotProgression "none" until the
-	// subclass has been ruled out.
-	sc := classSpellcasting(primary.Class)
-	if sc.SlotProgression == "none" && !isThirdCaster(primary.Subclass, primary.Level) {
-		return 0, false
-	}
-	abilityMod := abilityModForCaster(primary.Class, primary.Subclass, s.AbilityScores.Character())
-	return spellBudget(primary.Class, primary.Level, abilityMod, primary.Subclass), true
+	return multiclassSpellBudget(SubmissionClasses(s), s.AbilityScores.Character())
 }
 
 // hasNonEmptyClass reports whether any multiclass entry names a class.
