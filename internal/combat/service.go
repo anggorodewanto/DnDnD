@@ -254,13 +254,16 @@ type CardUpdater interface {
 	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
 }
 
-// TurnStartNotifier is the minimal callback combat.Service fires when a
-// new active turn is established by StartCombat (med-20 / Phase 26a).
-// Without it, the very first PC's turn would not get a #your-turn ping
-// until they complete it via /done. Production wiring in cmd/dndnd
-// posts FormatTurnStartPrompt to the combatant's #your-turn channel.
+// TurnStartNotifier is the minimal callback combat.Service fires from
+// createActiveTurn whenever a turn becomes active — the first turn of combat
+// AND every later advance, whether driven by a player's /done or a DM
+// dashboard "advance turn". Firing it from the single turn-creation chokepoint
+// (rather than the /done handler alone) is what guarantees the #your-turn ping
+// fires on the dashboard path too. impactSummary is the "since your last turn"
+// line; it is empty on the first turn / when nothing happened. Production
+// wiring in cmd/dndnd posts FormatTurnStartPromptWithImpact to #your-turn.
 type TurnStartNotifier interface {
-	NotifyFirstTurn(ctx context.Context, encounterID uuid.UUID, turnInfo TurnInfo)
+	NotifyTurnStart(ctx context.Context, encounterID uuid.UUID, turnInfo TurnInfo, impactSummary string)
 }
 
 // InitiativeTrackerNotifier is the minimal callback combat.Service fires
@@ -1140,13 +1143,10 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		return StartCombatResult{}, fmt.Errorf("re-fetching encounter: %w", err)
 	}
 
-	// med-20 / Phase 26a: ping the first combatant so they don't sit in
-	// silence until someone runs /done. Best-effort: a nil notifier or a
-	// notifier-side error must never roll back the encounter creation
-	// (the encounter is already persisted at this point).
-	if s.turnStartNotifier != nil {
-		s.turnStartNotifier.NotifyFirstTurn(ctx, enc.ID, turnInfo)
-	}
+	// med-20 / Phase 26a: the first-combatant #your-turn ping is fired from
+	// createActiveTurn (reached via the AdvanceTurn above), the single
+	// turn-start chokepoint, so the player is pinged on every advance path —
+	// not only here. No explicit NotifyTurnStart call is needed at this site.
 
 	tracker := FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID)
 

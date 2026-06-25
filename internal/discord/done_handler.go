@@ -486,56 +486,15 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		nextCombatant, turnInfo.ZoneTriggerResults,
 	)
 
-	// Post turn-start notification to #your-turn
-	yourTurnCh, ok := channelIDs["your-turn"]
-	if !ok || yourTurnCh == "" {
-		return
-	}
-
-	var impactSummary string
-	if h.impactSummaryProvider != nil {
-		impactSummary = h.impactSummaryProvider.GetImpactSummary(ctx, encounterID, nextCombatant.ID)
-	}
-
-	// Resolve the next combatant's Discord user ID so the ping is a real
-	// <@id> mention that actually notifies the player (NPCs keep plain name).
-	mention := h.resolveTurnMention(ctx, encounter.CampaignID, nextCombatant)
-
-	content := combat.FormatTurnStartPromptWithImpact(
-		encounterName,
-		turnInfo.RoundNumber,
-		nextCombatant.DisplayName,
-		turnInfo.Turn,
-		&nextCombatant,
-		impactSummary,
-		mention,
-	)
-	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
+	// The active-combatant #your-turn ping is no longer posted here: it is
+	// fired from combat.Service.createActiveTurn (the single turn-start
+	// chokepoint) so it also reaches turns advanced from the DM dashboard, not
+	// just /done. This handler keeps the auto-skip, zone-trigger, and
+	// combat-map posts below.
 
 	// Regenerate and post combat map with the Phase 105 encounter label so
 	// simultaneous encounters sharing #combat-map are distinguishable.
 	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label, h.mapRenderFailNotifier)
-}
-
-// resolveTurnMention returns the next combatant's Discord user ID so the
-// turn-start ping can fire a real <@id> notification. It returns "" for NPCs,
-// unlinked characters, an unresolvable lookup, or when no player lookup is
-// wired — callers then fall back to the plain-name ping.
-func (h *DoneHandler) resolveTurnMention(ctx context.Context, campaignID uuid.UUID, c refdata.Combatant) string {
-	if h.playerLookup == nil {
-		return ""
-	}
-	if c.IsNpc || !c.CharacterID.Valid {
-		return ""
-	}
-	pc, err := h.playerLookup.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
-		CampaignID:  campaignID,
-		CharacterID: c.CharacterID.UUID,
-	})
-	if err != nil {
-		return ""
-	}
-	return pc.DiscordUserID
 }
 
 // PostCombatMap regenerates the combat map and posts it to #combat-map.

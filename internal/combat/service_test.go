@@ -2798,11 +2798,13 @@ func TestEndCombat_PausesCombatTimers(t *testing.T) {
 // --- med-20 / Phase 26a: StartCombat fires first-turn ping ---
 
 type stubTurnStartNotifier struct {
-	calls []TurnInfo
+	calls   []TurnInfo
+	impacts []string
 }
 
-func (s *stubTurnStartNotifier) NotifyFirstTurn(_ context.Context, _ uuid.UUID, ti TurnInfo) {
+func (s *stubTurnStartNotifier) NotifyTurnStart(_ context.Context, _ uuid.UUID, ti TurnInfo, impact string) {
 	s.calls = append(s.calls, ti)
+	s.impacts = append(s.impacts, impact)
 }
 
 // TestService_StartCombat_FiresFirstTurnPing reuses the StartCombat_Success

@@ -1315,28 +1315,39 @@ func (n *initiativeTrackerNotifier) PostCompletedTracker(ctx context.Context, en
 	_ = n.store.DeleteInitiativeTrackerMessage(ctx, encounterID)
 }
 
-// firstTurnPingNotifier satisfies combat.TurnStartNotifier by posting the
-// FormatTurnStartPrompt line to the active combatant's #your-turn channel
-// when StartCombat creates the first turn (med-20 / Phase 26a). Without
-// it, the very first PC waits in silence until someone runs /done.
+// turnStartPingStore is the slice of *refdata.Queries the turn-start notifier
+// needs. Narrowing it to an interface keeps the notifier unit-testable without
+// a live database.
+type turnStartPingStore interface {
+	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+}
+
+// turnStartPingNotifier satisfies combat.TurnStartNotifier by posting the
+// turn-start prompt to the active combatant's #your-turn channel. combat.Service
+// fires it from createActiveTurn for EVERY turn — the first turn of combat, a
+// player's /done, and a DM dashboard advance — so the next player is pinged no
+// matter how the turn was advanced (med-20 / Phase 26a + the dashboard-advance
+// fix). The "since your last turn" impact summary is computed by the service
+// and passed in, so this stays a thin poster.
 //
 // Best-effort: any missing dependency or Discord-side error is silently
-// swallowed so the notifier can never roll back the encounter creation
-// path. (StartCombat persists the encounter before it fires this hook.)
-type firstTurnPingNotifier struct {
+// swallowed so the notifier can never roll back the persisted turn advance.
+type turnStartPingNotifier struct {
 	session discord.Session
 	csp     discord.CampaignSettingsProvider
-	queries *refdata.Queries
+	store   turnStartPingStore
 }
 
-func newFirstTurnPingNotifier(session discord.Session, csp discord.CampaignSettingsProvider, queries *refdata.Queries) *firstTurnPingNotifier {
-	if session == nil || csp == nil || queries == nil {
+func newTurnStartPingNotifier(session discord.Session, csp discord.CampaignSettingsProvider, store turnStartPingStore) *turnStartPingNotifier {
+	if session == nil || csp == nil || store == nil {
 		return nil
 	}
-	return &firstTurnPingNotifier{session: session, csp: csp, queries: queries}
+	return &turnStartPingNotifier{session: session, csp: csp, store: store}
 }
 
-func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID uuid.UUID, ti combat.TurnInfo) {
+func (n *turnStartPingNotifier) NotifyTurnStart(ctx context.Context, encounterID uuid.UUID, ti combat.TurnInfo, impactSummary string) {
 	channelIDs, err := n.csp.GetChannelIDs(ctx, encounterID)
 	if err != nil {
 		return
@@ -1345,28 +1356,28 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 	if !ok || yourTurnCh == "" {
 		return
 	}
-	combatant, err := n.queries.GetCombatant(ctx, ti.CombatantID)
+	combatant, err := n.store.GetCombatant(ctx, ti.CombatantID)
 	if err != nil {
 		return
 	}
-	enc, err := n.queries.GetEncounter(ctx, encounterID)
+	enc, err := n.store.GetEncounter(ctx, encounterID)
 	if err != nil {
 		return
 	}
-	// Real <@id> mention so the first PC in initiative is actually notified
-	// when combat starts (NPCs / unlinked characters keep the plain name).
+	// Real <@id> mention so the active PC is actually notified (NPCs /
+	// unlinked characters keep the plain name).
 	mention := n.resolveMention(ctx, enc.CampaignID, combatant)
-	content := combat.FormatTurnStartPrompt(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant, mention)
+	content := combat.FormatTurnStartPromptWithImpact(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant, impactSummary, mention)
 	_, _ = n.session.ChannelMessageSend(yourTurnCh, content)
 }
 
 // resolveMention returns the combatant's Discord user ID for a real <@id> turn
 // ping, or "" for NPCs, unlinked characters, or lookup failures.
-func (n *firstTurnPingNotifier) resolveMention(ctx context.Context, campaignID uuid.UUID, c refdata.Combatant) string {
+func (n *turnStartPingNotifier) resolveMention(ctx context.Context, campaignID uuid.UUID, c refdata.Combatant) string {
 	if c.IsNpc || !c.CharacterID.Valid {
 		return ""
 	}
-	pc, err := n.queries.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+	pc, err := n.store.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
 		CampaignID:  campaignID,
 		CharacterID: c.CharacterID.UUID,
 	})

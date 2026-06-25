@@ -732,6 +732,7 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 
 	s.postEnemyTurnReady(ctx, encounterID, combatant)
 	s.refreshInitiativeTracker(ctx, encounterID, combatant.ID)
+	s.notifyTurnStart(ctx, encounterID, combatant, turn, roundNumber)
 
 	return TurnInfo{
 		Turn:               turn,
@@ -824,6 +825,26 @@ func (s *Service) refreshInitiativeTracker(ctx context.Context, encounterID, cur
 		return
 	}
 	s.initiativeTrackerNotifier.UpdateTracker(ctx, encounterID, FormatInitiativeTracker(enc, combatants, currentCombatantID))
+}
+
+// notifyTurnStart fires the wired TurnStartNotifier so the active combatant's
+// #your-turn ping is posted on EVERY advance path — the first turn of combat, a
+// player's /done, and a DM dashboard "advance turn" — not just the /done
+// handler (which used to be the only producer for non-first turns, leaving
+// dashboard-advanced turns silent). The "since your last turn" impact summary
+// is computed here so the Discord adapter stays a thin poster. Best-effort: a
+// nil notifier no-ops, and a notifier-side error must never undo the
+// successfully-persisted turn advance.
+func (s *Service) notifyTurnStart(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant, turn refdata.Turn, roundNumber int32) {
+	if s.turnStartNotifier == nil {
+		return
+	}
+	impact := s.GetImpactSummary(ctx, encounterID, combatant.ID)
+	s.turnStartNotifier.NotifyTurnStart(ctx, encounterID, TurnInfo{
+		Turn:        turn,
+		CombatantID: combatant.ID,
+		RoundNumber: roundNumber,
+	}, impact)
 }
 
 // postEnemyTurnReady dispatches a KindEnemyTurnReady notification through

@@ -1658,12 +1658,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// /done, the rollHistoryLogger, and the discord slash-command
 			// handlers all read channel ids from a single source.
 
-			// med-20 / Phase 26a: post the first-combatant ping when
-			// StartCombat creates the first turn so players don't sit in
-			// silence until someone runs /done. Best-effort: a nil notifier
-			// is tolerated and the StartCombat flow degrades silently.
-			if firstTurnNotifier := newFirstTurnPingNotifier(discordSession, campaignSettingsProvider, queries); firstTurnNotifier != nil {
-				combatSvc.SetTurnStartNotifier(firstTurnNotifier)
+			// med-20 / Phase 26a (+ dashboard-advance fix): post the
+			// active-combatant #your-turn ping. combat.Service fires this from
+			// createActiveTurn for every turn — combat start, /done, AND a DM
+			// dashboard advance — so the next player is always pinged, not only
+			// on the /done path. Best-effort: a nil notifier is tolerated and
+			// the advance flow degrades silently.
+			if turnStartNotifier := newTurnStartPingNotifier(discordSession, campaignSettingsProvider, queries); turnStartNotifier != nil {
+				combatSvc.SetTurnStartNotifier(turnStartNotifier)
 			}
 
 			// med-18 / Phase 25: post + auto-update the persistent
