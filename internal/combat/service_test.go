@@ -2811,6 +2811,128 @@ func TestService_StartCombat_NilTurnStartNotifier_NoOp(t *testing.T) {
 	_ = err
 }
 
+// --- E-combatmap-on-start: opening battle-map posted at StartCombat ---
+
+type stubCombatMapNotifier struct {
+	calls []uuid.UUID
+}
+
+func (s *stubCombatMapNotifier) PostCombatMap(_ context.Context, encounterID uuid.UUID) {
+	s.calls = append(s.calls, encounterID)
+}
+
+// TestService_StartCombat_PostsCombatMap asserts the opening-board notifier
+// fires exactly once with the started encounter's ID once the first turn is
+// established (so players see the map before turn 1).
+func TestService_StartCombat_PostsCombatMap(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(_ context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: campaignID,
+			MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:  "Goblin Ambush",
+			Creatures: json.RawMessage(`[
+				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}
+			]`),
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, _ string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID: "goblin", Name: "Goblin", Ac: 15, HpAverage: 7,
+			Speed:         json.RawMessage(`{"walk":30}`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`),
+		}, nil
+	}
+	createdIDs := []uuid.UUID{}
+	store.createEncounterFn = func(_ context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: campaignID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, Name: arg.Name, Status: arg.Status, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createCombatantFn = func(_ context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdIDs = append(createdIDs, cID)
+		return refdata.Combatant{
+			ID: cID, EncounterID: arg.EncounterID, CharacterID: arg.CharacterID,
+			ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax,
+			HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, IsVisible: true,
+			PositionCol: arg.PositionCol, PositionRow: arg.PositionRow,
+			Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateEncounterRoundFn = func(_ context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Name: "Goblin Ambush", Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, Name: "Goblin Ambush", RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	turnID := uuid.New()
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(_ context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1, Name: "Goblin Ambush"}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	svc := NewService(store)
+	notifier := &stubCombatMapNotifier{}
+	svc.SetCombatMapNotifier(notifier)
+
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{
+			charID: {Col: "D", Row: 5},
+		},
+	}, roller)
+	require.NoError(t, err)
+	require.Len(t, notifier.calls, 1, "opening combat-map post must fire exactly once")
+	assert.Equal(t, encounterID, notifier.calls[0])
+}
+
+func TestService_StartCombat_NilCombatMapNotifier_NoOp(t *testing.T) {
+	// A nil combat-map notifier must not cause StartCombat to fail or panic.
+	templateID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(_ context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{ID: id, Creatures: json.RawMessage(`[]`)}, nil
+	}
+	svc := NewService(store)
+	svc.SetCombatMapNotifier(nil)
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{TemplateID: templateID}, roller)
+	// May error on later steps (no PCs / combatants) but must not panic on the
+	// nil notifier — that's the contract this guards.
+	_ = err
+}
+
 // --- med-18 / Phase 25: initiative tracker auto-post + auto-update ---
 
 type stubInitiativeTrackerNotifier struct {

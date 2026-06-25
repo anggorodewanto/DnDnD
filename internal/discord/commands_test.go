@@ -243,7 +243,7 @@ func TestRegisterCommands_BulkOverwrites(t *testing.T) {
 func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 	expected := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
-		"interact", "done", "deathsave", "command", "reaction", "check",
+		"interact", "done", "map", "deathsave", "command", "reaction", "check",
 		"save", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
 		"register", "import", "create-character", "character", "recap",

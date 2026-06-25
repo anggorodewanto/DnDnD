@@ -283,6 +283,10 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 			Description: "End your turn",
 		},
 		{
+			Name:        "map",
+			Description: "Post the current battle-map to #combat-map",
+		},
+		{
 			Name:        "deathsave",
 			Description: "Roll a death saving throw",
 		},

@@ -1783,13 +1783,27 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// combat.Handler.ExecuteEnemyTurn posts the "⚔️ <display_name>
 			// — Round N" label instead of silently no-oping in production.
 			wireEnemyTurnNotifier(combatHandler, discordHandlerSet.enemyTurnNotifier)
+			// E-combatmap-on-start + /map: post the opening battle-map to
+			// #combat-map at StartCombat (so players see the board before turn
+			// 1, not just after the first /done) and back the on-demand /map
+			// re-post. One notifier serves both; combatSvc supplies the
+			// encounter lookup used for the "⚔️ <name> — Round N" label.
+			combatMapNotifier := discord.NewDiscordCombatMapNotifier(discordSession, campaignSettingsProvider, mapRegen, combatSvc)
+			combatSvc.SetCombatMapNotifier(combatMapNotifier)
+			mapHandler := discord.NewMapHandler(discordSession, newDiscordUserEncounterResolver(queries), combatMapNotifier)
+			// Render + upload off the interaction-response path so /map ACKs
+			// within Discord's 3-second window (the PNG render can exceed it).
+			mapHandler.SetNotifyDispatcher(func(f func()) { go f() })
+			cmdRouter.SetMapHandler(mapHandler)
 			// T09 / Finding 6f: surface combat-map render failures to the DM
 			// via #dm-queue instead of swallowing them, so players acting off
-			// a now-stale map are not silently stranded. Wired onto both
-			// map-posting paths (/done and the dashboard enemy-turn notifier).
+			// a now-stale map are not silently stranded. Wired onto every
+			// map-posting path (/done, the dashboard enemy-turn notifier, and
+			// the start-of-combat / /map combat-map notifier).
 			if mapFailNotifier := newCombatMapRenderFailureNotifierAdapter(dmQueueNotifier, queries.GetCampaignByEncounterID); mapFailNotifier != nil {
 				discordHandlerSet.done.SetMapRenderFailureNotifier(mapFailNotifier)
 				discordHandlerSet.enemyTurnNotifier.SetMapRenderFailureNotifier(mapFailNotifier)
+				combatMapNotifier.SetMapRenderFailureNotifier(mapFailNotifier)
 			}
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.

@@ -276,6 +276,17 @@ type InitiativeTrackerNotifier interface {
 	PostCompletedTracker(ctx context.Context, encounterID uuid.UUID, content string)
 }
 
+// CombatMapNotifier is the minimal callback combat.Service fires after
+// StartCombat establishes the first turn, to post the opening battle-map to
+// #combat-map so players see the board *before* turn 1. Previously the map
+// first appeared only after the first /done turn-end (or a DM-executed enemy
+// turn), leaving turn-1 players acting blind. A nil notifier disables the
+// fan-out (headless / dashboard-only deploys keep working); a notifier-side
+// error must never roll back the already-persisted encounter.
+type CombatMapNotifier interface {
+	PostCombatMap(ctx context.Context, encounterID uuid.UUID)
+}
+
 // CombatLogNotifier is the minimal callback combat.Service fires to mirror
 // lifecycle announcements ("Combat ended: …", recovered-ammo summaries) to
 // the encounter's #combat-log channel (B-26b). A nil notifier disables the
@@ -318,6 +329,7 @@ type Service struct {
 	cardUpdater               CardUpdater
 	turnStartNotifier         TurnStartNotifier
 	initiativeTrackerNotifier InitiativeTrackerNotifier
+	combatMapNotifier         CombatMapNotifier
 	combatLogNotifier         CombatLogNotifier
 	lootPoolCreator           LootPoolCreator
 	hostilesDefeatedNotifier  HostilesDefeatedNotifier
@@ -456,6 +468,13 @@ func (s *Service) SetTurnStartNotifier(n TurnStartNotifier) {
 // fan-out (legacy tests / dashboard-only deploys keep working).
 func (s *Service) SetInitiativeTrackerNotifier(n InitiativeTrackerNotifier) {
 	s.initiativeTrackerNotifier = n
+}
+
+// SetCombatMapNotifier wires the opening-board #combat-map post fired at the
+// end of StartCombat. Nil-safe: without it, StartCombat behaves as before
+// (the map first appears after the first turn-end / enemy turn).
+func (s *Service) SetCombatMapNotifier(n CombatMapNotifier) {
+	s.combatMapNotifier = n
 }
 
 // SetCombatLogNotifier wires the #combat-log lifecycle-announcement callback
@@ -1099,6 +1118,15 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 	// returned message ID so subsequent AdvanceTurn calls can edit it.
 	if s.initiativeTrackerNotifier != nil {
 		s.initiativeTrackerNotifier.PostTracker(ctx, enc.ID, tracker)
+	}
+
+	// E-combatmap-on-start: post the opening battle-map to #combat-map now that
+	// the first turn is established, so players have the board before anyone
+	// acts (previously it first rendered only on the first /done). Best-effort:
+	// a nil notifier or notifier-side error must never roll back the persisted
+	// encounter.
+	if s.combatMapNotifier != nil {
+		s.combatMapNotifier.PostCombatMap(ctx, enc.ID)
 	}
 
 	return StartCombatResult{

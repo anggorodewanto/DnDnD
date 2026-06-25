@@ -98,6 +98,12 @@ func (r *CommandRouter) SetDistanceHandler(h *DistanceHandler) {
 	r.handlers["distance"] = h
 }
 
+// SetMapHandler registers the MapHandler for the /map command — an on-demand
+// re-post of the current battle-map to #combat-map.
+func (r *CommandRouter) SetMapHandler(h *MapHandler) {
+	r.handlers["map"] = h
+}
+
 // SetSummonCommandHandler registers the SummonCommandHandler for the /command command.
 func (r *CommandRouter) SetSummonCommandHandler(h *SummonCommandHandler) {
 	r.handlers["command"] = h

@@ -13,6 +13,7 @@ const generalHelp = "\U0001F4D6 **DnDnD Command Reference**\n" +
 	"`/shove [target]` \u2014 Shove a target creature\n" +
 	"`/interact [description]` \u2014 Free object interaction\n" +
 	"`/done` \u2014 End your turn\n" +
+	"`/map` \u2014 Post the current battle-map to #combat-map\n" +
 	"`/deathsave` \u2014 Roll a death saving throw\n" +
 	"`/command [creature] [action]` \u2014 Command a companion creature\n" +
 	"`/reaction` \u2014 Declare, cancel, or clear reactions\n" +
