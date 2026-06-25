@@ -1231,34 +1231,32 @@ func newChannelBindingLookup(ctx context.Context, queries *refdata.Queries) func
 	}
 }
 
+// initiativeTrackerStore persists the (channel, message) identity of an
+// encounter's #initiative-tracker message so the notifier can edit it in place
+// across bot restarts. *refdata.Queries satisfies it.
+type initiativeTrackerStore interface {
+	GetInitiativeTrackerMessage(ctx context.Context, encounterID uuid.UUID) (refdata.InitiativeTrackerMessage, error)
+	UpsertInitiativeTrackerMessage(ctx context.Context, arg refdata.UpsertInitiativeTrackerMessageParams) error
+	DeleteInitiativeTrackerMessage(ctx context.Context, encounterID uuid.UUID) error
+}
+
 // initiativeTrackerNotifier satisfies combat.InitiativeTrackerNotifier by
-// posting / editing a persistent #initiative-tracker message per encounter.
-// The mapping from encounter ID to Discord message ID lives in an
-// in-memory map for now (med-18 / Phase 25). A bot restart loses the map,
-// in which case the next AdvanceTurn falls back to PostTracker semantics
-// — a small follow-up migration could persist the message ID on the
-// encounters row to survive restarts.
+// posting / editing a persistent #initiative-tracker message per encounter
+// (med-18 / Phase 25). The encounter -> Discord (channel, message) mapping is
+// persisted in the initiative_tracker_messages table, so a mid-combat bot
+// restart no longer orphans the tracker: the next AdvanceTurn loads the row and
+// edits the existing message in place instead of posting a duplicate.
 type initiativeTrackerNotifier struct {
-	session     discord.Session
-	csp         discord.CampaignSettingsProvider
-	mu          sync.Mutex
-	messageByID map[uuid.UUID]initiativeTrackerMsg
+	session discord.Session
+	csp     discord.CampaignSettingsProvider
+	store   initiativeTrackerStore
 }
 
-type initiativeTrackerMsg struct {
-	channelID string
-	messageID string
-}
-
-func newInitiativeTrackerNotifier(session discord.Session, csp discord.CampaignSettingsProvider) *initiativeTrackerNotifier {
-	if session == nil || csp == nil {
+func newInitiativeTrackerNotifier(session discord.Session, csp discord.CampaignSettingsProvider, store initiativeTrackerStore) *initiativeTrackerNotifier {
+	if session == nil || csp == nil || store == nil {
 		return nil
 	}
-	return &initiativeTrackerNotifier{
-		session:     session,
-		csp:         csp,
-		messageByID: map[uuid.UUID]initiativeTrackerMsg{},
-	}
+	return &initiativeTrackerNotifier{session: session, csp: csp, store: store}
 }
 
 func (n *initiativeTrackerNotifier) channel(ctx context.Context, encounterID uuid.UUID) string {
@@ -1269,6 +1267,8 @@ func (n *initiativeTrackerNotifier) channel(ctx context.Context, encounterID uui
 	return channelIDs["initiative-tracker"]
 }
 
+// PostTracker sends a fresh tracker message and records its identity so future
+// updates edit it in place.
 func (n *initiativeTrackerNotifier) PostTracker(ctx context.Context, encounterID uuid.UUID, content string) {
 	ch := n.channel(ctx, encounterID)
 	if ch == "" {
@@ -1278,23 +1278,28 @@ func (n *initiativeTrackerNotifier) PostTracker(ctx context.Context, encounterID
 	if err != nil || msg == nil {
 		return
 	}
-	n.mu.Lock()
-	n.messageByID[encounterID] = initiativeTrackerMsg{channelID: ch, messageID: msg.ID}
-	n.mu.Unlock()
+	// Best-effort persist: a write error must not roll back the turn advance,
+	// it just means the next update re-posts instead of editing.
+	_ = n.store.UpsertInitiativeTrackerMessage(ctx, refdata.UpsertInitiativeTrackerMessageParams{
+		EncounterID: encounterID,
+		ChannelID:   ch,
+		MessageID:   msg.ID,
+	})
 }
 
+// UpdateTracker edits the persisted tracker message in place. With no persisted
+// message (first update, or it was deleted) it falls back to posting a fresh
+// one — which re-records the identity.
 func (n *initiativeTrackerNotifier) UpdateTracker(ctx context.Context, encounterID uuid.UUID, content string) {
-	n.mu.Lock()
-	prev, ok := n.messageByID[encounterID]
-	n.mu.Unlock()
-	if !ok {
-		// No message recorded (probably restarted) — post a new one so the
-		// channel still receives the update.
+	prev, err := n.store.GetInitiativeTrackerMessage(ctx, encounterID)
+	if err != nil {
 		n.PostTracker(ctx, encounterID, content)
 		return
 	}
-	if _, err := n.session.ChannelMessageEdit(prev.channelID, prev.messageID, content); err != nil {
-		return
+	if _, eerr := n.session.ChannelMessageEdit(prev.ChannelID, prev.MessageID, content); eerr != nil {
+		// The recorded message is gone (deleted / channel changed) — re-post
+		// and re-record so the channel still reflects the live turn.
+		n.PostTracker(ctx, encounterID, content)
 	}
 }
 
@@ -1304,11 +1309,10 @@ func (n *initiativeTrackerNotifier) PostCompletedTracker(ctx context.Context, en
 		return
 	}
 	_, _ = n.session.ChannelMessageSend(ch, content)
-	// Drop the live tracker mapping — combat is over, future updates would
-	// be misleading.
-	n.mu.Lock()
-	delete(n.messageByID, encounterID)
-	n.mu.Unlock()
+	// Drop the persisted mapping — combat is over, future updates would be
+	// misleading. Best-effort: a delete error is harmless (the row is orphaned
+	// but unused once the encounter ends, and CASCADEs away with it).
+	_ = n.store.DeleteInitiativeTrackerMessage(ctx, encounterID)
 }
 
 // firstTurnPingNotifier satisfies combat.TurnStartNotifier by posting the

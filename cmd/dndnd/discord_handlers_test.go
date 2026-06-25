@@ -24,6 +24,7 @@ import (
 // exercised by the enemy-turn-notifier smoke test and no-ops everything else.
 type testSession struct {
 	sendFunc          func(channelID, content string) (*discordgo.Message, error)
+	editFunc          func(channelID, messageID, content string) (*discordgo.Message, error)
 	guildChannelsFunc func(guildID string) ([]*discordgo.Channel, error)
 	respondFunc       func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
 }
@@ -69,6 +70,9 @@ func (t *testSession) FollowupMessageCreate(interaction *discordgo.Interaction, 
 	return &discordgo.Message{}, nil
 }
 func (t *testSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
+	if t.editFunc != nil {
+		return t.editFunc(channelID, messageID, content)
+	}
 	return &discordgo.Message{}, nil
 }
 func (t *testSession) ChannelMessageEditComplex(*discordgo.MessageEdit) (*discordgo.Message, error) {

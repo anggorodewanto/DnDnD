@@ -132,6 +132,7 @@ var MutableTables = []string{
 	"character_drafts",
 	"dm_active_campaign",
 	"open5e_custom_sources",
+	"initiative_tracker_messages",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.
@@ -181,6 +182,7 @@ var orderedDeleteTables = []string{
 	"reaction_declarations",
 	"encounter_zones",
 	"action_log",
+	"initiative_tracker_messages",
 	"error_log",
 	"encounters",
 	"turns",

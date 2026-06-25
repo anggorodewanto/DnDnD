@@ -318,6 +318,13 @@ type Feat struct {
 	Source           sql.NullString        `json:"source"`
 }
 
+type InitiativeTrackerMessage struct {
+	EncounterID uuid.UUID `json:"encounter_id"`
+	ChannelID   string    `json:"channel_id"`
+	MessageID   string    `json:"message_id"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type LootPool struct {
 	ID          uuid.UUID `json:"id"`
 	EncounterID uuid.UUID `json:"encounter_id"`

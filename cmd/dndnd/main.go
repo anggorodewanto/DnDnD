@@ -1667,11 +1667,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			}
 
 			// med-18 / Phase 25: post + auto-update the persistent
-			// #initiative-tracker message. The message ID lives in an
-			// in-memory map for now; bot restart causes the next update to
-			// post a fresh message (the user-visible behaviour stays correct,
-			// just no edit-in-place across restarts).
-			if trackerNotifier := newInitiativeTrackerNotifier(discordSession, campaignSettingsProvider); trackerNotifier != nil {
+			// #initiative-tracker message. The encounter -> (channel, message)
+			// mapping is persisted in initiative_tracker_messages (via queries),
+			// so the tracker is edited in place even across a mid-combat bot
+			// restart instead of orphaning the message and posting a duplicate.
+			if trackerNotifier := newInitiativeTrackerNotifier(discordSession, campaignSettingsProvider, queries); trackerNotifier != nil {
 				combatSvc.SetInitiativeTrackerNotifier(trackerNotifier)
 			}
 
