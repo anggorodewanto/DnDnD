@@ -4,7 +4,7 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-24 (session 1, setup — campaign clean-slated)._
+_Last updated: 2026-06-25 (session 1 — Vale approved; scene about to open)._
 
 ## Stack status
 
@@ -46,9 +46,23 @@ _Last updated: 2026-06-24 (session 1, setup — campaign clean-slated)._
 
 ## Character(s)
 
-- **None yet.** Plan: user builds a fresh character via `/register` → Build New →
-  web builder. Claude approves on the dashboard. Record name / class / race /
-  level / HP / AC / player_character ID here once approved.
+- **Vale** — Tiefling **Warlock 3** (patron: **the Fiend**), entertainer
+  background. **APPROVED** 2026-06-25 (was first portal character; built clean
+  after the ISSUE-001/008 fixes went live).
+  - character id `b6ca7f49-c173-4290-8c80-6fb785fbe733`
+  - HP **24/24**, AC **10** (DEX +0, no armor equipped — leather sits in the pack;
+    equip → AC 11), speed 30, prof bonus +2.
+  - Abilities: STR 10 · DEX 10 · CON 15 (+2) · INT 14 · **CHA 16 (+3)** · WIS 10.
+  - Saves: WIS, CHA. Skills: acrobatics, performance, deception, history.
+  - **Pact Magic:** 2 slots @ **slot level 2** (`pact_magic_slots {current:2,max:2,
+    slot_level:2}`). Spell save DC 13, spell atk +5 (CHA).
+  - Cantrips: **chill touch, mage hand** (+ thaumaturgy from Infernal Legacy).
+  - Known spells: **hellish rebuke** (L1) · **hold person, shatter, misty step** (L2).
+    Infernal Legacy also grants 1/day hellish rebuke @ L2 (free, CHA).
+  - Tiefling: **resistance to fire** (Hellish Resistance), darkvision.
+  - Kit: dagger, light crossbow + bolts, arcane focus, dungeoneer's pack,
+    entertainer's pack (instrument, costume), leather armor (unequipped). Languages
+    empty (ISSUE-009 cosmetic gap).
 
 ## Encounter / combat
 
@@ -74,8 +88,10 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-1. **User:** run `/register` → **🆕 Build New** in Discord; build a character via
-   the portal link; submit (goes pending → `#dm-queue` + Approvals).
-2. **Claude:** approve from the dashboard Approvals view; then open the scene
-   (tailor "Ashfall Waystation" to the character).
+1. **Claude (DM):** open the scene — tailor "Ashfall Waystation" to Vale (Tiefling
+   Fiend-pact warlock, entertainer). Deliver opening narration to `#the-story`
+   (via the dashboard **Narrate** tool — confirm with the player before the first
+   post).
+2. **Player (Vale):** react to the scene — investigate / talk / search / force the
+   cellar. Force the cellar = the fight is ready (10×10 waystation map to import).
 </content>

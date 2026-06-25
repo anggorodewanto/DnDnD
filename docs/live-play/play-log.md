@@ -64,6 +64,19 @@ history; `game-state.md` is the current snapshot.
   green, app rebuilt + restarted. Logged ISSUE-008 + the deeper gap (builder
   collects no concrete languages at all).
 
-**Next:** user **resubmits** the warlock (fix is live) → Claude approves on the
-dashboard → open the scene (tailor "Ashfall Waystation" to the warlock).
+**Vale resubmitted + approved (2026-06-25)**
+
+- Player resubmitted the warlock as **Vale** (Tiefling Fiend-pact Warlock 3,
+  entertainer). Submit succeeded — **no 500** (ISSUE-008 fix is live). Inspected the
+  stored record before approving: pact magic `{2 × slot-level-2}` (ISSUE-001 fix
+  worked end-to-end), 2 cantrips + 4 known spells incl. three L2 (hold person,
+  shatter, misty step) + hellish rebuke, HP 24, AC 10 (DEX +0), languages `'{}'`.
+  Build sound → **approved** on the dashboard (queue cleared). Details in
+  `game-state.md`.
+- In parallel (per player request): two background subagents fixing **ISSUE-005**
+  (Expertise wiring) and **ISSUE-006** (L1 half-caster phantom slot), TDD, each on
+  its own worktree branch for clean integration.
+
+**Next:** open the scene — tailor "Ashfall Waystation" to Vale; deliver opening
+narration to `#the-story` (confirm before the first post).
 </content>
