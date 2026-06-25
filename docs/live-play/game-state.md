@@ -7,13 +7,22 @@
 _Last updated: 2026-06-25 (session 1 — combat LIVE: Round 1 resolved through Forge's
 handaxe + the wretch's whiffed Multiattack; Vale's hold person LANDED → wretch
 PARALYZED. Vale's turn still active (movement/bonus action pending), then Round 2
-opens with Forge auto-critting the paralyzed wretch)._
+opens with Forge auto-critting the paralyzed wretch. App rebuilt + redeployed
+~13:45 UTC with the **ISSUE-014** DM-Console action-log fix live (combat state
+preserved); the **Hold Person** narration is now posted to #the-story)._
 
 ## Stack status
 
 - **UP** via `make local-up` (docker compose). App `localhost:8080`, DB
   `localhost:5432`. Bot `DnDnD` (id `1507904367301496862`) connected to guild
   `DnDnD`.
+- **Rebuilt + redeployed ~13:45 UTC (2026-06-25)** via
+  `docker compose up -d --build app` to ship the **ISSUE-014** fix (`main` `f1e3aeb`,
+  pushed) — the DM Console now records player combat actions to `action_log`. Clean
+  boot: "database connected and migrated" (no new migration), "discord session
+  opened", all discord checks passed for guild `1507910398886543532`, server on
+  `:8080`, no panic/error. **Combat state preserved across the redeploy** (still
+  Round 1, Vale's turn active, wretch paralyzed — see Encounter / combat below).
 
 ### Remote-player access (cloudflared tunnel) — 2026-06-25
 
@@ -172,6 +181,9 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 - Claude is driving the DM dashboard via claude-in-chrome (tab on
   `/dashboard/app/#home`). Session already authenticated as the DM (no re-login
   needed). Confirmed clean: 0 pending approvals / 0 encounters / 0 dm-queue.
+- **Standing rule:** all DM *mutations* go through this dashboard tab (Chrome),
+  never raw SQL/curl; narration to #the-story uses a `:::read-aloud:::` block. See
+  README "Hard constraints" + `runbook.md` §8.
 
 ## Next action
 
@@ -182,6 +194,11 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
   save (6 vs DC 13) and is **PARALYZED** (Vale concentrating; pact slots 2→1). See the
   **Encounter / combat** section above for the full chronology, ids, and the
   hidden-condition handling.
+- **Already done this beat:** the **Hold Person narration is POSTED to #the-story**
+  (dashboard Narrate editor → "Post to #the-story" → bot relayed; `narration_posts`
+  row at **13:51:18 UTC**, Discord msg id **`1519701526946386084`**) — no re-post
+  needed. The app was **redeployed ~13:45 UTC with the ISSUE-014 fix live** (DM
+  Console now logs player combat actions; combat state preserved).
 1. **Vale finishes her turn (init 19) — the player's call.** Her *action* is spent on
    hold person, but she still has her **30 ft of movement and her bonus action**. Wait
    for her to declare in `#in-character` (or `/move`); **do not act for her.** When she's

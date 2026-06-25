@@ -139,6 +139,27 @@ if/when the cellar fight starts.
   and Forge is within 5 ft of a **paralyzed** target, so his melee attacks get
   **advantage + auto-crit on hit**. Big swing for the party incoming.
 
+**ISSUE-014 fix shipped mid-session + Hold Person narration posted (2026-06-25)**
+
+- **ISSUE-014 fixed, committed, pushed, deployed.** The DM Console wasn't tracking
+  player combat actions (player casts/freeform/attacks never wrote `action_log`, so
+  `/api/dm/situation` `timeline[]` was blind to them). Fixed on `main` (`f1e3aeb`,
+  pushed `f29edd4..f1e3aeb`): a best-effort `recordCombatAction` helper
+  (`internal/combat/action_log_record.go`) writes an `action_log` row at the success
+  tail of every player combat path (`Cast`, `CastAoE`, `FreeformAction`, `Attack`,
+  `attackImprovised`, `OffhandAttack`). `make cover-check` green; review ship-ready.
+  **Redeployed** `docker compose up -d --build app` ~13:45 UTC — clean boot (db
+  connected + migrated, no new migration; discord session opened; all checks passed;
+  `:8080`; no error). **DM-side only:** #combat-log output is unchanged (players never
+  see the Console), and save adjudication stays a manual DM roll. **Live combat state
+  preserved across the redeploy** (still Round 1, Vale's turn active, wretch paralyzed).
+- **Hold Person narration POSTED to #the-story.** Drove the beat through the
+  dashboard **Narrate** editor (#narrate tab, authenticated as DM) → **Post to
+  #the-story** → the bot relayed it. Recorded as a `narration_posts` row at
+  **13:51:18 UTC**, Discord message id **`1519701526946386084`**. (Text: Vale's
+  Infernal incantation snaring the wretch; it locks rigid, paralyzed — "a puppet on a
+  severed string" — Forge within reach.)
+
 **Next:** Vale finishes her turn (movement/bonus action — player decides), then End
 Turn / `/done` opens Round 2 with Forge auto-critting the paralyzed wretch. Keep Vale's
 concentration intact (CON save on any damage to her, or the paralysis drops).

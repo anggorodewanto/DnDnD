@@ -115,6 +115,17 @@ Concretely each turn:
 - **Narration is the human DM's job, mechanics are the bot's.** The bot posts
   dice/combat results automatically; Claude supplies the *story* text the bot
   doesn't generate.
+- **Act as DM through the web dashboard, driven by Chrome (claude-in-chrome) —
+  standing rule.** Every DM *mutation* — posting narration, resolving #dm-queue
+  items, applying damage/conditions, advancing turns, building/starting encounters,
+  approving characters — goes through the DnDnD dashboard tab (logged in as the DM),
+  **never** raw SQL / curl. Mutation endpoints sit behind `dmAuthMw`, so curl can't
+  auth anyway, and the dashboard tab is the authenticated DM session. *Reads /
+  observation* via Postgres stay fine (see `runbook.md` §6); only *acting* must go
+  through the dashboard.
+- **Wrap #the-story narration in a read-aloud block.** When posting DM story prose
+  to #the-story via the Narrate editor, wrap the prose in a `:::read-aloud … :::`
+  block (use the editor's **Insert Read-Aloud Block** button). See `runbook.md` §8.
 - **Players roll their own dice — never roll for them.** When a player's action
   needs an attack / damage / check / save roll, the *player* rolls it (now via
   `/roll`, e.g. `/roll 1d6+2 reason:handaxe damage`) and reports the number. The

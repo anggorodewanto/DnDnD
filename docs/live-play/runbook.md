@@ -120,4 +120,27 @@ Useful tables: `campaigns` (settings JSONB has channel IDs), `characters` +
 `/done` (end turn), `/attack`, `/cast`, `/loot`, `/give`, `/save`, `/recap`.
 The bot replies in `#your-turn` / `#combat-log` / etc. Exact command set is
 whatever the bot registered with the guild (the app's command table).
+
+## 8. Posting DM narration to #the-story
+
+To narrate a beat into the story channel from the dashboard:
+
+1. In the DM dashboard SPA, open the **Narrate** tab (`#narrate`).
+2. Type the narration text in the editor, then **wrap the story prose in a
+   read-aloud block** — click **Insert Read-Aloud Block** and put the prose inside
+   the `:::read-aloud … :::` fence. This is a standing DM preference: all #the-story
+   narration goes out as a read-aloud block.
+3. Click **Post to #the-story** — the bot relays the text to **#the-story**,
+   stores a `narration_posts` row (timestamp + the Discord message id of the
+   relayed post), and the beat also surfaces in the **DM Console** timeline.
+
+The underlying call is `POST /api/narration/post` (behind DM auth). Verify a post
+landed by querying the `narration_posts` table (or by the returned Discord message
+id) — e.g. the Hold Person beat is `narration_posts` row at 13:51:18 UTC, msg id
+`1519701526946386084`.
+
+> **Standing rule (see README "Hard constraints"):** posting narration — like every
+> DM *mutation* — must go through the dashboard driven by Chrome (claude-in-chrome),
+> never raw SQL / curl. The mutation endpoints are behind `dmAuthMw`; only the
+> logged-in dashboard tab can authenticate. Postgres is for *reads/observation* (§6).
 </content>
