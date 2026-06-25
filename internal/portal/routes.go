@@ -78,6 +78,8 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 			r.Use(authMiddleware)
 			r.Get("/", h.ServeLanding)
 			r.Get("/create", h.ServeCreate)
+			// Character builder in edit mode (reuses the create shell).
+			r.Get("/character/{characterID}/edit", h.ServeEdit)
 
 			// Character sheet route
 			if cfg.sheetH != nil {

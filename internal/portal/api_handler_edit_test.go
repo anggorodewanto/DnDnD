@@ -55,9 +55,10 @@ func TestAPIHandler_GetCharacterEditData_OK(t *testing.T) {
 	h.GetCharacterEditData(rec, editGet("char-1", "owner-1"))
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	var got portal.CharacterSubmission
+	var got portal.EditData
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
-	assert.Equal(t, "Thorin", got.Name)
+	assert.Equal(t, "c1", got.CampaignID)
+	assert.Equal(t, "Thorin", got.Character.Name)
 }
 
 func TestAPIHandler_GetCharacterEditData_Forbidden(t *testing.T) {

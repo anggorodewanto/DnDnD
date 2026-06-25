@@ -688,7 +688,8 @@ func TestBuilderService_LoadEditData_OwnerAllowed(t *testing.T) {
 
 	got, err := svc.LoadEditData(context.Background(), "char-1", "player-1")
 	require.NoError(t, err)
-	assert.Equal(t, "Thorin", got.Name)
+	assert.Equal(t, "c1", got.CampaignID)
+	assert.Equal(t, "Thorin", got.Character.Name)
 }
 
 func TestBuilderService_LoadEditData_DMAllowed(t *testing.T) {

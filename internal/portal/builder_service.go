@@ -624,21 +624,33 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	}, nil
 }
 
+// EditData is the edit-mode prefill payload: the campaign the character belongs
+// to (the builder needs it for reference-list lookups) plus the reconstructed
+// submission.
+type EditData struct {
+	CampaignID string              `json:"campaign_id"`
+	Character  CharacterSubmission `json:"character"`
+}
+
 // LoadEditData authorizes the requester (owner or campaign DM) and returns the
 // character reconstructed as a builder submission for edit-mode prefill.
 // Returns ErrCharacterNotFound when the character is missing, or
 // ErrEditNotAllowed when the requester may not edit it.
-func (svc *BuilderService) LoadEditData(ctx context.Context, characterID, requesterID string) (CharacterSubmission, error) {
+func (svc *BuilderService) LoadEditData(ctx context.Context, characterID, requesterID string) (EditData, error) {
 	ec, err := svc.store.GetEditContext(ctx, characterID)
 	if err != nil {
-		return CharacterSubmission{}, err
+		return EditData{}, err
 	}
 	isOwner := ec.OwnerID != "" && ec.OwnerID == requesterID
 	isDM := ec.DMUserID != "" && ec.DMUserID == requesterID
 	if !isOwner && !isDM {
-		return CharacterSubmission{}, ErrEditNotAllowed
+		return EditData{}, ErrEditNotAllowed
 	}
-	return svc.store.LoadEditSubmission(ctx, characterID)
+	sub, err := svc.store.LoadEditSubmission(ctx, characterID)
+	if err != nil {
+		return EditData{}, err
+	}
+	return EditData{CampaignID: ec.CampaignID, Character: sub}, nil
 }
 
 // UpdateCharacter rewrites an existing character from a fresh builder

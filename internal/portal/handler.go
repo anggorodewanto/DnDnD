@@ -106,11 +106,14 @@ func (h *Handler) ServeLanding(w http.ResponseWriter, r *http.Request) {
 	h.render(w, h.landingTmpl, LandingData{UserID: userID})
 }
 
-// CreateData holds data for the character builder page.
+// CreateData holds data for the character builder page. EditCharacterID is
+// empty for the create flow and set to the target character's ID for the edit
+// flow; the Svelte builder switches to edit mode when it is present.
 type CreateData struct {
-	Token      string
-	CampaignID string
-	UserID     string
+	Token           string
+	CampaignID      string
+	UserID          string
+	EditCharacterID string
 }
 
 // ServeCreate validates the token and serves the character builder shell.
@@ -142,6 +145,23 @@ func (h *Handler) ServeCreate(w http.ResponseWriter, r *http.Request) {
 		Token:      tok.Token,
 		CampaignID: tok.CampaignID.String(),
 		UserID:     tok.DiscordUserID,
+	})
+}
+
+// ServeEdit renders the character builder shell in edit mode. It reuses the
+// create template with EditCharacterID set; ownership/DM authorization and the
+// campaign context are enforced and supplied by the edit-data + update API the
+// page calls, so this only needs the session auth applied by the route group.
+func (h *Handler) ServeEdit(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	h.render(w, h.createTmpl, CreateData{
+		EditCharacterID: chi.URLParam(r, "characterID"),
+		UserID:          userID,
 	})
 }
 
@@ -290,6 +310,7 @@ const createTemplate = `<!DOCTYPE html>
             <p>Loading character builder...</p>
             <input type="hidden" id="portal-token" value="{{.Token}}">
             <input type="hidden" id="campaign-id" value="{{.CampaignID}}">
+            <input type="hidden" id="edit-character-id" value="{{.EditCharacterID}}">
         </div>
     </div>
     <script type="module" crossorigin src="/portal/app/assets/{{.JSFile}}"></script>
