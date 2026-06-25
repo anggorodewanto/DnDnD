@@ -13,6 +13,7 @@
   import StatBlockLibrary from './StatBlockLibrary.svelte';
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
   import Open5eSourcesPanel from './Open5eSourcesPanel.svelte';
+  import DMConsolePanel from './DMConsolePanel.svelte';
   import DMQueuePanel from './DMQueuePanel.svelte';
   import LootPoolPanel from './LootPoolPanel.svelte';
   import LevelUpPanel from './LevelUpPanel.svelte';
@@ -263,6 +264,8 @@
       <MessagePlayerPanel {campaignId} />
     {:else if currentView === 'open5e-sources'}
       <Open5eSourcesPanel {campaignId} />
+    {:else if currentView === 'dm-console'}
+      <DMConsolePanel />
     {:else if currentView === 'dm-queue'}
       <DMQueuePanel />
     {:else if currentView === 'loot'}

@@ -45,6 +45,7 @@ export const dashboardNavItems = Object.freeze([
   { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', section: 'Run Session', group: ['combat'] },
   { id: 'exploration', label: 'Exploration', view: 'exploration', hash: '#exploration', section: 'Run Session', group: ['exploration'] },
   { id: 'narrate', label: 'Narrate', view: 'narrate', hash: '#narrate', section: 'Run Session', group: ['narrate'] },
+  { id: 'dm-console', label: 'DM Console', view: 'dm-console', hash: '#dm-console', section: 'Run Session', group: ['dm-console'] },
   { id: 'dm-queue', label: 'DM Queue', view: 'dm-queue', hash: '#dm-queue', section: 'Run Session', group: ['dm-queue'] },
 
   // Players — managing the people at the table.
@@ -103,6 +104,7 @@ const VIEW_TITLES = Object.freeze({
   'stat-block-library': 'Stat Block Library',
   'message-player': 'Message Player',
   'open5e-sources': 'Open5e Sources',
+  'dm-console': 'DM Console',
   'dm-queue': 'DM Queue',
   loot: 'Loot Pool',
   levelup: 'Level Up',

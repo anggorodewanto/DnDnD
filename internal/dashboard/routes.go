@@ -49,6 +49,20 @@ func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.N
 	return h
 }
 
+// RegisterDMSituationRoutes mounts the aggregated DM Console endpoint.
+// GET /api/dm/situation returns the single Situation JSON (pending work, live
+// state, recent timeline, next step) for the authenticated DM's active
+// campaign. Returns the constructed handler so callers can wire its optional
+// dependencies (SituationBuilder + CampaignLookup).
+func RegisterDMSituationRoutes(r chi.Router, logger *slog.Logger, authMiddleware func(http.Handler) http.Handler) *DMSituationHandler {
+	h := NewDMSituationHandler(logger)
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Get("/api/dm/situation", h.ServeSituation)
+	})
+	return h
+}
+
 // ExplorationHandler is the narrow surface of the exploration dashboard
 // handler consumed by RegisterExplorationRoutes. Keeping the dependency a
 // set of http.Handler methods avoids a circular import on exploration.

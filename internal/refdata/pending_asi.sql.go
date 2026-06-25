@@ -8,6 +8,7 @@ package refdata
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -60,6 +61,48 @@ func (q *Queries) ListPendingASI(ctx context.Context) ([]PendingAsi, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingASIByCampaign = `-- name: ListPendingASIByCampaign :many
+SELECT pa.character_id, c.name AS character_name, pa.created_at
+FROM pending_asi pa
+JOIN player_characters pc ON pc.character_id = pa.character_id
+JOIN characters c ON c.id = pa.character_id
+WHERE pc.campaign_id = $1
+ORDER BY pa.created_at ASC
+`
+
+type ListPendingASIByCampaignRow struct {
+	CharacterID   uuid.UUID `json:"character_id"`
+	CharacterName string    `json:"character_name"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// Pending level-up / ASI prompts for one campaign, joined to the character's
+// name for display. pending_asi only carries character_id, so the campaign is
+// scoped via the player_characters membership row. Feeds the DM Console's
+// unified pending list (internal/situation).
+func (q *Queries) ListPendingASIByCampaign(ctx context.Context, campaignID uuid.UUID) ([]ListPendingASIByCampaignRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingASIByCampaign, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingASIByCampaignRow{}
+	for rows.Next() {
+		var i ListPendingASIByCampaignRow
+		if err := rows.Scan(&i.CharacterID, &i.CharacterName, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

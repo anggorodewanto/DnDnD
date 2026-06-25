@@ -29,6 +29,45 @@ explain how the system is driven; this folder records a live game in progress.
 
 Then continue as DM from the "Next action" line in `game-state.md`.
 
+> **Before acting, pull the live picture.** `game-state.md` is a hand-maintained
+> save file and drifts. The **DM Console** (next section) is the *generated*
+> single source of truth for what's pending, where the encounter stands, and
+> what just happened. Consult it first each turn so you act on reality, not on a
+> stale note.
+
+---
+
+## DM Console — the centralized situational view (read this each turn)
+
+There is one endpoint that aggregates **everything a DM needs to act**, so you
+don't reconstruct it from six places (Discord #dm-queue, the approvals/level-up
+tabs, #initiative-tracker, #combat-log, `action_log`, narration):
+
+```
+GET /api/dm/situation        # DM-only; resolves the active campaign from the session
+```
+
+Surface it the same way you observe anything else (see `runbook.md`): open the
+**DM Console** tab in the dashboard (`#dm-console`), or fetch the endpoint /
+mirror it from Postgres. It returns one JSON payload:
+
+| Field | What it answers | Use it to |
+| --- | --- | --- |
+| `next_step` | "What should I do right now?" | A derived one-line suggestion (an NPC's live turn outranks pending requests). Start here. |
+| `pending[]` | "What needs my action?" | Unified, priority-sorted worklist: dm-queue items (whispers, freeform actions, rests, enemy-turn-ready…) **+** character approvals **+** level-up requests. Each has a `resolve_url` when a one-click resolve exists. |
+| `state` | "Where are we?" | Live encounter: `round`, `mode`, and every combatant's HP/AC/position/conditions, with the current-turn combatant flagged (`is_current`). Empty when out of combat. |
+| `timeline[]` | "What just happened?" | Recent merged feed (combat actions + narration), newest first. |
+
+**The DM Console is read-only situational awareness — it does not resolve
+anything.** You still *act* through the existing tools: resolve a queue item via
+its `resolve_url` / the dashboard resolver, apply damage through the combat
+workspace, narrate via #the-story. The Console tells you *what* to do; the
+existing surfaces are *how*.
+
+Why this exists: acting as DM off a partial picture is the main cause of
+mis-steps (resolving the wrong thing, missing a pending whisper, narrating
+against stale HP). One read of the Console replaces the guesswork.
+
 ---
 
 ## File map
@@ -76,5 +115,11 @@ Concretely each turn:
 - **Narration is the human DM's job, mechanics are the bot's.** The bot posts
   dice/combat results automatically; Claude supplies the *story* text the bot
   doesn't generate.
+- **Players roll their own dice — never roll for them.** When a player's action
+  needs an attack / damage / check / save roll, the *player* rolls it (now via
+  `/roll`, e.g. `/roll 1d6+2 reason:handaxe damage`) and reports the number. The
+  DM adjudicates against that number (does 15 beat AC 12?), but **must not roll
+  the player's dice**. Roll only for NPCs/monsters and DM-side checks. (This is
+  the single most common correction the human DM gives — honor it.)
 </content>
 </invoke>

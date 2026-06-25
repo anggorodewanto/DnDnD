@@ -54,6 +54,7 @@ import (
 	"github.com/ab/dndnd/internal/rest"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/shops"
+	"github.com/ab/dndnd/internal/situation"
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
 
@@ -1229,6 +1230,18 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		if dmQueueStore != nil {
 			dmQueueDashHandler.SetCampaignLister(dmQueueStore)
 			dmQueueDashHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
+		}
+
+		// DM Console: GET /api/dm/situation aggregates every DM-facing source
+		// (pending dm-queue items + character approvals + level-up requests,
+		// live encounter state, and a recent timeline) into one payload so a DM
+		// — human or the AI DM — answers "what needs my action / where are we /
+		// what just happened" from one place. Backed by the unit-tested
+		// internal/situation aggregator over a refdata-backed provider.
+		dmSituationHandler := dashboard.RegisterDMSituationRoutes(router, logger, dmAuthMw)
+		if queries != nil {
+			dmSituationHandler.SetBuilder(situation.NewService(newSituationProvider(queries)))
+			dmSituationHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
 		}
 
 		// Phase 112: DM dashboard errors panel. Mount the /dashboard/errors
