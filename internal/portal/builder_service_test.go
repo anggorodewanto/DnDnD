@@ -563,6 +563,19 @@ type mockBuilderStore struct {
 	saveDraftErr    error
 	loadDraftResult json.RawMessage
 	loadDraftErr    error
+
+	// edit-mode capture (UpdateCharacter path).
+	editContext        *portal.EditContext
+	editContextErr     error
+	updateCharErr      error
+	updateCalled       bool
+	lastUpdateCharID   string
+	lastUpdateParams   portal.CreateCharacterParams
+	setPendingErr      error
+	setPendingCalled   bool
+	lastSetPendingPCID string
+	hasActiveEncounter bool
+	hasActiveEncErr    error
 }
 
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
@@ -633,6 +646,140 @@ func (m *mockBuilderStore) SaveCharacterDraft(_ context.Context, campaignID, dis
 
 func (m *mockBuilderStore) LoadCharacterDraft(_ context.Context, _, _, _ string) (json.RawMessage, error) {
 	return m.loadDraftResult, m.loadDraftErr
+}
+
+func (m *mockBuilderStore) GetEditContext(_ context.Context, _ string) (*portal.EditContext, error) {
+	if m.editContextErr != nil {
+		return nil, m.editContextErr
+	}
+	return m.editContext, nil
+}
+
+func (m *mockBuilderStore) UpdateCharacterRecord(_ context.Context, characterID string, p portal.CreateCharacterParams) error {
+	m.updateCalled = true
+	m.lastUpdateCharID = characterID
+	m.lastUpdateParams = p
+	return m.updateCharErr
+}
+
+func (m *mockBuilderStore) SetPlayerCharacterPending(_ context.Context, pcID string) error {
+	m.setPendingCalled = true
+	m.lastSetPendingPCID = pcID
+	return m.setPendingErr
+}
+
+func (m *mockBuilderStore) HasActiveEncounter(_ context.Context, _ string) (bool, error) {
+	return m.hasActiveEncounter, m.hasActiveEncErr
+}
+
+func TestBuilderService_UpdateCharacter_PlayerEditResetsToPending(t *testing.T) {
+	notifier := &mockDMQueueNotifier{}
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+	}
+	svc := portal.NewBuilderService(store, portal.WithNotifier(notifier))
+
+	res, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", validSubmission())
+	require.NoError(t, err)
+	assert.Equal(t, "char-1", res.CharacterID)
+	assert.Equal(t, "pc-1", res.PlayerCharacterID)
+
+	assert.True(t, store.updateCalled)
+	assert.Equal(t, "char-1", store.lastUpdateCharID)
+	assert.Equal(t, "camp-1", store.lastUpdateParams.CampaignID)
+	// Player edit must revert to pending and re-notify the DM queue.
+	assert.True(t, store.setPendingCalled)
+	assert.Equal(t, "pc-1", store.lastSetPendingPCID)
+	assert.True(t, notifier.called)
+	assert.Equal(t, "portal-edit", notifier.via)
+}
+
+func TestBuilderService_UpdateCharacter_DMEditAppliesInstantly(t *testing.T) {
+	notifier := &mockDMQueueNotifier{}
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+	}
+	svc := portal.NewBuilderService(store, portal.WithNotifier(notifier))
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "dm-1", validSubmission())
+	require.NoError(t, err)
+
+	assert.True(t, store.updateCalled)
+	// DM edit stays approved: no pending reset, no DM-queue notify.
+	assert.False(t, store.setPendingCalled)
+	assert.False(t, notifier.called)
+}
+
+func TestBuilderService_UpdateCharacter_RejectsStranger(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID: "camp-1", OwnerID: "player-1", DMUserID: "dm-1", PlayerCharacterID: "pc-1",
+		},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "stranger", validSubmission())
+	require.ErrorIs(t, err, portal.ErrEditNotAllowed)
+	assert.False(t, store.updateCalled)
+}
+
+func TestBuilderService_UpdateCharacter_BlockedInEncounter(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID: "camp-1", OwnerID: "player-1", DMUserID: "dm-1", PlayerCharacterID: "pc-1",
+		},
+		hasActiveEncounter: true,
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", validSubmission())
+	require.ErrorIs(t, err, portal.ErrCharacterInEncounter)
+	assert.False(t, store.updateCalled)
+}
+
+func TestBuilderService_UpdateCharacter_NotFound(t *testing.T) {
+	store := &mockBuilderStore{editContextErr: portal.ErrCharacterNotFound}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "missing", "player-1", validSubmission())
+	require.ErrorIs(t, err, portal.ErrCharacterNotFound)
+	assert.False(t, store.updateCalled)
+}
+
+func TestBuilderService_UpdateCharacter_InvalidSubmission(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{CampaignID: "camp-1", OwnerID: "player-1", PlayerCharacterID: "pc-1"},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", portal.CharacterSubmission{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
+	assert.False(t, store.updateCalled)
+}
+
+func TestBuilderService_UpdateCharacter_StoreError(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext:   &portal.EditContext{CampaignID: "camp-1", OwnerID: "player-1", PlayerCharacterID: "pc-1"},
+		updateCharErr: errors.New("db down"),
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", validSubmission())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db down")
 }
 
 // mockDMQueueNotifier implements portal.DMQueueNotifier for testing.

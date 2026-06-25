@@ -55,6 +55,22 @@ func (m *dmMockStore) LoadCharacterDraft(ctx context.Context, campaignID, discor
 	return nil, nil
 }
 
+func (m *dmMockStore) GetEditContext(ctx context.Context, characterID string) (*EditContext, error) {
+	return nil, nil
+}
+
+func (m *dmMockStore) UpdateCharacterRecord(ctx context.Context, characterID string, p CreateCharacterParams) error {
+	return nil
+}
+
+func (m *dmMockStore) SetPlayerCharacterPending(ctx context.Context, playerCharacterID string) error {
+	return nil
+}
+
+func (m *dmMockStore) HasActiveEncounter(ctx context.Context, characterID string) (bool, error) {
+	return false, nil
+}
+
 // dmMockFeatureProvider implements FeatureProvider for the DM-flow tests.
 type dmMockFeatureProvider struct {
 	classFeatures    map[string]map[string][]character.Feature

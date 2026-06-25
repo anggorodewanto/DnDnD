@@ -22,6 +22,12 @@ type CharacterCreator interface {
 	RelinkPlayerCharacter(ctx context.Context, arg refdata.RelinkPlayerCharacterParams) (refdata.PlayerCharacter, error)
 	UpsertCharacterDraft(ctx context.Context, arg refdata.UpsertCharacterDraftParams) error
 	GetCharacterDraft(ctx context.Context, arg refdata.GetCharacterDraftParams) (json.RawMessage, error)
+	// Edit-mode dependencies.
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+	UpdateCharacter(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error)
+	UpdatePlayerCharacterStatus(ctx context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error)
+	GetActiveEncounterIDByCharacterID(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
 }
 
 type campaignGetter interface {
@@ -71,8 +77,37 @@ func NewBuilderStoreAdapter(q CharacterCreator, tokenSvc *TokenService) *Builder
 	return &BuilderStoreAdapter{q: q, tokenSvc: tokenSvc}
 }
 
-// CreateCharacterRecord creates a character in the database.
-func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error) {
+// characterColumns holds the derived, marshalled column values shared by the
+// create and update persistence paths. Building them once keeps the INSERT and
+// UPDATE in lock-step so an edit derives stats identically to a fresh build.
+type characterColumns struct {
+	campID           uuid.UUID
+	classesJSON      []byte
+	level            int32
+	scoresJSON       []byte
+	hpMax            int32
+	ac               int32
+	acFormula        sql.NullString
+	speedFt          int32
+	profBonus        int32
+	equippedMainHand sql.NullString
+	equippedOffHand  sql.NullString
+	equippedArmor    sql.NullString
+	spellSlotsMsg    pqtype.NullRawMessage
+	pactMagicMsg     pqtype.NullRawMessage
+	hitDiceJSON      []byte
+	featureUsesMsg   pqtype.NullRawMessage
+	featuresMsg      pqtype.NullRawMessage
+	profJSON         []byte
+	languages        []string
+	inventoryMsg     pqtype.NullRawMessage
+	charDataMsg      pqtype.NullRawMessage
+}
+
+// buildCharacterColumns derives every persistable column from a submission's
+// CreateCharacterParams. Shared by CreateCharacterRecord (INSERT) and
+// UpdateCharacterRecord (UPDATE).
+func buildCharacterColumns(p CreateCharacterParams) (characterColumns, error) {
 	scoresJSON, _ := json.Marshal(p.AbilityScores)
 	classEntries := resolveClassEntries(p)
 	classesJSON, _ := json.Marshal(classEntries)
@@ -111,8 +146,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		equippedArmor = sql.NullString{String: p.WornArmor, Valid: true}
 	}
 	// ISSUE-011: an equipped shield (flagged off_hand by the inventory builder)
-	// must also populate the dedicated equipped_off_hand column. Mirror the
-	// shield detection used for the Unarmored Defense AC formula below.
+	// must also populate the dedicated equipped_off_hand column.
 	var equippedOffHand sql.NullString
 	if hasEquipmentItem(p.Equipment, "shield") {
 		equippedOffHand = sql.NullString{String: "shield", Valid: true}
@@ -130,9 +164,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		pactMagicMsg = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
 	}
 
-	// Standard spell slots (ISSUE-002). Persist in the canonical string-keyed
-	// {current,max} shape the play/read path consumes; leave NULL for
-	// non-casters so fighters/rogues/barbarians are unaffected.
+	// Standard spell slots (ISSUE-002), canonical string-keyed {current,max}.
 	var spellSlotsMsg pqtype.NullRawMessage
 	if slots := spellSlotsForClasses(classEntries); slots != nil {
 		slotsJSON, _ := json.Marshal(slots)
@@ -145,9 +177,8 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		featuresMsg = pqtype.NullRawMessage{RawMessage: featJSON, Valid: true}
 	}
 
-	// character_data carries spells today; we also stash subrace and
-	// background here since the characters table has no dedicated column
-	// for them. Downstream code can read these without a migration.
+	// character_data carries spells, weapon masteries, subrace, background, and
+	// optional display-only appearance/backstory (no dedicated columns).
 	charData := map[string]any{}
 	if len(p.Spells) > 0 {
 		charData["spells"] = p.Spells
@@ -161,10 +192,6 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	if p.Background != "" {
 		charData["background"] = p.Background
 	}
-	// Optional free-form description (display-only flavor). Stashed here under
-	// the same no-dedicated-column rationale as subrace/background; trimmed so
-	// whitespace-only input does not bloat the blob. Read back via
-	// character.ProfileFromCharacterData on the sheet, card, and /character.
 	if appearance := strings.TrimSpace(p.Appearance); appearance != "" {
 		charData["appearance"] = appearance
 	}
@@ -179,55 +206,80 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 
 	campID, err := uuid.Parse(p.CampaignID)
 	if err != nil {
-		return "", fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
+		return characterColumns{}, fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
 	}
 
-	// ISSUE-004: persist the Unarmored Defense ac_formula so an unarmored
-	// Barbarian/Monk gets the right AC at creation and on every play-time
-	// recompute (combat.RecalculateAC reads char.AcFormula). Shield detection
-	// mirrors the inventory builder (EquipmentToInventoryWithEquipped marks any
-	// "shield" item equipped). NULL for armored characters and non-UD classes
-	// so fighters/wizards/etc. are unchanged.
+	// ISSUE-004: persist the Unarmored Defense ac_formula. NULL for armored /
+	// non-UD classes so they are unchanged.
 	var acFormula sql.NullString
 	if f := unarmoredDefenseFormula(classEntries, p.WornArmor, hasEquipmentItem(p.Equipment, "shield")); f != "" {
 		acFormula = sql.NullString{String: f, Valid: true}
 	}
 
-	// characters.languages is TEXT[] NOT NULL. pq.Array of a nil slice writes
-	// SQL NULL, which violates the constraint and 500s the create. The builder
-	// does not yet collect concrete languages, so default to a non-nil empty
-	// array. (Real race/background language population is a follow-up.)
+	// characters.languages is TEXT[] NOT NULL — a nil slice writes SQL NULL and
+	// violates the constraint, so default to a non-nil empty array.
 	languages := p.Languages
 	if languages == nil {
 		languages = []string{}
 	}
 
+	return characterColumns{
+		campID:           campID,
+		classesJSON:      classesJSON,
+		level:            int32(totalLevel),
+		scoresJSON:       scoresJSON,
+		hpMax:            int32(p.HPMax),
+		ac:               int32(p.AC),
+		acFormula:        acFormula,
+		speedFt:          int32(p.SpeedFt),
+		profBonus:        int32(p.ProfBonus),
+		equippedMainHand: equippedMainHand,
+		equippedOffHand:  equippedOffHand,
+		equippedArmor:    equippedArmor,
+		spellSlotsMsg:    spellSlotsMsg,
+		pactMagicMsg:     pactMagicMsg,
+		hitDiceJSON:      hitDiceJSON,
+		featureUsesMsg:   featureUsesMsg,
+		featuresMsg:      featuresMsg,
+		profJSON:         profJSON,
+		languages:        languages,
+		inventoryMsg:     inventoryMsg,
+		charDataMsg:      charDataMsg,
+	}, nil
+}
+
+// CreateCharacterRecord creates a character in the database.
+func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error) {
+	c, err := buildCharacterColumns(p)
+	if err != nil {
+		return "", err
+	}
 	ch, err := a.q.CreateCharacter(ctx, refdata.CreateCharacterParams{
-		CampaignID:       campID,
+		CampaignID:       c.campID,
 		Name:             p.Name,
 		Race:             p.Race,
-		Classes:          classesJSON,
-		Level:            int32(totalLevel),
-		AbilityScores:    scoresJSON,
-		HpMax:            int32(p.HPMax),
-		HpCurrent:        int32(p.HPMax),
+		Classes:          c.classesJSON,
+		Level:            c.level,
+		AbilityScores:    c.scoresJSON,
+		HpMax:            c.hpMax,
+		HpCurrent:        c.hpMax,
 		TempHp:           0,
-		Ac:               int32(p.AC),
-		AcFormula:        acFormula,
-		SpeedFt:          int32(p.SpeedFt),
-		ProficiencyBonus: int32(p.ProfBonus),
-		EquippedMainHand: equippedMainHand,
-		EquippedOffHand:  equippedOffHand,
-		EquippedArmor:    equippedArmor,
-		HitDiceRemaining: hitDiceJSON,
-		FeatureUses:      featureUsesMsg,
-		SpellSlots:       spellSlotsMsg,
-		PactMagicSlots:   pactMagicMsg,
-		Features:         featuresMsg,
-		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
-		Languages:        languages,
-		Inventory:        inventoryMsg,
-		CharacterData:    charDataMsg,
+		Ac:               c.ac,
+		AcFormula:        c.acFormula,
+		SpeedFt:          c.speedFt,
+		ProficiencyBonus: c.profBonus,
+		EquippedMainHand: c.equippedMainHand,
+		EquippedOffHand:  c.equippedOffHand,
+		EquippedArmor:    c.equippedArmor,
+		HitDiceRemaining: c.hitDiceJSON,
+		FeatureUses:      c.featureUsesMsg,
+		SpellSlots:       c.spellSlotsMsg,
+		PactMagicSlots:   c.pactMagicMsg,
+		Features:         c.featuresMsg,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
+		Languages:        c.languages,
+		Inventory:        c.inventoryMsg,
+		CharacterData:    c.charDataMsg,
 		Gold:             0,
 		Homebrew:         sql.NullBool{Bool: false, Valid: true},
 	})
@@ -235,6 +287,163 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		return "", err
 	}
 	return ch.ID.String(), nil
+}
+
+// GetEditContext returns ownership/DM/status facts for an existing character,
+// or ErrCharacterNotFound when it does not exist. OwnerID/PlayerCharacterID are
+// empty when no player_characters row links the character (unclaimed DM build).
+func (a *BuilderStoreAdapter) GetEditContext(ctx context.Context, characterID string) (*EditContext, error) {
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid character_id %q: %w", characterID, err)
+	}
+	ch, err := a.q.GetCharacter(ctx, charID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrCharacterNotFound
+		}
+		return nil, fmt.Errorf("getting character: %w", err)
+	}
+	ec := &EditContext{CampaignID: ch.CampaignID.String()}
+
+	pc, err := a.q.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+		CampaignID:  ch.CampaignID,
+		CharacterID: ch.ID,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("getting player character: %w", err)
+	}
+	if err == nil {
+		ec.OwnerID = pc.DiscordUserID
+		ec.PlayerCharacterID = pc.ID.String()
+		ec.Status = pc.Status
+	}
+
+	if getter, ok := a.q.(campaignGetter); ok {
+		if camp, cerr := getter.GetCampaignByID(ctx, ch.CampaignID); cerr == nil {
+			ec.DMUserID = camp.DmUserID
+		}
+	}
+	return ec, nil
+}
+
+// UpdateCharacterRecord rewrites a character from a fresh build (derived
+// identically to creation) while preserving live-play state: damage taken
+// (hp_current capped to the new max), temp HP, gold, attunement, ddb_url,
+// homebrew, and any expended spell slots.
+func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, characterID string, p CreateCharacterParams) error {
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return fmt.Errorf("invalid character_id %q: %w", characterID, err)
+	}
+	existing, err := a.q.GetCharacter(ctx, charID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrCharacterNotFound
+		}
+		return fmt.Errorf("getting character: %w", err)
+	}
+	c, err := buildCharacterColumns(p)
+	if err != nil {
+		return err
+	}
+
+	hpCurrent := min(existing.HpCurrent, c.hpMax)
+
+	_, err = a.q.UpdateCharacter(ctx, refdata.UpdateCharacterParams{
+		ID:               charID,
+		Name:             p.Name,
+		Race:             p.Race,
+		Classes:          c.classesJSON,
+		Level:            c.level,
+		AbilityScores:    c.scoresJSON,
+		HpMax:            c.hpMax,
+		HpCurrent:        hpCurrent,
+		TempHp:           existing.TempHp,
+		Ac:               c.ac,
+		AcFormula:        c.acFormula,
+		SpeedFt:          c.speedFt,
+		ProficiencyBonus: c.profBonus,
+		EquippedMainHand: c.equippedMainHand,
+		EquippedOffHand:  c.equippedOffHand,
+		EquippedArmor:    c.equippedArmor,
+		SpellSlots:       preserveExpendedSlots(existing.SpellSlots, c.spellSlotsMsg),
+		PactMagicSlots:   c.pactMagicMsg,
+		HitDiceRemaining: c.hitDiceJSON,
+		FeatureUses:      c.featureUsesMsg,
+		Features:         c.featuresMsg,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
+		Gold:             existing.Gold,
+		AttunementSlots:  existing.AttunementSlots,
+		Languages:        c.languages,
+		Inventory:        c.inventoryMsg,
+		CharacterData:    c.charDataMsg,
+		DdbUrl:           existing.DdbUrl,
+		Homebrew:         existing.Homebrew,
+	})
+	return err
+}
+
+// preserveExpendedSlots carries forward spell slots already spent before an
+// edit. The fresh build supplies new {current=max} per level; for any level
+// that existed before, the number expended (oldMax-oldCurrent) is re-applied to
+// the new max so a mid-day edit does not silently refill the caster. Falls back
+// to the freshly-derived slots when either side is absent or unparseable.
+func preserveExpendedSlots(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage {
+	if !fresh.Valid || !existing.Valid {
+		return fresh
+	}
+	var oldSlots, newSlots map[string]character.SlotInfo
+	if err := json.Unmarshal(existing.RawMessage, &oldSlots); err != nil {
+		return fresh
+	}
+	if err := json.Unmarshal(fresh.RawMessage, &newSlots); err != nil {
+		return fresh
+	}
+	for level, ns := range newSlots {
+		os, ok := oldSlots[level]
+		if !ok {
+			continue
+		}
+		expended := max(os.Max-os.Current, 0)
+		ns.Current = max(ns.Max-expended, 0)
+		newSlots[level] = ns
+	}
+	merged, err := json.Marshal(newSlots)
+	if err != nil {
+		return fresh
+	}
+	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// SetPlayerCharacterPending flips a player_characters row back to pending,
+// clearing any prior DM feedback (a player's edit needs fresh review).
+func (a *BuilderStoreAdapter) SetPlayerCharacterPending(ctx context.Context, playerCharacterID string) error {
+	id, err := uuid.Parse(playerCharacterID)
+	if err != nil {
+		return fmt.Errorf("invalid player_character_id %q: %w", playerCharacterID, err)
+	}
+	_, err = a.q.UpdatePlayerCharacterStatus(ctx, refdata.UpdatePlayerCharacterStatusParams{
+		ID:     id,
+		Status: "pending",
+	})
+	return err
+}
+
+// HasActiveEncounter reports whether the character is in an active encounter.
+func (a *BuilderStoreAdapter) HasActiveEncounter(ctx context.Context, characterID string) (bool, error) {
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return false, fmt.Errorf("invalid character_id %q: %w", characterID, err)
+	}
+	_, err = a.q.GetActiveEncounterIDByCharacterID(ctx, uuid.NullUUID{UUID: charID, Valid: true})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreatePlayerCharacterRecord creates a player_characters row.

@@ -10,6 +10,7 @@ import (
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +34,47 @@ type captureCharacterCreator struct {
 	upsertDraftErr      error
 	getDraftResult      json.RawMessage
 	getDraftErr         error
+
+	// edit-mode capture.
+	getCharResult        refdata.Character
+	getCharErr           error
+	pcByCharResult       refdata.PlayerCharacter
+	pcByCharErr          error
+	campaignResult       refdata.Campaign
+	campaignErr          error
+	capturedUpdate       refdata.UpdateCharacterParams
+	updateResult         refdata.Character
+	updateErr            error
+	capturedStatusUpdate refdata.UpdatePlayerCharacterStatusParams
+	statusUpdateErr      error
+	activeEncounterID    uuid.UUID
+	activeEncounterErr   error
+}
+
+func (c *captureCharacterCreator) GetCharacter(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+	return c.getCharResult, c.getCharErr
+}
+
+func (c *captureCharacterCreator) GetPlayerCharacterByCharacter(_ context.Context, _ refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
+	return c.pcByCharResult, c.pcByCharErr
+}
+
+func (c *captureCharacterCreator) GetCampaignByID(_ context.Context, _ uuid.UUID) (refdata.Campaign, error) {
+	return c.campaignResult, c.campaignErr
+}
+
+func (c *captureCharacterCreator) UpdateCharacter(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+	c.capturedUpdate = arg
+	return c.updateResult, c.updateErr
+}
+
+func (c *captureCharacterCreator) UpdatePlayerCharacterStatus(_ context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error) {
+	c.capturedStatusUpdate = arg
+	return refdata.PlayerCharacter{}, c.statusUpdateErr
+}
+
+func (c *captureCharacterCreator) GetActiveEncounterIDByCharacterID(_ context.Context, _ uuid.NullUUID) (uuid.UUID, error) {
+	return c.activeEncounterID, c.activeEncounterErr
 }
 
 func (c *captureCharacterCreator) CreateCharacter(_ context.Context, arg refdata.CreateCharacterParams) (refdata.Character, error) {
@@ -1262,4 +1304,119 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_Fighter_NoACFormula(t *testin
 	require.NoError(t, err)
 
 	assert.False(t, creator.capturedParams.AcFormula.Valid, "fighter has no ac_formula (NULL)")
+}
+
+func TestBuilderStoreAdapter_GetEditContext(t *testing.T) {
+	campID := uuid.New()
+	charID := uuid.New()
+	pcID := uuid.New()
+	creator := &captureCharacterCreator{
+		getCharResult:  refdata.Character{ID: charID, CampaignID: campID},
+		pcByCharResult: refdata.PlayerCharacter{ID: pcID, DiscordUserID: "player-1", Status: "approved"},
+		campaignResult: refdata.Campaign{ID: campID, DmUserID: "dm-1"},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	ec, err := adapter.GetEditContext(context.Background(), charID.String())
+	require.NoError(t, err)
+	assert.Equal(t, campID.String(), ec.CampaignID)
+	assert.Equal(t, "player-1", ec.OwnerID)
+	assert.Equal(t, pcID.String(), ec.PlayerCharacterID)
+	assert.Equal(t, "approved", ec.Status)
+	assert.Equal(t, "dm-1", ec.DMUserID)
+}
+
+func TestBuilderStoreAdapter_GetEditContext_NotFound(t *testing.T) {
+	creator := &captureCharacterCreator{getCharErr: sql.ErrNoRows}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	_, err := adapter.GetEditContext(context.Background(), uuid.New().String())
+	require.ErrorIs(t, err, portal.ErrCharacterNotFound)
+}
+
+func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesLiveState(t *testing.T) {
+	charID := uuid.New()
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			ID:         charID,
+			CampaignID: uuid.New(),
+			HpCurrent:  5,
+			TempHp:     3,
+			Gold:       50,
+			// Level-1 wizard had 2 first-level slots, one already spent.
+			SpellSlots: pqtype.NullRawMessage{RawMessage: []byte(`{"1":{"current":1,"max":2}}`), Valid: true},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Gandalf",
+		Race:          "Human",
+		Class:         "wizard",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 13, CHA: 10},
+		HPMax:         8,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+	err := adapter.UpdateCharacterRecord(context.Background(), charID.String(), params)
+	require.NoError(t, err)
+
+	// Damage, temp HP, and gold survive the rebuild.
+	assert.Equal(t, int32(5), creator.capturedUpdate.HpCurrent)
+	assert.Equal(t, int32(3), creator.capturedUpdate.TempHp)
+	assert.Equal(t, int32(50), creator.capturedUpdate.Gold)
+
+	// The previously-expended first-level slot stays spent (current 1, not 2).
+	require.True(t, creator.capturedUpdate.SpellSlots.Valid)
+	var slots map[string]character.SlotInfo
+	require.NoError(t, json.Unmarshal(creator.capturedUpdate.SpellSlots.RawMessage, &slots))
+	assert.Equal(t, character.SlotInfo{Current: 1, Max: 2}, slots["1"])
+}
+
+func TestBuilderStoreAdapter_UpdateCharacterRecord_CapsHPToNewMax(t *testing.T) {
+	charID := uuid.New()
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{ID: charID, CampaignID: uuid.New(), HpCurrent: 99},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Frodo",
+		Race:          "Halfling",
+		Class:         "rogue",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 16, CON: 12, INT: 12, WIS: 13, CHA: 10},
+		HPMax:         9,
+		AC:            13,
+		SpeedFt:       25,
+		ProfBonus:     2,
+	}
+	require.NoError(t, adapter.UpdateCharacterRecord(context.Background(), charID.String(), params))
+	assert.Equal(t, int32(9), creator.capturedUpdate.HpCurrent, "hp_current capped to the new max")
+}
+
+func TestBuilderStoreAdapter_SetPlayerCharacterPending(t *testing.T) {
+	pcID := uuid.New()
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	require.NoError(t, adapter.SetPlayerCharacterPending(context.Background(), pcID.String()))
+	assert.Equal(t, pcID, creator.capturedStatusUpdate.ID)
+	assert.Equal(t, "pending", creator.capturedStatusUpdate.Status)
+}
+
+func TestBuilderStoreAdapter_HasActiveEncounter(t *testing.T) {
+	charID := uuid.New()
+
+	none := portal.NewBuilderStoreAdapter(&captureCharacterCreator{activeEncounterErr: sql.ErrNoRows}, nil)
+	in, err := none.HasActiveEncounter(context.Background(), charID.String())
+	require.NoError(t, err)
+	assert.False(t, in)
+
+	active := portal.NewBuilderStoreAdapter(&captureCharacterCreator{activeEncounterID: uuid.New()}, nil)
+	in, err = active.HasActiveEncounter(context.Background(), charID.String())
+	require.NoError(t, err)
+	assert.True(t, in)
 }

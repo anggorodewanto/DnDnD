@@ -23,6 +23,12 @@ var (
 	// already has an approved (active) character in the campaign. They must
 	// /retire it first; we never clobber an approved character.
 	ErrAlreadyActive = errors.New("you already have an active character in this campaign — retire it first")
+	// ErrEditNotAllowed is returned when the requester is neither the
+	// character's owner nor the campaign DM.
+	ErrEditNotAllowed = errors.New("not allowed to edit this character")
+	// ErrCharacterInEncounter blocks an edit while the character is in an active
+	// encounter — rebuilding would reset derived stats mid-combat.
+	ErrCharacterInEncounter = errors.New("character is in an active encounter — cannot edit now")
 )
 
 // CharacterSubmission is the payload sent by the character builder form.
@@ -258,10 +264,33 @@ type ActivePlayerCharacter struct {
 	Status string
 }
 
+// EditContext describes who may edit an existing character and the live-play
+// gate. OwnerID is the linked player's Discord ID ("" when the character has no
+// linked player, e.g. DM-created and unclaimed). DMUserID is the campaign DM.
+type EditContext struct {
+	CampaignID        string
+	OwnerID           string
+	DMUserID          string
+	PlayerCharacterID string
+	Status            string
+}
+
 // BuilderStore abstracts the persistence layer for character creation.
 type BuilderStore interface {
 	CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error)
 	CreatePlayerCharacterRecord(ctx context.Context, p CreatePlayerCharacterParams) (string, error)
+	// GetEditContext returns ownership/DM/status facts for an existing
+	// character, or ErrCharacterNotFound when it does not exist.
+	GetEditContext(ctx context.Context, characterID string) (*EditContext, error)
+	// UpdateCharacterRecord rewrites a character from a fresh build, preserving
+	// live-play state (current HP, temp HP, gold, used spell slots).
+	UpdateCharacterRecord(ctx context.Context, characterID string, p CreateCharacterParams) error
+	// SetPlayerCharacterPending flips a player_characters row back to pending
+	// (a player's edit must be re-approved by the DM).
+	SetPlayerCharacterPending(ctx context.Context, playerCharacterID string) error
+	// HasActiveEncounter reports whether the character is currently in an
+	// active encounter (edits are blocked while true).
+	HasActiveEncounter(ctx context.Context, characterID string) (bool, error)
 	// ActivePlayerCharacter returns the non-retired player_characters row for
 	// the (campaign, player), or (nil, nil) when none exists.
 	ActivePlayerCharacter(ctx context.Context, campaignID, discordUserID string) (*ActivePlayerCharacter, error)
@@ -432,10 +461,13 @@ type createInput struct {
 	mode          CreateMode
 }
 
-// create is the unified creation core shared by the player and DM flows.
-func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCharacterResult, error) {
-	sub := in.sub
-	if in.mode == ModeDM && sub.AbilityMethod == "" && svc.hasAbilityMethodProvider() {
+// prepareCharParams validates a submission and derives the persistable
+// CreateCharacterParams for the given campaign + mode. It is shared by the
+// create and update flows. On validation failure it returns the messages (and
+// a zero params value); callers add flow-specific checks (token, campaign_id)
+// before deciding whether to proceed.
+func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID string, sub CharacterSubmission, mode CreateMode) (CreateCharacterParams, []string) {
+	if mode == ModeDM && sub.AbilityMethod == "" && svc.hasAbilityMethodProvider() {
 		sub.AbilityMethod = AbilityMethodPointBuy
 	}
 	// Back-fill the legacy single-class fields from the primary multiclass
@@ -448,8 +480,8 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		}
 	}
 
-	errs := ValidateSubmissionMode(sub, in.mode)
-	if err := svc.validateAllowedAbilityMethod(ctx, in.campaignID, sub.AbilityMethod); err != nil {
+	errs := ValidateSubmissionMode(sub, mode)
+	if err := svc.validateAllowedAbilityMethod(ctx, campaignID, sub.AbilityMethod); err != nil {
 		errs = append(errs, err.Error())
 	}
 	// Reject illegal client-submitted skill sets (e.g. a crafted POST claiming
@@ -464,18 +496,8 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	if err := validateSubmittedExpertise(sub); err != nil {
 		errs = append(errs, err.Error())
 	}
-	// A missing campaign_id (both modes) or token (player flow) is a bad
-	// request, not a server error: reject it here so the handler returns 400
-	// instead of letting a token lookup miss or campaign_id parse failure
-	// surface as a generic 500.
-	if in.campaignID == "" {
-		errs = append(errs, "campaign_id is required")
-	}
-	if in.mode == ModePlayer && in.token == "" {
-		errs = append(errs, "token is required")
-	}
 	if len(errs) > 0 {
-		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
+		return CreateCharacterParams{}, errs
 	}
 
 	stats := DeriveStats(sub, svc.lookupRaceSpeeds(ctx))
@@ -498,8 +520,8 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		skills = append(classSkillProficiencies(SubmissionClasses(sub)), backgroundSkillProficiencies(sub.Background)...)
 	}
 
-	charParams := CreateCharacterParams{
-		CampaignID:      in.campaignID,
+	return CreateCharacterParams{
+		CampaignID:      campaignID,
 		Name:            sub.Name,
 		Race:            sub.Race,
 		Subrace:         sub.Subrace,
@@ -524,6 +546,24 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		WornArmor:       sub.WornArmor,
 		Appearance:      sub.Appearance,
 		Backstory:       sub.Backstory,
+	}, nil
+}
+
+// create is the unified creation core shared by the player and DM flows.
+func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCharacterResult, error) {
+	charParams, errs := svc.prepareCharParams(ctx, in.campaignID, in.sub, in.mode)
+	// A missing campaign_id (both modes) or token (player flow) is a bad
+	// request, not a server error: reject it here so the handler returns 400
+	// instead of letting a token lookup miss or campaign_id parse failure
+	// surface as a generic 500.
+	if in.campaignID == "" {
+		errs = append(errs, "campaign_id is required")
+	}
+	if in.mode == ModePlayer && in.token == "" {
+		errs = append(errs, "token is required")
+	}
+	if len(errs) > 0 {
+		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}
 
 	if in.mode == ModePlayer {
@@ -569,7 +609,7 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	}
 
 	if in.mode == ModePlayer && svc.notifier != nil {
-		if err := svc.notifier.NotifyDMQueue(ctx, in.campaignID, sub.Name, in.discordUserID, "portal-create"); err != nil && svc.logger != nil {
+		if err := svc.notifier.NotifyDMQueue(ctx, in.campaignID, in.sub.Name, in.discordUserID, "portal-create"); err != nil && svc.logger != nil {
 			svc.logger.Warn("notifying dm queue", "error", err)
 		}
 	}
@@ -577,6 +617,67 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	return CreateCharacterResult{
 		CharacterID:       charID,
 		PlayerCharacterID: pcID,
+	}, nil
+}
+
+// UpdateCharacter rewrites an existing character from a fresh builder
+// submission. The requester must be the character's owner or the campaign DM
+// (else ErrEditNotAllowed); editing is blocked while the character is in an
+// active encounter (ErrCharacterInEncounter). A player's edit flips the
+// player_characters row back to pending (DM re-approval) and notifies the DM
+// queue; a DM's edit applies immediately. Live-play state (current HP, temp HP,
+// gold, used spell slots) is preserved by the store. The campaign is taken from
+// the stored character, so callers need not supply it.
+func (svc *BuilderService) UpdateCharacter(ctx context.Context, characterID, requesterID string, sub CharacterSubmission) (CreateCharacterResult, error) {
+	ec, err := svc.store.GetEditContext(ctx, characterID)
+	if err != nil {
+		return CreateCharacterResult{}, err
+	}
+
+	isOwner := ec.OwnerID != "" && ec.OwnerID == requesterID
+	isDM := ec.DMUserID != "" && ec.DMUserID == requesterID
+	if !isOwner && !isDM {
+		return CreateCharacterResult{}, ErrEditNotAllowed
+	}
+
+	inEncounter, err := svc.store.HasActiveEncounter(ctx, characterID)
+	if err != nil {
+		return CreateCharacterResult{}, fmt.Errorf("checking active encounter: %w", err)
+	}
+	if inEncounter {
+		return CreateCharacterResult{}, ErrCharacterInEncounter
+	}
+
+	// A DM may build arbitrary stat blocks (ModeDM rules); a player edit is
+	// held to the same generation rules as creation (ModePlayer).
+	mode := ModePlayer
+	if isDM {
+		mode = ModeDM
+	}
+	charParams, errs := svc.prepareCharParams(ctx, ec.CampaignID, sub, mode)
+	if len(errs) > 0 {
+		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
+	}
+
+	if err := svc.store.UpdateCharacterRecord(ctx, characterID, charParams); err != nil {
+		return CreateCharacterResult{}, fmt.Errorf("updating character: %w", err)
+	}
+
+	// A player's edit must be re-approved; a DM's edit stays as-is.
+	if !isDM && ec.PlayerCharacterID != "" {
+		if err := svc.store.SetPlayerCharacterPending(ctx, ec.PlayerCharacterID); err != nil {
+			return CreateCharacterResult{}, fmt.Errorf("resetting approval status: %w", err)
+		}
+		if svc.notifier != nil {
+			if err := svc.notifier.NotifyDMQueue(ctx, ec.CampaignID, sub.Name, requesterID, "portal-edit"); err != nil && svc.logger != nil {
+				svc.logger.Warn("notifying dm queue", "error", err)
+			}
+		}
+	}
+
+	return CreateCharacterResult{
+		CharacterID:       characterID,
+		PlayerCharacterID: ec.PlayerCharacterID,
 	}, nil
 }
 
