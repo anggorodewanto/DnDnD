@@ -4,8 +4,8 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-25 (session 1 — 2nd player joined; Forge approved + woven into
-the scene; the cellar thing is climbing toward the light)._
+_Last updated: 2026-06-25 (session 1 — combat LIVE: Vale cast hold person → escalated
+to initiative; Round 1, Forge's turn first vs the cellar wretch)._
 
 ## Stack status
 
@@ -68,9 +68,11 @@ the scene; the cellar thing is climbing toward the light)._
 
 ## Map
 
-- **None** (old "New Map" deleted during clean-slate). Import a battle map only
-  when the scene needs one — `docs/testdata/sample.tmj` is a 10×10 sample to
-  import via the dashboard (`POST /api/maps/import`). Record the new map ID here.
+- **Ashfall Waystation — common room** (`1ad14481-f938-462d-be75-25764463ff5b`),
+  **12×10** blank grid built fresh via dashboard Maps → New Map (not the sample
+  import). A 2×2 **Pit** in the bottom-left corner marks the **cellar mouth** the
+  wretch climbed out of; the rest is open ground (hearth / front door / tables are
+  narrated, not painted).
 
 ## Character(s)
 
@@ -102,8 +104,27 @@ the scene; the cellar thing is climbing toward the light)._
 
 ## Encounter / combat
 
-- **None yet.** No encounters, no active combat. To be built once the character
-  exists and the scene calls for it.
+- **LIVE — Round 1.** Encounter "Waystation — the cellar wretch" (combat id
+  `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`), on the common-room map above.
+  - **Initiative:** Forge **22** → the wretch **19** → Vale **19** (Forge up first).
+  - **Threat:** 1× **Ghoul** stat block (G1) — **HP 22, AC 12**, placed at the cellar
+    mouth (2,7), ~35 ft (7 sq) from the party by the door. **DM RULING: it is a
+    LIVING wretch (Humanoid), not undead** — a person rotted/maddened by whatever's
+    in the cellar. Reflavored so Vale's *hold person* is a valid target (the engine
+    just labels the stat block "Ghoul"; ignore the type tag). Ghoul claws/bite +
+    paralysing touch reflavored as a sickening grip; run RAW numbers.
+  - **Vale's pending action:** declared *hold person* pre-initiative; per the player
+    it's HELD and **resolves on Vale's turn** (3rd, after the wretch moves) — WIS save
+    vs **DC 13**. Don't pre-resolve it. Vale has 1 pact slot left after it (2→1).
+  - PCs auto-placed at combat start (Vale token at top-left (0,0); Forge near the
+    party). Monster HP hidden from players in #initiative-tracker (good).
+  - **#combat-map note:** this combat started BEFORE the `7b6c125` deploy, so the
+    opening board was NOT auto-posted (that feature only fires on *future*
+    StartCombat). The board now lands in #combat-map on the first `/done`, on a
+    DM-run enemy turn, or — **new this deploy** — when any player runs **`/map`**
+    on demand. To show the current board now, a player can run `/map`.
+  - **Reserve:** if 1 wretch proves light for two L3 PCs, a 2nd can claw up from the
+    pit mid-fight (the door was scored by something *desperate*).
 
 ## Opening scene (DM plan — flex to the character once built)
 
@@ -124,17 +145,26 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-- **Scene is live, party of two.** Latest beat posted to `#the-story` (10:26 AM):
-  Vale set the mage hand as a guard at the cellar mouth and called *"hello?"* down
-  the steps → the dragging *scrape* answered, paused (it *heard her*), and is now
-  **climbing toward the light** — "maybe two turns from the top." On that beat,
-  **Forge Anvilbearer** shoves in through the waystation's front door (his entrance
-  into the scene — the world delivering the 2nd PC; his choices belong to his player).
-1. **Players (Vale + Forge):** declare next moves in `#in-character`. Forge has not
-   acted IC yet — this is his first beat. Descending / meeting the climbing thing =
-   the fight is ready (import the 10×10 waystation map for the cellar).
-2. **Claude (DM):** respond via the Narrate tool (`#the-story`). When the thing
-   reaches the top (≈2 beats) or a PC closes with it, combat starts: import the map,
-   build the encounter (it clawed to get *out* — pick/stat the threat), open combat
-   with both PCs in initiative.
+- **COMBAT IS LIVE — Round 1, Forge's turn.** Vale answered the emergence by casting
+  *hold person* (`#in-character`, 11:31 AM); the DM (per the player) escalated straight
+  to initiative rather than resolving the cast in narration. Initiative rolled, combat
+  opened, and the DM posted the combat-start beat to `#the-story` (11:46 AM):
+  the wretch drops to all fours, **established as alive** (heaving ribs, ticking pulse,
+  drool) so *hold person* is on the table; ~35 ft of flagstone between it and the party.
+  See the **Encounter / combat** section above for ids, initiative, stats, and the
+  living-wretch ruling.
+1. **Forge (init 22) is up first** — his player declares in `#in-character` (or `/move`,
+   `/attack`). **His choices are his own; the DM does not act for him.** Forge is the
+   remote 2nd player (cloudflared tunnel).
+2. **Then the wretch (19):** DM runs it. From (2,7) it can move ~6 sq (30 ft) toward the
+   party and likely reach melee on whoever's closest unless Forge intercepts/blocks. Run
+   its turn from the Combat Manager (move + Multiattack: 2 claws / bite; on a hit by
+   claws vs a non-elf, the target's CON save or be reflavored-"gripped"/restrained — DM
+   call; keep RAW numbers).
+3. **Then Vale (19):** resolve her held *hold person* — the wretch makes a **WIS save vs
+   DC 13**. Fail → paralysed (advantage to attackers, auto-crit melee in 5 ft = huge for
+   Forge); save → no effect, slot spent (Vale 2→1 pact slots).
+4. **DM cadence each turn:** advance the Combat Manager turn queue (End Turn), narrate
+   results to `#the-story`, apply damage/conditions on the combatant panels. If the lone
+   wretch is trivial, a 2nd can claw up from the pit (see Reserve note above).
 </content>
