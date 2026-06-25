@@ -110,6 +110,13 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	if p.WornArmor != "" {
 		equippedArmor = sql.NullString{String: p.WornArmor, Valid: true}
 	}
+	// ISSUE-011: an equipped shield (flagged off_hand by the inventory builder)
+	// must also populate the dedicated equipped_off_hand column. Mirror the
+	// shield detection used for the Unarmored Defense AC formula below.
+	var equippedOffHand sql.NullString
+	if hasEquipmentItem(p.Equipment, "shield") {
+		equippedOffHand = sql.NullString{String: "shield", Valid: true}
+	}
 
 	var featureUsesMsg pqtype.NullRawMessage
 	if fu := InitFeatureUses(classEntries, p.AbilityScores); len(fu) > 0 {
@@ -200,6 +207,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		SpeedFt:          int32(p.SpeedFt),
 		ProficiencyBonus: int32(p.ProfBonus),
 		EquippedMainHand: equippedMainHand,
+		EquippedOffHand:  equippedOffHand,
 		EquippedArmor:    equippedArmor,
 		HitDiceRemaining: hitDiceJSON,
 		FeatureUses:      featureUsesMsg,

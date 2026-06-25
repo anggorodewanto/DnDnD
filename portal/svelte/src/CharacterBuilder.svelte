@@ -21,6 +21,7 @@
   import { humanizeSubmitError } from './lib/submit-error.js';
   import { submissionRequirements, canSubmit } from './lib/submission-requirements.js';
   import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState } from './lib/builder-steps.js';
+  import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -450,31 +451,24 @@
     return item ? item.name : id.replace(/-/g, ' ');
   }
 
-  let selectedArmorOptions = $derived(() => {
-    const byId = equipmentById();
-    return selectedEquipment().filter((id) => {
-      if (id === 'shield') return true;
-      const item = byId.get(id);
-      return item && item.category === 'armor';
-    });
-  });
+  // Equippable armor/weapon ids drawn from the selected equipment. The lib
+  // helpers recognise an id as armor/weapon from the loaded catalog's category
+  // OR a static SRD id fallback, so a pack pick (leather, light crossbow) stays
+  // selectable even before allEquipment resolves (ISSUE-011).
+  let selectedArmorOptions = $derived(() => armorOptionIds(selectedEquipment(), equipmentById()));
+  let selectedWeaponOptions = $derived(() => weaponOptionIds(selectedEquipment(), equipmentById()));
 
-  let selectedWeaponOptions = $derived(() => {
-    const byId = equipmentById();
-    return selectedEquipment().filter((id) => {
-      const item = byId.get(id);
-      return item && item.category === 'weapon';
-    });
-  });
-
-  // Clear worn/equipped picks that fall out of the selected list.
+  // Clear worn/equipped picks only when they genuinely fall out of the option
+  // list — reconcileEquipPick keeps a still-present pack pick that the catalog
+  // hasn't resolved yet, so a legitimate selection is never silently dropped
+  // before submit (ISSUE-011).
   $effect(() => {
-    const armor = selectedArmorOptions();
-    if (wornArmor && !armor.includes(wornArmor)) wornArmor = '';
+    const next = reconcileEquipPick(wornArmor, selectedArmorOptions());
+    if (next !== wornArmor) wornArmor = next;
   });
   $effect(() => {
-    const weapons = selectedWeaponOptions();
-    if (equippedWeapon && !weapons.includes(equippedWeapon)) equippedWeapon = '';
+    const next = reconcileEquipPick(equippedWeapon, selectedWeaponOptions());
+    if (next !== equippedWeapon) equippedWeapon = next;
   });
 
   function toggleMastery(weaponId) {

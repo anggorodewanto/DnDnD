@@ -447,6 +447,59 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsEquipped(t *testing.T
 	assert.Equal(t, "main_hand", items[0].EquipSlot)
 }
 
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsEquippedOffHand(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:     uuid.New().String(),
+		Name:           "Knight",
+		Race:           "Human",
+		Class:          "Fighter",
+		AbilityScores:  character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:          12,
+		AC:             18,
+		SpeedFt:        30,
+		ProfBonus:      2,
+		Equipment:      []string{"longsword", "chain-mail", "shield"},
+		EquippedWeapon: "longsword",
+		WornArmor:      "chain-mail",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// An equipped shield should populate the dedicated EquippedOffHand column.
+	assert.True(t, creator.capturedParams.EquippedOffHand.Valid)
+	assert.Equal(t, "shield", creator.capturedParams.EquippedOffHand.String)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_NoShieldNoOffHand(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:     uuid.New().String(),
+		Name:           "Duelist",
+		Race:           "Human",
+		Class:          "Fighter",
+		AbilityScores:  character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:          12,
+		AC:             16,
+		SpeedFt:        30,
+		ProfBonus:      2,
+		Equipment:      []string{"longsword", "chain-mail"},
+		EquippedWeapon: "longsword",
+		WornArmor:      "chain-mail",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// Without a shield the off-hand column stays NULL.
+	assert.False(t, creator.capturedParams.EquippedOffHand.Valid)
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_NoFeatures(t *testing.T) {
 	creator := &captureCharacterCreator{}
 	adapter := portal.NewBuilderStoreAdapter(creator, nil)
