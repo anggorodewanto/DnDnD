@@ -302,10 +302,19 @@ Usage:
 
 const helpEquip = `/equip — Equip an Item
 
+Items go into one of three slots. Body armor needs armor:true; a shield
+goes in the off-hand; anything else defaults to your main hand.
+
 Usage:
-  /equip [item]                       Equip an item from your inventory
-  /equip [item] offhand:true          Equip in your off-hand
-  /equip [item] armor:true            Equip as body armor`
+  /equip [item]                       Hold in your main hand (weapon)
+  /equip [item] offhand:true          Off-hand: a shield or a second weapon
+  /equip [item] armor:true            Wear as body armor (e.g. leather, chain-mail)
+  /equip none armor:true              Take off your body armor (clears the slot)
+
+Notes:
+  • Use the item id shown in /inventory (e.g. leather, longsword).
+  • Each slot holds one item — equipping new body armor replaces the old.
+  • Body armor can't be donned or doffed during combat.`
 
 const helpInventory = `/inventory — Show Your Inventory
 

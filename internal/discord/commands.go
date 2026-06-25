@@ -423,23 +423,23 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:        "equip",
-			Description: "Equip an item",
+			Description: "Equip an item to a slot: main hand (default), off-hand, or body armor",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "item",
-					Description: "Item to equip (e.g. longsword)",
+					Description: "Item id from /inventory (e.g. leather, longsword). Use 'none' to unequip a slot.",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "offhand",
-					Description: "Equip in off-hand",
+					Description: "Put it in your off-hand slot: a shield or a second weapon",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "armor",
-					Description: "Equip as body armor",
+					Description: "Wear as body armor — required for armor like leather/chain (omit for shields)",
 				},
 			},
 		},
