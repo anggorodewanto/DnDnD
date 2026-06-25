@@ -7,9 +7,12 @@
 _Last updated: 2026-06-25 (session 1 — combat LIVE: Round 1 resolved through Forge's
 handaxe + the wretch's whiffed Multiattack; Vale's hold person LANDED → wretch
 PARALYZED. Vale's turn still active (movement/bonus action pending), then Round 2
-opens with Forge auto-critting the paralyzed wretch. App rebuilt + redeployed
-~13:45 UTC with the **ISSUE-014** DM-Console action-log fix live (combat state
-preserved); the **Hold Person** narration is now posted to #the-story)._
+opens with Forge auto-critting the paralyzed wretch. App redeployed **again ~22:50 UTC**
+with two more live-play fixes live — **ISSUE-016** (`/done` phantom-attack after a spell
+cast) + the **ISSUE-015 DISPLAY half** (paralysis no longer renders as "[object Object]")
+— on top of the earlier ~13:45 UTC **ISSUE-014** DM-Console fix; combat state preserved.
+Cosmetic caveat: Vale's current turn still shows the pre-fix phantom attack — confirm
+`/done` past it once. The **Hold Person** narration is posted to #the-story)._
 
 ## Stack status
 
@@ -23,6 +26,20 @@ preserved); the **Hold Person** narration is now posted to #the-story)._
   opened", all discord checks passed for guild `1507910398886543532`, server on
   `:8080`, no panic/error. **Combat state preserved across the redeploy** (still
   Round 1, Vale's turn active, wretch paralyzed — see Encounter / combat below).
+- **Redeployed AGAIN ~22:50 UTC (2026-06-25)** via `docker compose up -d --build app`
+  to ship two more live-play fixes in one commit (`main` `b108bf2`, pushed
+  `0dfa1ec..b108bf2`): **ISSUE-016** (`/done` no longer warns of a phantom attack after
+  a player casts a spell with their action) + the **ISSUE-015 DISPLAY half** (the Combat
+  Manager now renders conditions via `conditionName()` instead of "[object Object]";
+  the WRITE half of ISSUE-015 stays OPEN). Clean boot: "database connected and migrated"
+  (no new migration), "discord session opened", all discord checks passed for guild
+  `1507910398886543532`, server on `:8080`, no error. **Combat state preserved again**
+  (still Round 1, Vale's turn active, wretch paralyzed D7 15/22, Forge E7 32/32, Vale
+  K6 24/24 concentrating with 1 pact slot left).
+  - **Cosmetic caveat:** Vale's *current* turn still carries the pre-fix
+    `attacks_remaining=1` (the ISSUE-016 fix only affects casts made on the new binary),
+    so `/done` will still warn **once** for this turn — just confirm past it; her next
+    cast is clean.
 
 ### Remote-player access (cloudflared tunnel) — 2026-06-25
 

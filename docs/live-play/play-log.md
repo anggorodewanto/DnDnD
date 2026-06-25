@@ -163,4 +163,43 @@ if/when the cellar fight starts.
 **Next:** Vale finishes her turn (movement/bonus action — player decides), then End
 Turn / `/done` opens Round 2 with Forge auto-critting the paralyzed wretch. Keep Vale's
 concentration intact (CON save on any damage to her, or the paralysis drops).
+
+**Two live-play bugs fixed + redeployed (2026-06-25, ~22:50 UTC)**
+
+- Two more bugs surfaced **during this live combat** and were fixed, shipped, and
+  redeployed in one commit (`main` `b108bf2`, pushed `0dfa1ec..b108bf2`). Both found
+  while watching Vale's Hold Person beat play out:
+  - **ISSUE-016 (NEW) — `/done` phantom "1 attack" after a spell cast.** When Vale
+    (Warlock 3, no Extra Attack) cast Hold Person with her **action**, `/done` warned
+    "you still have 1 attack" — an attack she never had. Casting a spell is the
+    Cast-a-Spell action, not the Attack action, but `Service.Cast`/`CastAoE` left the
+    seeded `attacks_remaining=1` in place, so the `/done` unused-resource check (and the
+    "Remaining" summary) reported a phantom attack. **Fixed:** zero
+    `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled);
+    bonus-action casts left untouched. Red/green `cast_attacks_remaining_test.go`,
+    `make cover-check` green. Severity medium (misleading UX).
+  - **ISSUE-015 DISPLAY half — paralysis showing as "[object Object]".** The Combat
+    Manager rendered the wretch's *hold person* paralysis as **"[object Object]"** — the
+    engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI
+    interpolated each entry as a string. **Fixed:** new `conditionName()` helper
+    (`dashboard/svelte/src/lib/combat.js`) Title-Cases either an object's `.condition` or
+    a bare string; `CombatManager.svelte` renders `conditionName(cond)`. vitest 64/64,
+    svelte build clean, embedded assets regenerated. **Display half only** — the
+    **WRITE half of ISSUE-015 stays OPEN** (the dashboard "add condition" PATCH still
+    writes a bare string array the engine ignores, so a button-added condition renders
+    but no-ops mechanically; the correct-shape writer remains the DM-Override POST). The
+    live paralysis renders correctly now because it was written in the object shape.
+- **Redeployed** `docker compose up -d --build app` ~22:50 UTC — clean boot (db connected
+  + migrated, no new migration; discord session opened; all checks passed for guild
+  `1507910398886543532`; server `:8080`; no error). **Live combat state preserved across
+  the redeploy** (still Round 1, Vale's turn active, wretch paralyzed at D7 15/22, Forge
+  E7 32/32, Vale K6 24/24 concentrating, 1 pact slot left).
+- **Cosmetic caveat:** Vale's *current* turn still carries the pre-fix
+  `attacks_remaining=1` (the ISSUE-016 fix only affects casts made on the new binary), so
+  `/done` will still warn **once** for this turn — she just confirms past it; her next
+  cast is clean.
+
+**Next (unchanged):** Vale finishes her turn (movement/bonus action — player decides),
+then `/done` opens Round 2 with Forge auto-critting the paralyzed wretch. Keep Vale's
+concentration intact.
 </content>

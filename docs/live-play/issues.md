@@ -23,7 +23,8 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-012 | 2026-06-25 | character card / spellcasting | minor | FIXED | Discord character card + `/character` embed show **"Spell Slots: —" for warlocks** — they read only the `spell_slots` column and never fall back to `pact_magic_slots`. **Fixed (TDD, `main` 5090e02):** both surfaces now pact-aware — parse the canonical `character.PactMagicSlots` ({slot_level,current,max}) and render `Pact Magic: N × Lvl L`; a multiclass caster shows standard + pact joined by ` | `; non-casters keep `—`. `charactercard/format.go`+`service.go` (`CardData.PactMagicSlots`, `formatPactMagicSlots`, `parsePactMagicSlots`), `discord/character_handler.go` (`buildSpellSlotSummary` + a Spell Slots line in `buildCharacterEmbed`). cover-check green. |
 | ISSUE-013 | 2026-06-25 | builder / submit (server) | blocker | FIXED | Friend's **barbarian / guild-artisan** submit 400s: `skill "insight" is not selectable for this class`. Root cause = **slug drift** between two hand-maintained Go background maps and the builder's kebab-case slugs. `backgroundSkillProficiencies` (`derive_stats.go`) had **no `guild-artisan`** case and keyed folk-hero as `"folk hero"` (space); both backgrounds therefore resolved to ∅ locked skills, so their PHB grants (insight+persuasion) were treated as off-list class picks and rejected. `backgroundStartingEquipment` (`starting_equipment.go`) had the same space-slug bug → those two backgrounds also silently got no starting-equipment pack. **Fixed (TDD, `main`):** both Go maps re-keyed to the exact 13 builder slugs (kebab-case) + `guild-artisan` added; two contract tests (`TestBackgroundSkillProficiencies_AllBuilderBackgrounds`, `TestBackgroundEquipmentPack_AllBuilderBackgrounds`) lock every builder slug so future drift fails CI; removed a stale test that asserted the old Title-Case `"Folk Hero"` input (never sent by the real builder — why the bug hid). cover-check green. **Deeper fix (SSOT) tracked separately.** |
 | ISSUE-014 | 2026-06-25 | dm console / action log | medium | FIXED + DEPLOYED | DM Console didn't track player combat actions — spell casts + freeform actions post to #combat-log but were never written to `action_log`, so `GET /api/dm/situation` `timeline[]` showed nothing for them. **Fixed (`main` f1e3aeb, pushed, redeployed ~13:45 UTC):** a best-effort `recordCombatAction` helper (new `internal/combat/action_log_record.go`) now writes an `action_log` row at the success tail of every player combat path (`Cast`, `CastAoE`, `FreeformAction`, `Attack`, `attackImprovised`, `OffhandAttack`). **DM-side only** — player-facing #combat-log output is unchanged; the Console is behind DM auth. Save adjudication stays a manual DM roll (no auto #dm-queue item, no auto NPC save). |
-| ISSUE-015 | 2026-06-25 | dashboard / conditions | high | OPEN | Condition-shape mismatch between the dashboard "add condition" button and the engine. The workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` (+ Svelte tracker) write a bare JSON string array (`["paralyzed"]`), but the engine reads conditions via `parseConditions` as objects keyed by `.condition` (`[{"condition":"paralyzed",...}]`). A condition added through the normal button renders but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) **never fire** (`.Condition` parses empty). Only the DM-Override POST `/api/combat/{id}/override/combatant/{cid}/conditions` writes the correct object shape. Flagged for follow-up (align PATCH + tracker to the object shape, or have the engine accept both). |
+| ISSUE-015 | 2026-06-25 | dashboard / conditions | high | DISPLAY FIXED / WRITE OPEN | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half STILL OPEN:** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` (+ Svelte tracker) still write a bare string array (`["paralyzed"]`) the engine's `parseConditions` ignores, so a button-added condition renders but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) **never fire**. Correct-shape writer remains the DM-Override POST `/api/combat/{id}/override/combatant/{cid}/conditions`. |
+| ISSUE-016 | 2026-06-25 | combat / spellcasting | medium | FIXED + DEPLOYED | `/done` falsely warned "you still have 1 attack" after a player cast a spell with their ACTION. Casting a spell is the Cast-a-Spell action, not the Attack action, so no weapon attack remains — but `Service.Cast`/`Service.CastAoE` consumed the action while leaving the seeded `attacks_remaining=1`, so the `/done` unused-resource check (and the "Remaining" summary) reported a phantom attack. **Fixed (`b108bf2`):** zero `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled); bonus-action casts left untouched (they keep the Attack action + its attacks). Found in live play: Vale (Warlock 3, no Extra Attack) cast Hold Person, then `/done` warned of an attack she never had. |
 
 ---
 
@@ -322,30 +323,74 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   saving throw (and/or surfacing a `#dm-queue` prompt) for player save-spells is a
   worthwhile future enhancement — today it remains a manual DM roll.
 
-### ISSUE-015 — Condition shape mismatch: dashboard "add condition" button vs the engine
+### ISSUE-015 — Condition shape mismatch: dashboard vs the engine (DISPLAY half FIXED · WRITE half OPEN)
 - **Date:** 2026-06-25
-- **Area:** dashboard / combat conditions (workspace PATCH + Svelte tracker vs engine
-  `parseConditions`)
-- **Severity:** high — a **silent mechanical no-op**: the condition shows on the
-  tracker but does nothing in the rules engine.
-- **Status:** OPEN — flagged for a follow-up fix.
-- **Detail:** The workspace PATCH endpoint
-  `/api/combat/{id}/combatants/{cid}/conditions` (and the Svelte tracker that drives
-  the "add condition" button) write conditions as a **bare JSON string array**, e.g.
-  `["paralyzed"]`. The combat engine, however, reads conditions via `parseConditions`
-  as an **array of objects keyed by `.condition`**, e.g.
-  `[{"condition":"paralyzed",...}]`.
-- **Symptom:** a condition added through the normal dashboard button is rendered, but
-  its mechanical effects — auto-crit (melee within 5 ft of a paralyzed target),
-  advantage-to-attackers, auto-fail STR/DEX saves — **do NOT fire**, because
-  `.Condition` parses empty out of the string-array shape.
-- **Only correct path today:** the DM-Override endpoint POST
+- **Area:** dashboard / combat conditions (Combat Manager render + workspace PATCH +
+  Svelte tracker vs engine `parseConditions`)
+- **Severity:** high — the WRITE half is a **silent mechanical no-op**: a
+  button-added condition shows on the tracker but does nothing in the rules engine.
+- **Status:** **DISPLAY half FIXED** (`b108bf2`, deployed) · **WRITE half STILL OPEN**.
+- **Two halves:**
+  - **DISPLAY (the render) — FIXED.** The Combat Manager rendered a combatant's
+    condition as **"[object Object]"** because the engine stores conditions as objects
+    (`{condition:"paralyzed",...}`) but the Svelte UI interpolated each entry directly
+    as a string.
+  - **WRITE (the persisted shape) — OPEN.** The workspace PATCH endpoint
+    `/api/combat/{id}/combatants/{cid}/conditions` (and the Svelte tracker that drives
+    the "add condition" button) still write conditions as a **bare JSON string array**,
+    e.g. `["paralyzed"]`. The combat engine reads conditions via `parseConditions`
+    as an **array of objects keyed by `.condition`**, e.g.
+    `[{"condition":"paralyzed",...}]`.
+- **WRITE-half symptom (still live):** a condition added through the normal dashboard
+  button now *renders* correctly (post-display-fix), but its mechanical effects —
+  auto-crit (melee within 5 ft of a paralyzed target), advantage-to-attackers,
+  auto-fail STR/DEX saves — **do NOT fire**, because `.Condition` parses empty out of
+  the string-array shape.
+- **Only correct WRITE path today:** the DM-Override endpoint POST
   `/api/combat/{id}/override/combatant/{cid}/conditions` is the lone HTTP path that
   writes the correct object shape (which is why the wretch's *hold person* paralysis,
-  applied by the engine/override flow, fires correctly while a button-added condition
-  would not).
-- **Fix idea:** align the PATCH endpoint + Svelte tracker to the object shape, or have
-  the engine's `parseConditions` accept both the string-array and object shapes.
+  applied via that override-equivalent path in the object shape, fires correctly — and
+  now also renders correctly — while a button-added condition would render but no-op).
+- **FIX (DISPLAY half, 2026-06-25, `main` `b108bf2`, pushed `0dfa1ec..b108bf2`,
+  deployed ~22:50 UTC):** new `conditionName()` helper
+  (`dashboard/svelte/src/lib/combat.js`) Title-Cases either an object's `.condition`
+  or a bare string; `CombatManager.svelte` now renders `conditionName(cond)` instead of
+  interpolating the raw entry. vitest 64/64, svelte build clean, embedded assets
+  regenerated. **Display-only** — the persisted WRITE shape is untouched.
+- **Remaining WRITE-half fix idea:** align the PATCH endpoint + Svelte tracker to the
+  object shape, or have the engine's `parseConditions` accept both the string-array and
+  object shapes.
+
+### ISSUE-016 — `/done` phantom "1 attack" warning after casting a spell with the action (FIXED)
+- **Date:** 2026-06-25
+- **Area:** combat / spellcasting (action economy — `Service.Cast` / `Service.CastAoE`
+  vs the `/done` unused-resource check)
+- **Severity:** medium — misleading UX; a phantom unused-attack warning could cause a
+  player to waste time or a DM to mis-rule the turn.
+- **Status:** FIXED + DEPLOYED (`main` `b108bf2`, pushed `0dfa1ec..b108bf2`, redeployed
+  ~22:50 UTC).
+- **Repro:** A character with **no Extra Attack** (e.g. Warlock 3) casts a spell using
+  their **action** (cantrip or leveled), then runs **`/done`**.
+- **Expected:** No unused-resource warning for a weapon attack — the action was spent on
+  Cast-a-Spell, so there is no Attack action and no weapon attack remaining.
+- **Actual:** `/done` warned **"you still have 1 attack"** and the "Remaining" resource
+  summary listed a phantom attack.
+- **Root cause:** casting a spell is the **Cast-a-Spell action, not the Attack action**,
+  so no weapon attack remains — but `Service.Cast` / `Service.CastAoE` consumed the
+  action while leaving the seeded `attacks_remaining=1` untouched. The `/done`
+  unused-resource check (and the "Remaining" summary) read that stale `attacks_remaining`
+  and reported an attack the caster never had.
+- **FIX (2026-06-25, TDD, `main` `b108bf2`):** zero `turn.AttacksRemaining` when a spell
+  consumes the **action** (cantrip or leveled). **Bonus-action casts are left untouched**
+  — those keep the Attack action and its attacks (e.g. a quickened/bonus-action spell
+  plus a weapon attack is legal). Red/green test
+  `internal/combat/cast_attacks_remaining_test.go`; `make cover-check` passes.
+- **Discovered in live play:** Vale (Warlock 3, no Extra Attack) cast **Hold Person**,
+  then `/done` warned of an attack she never had.
+- **Caveat (live state):** the fix only affects casts made on the **new binary**. Vale's
+  *current* in-flight turn still carries the pre-fix `attacks_remaining=1`, so `/done`
+  will warn **once more** for this turn — she just confirms past it; her **next** cast is
+  clean.
 
 <!-- Append a section per issue:
 
