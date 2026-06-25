@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -18,12 +19,16 @@ import (
 
 // mockCharacterQuerier implements portal.CharacterQuerier for unit tests.
 type mockCharacterQuerier struct {
-	character refdata.Character
-	charErr   error
-	pc        refdata.PlayerCharacter
-	pcErr     error
-	spells    []refdata.Spell
-	spellsErr error
+	character   refdata.Character
+	charErr     error
+	pc          refdata.PlayerCharacter
+	pcErr       error
+	spells      []refdata.Spell
+	spellsErr   error
+	campaign    refdata.Campaign
+	campaignErr error
+	viewerPC    refdata.PlayerCharacter
+	viewerPCErr error
 }
 
 func (m *mockCharacterQuerier) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -40,6 +45,118 @@ func (m *mockCharacterQuerier) GetSpellsByIDs(_ context.Context, ids []string) (
 
 func (m *mockCharacterQuerier) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.NullUUID) (refdata.Combatant, error) {
 	return refdata.Combatant{}, sql.ErrNoRows // default: not in combat
+}
+
+func (m *mockCharacterQuerier) GetCampaignByID(_ context.Context, _ uuid.UUID) (refdata.Campaign, error) {
+	return m.campaign, m.campaignErr
+}
+
+func (m *mockCharacterQuerier) GetPlayerCharacterByDiscordUser(_ context.Context, _ refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error) {
+	return m.viewerPC, m.viewerPCErr
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_DM(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+	q := &mockCharacterQuerier{
+		character:   refdata.Character{ID: charID, CampaignID: campID},
+		campaign:    refdata.Campaign{ID: campID, DmUserID: "dm-1"},
+		viewerPCErr: sql.ErrNoRows, // DM has no PC in the campaign
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	ok, err := store.CanViewCharacter(context.Background(), charID.String(), "dm-1")
+
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_CampaignMember(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+	q := &mockCharacterQuerier{
+		character: refdata.Character{ID: charID, CampaignID: campID},
+		campaign:  refdata.Campaign{ID: campID, DmUserID: "dm-1"},
+		viewerPC:  refdata.PlayerCharacter{CampaignID: campID, DiscordUserID: "player-2", Status: "approved"},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	ok, err := store.CanViewCharacter(context.Background(), charID.String(), "player-2")
+
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_Stranger(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+	q := &mockCharacterQuerier{
+		character:   refdata.Character{ID: charID, CampaignID: campID},
+		campaign:    refdata.Campaign{ID: campID, DmUserID: "dm-1"},
+		viewerPCErr: sql.ErrNoRows, // not a player in this campaign
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	ok, err := store.CanViewCharacter(context.Background(), charID.String(), "stranger")
+
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_InvalidID(t *testing.T) {
+	store := portal.NewCharacterSheetStoreAdapter(&mockCharacterQuerier{})
+	_, err := store.CanViewCharacter(context.Background(), "not-a-uuid", "user-1")
+	require.Error(t, err)
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_CharNotFound(t *testing.T) {
+	q := &mockCharacterQuerier{charErr: sql.ErrNoRows}
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	_, err := store.CanViewCharacter(context.Background(), uuid.New().String(), "user-1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, portal.ErrCharacterNotFound)
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_CampaignLookupError(t *testing.T) {
+	charID := uuid.New()
+	q := &mockCharacterQuerier{
+		character:   refdata.Character{ID: charID, CampaignID: uuid.New()},
+		campaignErr: errors.New("db down"),
+	}
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	_, err := store.CanViewCharacter(context.Background(), charID.String(), "user-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db down")
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_ViewerLookupError(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+	q := &mockCharacterQuerier{
+		character:   refdata.Character{ID: charID, CampaignID: campID},
+		campaign:    refdata.Campaign{ID: campID, DmUserID: "dm-1"},
+		viewerPCErr: errors.New("db down"),
+	}
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	_, err := store.CanViewCharacter(context.Background(), charID.String(), "player-2")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db down")
+}
+
+func TestCharacterSheetStoreAdapter_CanViewCharacter_CampaignMissingButMember(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+	q := &mockCharacterQuerier{
+		character:   refdata.Character{ID: charID, CampaignID: campID},
+		campaignErr: sql.ErrNoRows, // campaign row gone; fall through to membership
+		viewerPC:    refdata.PlayerCharacter{CampaignID: campID, DiscordUserID: "player-2"},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	ok, err := store.CanViewCharacter(context.Background(), charID.String(), "player-2")
+
+	require.NoError(t, err)
+	assert.True(t, ok)
 }
 
 func TestCharacterSheetStoreAdapter_GetCharacterOwner(t *testing.T) {

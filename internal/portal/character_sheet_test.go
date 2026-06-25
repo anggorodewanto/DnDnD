@@ -13,10 +13,12 @@ import (
 
 // mockCharacterSheetStore implements portal.CharacterSheetStore for tests.
 type mockCharacterSheetStore struct {
-	character *portal.CharacterSheetData
-	err       error
-	ownerID   string
-	ownerErr  error
+	character  *portal.CharacterSheetData
+	err        error
+	ownerID    string
+	ownerErr   error
+	canView    bool
+	canViewErr error
 }
 
 func (m *mockCharacterSheetStore) GetCharacterForSheet(_ context.Context, characterID string) (*portal.CharacterSheetData, error) {
@@ -25,6 +27,10 @@ func (m *mockCharacterSheetStore) GetCharacterForSheet(_ context.Context, charac
 
 func (m *mockCharacterSheetStore) GetCharacterOwner(_ context.Context, characterID string) (string, error) {
 	return m.ownerID, m.ownerErr
+}
+
+func (m *mockCharacterSheetStore) CanViewCharacter(_ context.Context, characterID, requestingUserID string) (bool, error) {
+	return m.canView, m.canViewErr
 }
 
 func TestLoadCharacterSheet_Success(t *testing.T) {
@@ -65,6 +71,53 @@ func TestLoadCharacterSheet_WrongOwner(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, portal.ErrNotOwner))
+}
+
+func TestLoadCharacterSheet_CampaignMemberCanView(t *testing.T) {
+	store := &mockCharacterSheetStore{
+		ownerID: "user-owner",
+		canView: true, // a co-player or the DM
+		character: &portal.CharacterSheetData{
+			ID:   "char-1",
+			Name: "Thorn",
+		},
+	}
+
+	svc := portal.NewCharacterSheetService(store)
+	data, err := svc.LoadCharacterSheet(context.Background(), "char-1", "user-coplayer")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Thorn", data.Name)
+}
+
+func TestLoadCharacterSheet_NonMemberDenied(t *testing.T) {
+	store := &mockCharacterSheetStore{
+		ownerID: "user-owner",
+		canView: false, // not owner, not in campaign, not DM
+		character: &portal.CharacterSheetData{
+			ID:   "char-1",
+			Name: "Thorn",
+		},
+	}
+
+	svc := portal.NewCharacterSheetService(store)
+	_, err := svc.LoadCharacterSheet(context.Background(), "char-1", "user-stranger")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, portal.ErrNotOwner))
+}
+
+func TestLoadCharacterSheet_CanViewLookupError(t *testing.T) {
+	store := &mockCharacterSheetStore{
+		ownerID:    "user-owner",
+		canViewErr: errors.New("db error"),
+	}
+
+	svc := portal.NewCharacterSheetService(store)
+	_, err := svc.LoadCharacterSheet(context.Background(), "char-1", "user-coplayer")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
 }
 
 func TestLoadCharacterSheet_OwnerLookupError(t *testing.T) {

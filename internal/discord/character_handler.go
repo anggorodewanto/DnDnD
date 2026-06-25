@@ -91,13 +91,11 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 
 	embed := h.buildCharacterEmbed(ch)
 
-	// The portal sheet route is owner-gated (403 for non-owners), so only
-	// surface the link when the caller is looking at their own character.
-	content := ""
-	if viewingSelf {
-		portalLink := fmt.Sprintf("%s/portal/character/%s", h.portalBaseURL, ch.ID.String())
-		content = fmt.Sprintf("View full character sheet: %s", portalLink)
-	}
+	// The portal sheet route admits the owner, the campaign DM, and any player
+	// in the campaign, so surface the link for both self and party views. The
+	// portal independently enforces access (403 for outsiders).
+	portalLink := fmt.Sprintf("%s/portal/character/%s", h.portalBaseURL, ch.ID.String())
+	content := fmt.Sprintf("View full character sheet: %s", portalLink)
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

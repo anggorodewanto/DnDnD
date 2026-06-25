@@ -608,7 +608,7 @@ func TestCharacterHandler_SelfView_IncludesPortalLink(t *testing.T) {
 	}
 }
 
-func TestCharacterHandler_TargetView_ApprovedMember_NoPortalLink(t *testing.T) {
+func TestCharacterHandler_TargetView_ApprovedMember_IncludesPortalLink(t *testing.T) {
 	mock := newTestMock()
 	rc := captureFullResponse(mock)
 
@@ -623,8 +623,10 @@ func TestCharacterHandler_TargetView_ApprovedMember_NoPortalLink(t *testing.T) {
 	if !strings.Contains(rc.Embeds[0].Title, "Aria") {
 		t.Errorf("expected target's character in embed, got title: %s", rc.Embeds[0].Title)
 	}
-	if strings.Contains(rc.Content, "/portal/character/") {
-		t.Errorf("did not expect portal link when viewing a target, got: %s", rc.Content)
+	// The portal sheet now admits campaign co-players and the DM (the portal
+	// enforces access), so the link is surfaced for party views too.
+	if !strings.Contains(rc.Content, "https://portal.dndnd.app/portal/character/") {
+		t.Errorf("expected portal link for approved target view, got: %s", rc.Content)
 	}
 	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
 		t.Error("expected ephemeral response for target view")

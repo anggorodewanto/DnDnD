@@ -101,6 +101,9 @@ type SavingThrowDisplay struct {
 type CharacterSheetStore interface {
 	GetCharacterForSheet(ctx context.Context, characterID string) (*CharacterSheetData, error)
 	GetCharacterOwner(ctx context.Context, characterID string) (string, error)
+	// CanViewCharacter reports whether a non-owner may view the sheet: true for
+	// the campaign DM or any non-retired player in the character's campaign.
+	CanViewCharacter(ctx context.Context, characterID, requestingUserID string) (bool, error)
 }
 
 // CharacterSheetService loads character data for the sheet view.
@@ -113,8 +116,10 @@ func NewCharacterSheetService(store CharacterSheetStore) *CharacterSheetService 
 	return &CharacterSheetService{store: store}
 }
 
-// LoadCharacterSheet loads and enriches character data for display.
-// Returns ErrNotOwner if the requesting user does not own the character.
+// LoadCharacterSheet loads and enriches character data for display. The owner
+// always has access; otherwise the campaign DM and any player in the
+// character's campaign may view it. Returns ErrNotOwner when the requesting
+// user qualifies for none of those.
 func (svc *CharacterSheetService) LoadCharacterSheet(ctx context.Context, characterID, requestingUserID string) (*CharacterSheetData, error) {
 	ownerID, err := svc.store.GetCharacterOwner(ctx, characterID)
 	if err != nil {
@@ -122,7 +127,13 @@ func (svc *CharacterSheetService) LoadCharacterSheet(ctx context.Context, charac
 	}
 
 	if ownerID != requestingUserID {
-		return nil, ErrNotOwner
+		canView, err := svc.store.CanViewCharacter(ctx, characterID, requestingUserID)
+		if err != nil {
+			return nil, err
+		}
+		if !canView {
+			return nil, ErrNotOwner
+		}
 	}
 
 	data, err := svc.store.GetCharacterForSheet(ctx, characterID)

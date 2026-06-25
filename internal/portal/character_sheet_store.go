@@ -19,6 +19,8 @@ type CharacterQuerier interface {
 	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 	GetSpellsByIDs(ctx context.Context, ids []string) ([]refdata.Spell, error)
 	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
+	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
 }
 
 // CharacterSheetStoreAdapter implements CharacterSheetStore using refdata.Queries.
@@ -58,6 +60,45 @@ func (a *CharacterSheetStoreAdapter) GetCharacterOwner(ctx context.Context, char
 	}
 
 	return pc.DiscordUserID, nil
+}
+
+// CanViewCharacter reports whether requestingUserID may view the character's
+// sheet without owning it: true for the campaign DM or any non-retired player
+// in the character's campaign.
+func (a *CharacterSheetStoreAdapter) CanViewCharacter(ctx context.Context, characterID, requestingUserID string) (bool, error) {
+	charUUID, err := uuid.Parse(characterID)
+	if err != nil {
+		return false, fmt.Errorf("invalid character ID: %w", err)
+	}
+
+	ch, err := a.q.GetCharacter(ctx, charUUID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrCharacterNotFound
+		}
+		return false, fmt.Errorf("getting character: %w", err)
+	}
+
+	camp, err := a.q.GetCampaignByID(ctx, ch.CampaignID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("getting campaign: %w", err)
+	}
+	if err == nil && camp.DmUserID == requestingUserID {
+		return true, nil
+	}
+
+	// Any non-retired player in the same campaign may view the sheet.
+	_, err = a.q.GetPlayerCharacterByDiscordUser(ctx, refdata.GetPlayerCharacterByDiscordUserParams{
+		CampaignID:    ch.CampaignID,
+		DiscordUserID: requestingUserID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("getting player character: %w", err)
+	}
+	return true, nil
 }
 
 // GetCharacterForSheet loads a character's full data for sheet display.
