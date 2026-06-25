@@ -4,8 +4,10 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-25 (session 1 — combat LIVE: Vale cast hold person → escalated
-to initiative; Round 1, Forge's turn first vs the cellar wretch)._
+_Last updated: 2026-06-25 (session 1 — combat LIVE: Round 1 resolved through Forge's
+handaxe + the wretch's whiffed Multiattack; Vale's hold person LANDED → wretch
+PARALYZED. Vale's turn still active (movement/bonus action pending), then Round 2
+opens with Forge auto-critting the paralyzed wretch)._
 
 ## Stack status
 
@@ -104,21 +106,35 @@ to initiative; Round 1, Forge's turn first vs the cellar wretch)._
 
 ## Encounter / combat
 
-- **LIVE — Round 1.** Encounter "Waystation — the cellar wretch" (combat id
-  `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`), on the common-room map above.
+- **LIVE — Round 1 (Vale's turn active).** Encounter "Waystation — the cellar wretch"
+  (combat id `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`), on the common-room map above.
   - **Initiative:** Forge **22** → the wretch **19** → Vale **19** (Forge up first).
-  - **Threat:** 1× **Ghoul** stat block (G1) — **HP 22, AC 12**, placed at the cellar
-    mouth (2,7), ~35 ft (7 sq) from the party by the door. **DM RULING: it is a
+  - **Threat:** 1× **Ghoul** stat block (G1) — **AC 12, HP now 15/22 (bloodied)**,
+    climbed out of the cellar mouth (2,7) and into melee. **DM RULING: it is a
     LIVING wretch (Humanoid), not undead** — a person rotted/maddened by whatever's
     in the cellar. Reflavored so Vale's *hold person* is a valid target (the engine
     just labels the stat block "Ghoul"; ignore the type tag). Ghoul claws/bite +
     paralysing touch reflavored as a sickening grip; run RAW numbers.
-  - **Vale's pending action:** declared *hold person* pre-initiative; per the player
-    it's HELD and **resolves on Vale's turn** (3rd, after the wretch moves) — WIS save
-    vs **DC 13**. Don't pre-resolve it. Vale has 1 pact slot left after it (2→1).
-  - **Token positions (2026-06-25):** Forge **J7**, Vale **K6** (party by the
-    door), the wretch **C7** (cellar mouth, just NE of the corner pit). All three
-    render on the board. Monster HP hidden from players in #initiative-tracker (good).
+  - **CONDITION — the wretch is PARALYZED** (source_spell *hold person*, applied in the
+    engine, indefinite until Vale drops concentration). **Hidden from players** — describe
+    it as "bloodied and rigid / seized", never "paralyzed". Mechanical consequences: it
+    auto-fails STR/DEX saves, attackers have advantage against it, and any melee hit from
+    within 5 ft is an **auto-crit**. This sets up Forge for a huge Round-2 swing.
+  - **Round 1 resolved so far (chronological):**
+    1. **Forge (init 22):** freeform *throw* — **handaxe HIT** (roll 15 vs AC 12) for
+       **7 damage**. Wretch 22→15 HP, now **bloodied**. Turn done.
+    2. **The wretch (init 19):** moved from the cellar mouth into melee (now **D7**,
+       adjacent to Forge at E7); **Multiattack — bite (8) and claws (10) BOTH MISSED**
+       Forge's AC 14. No damage. Turn done.
+    3. **Vale (init 19) — ACTIVE:** cast **hold person** on the wretch (action used,
+       now **concentrating**); the wretch's **WIS save 6 vs DC 13 → FAIL → PARALYZED**.
+       Vale spent a pact slot (**2→1, one left**). Her **movement (30 ft) + bonus
+       action are still available** — the player's call; her turn is NOT yet ended.
+  - **Vale's concentration:** on **hold person** — if she takes damage she rolls a CON
+    save (DC = max(10, ½ damage)) or the wretch un-paralyzes. Keep the wretch pinned.
+  - **Token positions (2026-06-25):** Forge **E7** (HP 32/32), Vale **K6** (HP 24/24,
+    concentrating), the wretch **D7** (HP 15/22, PARALYZED — adjacent to Forge). All
+    three render on the board. Monster HP hidden from players in #initiative-tracker (good).
   - **Two map-render bugs found + fixed (2026-06-25):**
     1. *PCs had no tokens.* The blank dashboard-built map has **no authored spawn
        zones**, so combat-start's PC seater bailed and wrote the zero-value
@@ -159,26 +175,26 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-- **COMBAT IS LIVE — Round 1, Forge's turn.** Vale answered the emergence by casting
-  *hold person* (`#in-character`, 11:31 AM); the DM (per the player) escalated straight
-  to initiative rather than resolving the cast in narration. Initiative rolled, combat
-  opened, and the DM posted the combat-start beat to `#the-story` (11:46 AM):
-  the wretch drops to all fours, **established as alive** (heaving ribs, ticking pulse,
-  drool) so *hold person* is on the table; ~35 ft of flagstone between it and the party.
-  See the **Encounter / combat** section above for ids, initiative, stats, and the
-  living-wretch ruling.
-1. **Forge (init 22) is up first** — his player declares in `#in-character` (or `/move`,
-   `/attack`). **His choices are his own; the DM does not act for him.** Forge is the
-   remote 2nd player (cloudflared tunnel).
-2. **Then the wretch (19):** DM runs it. From (2,7) it can move ~6 sq (30 ft) toward the
-   party and likely reach melee on whoever's closest unless Forge intercepts/blocks. Run
-   its turn from the Combat Manager (move + Multiattack: 2 claws / bite; on a hit by
-   claws vs a non-elf, the target's CON save or be reflavored-"gripped"/restrained — DM
-   call; keep RAW numbers).
-3. **Then Vale (19):** resolve her held *hold person* — the wretch makes a **WIS save vs
-   DC 13**. Fail → paralysed (advantage to attackers, auto-crit melee in 5 ft = huge for
-   Forge); save → no effect, slot spent (Vale 2→1 pact slots).
+- **COMBAT IS LIVE — Round 1, Vale's turn (post-hold-person).** All three Round-1
+  initiative slots have acted on their *actions*: Forge threw a handaxe (HIT, 7 dmg →
+  wretch bloodied 15/22), the wretch closed to melee (D7) and **whiffed its whole
+  Multiattack** on Forge, and Vale's **hold person LANDED** — the wretch failed its WIS
+  save (6 vs DC 13) and is **PARALYZED** (Vale concentrating; pact slots 2→1). See the
+  **Encounter / combat** section above for the full chronology, ids, and the
+  hidden-condition handling.
+1. **Vale finishes her turn (init 19) — the player's call.** Her *action* is spent on
+   hold person, but she still has her **30 ft of movement and her bonus action**. Wait
+   for her to declare in `#in-character` (or `/move`); **do not act for her.** When she's
+   done, `/done` (or End Turn) advances to Round 2.
+2. **Round 2 opens with Forge (init 22)** standing adjacent (E7 ↔ D7, within 5 ft) to a
+   **PARALYZED** target. Forge's melee attacks get **advantage and auto-crit on hit** —
+   a big swing that should drop or nearly drop the wretch. **His choices are his own; the
+   DM does not act for him.** (Forge is the remote 2nd player on the cloudflared tunnel.)
+3. **Keep the wretch pinned:** the paralysis holds only while Vale concentrates. If the
+   wretch (or anything) deals damage to Vale, she rolls a **CON save (DC max(10, ½ dmg))**
+   or hold person drops and the wretch un-paralyzes. Track concentration on her panel.
 4. **DM cadence each turn:** advance the Combat Manager turn queue (End Turn), narrate
-   results to `#the-story`, apply damage/conditions on the combatant panels. If the lone
-   wretch is trivial, a 2nd can claw up from the pit (see Reserve note above).
+   results to `#the-story` (describe the wretch as "rigid / seized", never "paralyzed"),
+   apply damage/conditions on the combatant panels. If the lone wretch is trivial, a 2nd
+   can claw up from the pit (see Reserve note above).
 </content>

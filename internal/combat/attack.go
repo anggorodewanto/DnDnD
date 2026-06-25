@@ -1218,6 +1218,10 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		}
 	}
 
+	// ISSUE-014: persist the attack to action_log for the DM Console timeline.
+	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+
 	return result, nil
 }
 
@@ -1305,6 +1309,11 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	// targeting cmd.Target, and any sap_disadvantage on the attacker.
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
+
+	// ISSUE-014: persist the improvised attack to action_log for the DM Console.
+	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+
 	return result, nil
 }
 
@@ -1455,6 +1464,11 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	// sap_disadvantage on the attacker.
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
+
+	// ISSUE-014: persist the off-hand attack to action_log for the DM Console.
+	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+
 	return result, nil
 }
 

@@ -22,6 +22,8 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-011 | 2026-06-25 | builder / equipment (frontend) | major | FIXED | Portal-built characters persist with **nothing equipped** — `equipped_main_hand`/`off_hand`/`armor` empty, all inventory items `equipped:false` — even when the player equips a weapon/armor in the builder. Breaks `/attack` (no weapon), armor AC, and the card "Equipped" row. Go ingest + adapter persist `EquippedWeapon`/`WornArmor` fine; the drop is **frontend**. **Fixed (TDD, `main` 06a0ac5):** real cause was **async-load ordering** — `CharacterBuilder.svelte`'s reset `$effect`s cleared a valid `wornArmor`/`equippedWeapon` pick while the catalog (`allEquipment`) was still `[]` (e.g. right after a draft restore), because the option lists decided armor/weapon purely from the async catalog `category`. New `portal/svelte/src/lib/equip-selection.js` (`reconcileEquipPick` + category-OR-SRD-id fallback mirroring the Go `knownWeapons`/`knownArmor` maps) clears only on a genuine non-option, never on a transient catalog miss. Also wired `EquippedOffHand` (shield via `hasEquipmentItem(equipment,"shield")`). 461 vitest, bundle rebuilt, cover-check green. Workaround pre-deploy: player runs `/equip` in Discord. |
 | ISSUE-012 | 2026-06-25 | character card / spellcasting | minor | FIXED | Discord character card + `/character` embed show **"Spell Slots: —" for warlocks** — they read only the `spell_slots` column and never fall back to `pact_magic_slots`. **Fixed (TDD, `main` 5090e02):** both surfaces now pact-aware — parse the canonical `character.PactMagicSlots` ({slot_level,current,max}) and render `Pact Magic: N × Lvl L`; a multiclass caster shows standard + pact joined by ` | `; non-casters keep `—`. `charactercard/format.go`+`service.go` (`CardData.PactMagicSlots`, `formatPactMagicSlots`, `parsePactMagicSlots`), `discord/character_handler.go` (`buildSpellSlotSummary` + a Spell Slots line in `buildCharacterEmbed`). cover-check green. |
 | ISSUE-013 | 2026-06-25 | builder / submit (server) | blocker | FIXED | Friend's **barbarian / guild-artisan** submit 400s: `skill "insight" is not selectable for this class`. Root cause = **slug drift** between two hand-maintained Go background maps and the builder's kebab-case slugs. `backgroundSkillProficiencies` (`derive_stats.go`) had **no `guild-artisan`** case and keyed folk-hero as `"folk hero"` (space); both backgrounds therefore resolved to ∅ locked skills, so their PHB grants (insight+persuasion) were treated as off-list class picks and rejected. `backgroundStartingEquipment` (`starting_equipment.go`) had the same space-slug bug → those two backgrounds also silently got no starting-equipment pack. **Fixed (TDD, `main`):** both Go maps re-keyed to the exact 13 builder slugs (kebab-case) + `guild-artisan` added; two contract tests (`TestBackgroundSkillProficiencies_AllBuilderBackgrounds`, `TestBackgroundEquipmentPack_AllBuilderBackgrounds`) lock every builder slug so future drift fails CI; removed a stale test that asserted the old Title-Case `"Folk Hero"` input (never sent by the real builder — why the bug hid). cover-check green. **Deeper fix (SSOT) tracked separately.** |
+| ISSUE-014 | 2026-06-25 | dm console / action log | medium | FIXING | DM Console doesn't track player combat actions — spell casts + freeform actions post to #combat-log but are never written to `action_log`, so `GET /api/dm/situation` `timeline[]` shows nothing for them. The player-action service paths (`Service.Cast`, `CastAoE`, `FreeformAction`, `Attack`, `OffhandAttack`) never call `CreateActionLog`; only DM-side/automated flows (enemy turns, legendary, DM dashboard) write it. Being fixed THIS session (action_log writes added to the player paths). |
+| ISSUE-015 | 2026-06-25 | dashboard / conditions | high | OPEN | Condition-shape mismatch between the dashboard "add condition" button and the engine. The workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` (+ Svelte tracker) write a bare JSON string array (`["paralyzed"]`), but the engine reads conditions via `parseConditions` as objects keyed by `.condition` (`[{"condition":"paralyzed",...}]`). A condition added through the normal button renders but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) **never fire** (`.Condition` parses empty). Only the DM-Override POST `/api/combat/{id}/override/combatant/{cid}/conditions` writes the correct object shape. Flagged for follow-up (align PATCH + tracker to the object shape, or have the engine accept both). |
 
 ---
 
@@ -281,6 +283,52 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Simplification:** slots emitted full (current==max); prior `current` not
   preserved. Acceptable — level-ups conventionally land on a long rest, and the
   old shape was unusable, so any valid shape is a strict improvement.
+
+### ISSUE-014 — DM Console does not track player combat actions (action_log gap)
+- **Date:** 2026-06-25
+- **Area:** dm console / action log (player-action service vs `/api/dm/situation`)
+- **Severity:** medium — DM situational-awareness gap. Combat resolves correctly;
+  only the DM Console's after-the-fact timeline is blind to player actions.
+- **Status:** FIXING (being addressed this session — action_log writes added to the
+  player paths).
+- **Detail:** Player spell casts and freeform actions post their results to
+  `#combat-log`, but the player-action service paths never write to the `action_log`
+  table. As a result `GET /api/dm/situation` returns a `timeline[]` with nothing for
+  player combat actions — the DM Console looks empty even mid-fight.
+- **Root cause:** the player-action service entry points — `Service.Cast`,
+  `Service.CastAoE`, `Service.FreeformAction`, `Service.Attack`,
+  `Service.OffhandAttack` — never call `CreateActionLog`. Only the DM-side /
+  automated flows (enemy turns, legendary actions, the DM dashboard) write to
+  `action_log`, so the timeline is populated for those but not for anything a player
+  does.
+- **Fix:** add `CreateActionLog` writes to the player-action service paths so player
+  casts/freeform/attacks land in the timeline alongside the automated entries (in
+  progress this session).
+
+### ISSUE-015 — Condition shape mismatch: dashboard "add condition" button vs the engine
+- **Date:** 2026-06-25
+- **Area:** dashboard / combat conditions (workspace PATCH + Svelte tracker vs engine
+  `parseConditions`)
+- **Severity:** high — a **silent mechanical no-op**: the condition shows on the
+  tracker but does nothing in the rules engine.
+- **Status:** OPEN — flagged for a follow-up fix.
+- **Detail:** The workspace PATCH endpoint
+  `/api/combat/{id}/combatants/{cid}/conditions` (and the Svelte tracker that drives
+  the "add condition" button) write conditions as a **bare JSON string array**, e.g.
+  `["paralyzed"]`. The combat engine, however, reads conditions via `parseConditions`
+  as an **array of objects keyed by `.condition`**, e.g.
+  `[{"condition":"paralyzed",...}]`.
+- **Symptom:** a condition added through the normal dashboard button is rendered, but
+  its mechanical effects — auto-crit (melee within 5 ft of a paralyzed target),
+  advantage-to-attackers, auto-fail STR/DEX saves — **do NOT fire**, because
+  `.Condition` parses empty out of the string-array shape.
+- **Only correct path today:** the DM-Override endpoint POST
+  `/api/combat/{id}/override/combatant/{cid}/conditions` is the lone HTTP path that
+  writes the correct object shape (which is why the wretch's *hold person* paralysis,
+  applied by the engine/override flow, fires correctly while a button-added condition
+  would not).
+- **Fix idea:** align the PATCH endpoint + Svelte tracker to the object shape, or have
+  the engine's `parseConditions` accept both the string-array and object shapes.
 
 <!-- Append a section per issue:
 

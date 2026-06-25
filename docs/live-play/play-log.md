@@ -116,4 +116,30 @@ history; `game-state.md` is the current snapshot.
 
 **Next:** Vale acts on the open cellar; DM responds. Import the 10×10 waystation map
 if/when the cellar fight starts.
+
+**Combat — Round 1 (2026-06-25)**
+
+- **Initiative:** Forge **22** → the wretch/Ghoul **19** → Vale **19**. Combat id
+  `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`. Wretch AC 12 / HP 22 at the cellar mouth;
+  party by the door. (Living-wretch ruling — see `game-state.md`.)
+- **Forge (init 22) — handaxe throw.** Freeform *throw* action: **HIT** (roll 15 vs
+  AC 12) for **7 damage**. Wretch **22→15 HP, bloodied**. Turn done. (Narrated as the
+  axe biting deep before the thing even fully cleared the steps.)
+- **The wretch (init 19) — closes + whiffs.** Moved off the cellar mouth into melee,
+  now at **D7** (adjacent to Forge at **E7**), and used **Multiattack** — **bite (8)
+  and claws (10) BOTH MISSED** Forge's AC 14. No damage. Turn done. (Narrated as a
+  frantic, grasping lunge that Forge turns aside.)
+- **Vale (init 19) — hold person LANDS.** Vale cast **hold person** on the wretch
+  (action spent; she is now **concentrating**; pact slots **2→1**). DM rolled the
+  wretch's **WIS save: 6 vs DC 13 → FAIL** → the wretch is **PARALYZED** (engine
+  condition, source_spell hold person; hidden from players — narrated as the thing
+  locking up "bloodied and rigid"). Vale still has her **movement + bonus action**;
+  her turn is **not yet ended** (player's call).
+- **Set-up for Round 2:** once Vale ends her turn, `/done` advances to Forge first —
+  and Forge is within 5 ft of a **paralyzed** target, so his melee attacks get
+  **advantage + auto-crit on hit**. Big swing for the party incoming.
+
+**Next:** Vale finishes her turn (movement/bonus action — player decides), then End
+Turn / `/done` opens Round 2 with Forge auto-critting the paralyzed wretch. Keep Vale's
+concentration intact (CON save on any damage to her, or the paralysis drops).
 </content>

@@ -323,6 +323,13 @@ type bonusOffhandCommandPathStore struct {
 	hpWrites   []refdata.UpdateCombatantHPParams
 }
 
+// CreateActionLog is a no-op: ISSUE-014 made OffhandAttack best-effort record
+// the swing to action_log, but this path-test only asserts the bonus-action /
+// damage-mod economy, so the embedded (nil) combat.Store must not be invoked.
+func (s *bonusOffhandCommandPathStore) CreateActionLog(_ context.Context, _ refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+	return refdata.ActionLog{}, nil
+}
+
 func (s *bonusOffhandCommandPathStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
 	if id == s.char.ID {
 		return s.char, nil

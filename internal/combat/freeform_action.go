@@ -78,6 +78,12 @@ func (s *Service) FreeformAction(ctx context.Context, cmd FreeformActionCommand)
 		return FreeformActionResult{}, fmt.Errorf("creating pending action: %w", err)
 	}
 
+	// ISSUE-014: persist the freeform action to action_log so it surfaces in the
+	// DM Console timeline (it otherwise only lands in #dm-queue). Best-effort.
+	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Turn.EncounterID, cmd.Combatant.ID,
+		uuid.NullUUID{}, actionTypeFreeformAction,
+		fmt.Sprintf("%s: %q", cmd.Combatant.DisplayName, cmd.ActionText))
+
 	dmQueueMsg := fmt.Sprintf("🎭 **Action** — %s: \"%s\"", cmd.Combatant.DisplayName, cmd.ActionText)
 	combatLog := fmt.Sprintf("🎭 %s: \"%s\" — sent to DM queue", cmd.Combatant.DisplayName, cmd.ActionText)
 

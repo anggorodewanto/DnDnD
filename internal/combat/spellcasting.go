@@ -810,6 +810,17 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 	result.InvisibilityBroken = broken
 
+	// ISSUE-014: persist the resolved cast to action_log so it surfaces in the
+	// DM Console timeline. Best-effort — never aborts a cast that already spent
+	// the slot and applied its effects.
+	castEnc := cmd.EncounterID
+	if castEnc == uuid.Nil {
+		castEnc = cmd.Turn.EncounterID
+	}
+	s.recordCombatAction(ctx, cmd.Turn.ID, castEnc, cmd.CasterID,
+		nullableCombatantID(cmd.TargetID), actionTypeCast,
+		describeCast(result.CasterName, result.SpellName, result.TargetName))
+
 	// 19. med-26 / Phase 67: auto-create persistent zones for known
 	// AoE / area-effect spells. Best-effort — zone creation errors are
 	// logged via the returned error so DM can investigate but Cast itself

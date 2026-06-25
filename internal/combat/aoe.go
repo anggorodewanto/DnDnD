@@ -738,6 +738,15 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		result.MetamagicCost = metamagicCost
 		result.SorceryPointsRemaining = sorceryPointsRemaining
 	}
+
+	// ISSUE-014: persist the resolved area cast to action_log so it surfaces in
+	// the DM Console timeline. Best-effort; no single target id for an AoE.
+	// Use the loaded caster's encounter (authoritative here, like the rest of
+	// CastAoE) rather than cmd.EncounterID, which partial callers may leave nil.
+	s.recordCombatAction(ctx, cmd.Turn.ID, caster.EncounterID, cmd.CasterID,
+		uuid.NullUUID{}, actionTypeCast,
+		describeAoECast(result.CasterName, result.SpellName, result.AffectedNames))
+
 	return result, nil
 }
 
