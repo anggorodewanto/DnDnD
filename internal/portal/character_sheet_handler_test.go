@@ -72,6 +72,61 @@ func TestServeCharacterSheet_Success(t *testing.T) {
 	assert.Contains(t, body, "Fighter 5")
 }
 
+func TestServeCharacterSheet_SpellDetails(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Gandalf",
+			Race:             "Elf",
+			Level:            5,
+			ProficiencyBonus: 3,
+			Classes:          []character.ClassEntry{{Class: "Wizard", Level: 5}},
+			AbilityScores:    character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10},
+			HpMax:            32,
+			HpCurrent:        32,
+			AC:               15,
+			SpeedFt:          30,
+			AbilityModifiers: map[string]int{"STR": -1, "DEX": 2, "CON": 1, "INT": 4, "WIS": 1, "CHA": 0},
+			ClassSummary:     "Wizard 5",
+			Spells: []portal.SpellDisplayEntry{
+				{
+					ID: "fireball", Name: "Fireball", Level: 3, School: "evocation",
+					CastingTime: "1 action", Range: "150ft",
+					Components:  []string{"V", "S", "M"},
+					Duration:    "Instantaneous",
+					Description: "A bright streak flashes to a point you choose, then blossoms into flame.",
+					Prepared:    true,
+				},
+				{
+					ID: "haste", Name: "Haste", Level: 3, School: "transmutation",
+					CastingTime:   "1 action",
+					Duration:      "Concentration, up to 1 minute",
+					Concentration: true,
+				},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	// Headline mirrors the builder's "{ordinal}-level {school}" format.
+	assert.Contains(t, body, "3rd-level evocation")
+	// Full detail fields are rendered.
+	assert.Contains(t, body, "A bright streak flashes to a point you choose")
+	assert.Contains(t, body, "V, S, M")
+	assert.Contains(t, body, "Instantaneous")
+	// Concentration spells carry a badge.
+	assert.Contains(t, body, "Concentration")
+	// Expandable accordion markup.
+	assert.Contains(t, body, "<details")
+}
+
 func TestServeCharacterSheet_Unauthenticated(t *testing.T) {
 	h := portal.NewCharacterSheetHandler(slog.Default(), nil)
 	rec := httptest.NewRecorder()

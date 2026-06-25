@@ -205,6 +205,10 @@ func (a *CharacterSheetStoreAdapter) enrichSpells(ctx context.Context, spells []
 		spells[i].School = ref.School
 		spells[i].CastingTime = ref.CastingTime
 		spells[i].Range = formatSpellRange(ref)
+		spells[i].Components = ref.Components
+		spells[i].Duration = ref.Duration
+		spells[i].Description = ref.Description
+		spells[i].Concentration = ref.Concentration.Valid && ref.Concentration.Bool
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/go-chi/chi/v5"
@@ -127,7 +129,50 @@ func sheetFuncMap() template.FuncMap {
 			return "○"
 		},
 		"groupSpellsByLevel": groupSpellsByLevel,
+		"spellHeadline":      spellHeadline,
+		"join":               strings.Join,
 	}
+}
+
+// spellHeadline renders a D&D-style level+school headline, mirroring the
+// builder's spell detail panel: "Evocation cantrip" or "3rd-level abjuration".
+// The school is dropped when missing.
+func spellHeadline(s SpellDisplayEntry) string {
+	if s.Level == 0 {
+		if s.School == "" {
+			return "Cantrip"
+		}
+		return capitalizeFirst(s.School) + " cantrip"
+	}
+	lead := spellLevelOrdinal(s.Level) + "-level"
+	if s.School == "" {
+		return lead
+	}
+	return lead + " " + s.School
+}
+
+// spellLevelOrdinal returns the English ordinal for a spell level (1-9).
+func spellLevelOrdinal(n int) string {
+	switch n {
+	case 1:
+		return "1st"
+	case 2:
+		return "2nd"
+	case 3:
+		return "3rd"
+	default:
+		return strconv.Itoa(n) + "th"
+	}
+}
+
+// capitalizeFirst upper-cases the first rune of s, leaving the rest unchanged.
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }
 
 // groupSpellsByLevel organizes spells into groups by spell level, sorted ascending.
@@ -211,6 +256,19 @@ const characterSheetTemplate = `<!DOCTYPE html>
         .lang-tag { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
         .attune-item { padding: 0.25rem 0; }
         .empty-msg { color: #666; font-style: italic; }
+        .spell-entry { border-bottom: 1px solid #0f346033; }
+        .spell-summary { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.3rem 0; cursor: pointer; list-style: none; }
+        .spell-summary::-webkit-details-marker { display: none; }
+        .spell-summary::before { content: '\25B8'; color: #6a6a80; margin-right: 0.4rem; font-size: 0.75rem; }
+        details[open] > .spell-summary::before { content: '\25BE'; }
+        .spell-detail-body { padding: 0.25rem 0 0.65rem 1.15rem; }
+        .spell-headline { color: #a0a0b0; font-size: 0.85rem; margin: 0 0 0.4rem; }
+        .conc-tag { background: #3a2a4e; color: #c9a9ff; border-radius: 3px; padding: 0 0.35rem; font-size: 0.7rem; margin-left: 0.4rem; }
+        .spell-meta { margin: 0 0 0.5rem; }
+        .spell-meta > div { display: flex; gap: 0.5rem; font-size: 0.82rem; padding: 0.1rem 0; }
+        .spell-meta dt { color: #a0a0b0; min-width: 7rem; }
+        .spell-meta dd { margin: 0; color: #e0e0e8; }
+        .spell-desc { font-size: 0.88rem; line-height: 1.45; color: #c0c0d0; white-space: pre-wrap; margin: 0; }
         .desc-block { margin-bottom: 0.75rem; }
         .desc-label { color: #a0a0b0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
         .desc-text { color: #c0c0d0; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; }
@@ -431,19 +489,34 @@ const characterSheetTemplate = `<!DOCTYPE html>
             <div style="margin-bottom: 0.75rem;">
                 <div style="color: #e94560; font-weight: bold; margin-bottom: 0.25rem;">{{.Label}}</div>
                 {{range .Spells}}
-                <div class="item-row">
-                    <span>
-                        {{if .Prepared}}<span class="prof-dot prof-yes">●</span>{{end}}
-                        {{.Name}}
-                        {{if .School}}<span style="color:#a0a0b0; font-size:0.8rem;">({{.School}})</span>{{end}}
-                        {{if .Homebrew}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Homebrew</span>{{end}}
-                        {{if .OffList}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Off-list</span>{{end}}
-                    </span>
-                    <span style="color:#a0a0b0; font-size:0.8rem;">
-                        {{if .CastingTime}}{{.CastingTime}}{{end}}
-                        {{if .Range}} | {{.Range}}{{end}}
-                    </span>
-                </div>
+                <details class="spell-entry">
+                    <summary class="spell-summary">
+                        <span>
+                            {{if .Prepared}}<span class="prof-dot prof-yes">●</span>{{end}}
+                            {{.Name}}
+                            {{if .School}}<span style="color:#a0a0b0; font-size:0.8rem;">({{.School}})</span>{{end}}
+                            {{if .Homebrew}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Homebrew</span>{{end}}
+                            {{if .OffList}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Off-list</span>{{end}}
+                        </span>
+                        <span style="color:#a0a0b0; font-size:0.8rem;">
+                            {{if .CastingTime}}{{.CastingTime}}{{end}}
+                            {{if .Range}} | {{.Range}}{{end}}
+                        </span>
+                    </summary>
+                    <div class="spell-detail-body">
+                        <p class="spell-headline">
+                            {{spellHeadline .}}
+                            {{if .Concentration}}<span class="conc-tag">Concentration</span>{{end}}
+                        </p>
+                        <dl class="spell-meta">
+                            {{if .CastingTime}}<div><dt>Casting Time</dt><dd>{{.CastingTime}}</dd></div>{{end}}
+                            {{if .Range}}<div><dt>Range</dt><dd>{{.Range}}</dd></div>{{end}}
+                            {{if .Components}}<div><dt>Components</dt><dd>{{join .Components ", "}}</dd></div>{{end}}
+                            {{if .Duration}}<div><dt>Duration</dt><dd>{{.Duration}}</dd></div>{{end}}
+                        </dl>
+                        {{if .Description}}<p class="spell-desc">{{.Description}}</p>{{end}}
+                    </div>
+                </details>
                 {{end}}
             </div>
             {{end}}

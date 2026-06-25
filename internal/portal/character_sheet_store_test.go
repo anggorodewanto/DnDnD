@@ -207,6 +207,84 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells(t *testing
 	assert.Equal(t, "Self", byID["shield"].Range)
 }
 
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_SpellDetails(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 5}})
+	charDataJSON, _ := json.Marshal(map[string]any{"spells": []string{"fireball"}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spells: []refdata.Spell{
+			{
+				ID: "fireball", Name: "Fireball", Level: 3, School: "evocation",
+				CastingTime:   "1 action",
+				RangeType:     "ranged",
+				RangeFt:       sql.NullInt32{Int32: 150, Valid: true},
+				Components:    []string{"V", "S", "M"},
+				Duration:      "Instantaneous",
+				Concentration: sql.NullBool{Bool: false, Valid: true},
+				Description:   "A bright streak flashes to a point you choose, then blossoms into flame.",
+			},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	s := data.Spells[0]
+	assert.Equal(t, []string{"V", "S", "M"}, s.Components)
+	assert.Equal(t, "Instantaneous", s.Duration)
+	assert.Equal(t, "A bright streak flashes to a point you choose, then blossoms into flame.", s.Description)
+	assert.False(t, s.Concentration)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_ConcentrationSpell(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 5}})
+	charDataJSON, _ := json.Marshal(map[string]any{"spells": []string{"haste"}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spells: []refdata.Spell{
+			{
+				ID: "haste", Name: "Haste", Level: 3, School: "transmutation",
+				CastingTime:   "1 action",
+				Duration:      "Concentration, up to 1 minute",
+				Concentration: sql.NullBool{Bool: true, Valid: true},
+			},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	assert.True(t, data.Spells[0].Concentration)
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_Description(t *testing.T) {
 	charID := uuid.New()
 

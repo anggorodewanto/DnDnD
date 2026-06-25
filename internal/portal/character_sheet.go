@@ -66,16 +66,20 @@ type CharacterSheetData struct {
 
 // SpellDisplayEntry holds data for displaying a single spell on the character sheet.
 type SpellDisplayEntry struct {
-	ID          string
-	Name        string
-	Level       int
-	School      string
-	CastingTime string
-	Range       string
-	Prepared    bool
-	Source      string
-	Homebrew    bool
-	OffList     bool
+	ID            string
+	Name          string
+	Level         int
+	School        string
+	CastingTime   string
+	Range         string
+	Components    []string
+	Duration      string
+	Description   string
+	Concentration bool
+	Prepared      bool
+	Source        string
+	Homebrew      bool
+	OffList       bool
 }
 
 // SkillDisplay holds display data for a single skill.
