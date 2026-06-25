@@ -77,6 +77,27 @@ history; `game-state.md` is the current snapshot.
   (Expertise wiring) and **ISSUE-006** (L1 half-caster phantom slot), TDD, each on
   its own worktree branch for clean integration.
 
-**Next:** open the scene — tailor "Ashfall Waystation" to Vale; deliver opening
-narration to `#the-story` (confirm before the first post).
+**Scene opened (2026-06-25)**
+
+- Opening "Ashfall Waystation" narration posted to `#the-story` via the dashboard
+  Narrate tool (player-confirmed), tailored to Vale (Tiefling Fiend-pact warlock,
+  entertainer): cold hearth, missing keeper, cellar door gouged from the inside,
+  patron's pull. Awaiting Vale's first action.
+
+**Equip + card bugs found & fixed (2026-06-25)**
+
+- Player flagged: card shows "Equipped: —" + "Spell Slots: —", and `/character`
+  shows nothing equipped despite equipping in the builder. Read-only investigator
+  traced both. **ISSUE-011** (equipped gear dropped) = frontend async-load ordering
+  bug; **ISSUE-012** (warlock pact slots never shown on Discord cards) = display
+  gap. Both fixed TDD on worktree branches, cherry-picked to `main`, cover-check
+  green. Also improved `/equip` help (slot model + `armor:true`) and shipped the
+  ISSUE-002..006 builder fixes.
+- **Live unblock meanwhile:** Vale can `/equip item:leather armor:true` +
+  `/equip item:dagger` (or `light-crossbow`) — items are already in inventory.
+- App **redeployed** (`docker compose up -d --build app`) — 002..006 + `/equip`
+  help live; a second redeploy folds in 011/012.
+
+**Next:** Vale takes her first action in the scene; DM responds. Import the 10×10
+waystation map if/when the cellar fight starts.
 </content>
