@@ -3,6 +3,7 @@
   import { makeBuilderApi } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
+  import { raceBaseLanguages, availableLanguageChoices, assembleLanguages, bonusLanguageCount } from './lib/languages.js';
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks, applyAbilityBonuses } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
@@ -59,6 +60,9 @@
   // that gets double proficiency. Empty for every other class. ISSUE-005.
   let selectedExpertise = $state([]);
   let selectedSpells = $state([]);
+  // Concrete bonus languages chosen by the player. The race's base languages
+  // are read-only; this holds only the background-granted picks (ISSUE-009).
+  let chosenLanguages = $state([]);
   let selectedMasteries = $state([]); // weapon ids whose mastery the character knows
 
   // Reference data
@@ -171,6 +175,26 @@
     if (!sameSkillSet(next, selectedExpertise)) selectedExpertise = next;
   });
 
+  // Keep bonus language picks legal as race / background change: drop any pick
+  // that is no longer a valid bonus choice (e.g. it became a race base language)
+  // and never let the count exceed the background's bonus grant. Mirrors the
+  // expertise prune effect. ISSUE-009. Compared against the race base alone so a
+  // pick isn't pruned just for appearing in its own `knownLanguages`.
+  $effect(() => {
+    const selectable = new Set(
+      availableLanguageChoices(raceLanguages).map(l => l.toLowerCase()),
+    );
+    const next = [];
+    for (const lang of chosenLanguages) {
+      if (next.length >= languageBonusCount) break;
+      if (typeof lang !== 'string' || lang.trim() === '') continue;
+      if (!selectable.has(lang.toLowerCase())) continue;
+      if (next.some(l => l.toLowerCase() === lang.toLowerCase())) continue;
+      next.push(lang);
+    }
+    if (!sameSkillSet(next, chosenLanguages)) chosenLanguages = next;
+  });
+
   // --- Draft persistence (localStorage) --------------------------------
   // Survive an accidental reload: restore unsubmitted fields on init,
   // re-save on every change, and clear once the character is submitted.
@@ -214,6 +238,7 @@
     if (Array.isArray(d.selectedSkills)) selectedSkills = d.selectedSkills;
     if (Array.isArray(d.selectedExpertise)) selectedExpertise = d.selectedExpertise;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
+    if (Array.isArray(d.chosenLanguages)) chosenLanguages = d.chosenLanguages;
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
     if (d.packChoices !== undefined) packChoices = d.packChoices;
     if (Array.isArray(d.manualEquipment)) manualEquipment = d.manualEquipment;
@@ -231,7 +256,7 @@
     return $state.snapshot({
       currentStep, name, race, subrace, background,
       classEntries, scores, abilityMethod, abilityRolls,
-      selectedSkills, selectedExpertise, selectedSpells, selectedMasteries, packChoices, manualEquipment,
+      selectedSkills, selectedExpertise, selectedSpells, chosenLanguages, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
     });
   }
@@ -373,6 +398,22 @@
     }
   }
 
+  // Set the bonus language in picker slot `index`. A blank value clears the
+  // slot; a real value replaces it, dropping any duplicate of that language in
+  // another slot so the same language can't be picked twice. The prune effect
+  // then re-normalizes (caps to the bonus count, drops now-illegal picks).
+  function setLanguageChoice(index, value) {
+    const next = [...chosenLanguages];
+    if (!value) {
+      next.splice(index, 1);
+    } else {
+      const dup = next.findIndex((l, i) => i !== index && l.toLowerCase() === value.toLowerCase());
+      if (dup !== -1) next.splice(dup, 1);
+      next[index] = value;
+    }
+    chosenLanguages = next.filter(l => typeof l === 'string' && l.trim() !== '');
+  }
+
   // Membership-only comparison (order-insensitive) so the reconcile effect
   // only writes selectedSkills when the set actually changed — avoids a
   // write/re-run loop on every reconcile pass.
@@ -483,6 +524,16 @@
   // Derived stats for review
   let selectedRaceData = $derived(races.find(r => r.id === race));
   let selectedClassData = $derived(classes.find(c => c.id === selectedClass));
+
+  // Languages (ISSUE-009): the race grants fixed base languages (locked); the
+  // background grants a COUNT of bonus languages the player picks concretely.
+  // `knownLanguages` (race base + already-chosen) drives both the prune effect
+  // and the per-slot picker options so no language can be chosen twice.
+  let raceLanguages = $derived(raceBaseLanguages(selectedRaceData));
+  let languageBonusCount = $derived(bonusLanguageCount(backgroundDetails(background)));
+  let knownLanguages = $derived([...raceLanguages, ...chosenLanguages]);
+  let availableLanguages = $derived(availableLanguageChoices(knownLanguages));
+
   let weaponIds = $derived(allEquipment.filter(e => e.category === 'weapon').map(e => e.id));
   let weaponList = $derived(allEquipment.filter(e => e.category === 'weapon'));
   let raceWeaponIds = $derived(raceGrantedWeaponProficiencies(selectedRaceData?.traits, weaponIds));
@@ -586,6 +637,7 @@
       expertise,
       equipment: selectedEquipment(),
       spells: selectedSpells,
+      languages: assembleLanguages(raceBaseLanguages(selectedRaceData), chosenLanguages),
       weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),
       equipped_weapon: equippedWeapon,
       worn_armor: wornArmor,
@@ -1061,6 +1113,49 @@
             {/if}
           </div>
         {/if}
+
+        <!-- Languages (ISSUE-009): race base languages are fixed (read-only
+             chips); the background grants a count of bonus languages the player
+             picks here. Concrete strings flow into CharacterSubmission.Languages. -->
+        {#if selectedRaceData}
+          <div class="language-section">
+            <h3>Languages</h3>
+            {#if raceLanguages.length > 0}
+              <p class="bg-skill-hint">
+                From <strong>{selectedRaceData.name}</strong> race:
+                {#each raceLanguages as lang}
+                  <span class="bg-skill-tag lang-locked">{lang}</span>
+                {/each}
+              </p>
+            {/if}
+            {#if languageBonusCount > 0}
+              <p class="skill-budget">
+                <strong>Bonus languages:</strong> {chosenLanguages.length}/{languageBonusCount}
+                {#if chosenLanguages.length < languageBonusCount}
+                  <span class="skill-incomplete">— choose {languageBonusCount - chosenLanguages.length} more from your {background.replace(/-/g, ' ')} background</span>
+                {/if}
+              </p>
+              <div class="language-picker">
+                {#each Array(languageBonusCount) as _, i}
+                  {@const current = chosenLanguages[i] ?? ''}
+                  {@const options = current ? [current, ...availableLanguages] : availableLanguages}
+                  <select
+                    class="language-select"
+                    value={current}
+                    onchange={(e) => setLanguageChoice(i, e.currentTarget.value)}
+                  >
+                    <option value="">— choose a language —</option>
+                    {#each options as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                {/each}
+              </div>
+            {:else}
+              <p class="bg-skill-hint">Your background grants no bonus languages.</p>
+            {/if}
+          </div>
+        {/if}
       </div>
 
     <!-- Step 4: Equipment -->
@@ -1465,6 +1560,12 @@
   .skill-warn { color: #e9a045; font-size: 0.85rem; margin: 0 0 0.5rem; }
   .expertise-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #2a2a3a; }
   .expertise-section h3 { margin: 0 0 0.5rem; }
+
+  .language-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #2a2a3a; }
+  .language-section h3 { margin: 0 0 0.5rem; }
+  .lang-locked { text-transform: none; }
+  .language-picker { display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; }
+  .language-select { width: 100%; }
 
   .spell-cap-hint { color: #aaa; font-size: 0.85rem; margin: 0 0 0.6rem; }
   .spell-cap-hint strong { color: #e94560; }

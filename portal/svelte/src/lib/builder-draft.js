@@ -38,6 +38,7 @@ const DRAFT_FIELDS = [
   'selectedSkills',
   'selectedExpertise',
   'selectedSpells',
+  'chosenLanguages',
   'selectedMasteries',
   'packChoices',
   'manualEquipment',
