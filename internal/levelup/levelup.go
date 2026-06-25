@@ -1,6 +1,8 @@
 package levelup
 
 import (
+	"strconv"
+
 	"github.com/ab/dndnd/internal/character"
 )
 
@@ -11,7 +13,7 @@ type LevelUpResult struct {
 	NewHPMax            int
 	HPGained            int
 	NewProficiencyBonus int
-	NewSpellSlots       map[int]int
+	NewSpellSlots       map[string]character.SlotInfo
 	NewPactSlots        character.PactMagicSlots
 	NewAttacksPerAction int
 	LeveledClass        string
@@ -38,8 +40,10 @@ func CalculateLevelUp(
 	// Determine which class was leveled
 	leveledClass, leveledClassLevel := findLeveledClass(oldClasses, newClasses)
 
-	// Spell slots
-	newSpellSlots := character.CalculateSpellSlots(newClasses, spellcasting)
+	// Spell slots — emit the canonical stored shape (string-keyed slot levels
+	// mapping to {current,max}) so combat.ParseSpellSlots / the /cast read path
+	// can unmarshal them. nil for non-casters (ISSUE-010).
+	newSpellSlots := canonicalSpellSlots(character.CalculateSpellSlots(newClasses, spellcasting))
 
 	// Pact magic
 	var newPactSlots character.PactMagicSlots
@@ -66,6 +70,24 @@ func CalculateLevelUp(
 		LeveledClass:        leveledClass,
 		LeveledClassLevel:   leveledClassLevel,
 	}
+}
+
+// canonicalSpellSlots converts the {slotLevel: count} map returned by
+// character.CalculateSpellSlots into the canonical stored shape:
+// {"<slotLevel>": {current, max}}, matching the portal fresh-build convention
+// and what combat.ParseSpellSlots expects. A level-up conventionally lands on a
+// long rest, so slots are emitted full (current == max). Returns nil for an
+// empty/nil source (non-caster) so service.go's `!= nil` guard skips the
+// spell_slots column rather than writing an empty {}.
+func canonicalSpellSlots(slots map[int]int) map[string]character.SlotInfo {
+	if len(slots) == 0 {
+		return nil
+	}
+	out := make(map[string]character.SlotInfo, len(slots))
+	for level, count := range slots {
+		out[strconv.Itoa(level)] = character.SlotInfo{Current: count, Max: count}
+	}
+	return out
 }
 
 // asiLevels are the standard class levels that grant an ASI.

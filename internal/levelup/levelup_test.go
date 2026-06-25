@@ -2,10 +2,12 @@ package levelup
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 )
 
 func TestCalculateLevelUp_SingleClassFighterLevel5to6(t *testing.T) {
@@ -71,6 +73,74 @@ func TestCalculateLevelUp_MulticlassWizardPaladin(t *testing.T) {
 	// Attacks per action: max across classes. Wizard has 1 at all levels, Paladin has 1 at level 4
 	if result.NewAttacksPerAction != 1 {
 		t.Errorf("NewAttacksPerAction = %d, want 1", result.NewAttacksPerAction)
+	}
+}
+
+// TestCalculateLevelUp_SpellSlotsParseViaCombat is the ISSUE-010 regression
+// guard: the spell-slots JSON emitted after a level-up to a spellcasting class
+// must round-trip through combat.ParseSpellSlots (the canonical /cast read
+// path) into {current,max} per slot level. The old map[int]int shape
+// ({"1":4}) was unparseable, so /cast rejected any leveled caster.
+func TestCalculateLevelUp_SpellSlotsParseViaCombat(t *testing.T) {
+	oldClasses := []character.ClassEntry{{Class: "wizard", Level: 2}}
+	newClasses := []character.ClassEntry{{Class: "wizard", Level: 3}}
+	hitDice := map[string]string{"wizard": "d6"}
+	spellcasting := map[string]character.ClassSpellcasting{
+		"wizard": {SlotProgression: "full"},
+	}
+	attacksPerAction := map[string]map[int]int{"wizard": {1: 1}}
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 14, INT: 18, WIS: 12, CHA: 10}
+
+	result := CalculateLevelUp(oldClasses, newClasses, hitDice, spellcasting, attacksPerAction, scores)
+
+	if result.NewSpellSlots == nil {
+		t.Fatal("NewSpellSlots is nil for a level-3 wizard, want non-nil slots")
+	}
+
+	raw, err := json.Marshal(result.NewSpellSlots)
+	if err != nil {
+		t.Fatalf("marshaling NewSpellSlots: %v", err)
+	}
+
+	parsed, err := combat.ParseSpellSlots(raw)
+	if err != nil {
+		t.Fatalf("combat.ParseSpellSlots rejected level-up slots %s: %v", raw, err)
+	}
+
+	// A level-3 wizard (caster level 3) has 4 first-level and 2 second-level slots.
+	want := character.MulticastSpellSlots(3)
+	if len(parsed) != len(want) {
+		t.Fatalf("parsed slot levels = %d, want %d (raw=%s)", len(parsed), len(want), raw)
+	}
+	for level, count := range want {
+		key := strconv.Itoa(level)
+		info, ok := parsed[key]
+		if !ok {
+			t.Errorf("missing slot level %q in parsed slots %s", key, raw)
+			continue
+		}
+		if info.Current != count || info.Max != count {
+			t.Errorf("slot level %q = {current:%d,max:%d}, want {current:%d,max:%d}",
+				key, info.Current, info.Max, count, count)
+		}
+	}
+}
+
+// TestCalculateLevelUp_NonCasterSpellSlotsNil guards that a non-spellcasting
+// level-up leaves NewSpellSlots nil so service.go's `!= nil` guard skips the
+// spell_slots column (no empty {} written).
+func TestCalculateLevelUp_NonCasterSpellSlotsNil(t *testing.T) {
+	oldClasses := []character.ClassEntry{{Class: "fighter", Level: 5}}
+	newClasses := []character.ClassEntry{{Class: "fighter", Level: 6}}
+	hitDice := map[string]string{"fighter": "d10"}
+	spellcasting := map[string]character.ClassSpellcasting{}
+	attacksPerAction := map[string]map[int]int{"fighter": {1: 1, 5: 2}}
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+
+	result := CalculateLevelUp(oldClasses, newClasses, hitDice, spellcasting, attacksPerAction, scores)
+
+	if result.NewSpellSlots != nil {
+		t.Errorf("NewSpellSlots = %v, want nil for a non-caster", result.NewSpellSlots)
 	}
 }
 

@@ -18,7 +18,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-007 | 2026-06-24 | builder / spellcasting (frontend+server) | major | FIXED | Multiclass **is** exposed (up to 4 class rows) and the spell *count* budget used the **primary class only** — frontend (`classEntries[0]`) and server (`primaryClassEntry`) — so secondary caster levels were ignored (budget too low) and a **non-caster primary hid the Spells step entirely** (e.g. Fighter 1 / Wizard 3). **Fixed (TDD, both sides, `main`):** `anyCaster` / `multiclassCantripCap` / `multiclassLeveledCap` (`spellcasting.js`) + `multiclassSpellBudget` (`spellbudget.go`) sum each class's own budget over **every** caster entry (5e computes known/prepared/cantrip counts per class; only spell *slots* combine); `CharacterBuilder.svelte` gate + caps now aggregate across `classEntries`. `max_spell_level` was already multiclass-correct (`DeriveStats` passes all classes) and was left untouched. 473 vitest + `make cover-check` green (overall 90.67%, portal 89.23%). Bundle rebuilt. |
 | ISSUE-008 | 2026-06-24 | builder / persistence | blocker | FIXED (adapter) | Portal submit 500s — `characters.languages` is `TEXT[] NOT NULL`, builder sends no languages, `pq.Array(nil)` → SQL NULL → constraint violation. Blocked **all** portal builds. Coerced nil→`[]` in `CreateCharacterRecord`. Underlying collection gap tracked as ISSUE-009. |
 | ISSUE-009 | 2026-06-24 | builder / language selection | minor | OPEN | Builder collects **no concrete languages** — `backgrounds.js` carries only a *count* of bonus languages, never the strings. Characters persist with an empty language list instead of race base + background + chosen languages. Cosmetic today (languages unused in combat); fix = add a language-selection step + populate `submission.Languages`. |
-| ISSUE-010 | 2026-06-24 | levelup / persistence | major | OPEN | Level-up persists `spell_slots` as `map[int]int` → `{"1":4}` (`levelup/levelup.go:14`, `service.go:243`), but the cast reader `ParseSpellSlots` (`combat/divine_smite.go:71`) unmarshals into `map[string]SlotInfo` (`{current,max}`). `{"1":4}` fails to unmarshal → `/cast` errors. Surfaced while fixing ISSUE-002. Needs a runtime confirm, but the shape mismatch is clear in code. Fix = level-up should write the `{current,max}` shape (or share the portal converter). |
+| ISSUE-010 | 2026-06-24 | levelup / persistence | major | FIXED | Level-up persisted `spell_slots` as `map[int]int` → `{"1":4}` (`levelup/levelup.go:14`), but the cast reader `ParseSpellSlots` (`combat/divine_smite.go:71`) unmarshals into `map[string]SlotInfo` (`{current,max}`) → `{"1":4}` failed to unmarshal → `/cast` errored after any level-up. **Fixed (TDD, `main`):** `LevelUpResult.NewSpellSlots` is now `map[string]character.SlotInfo`; new `canonicalSpellSlots` helper converts the `CalculateSpellSlots` result to the string-keyed `{current,max}` shape (full on level-up; `nil` for non-casters so the `!= nil` guard skips the column). Regression test round-trips the emitted JSON through `combat.ParseSpellSlots`. cover-check green (overall 90.68%, levelup 90.45%). Slots emitted full (current==max) on level-up — matches the portal convention + long-rest assumption; prior `current` not preserved (the old shape was unparseable, so this is strictly an improvement). |
 | ISSUE-011 | 2026-06-25 | builder / equipment (frontend) | major | FIXED | Portal-built characters persist with **nothing equipped** — `equipped_main_hand`/`off_hand`/`armor` empty, all inventory items `equipped:false` — even when the player equips a weapon/armor in the builder. Breaks `/attack` (no weapon), armor AC, and the card "Equipped" row. Go ingest + adapter persist `EquippedWeapon`/`WornArmor` fine; the drop is **frontend**. **Fixed (TDD, `main` 06a0ac5):** real cause was **async-load ordering** — `CharacterBuilder.svelte`'s reset `$effect`s cleared a valid `wornArmor`/`equippedWeapon` pick while the catalog (`allEquipment`) was still `[]` (e.g. right after a draft restore), because the option lists decided armor/weapon purely from the async catalog `category`. New `portal/svelte/src/lib/equip-selection.js` (`reconcileEquipPick` + category-OR-SRD-id fallback mirroring the Go `knownWeapons`/`knownArmor` maps) clears only on a genuine non-option, never on a transient catalog miss. Also wired `EquippedOffHand` (shield via `hasEquipmentItem(equipment,"shield")`). 461 vitest, bundle rebuilt, cover-check green. Workaround pre-deploy: player runs `/equip` in Discord. |
 | ISSUE-012 | 2026-06-25 | character card / spellcasting | minor | FIXED | Discord character card + `/character` embed show **"Spell Slots: —" for warlocks** — they read only the `spell_slots` column and never fall back to `pact_magic_slots`. **Fixed (TDD, `main` 5090e02):** both surfaces now pact-aware — parse the canonical `character.PactMagicSlots` ({slot_level,current,max}) and render `Pact Magic: N × Lvl L`; a multiclass caster shows standard + pact joined by ` | `; non-casters keep `—`. `charactercard/format.go`+`service.go` (`CardData.PactMagicSlots`, `formatPactMagicSlots`, `parsePactMagicSlots`), `discord/character_handler.go` (`buildSpellSlotSummary` + a Spell Slots line in `buildCharacterEmbed`). cover-check green. |
 
@@ -240,6 +240,33 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   wizard's budget now passes where the primary-only cap rejected it). 473 vitest +
   `make cover-check` green (overall 90.67%, portal 89.23%). Svelte bundle rebuilt
   (`internal/portal/assets/` is git-tracked).
+
+### ISSUE-010 — Level-up wrote spell_slots in an unparseable shape (FIXED)
+- **Date:** 2026-06-24 (fixed 2026-06-25)
+- **Area:** level-up persistence vs the `/cast` read path
+- **Severity:** major — any leveled caster that leveled up could no longer cast.
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** `CalculateLevelUp` built `NewSpellSlots` as `map[int]int`
+  (`levelup/levelup.go`) and `service.go` marshaled it raw → `{"1":4,"2":2}`. The
+  canonical reader `combat.ParseSpellSlots` (`combat/divine_smite.go:71`)
+  unmarshals into `map[string]character.SlotInfo`
+  (`{"1":{"current":4,"max":4}}`), so the number-shaped JSON failed with
+  `cannot unmarshal number into Go value of type combat.SlotInfo` and `/cast`
+  rejected the character.
+- **Fix:** changed `LevelUpResult.NewSpellSlots` to
+  `map[string]character.SlotInfo`; added `canonicalSpellSlots(map[int]int)` that
+  string-keys each slot level and sets `Current == Max == count` (full on
+  level-up), returning `nil` for an empty/nil source so `service.go`'s `!= nil`
+  guard still skips the column for non-casters. `service.go` unchanged. Confined
+  to `internal/levelup`.
+- **Tests:** `TestCalculateLevelUp_SpellSlotsParseViaCombat` (RED→GREEN: marshals
+  the wizard 2→3 level-up slots and round-trips them through
+  `combat.ParseSpellSlots`, asserting `{current,max}` == `MulticastSpellSlots(3)`)
+  + `TestCalculateLevelUp_NonCasterSpellSlotsNil`. `make cover-check` green
+  (overall 90.68%, levelup 90.45%).
+- **Simplification:** slots emitted full (current==max); prior `current` not
+  preserved. Acceptable — level-ups conventionally land on a long rest, and the
+  old shape was unusable, so any valid shape is a strict improvement.
 
 <!-- Append a section per issue:
 
