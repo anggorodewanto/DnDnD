@@ -207,24 +207,33 @@ func TestPactMagicSlotsForLevel(t *testing.T) {
 }
 
 func TestCalculateSpellSlots_SingleClassHalfCaster(t *testing.T) {
+	// Half-casters (Paladin, Ranger) get NO leveled spell slots until character
+	// level 2 (D&D 5e SRD). Level 1 must yield nil; level 2+ follows the standard
+	// (level+1)/2 effective caster level. The L1 case guards against ISSUE-006,
+	// where the formula previously granted a phantom first-level slot at L1.
 	tests := []struct {
 		name  string
+		class string
 		level int
 		want  map[int]int
 	}{
-		{"Paladin 3 gets 3 first-level slots", 3, map[int]int{1: 3}},
-		{"Paladin 5 gets 4/2", 5, map[int]int{1: 4, 2: 2}},
-		{"Paladin 9 gets 4/3/2", 9, map[int]int{1: 4, 2: 3, 3: 2}},
+		{"Paladin 1 gets no leveled slots", "paladin", 1, nil},
+		{"Ranger 1 gets no leveled slots", "ranger", 1, nil},
+		{"Paladin 2 gets 2 first-level slots", "paladin", 2, map[int]int{1: 2}},
+		{"Ranger 2 gets 2 first-level slots", "ranger", 2, map[int]int{1: 2}},
+		{"Paladin 3 gets 3 first-level slots", "paladin", 3, map[int]int{1: 3}},
+		{"Paladin 5 gets 4/2", "paladin", 5, map[int]int{1: 4, 2: 2}},
+		{"Paladin 9 gets 4/3/2", "paladin", 9, map[int]int{1: 4, 2: 3, 3: 2}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			classes := []ClassEntry{{Class: "paladin", Level: tc.level}}
+			classes := []ClassEntry{{Class: tc.class, Level: tc.level}}
 			spellcasting := map[string]ClassSpellcasting{
-				"paladin": {SlotProgression: "half"},
+				tc.class: {SlotProgression: "half"},
 			}
 			got := CalculateSpellSlots(classes, spellcasting)
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("CalculateSpellSlots(paladin %d) = %v, want %v", tc.level, got, tc.want)
+				t.Errorf("CalculateSpellSlots(%s %d) = %v, want %v", tc.class, tc.level, got, tc.want)
 			}
 		})
 	}

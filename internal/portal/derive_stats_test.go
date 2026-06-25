@@ -734,6 +734,50 @@ func TestMaxSpellLevelForClasses_Wizard5(t *testing.T) {
 	assert.Equal(t, 3, MaxSpellLevelForClasses(classes))
 }
 
+func TestMaxSpellLevelForClasses_Paladin1(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Paladin", Level: 1}}
+	// Half-casters get no leveled slots until character level 2 (ISSUE-006), so
+	// a level-1 Paladin must derive max spell level 0, not 1.
+	assert.Equal(t, 0, MaxSpellLevelForClasses(classes))
+}
+
+func TestMaxSpellLevelForClasses_Ranger1(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Ranger", Level: 1}}
+	assert.Equal(t, 0, MaxSpellLevelForClasses(classes))
+}
+
+func TestDeriveDMStats_Level1HalfCasterHasNoSpellSlots(t *testing.T) {
+	// A freshly-built level-1 Paladin must store no leveled spell slots and a
+	// max spell level of 0 (ISSUE-006: the old (level+1)/2 formula granted a
+	// phantom first-level slot at L1).
+	for _, class := range []string{"Paladin", "Ranger"} {
+		t.Run(class, func(t *testing.T) {
+			sub := CharacterSubmission{
+				Race: "Human",
+				Classes: []character.ClassEntry{
+					{Class: class, Level: 1},
+				},
+				AbilityScores: PointBuyScores{
+					STR: 14, DEX: 12, CON: 14, INT: 10, WIS: 12, CHA: 14,
+				},
+			}
+			stats := DeriveStats(sub, nil)
+			assert.Empty(t, stats.SpellSlots, "level-1 half-caster should have no leveled spell slots")
+			assert.Equal(t, 0, stats.MaxSpellLevel, "level-1 half-caster should have max spell level 0")
+		})
+	}
+}
+
+func TestSpellSlotsForClasses_Level1HalfCasterIsNil(t *testing.T) {
+	// The stored-shape helper must return nil (so spell_slots stays NULL) for a
+	// level-1 half-caster, and the standard 2 first-level slots at level 2.
+	assert.Nil(t, spellSlotsForClasses([]character.ClassEntry{{Class: "Paladin", Level: 1}}))
+	assert.Nil(t, spellSlotsForClasses([]character.ClassEntry{{Class: "Ranger", Level: 1}}))
+
+	l2 := spellSlotsForClasses([]character.ClassEntry{{Class: "Paladin", Level: 2}})
+	assert.Equal(t, map[string]character.SlotInfo{"1": {Current: 2, Max: 2}}, l2)
+}
+
 func TestDeriveDMStats_SkillModifiers_FighterProficiencies(t *testing.T) {
 	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{

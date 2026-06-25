@@ -130,10 +130,15 @@ func CalculateSpellSlots(classes []ClassEntry, spellcasting map[string]ClassSpel
 	if len(classes) == 1 {
 		sc, ok := spellcasting[classes[0].Class]
 		if ok && sc.SlotProgression == "half" {
-			casterLevel := (classes[0].Level + 1) / 2
-			if casterLevel == 0 {
+			// Half-casters (Paladin, Ranger) gain no leveled spell slots until
+			// character level 2 (D&D 5e SRD). Guard the level-1 case explicitly:
+			// the (level+1)/2 effective caster level below is correct for L>=2
+			// but would otherwise round a level-1 half-caster up to caster level
+			// 1 and grant a phantom first-level slot (ISSUE-006).
+			if classes[0].Level < 2 {
 				return nil
 			}
+			casterLevel := (classes[0].Level + 1) / 2
 			return MulticastSpellSlots(casterLevel)
 		}
 	}
