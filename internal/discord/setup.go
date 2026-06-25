@@ -16,6 +16,9 @@ type CategoryDef struct {
 // ChannelDef defines a text channel within a category.
 type ChannelDef struct {
 	Name string
+	// Topic is the channel description shown under the channel name, explaining
+	// what the channel is for. Set on creation via /setup.
+	Topic string
 	// PermissionFunc returns permission overwrites for this channel.
 	// Parameters: guildID (used as @everyone role ID), botUserID, dmUserID.
 	// If nil, no special permissions are applied.
@@ -28,31 +31,31 @@ func ChannelStructure() []CategoryDef {
 		{
 			Name: "SYSTEM",
 			Channels: []ChannelDef{
-				{Name: "initiative-tracker"},
-				{Name: "combat-log"},
-				{Name: "roll-history"},
+				{Name: "initiative-tracker", Topic: "Bot-maintained turn order for the current encounter — who's up now and who's next."},
+				{Name: "combat-log", Topic: "Auto-logged combat events: attack rolls, damage, saves, conditions, and deaths."},
+				{Name: "roll-history", Topic: "A running record of dice rolls (checks, saves, attacks) for table transparency."},
 			},
 		},
 		{
 			Name: "NARRATION",
 			Channels: []ChannelDef{
-				{Name: "the-story", PermissionFunc: theStoryPerms},
-				{Name: "in-character"},
-				{Name: "player-chat"},
+				{Name: "the-story", Topic: "DM narration and scene-setting. Only the DM and bot post here — read along and react in #in-character.", PermissionFunc: theStoryPerms},
+				{Name: "in-character", Topic: "Speak and act as your character — in-world dialogue and roleplay."},
+				{Name: "player-chat", Topic: "Out-of-character table talk: questions, scheduling, and banter."},
 			},
 		},
 		{
 			Name: "COMBAT",
 			Channels: []ChannelDef{
-				{Name: "combat-map", PermissionFunc: combatMapPerms},
-				{Name: "your-turn"},
+				{Name: "combat-map", Topic: "The rendered battle map for the current encounter, posted and updated by the bot.", PermissionFunc: combatMapPerms},
+				{Name: "your-turn", Topic: "Turn prompts and reminders — the bot pings you here when it's your turn to act."},
 			},
 		},
 		{
 			Name: "REFERENCE",
 			Channels: []ChannelDef{
-				{Name: "character-cards"},
-				{Name: "dm-queue", PermissionFunc: dmQueuePerms},
+				{Name: "character-cards", Topic: "Live character sheets — HP, AC, spell slots, and equipment, kept current by the bot."},
+				{Name: "dm-queue", Topic: "DM-only: character approvals and admin items awaiting the Dungeon Master.", PermissionFunc: dmQueuePerms},
 			},
 		},
 	}
@@ -170,6 +173,7 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 			ch, err := s.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
 				Name:                 chDef.Name,
 				Type:                 discordgo.ChannelTypeGuildText,
+				Topic:                chDef.Topic,
 				ParentID:             catID,
 				PermissionOverwrites: overwrites,
 			})

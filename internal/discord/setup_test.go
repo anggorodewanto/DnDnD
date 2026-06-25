@@ -73,6 +73,48 @@ func channelNamesFrom(defs []ChannelDef) []string {
 	return names
 }
 
+func TestChannelStructure_AllChannelsHaveTopics(t *testing.T) {
+	for _, cat := range ChannelStructure() {
+		for _, ch := range cat.Channels {
+			assert.NotEmptyf(t, ch.Topic, "channel %s should have a topic explaining its purpose", ch.Name)
+		}
+	}
+}
+
+func TestSetupChannels_CreatesChannelsWithTopics(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil // no existing channels
+	}
+
+	topics := make(map[string]string)
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		// Categories carry no topic; only text channels do.
+		if data.Type == discordgo.ChannelTypeGuildText {
+			topics[data.Name] = data.Topic
+		}
+		return &discordgo.Channel{
+			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
+			Name: data.Name,
+			Type: data.Type,
+		}, nil
+	}
+
+	_, err := SetupChannels(mock, "guild-1", "bot-user-1", "dm-user-1")
+	require.NoError(t, err)
+
+	for _, name := range []string{
+		"initiative-tracker", "combat-log", "roll-history",
+		"the-story", "in-character", "player-chat",
+		"combat-map", "your-turn",
+		"character-cards", "dm-queue",
+	} {
+		assert.NotEmptyf(t, topics[name], "channel %s was created without a topic", name)
+	}
+}
+
 func TestSetupChannels_CreatesAllChannelsAndCategories(t *testing.T) {
 	mock := newTestMock()
 	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
