@@ -20,6 +20,7 @@ const generalHelp = "\U0001F4D6 **DnDnD Command Reference**\n" +
 	"\n**Checks & Saves**\n" +
 	"`/check [skill]` \u2014 Make an ability or skill check\n" +
 	"`/save [ability]` \u2014 Make a saving throw\n" +
+	"`/roll [dice]` \u2014 Roll any dice (e.g. 1d20+4, 2d6)\n" +
 	"\n**Communication**\n" +
 	"`/whisper [message]` \u2014 Send a private message to the DM\n" +
 	"\n**Status & Inventory**\n" +
@@ -59,6 +60,7 @@ var helpTopics = map[string]string{
 	"move":             helpMove,
 	"check":            helpCheck,
 	"save":             helpSave,
+	"roll":             helpRoll,
 	"rest":             helpRest,
 	"equip":            helpEquip,
 	"inventory":        helpInventory,
@@ -294,6 +296,27 @@ Usage:
   /save [ability]                     Roll a saving throw (e.g. /save dex, /save wis)
 
 Proficiency and modifiers are applied automatically.`
+
+const helpRoll = `/roll — Roll Dice
+
+A freeform dice roller for anything the other commands don't cover — the DM
+asks for a roll, you roll. The result is shown to you and posted to
+#roll-history so the whole table sees it.
+
+Usage:
+  /roll [dice]                        Roll any dice expression (e.g. 1d20+4, 2d6, d20)
+  /roll [dice] reason:[text]          Label the roll (e.g. reason:handaxe throw)
+
+Examples:
+  /roll 1d20+5                        A to-hit or check roll
+  /roll 2d6+3                         A damage roll
+  /roll 4d6                           Roll a stat
+  /roll d20 reason:initiative         A labelled d20
+
+Notes:
+  • Combine dice and flat modifiers freely: 1d20+4, 2d6-1, 1d8+1d6+2.
+  • No character required — anyone can roll. With a character, the roll is
+    labelled with its name.`
 
 const helpRest = `/rest — Take a Rest
 

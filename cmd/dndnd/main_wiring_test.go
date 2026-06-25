@@ -100,8 +100,8 @@ func TestRollHistoryLoggerAdapter_ProviderErrorIsNoOp(t *testing.T) {
 }
 
 // TestBuildDiscordHandlers_WiresRollHistoryLogger asserts that when the deps
-// carry a rollHistoryLogger, the /check, /save, /rest handlers all see a
-// non-nil logger so #roll-history posts actually fire end-to-end.
+// carry a rollHistoryLogger, the /check, /save, /rest, /roll handlers all see
+// a non-nil logger so #roll-history posts actually fire end-to-end.
 func TestBuildDiscordHandlers_WiresRollHistoryLogger(t *testing.T) {
 	session := &testSession{}
 	deps := discordHandlerDeps{
@@ -115,9 +115,11 @@ func TestBuildDiscordHandlers_WiresRollHistoryLogger(t *testing.T) {
 	require.NotNil(t, set.check)
 	require.NotNil(t, set.save)
 	require.NotNil(t, set.rest)
+	require.NotNil(t, set.roll)
 	assert.True(t, set.check.HasRollLogger(), "/check must have rollLogger when wired in deps")
 	assert.True(t, set.save.HasRollLogger(), "/save must have rollLogger when wired in deps")
 	assert.True(t, set.rest.HasRollLogger(), "/rest must have rollLogger when wired in deps")
+	assert.True(t, set.roll.HasRollLogger(), "/roll must have rollLogger when wired in deps")
 }
 
 // recordingRollLogger is a minimal dice.RollHistoryLogger used to prove the

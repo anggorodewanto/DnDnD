@@ -244,7 +244,7 @@ func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 	expected := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
 		"interact", "done", "map", "deathsave", "command", "reaction", "check",
-		"save", "rest", "whisper", "status", "equip", "undo", "inventory",
+		"save", "roll", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
 		"register", "import", "create-character", "character", "recap",
 		"distance", "help", "setup",

@@ -396,6 +396,23 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:        "roll",
+			Description: "Roll dice (e.g. 1d20+4, 2d6) — result posts to #roll-history",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "dice",
+					Description: "Dice to roll, e.g. 1d20+4, 2d6, d20",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "reason",
+					Description: "What the roll is for (e.g. handaxe throw)",
+				},
+			},
+		},
+		{
 			Name:        "rest",
 			Description: "Take a short or long rest",
 			Options: []*discordgo.ApplicationCommandOption{

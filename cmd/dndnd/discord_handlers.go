@@ -153,6 +153,7 @@ type discordHandlers struct {
 	done              *discord.DoneHandler
 	check             *discord.CheckHandler
 	save              *discord.SaveHandler
+	roll              *discord.RollHandler
 	rest              *discord.RestHandler
 	summon            *discord.SummonCommandHandler
 	recap             *discord.RecapHandler
@@ -245,6 +246,13 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			characterLookup,
 			deps.resolver,
 			combatantLookup,
+			deps.rollHistoryLogger,
+		),
+		roll: discord.NewRollHandler(
+			deps.session,
+			deps.roller,
+			checkCampProv,
+			characterLookup,
 			deps.rollHistoryLogger,
 		),
 		rest: func() *discord.RestHandler {
@@ -750,6 +758,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetDoneHandler(set.done)
 	r.SetCheckHandler(set.check)
 	r.SetSaveHandler(set.save)
+	r.SetRollHandler(set.roll)
 	r.SetRestHandler(set.rest)
 	r.SetSummonCommandHandler(set.summon)
 	r.SetRecapHandler(set.recap)

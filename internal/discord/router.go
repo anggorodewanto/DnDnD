@@ -124,6 +124,11 @@ func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
 	r.handlers["save"] = h
 }
 
+// SetRollHandler registers the RollHandler for the /roll freeform dice command.
+func (r *CommandRouter) SetRollHandler(h *RollHandler) {
+	r.handlers["roll"] = h
+}
+
 // SetInventoryHandler registers the InventoryHandler for the /inventory command.
 func (r *CommandRouter) SetInventoryHandler(h *InventoryHandler) {
 	r.handlers["inventory"] = h
