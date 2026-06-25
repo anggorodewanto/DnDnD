@@ -430,6 +430,105 @@ func (a *BuilderStoreAdapter) SetPlayerCharacterPending(ctx context.Context, pla
 	return err
 }
 
+// LoadEditSubmission reconstructs a builder submission from a saved character
+// for edit-mode prefill, or ErrCharacterNotFound when it does not exist.
+func (a *BuilderStoreAdapter) LoadEditSubmission(ctx context.Context, characterID string) (CharacterSubmission, error) {
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return CharacterSubmission{}, fmt.Errorf("invalid character_id %q: %w", characterID, err)
+	}
+	ch, err := a.q.GetCharacter(ctx, charID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return CharacterSubmission{}, ErrCharacterNotFound
+		}
+		return CharacterSubmission{}, fmt.Errorf("getting character: %w", err)
+	}
+	return submissionFromCharacter(ch), nil
+}
+
+// submissionFromCharacter maps a persisted character back into the builder's
+// CharacterSubmission shape. It is the inverse of buildCharacterColumns:
+// background-pack items are dropped from Equipment (the build re-adds them) so
+// an edit round-trip does not duplicate them. AbilityMethod is left empty since
+// the generation method is not persisted; a player edit is then re-validated as
+// point-buy (DM edits use the looser range check).
+func submissionFromCharacter(ch refdata.Character) CharacterSubmission {
+	sub := CharacterSubmission{
+		Name:      ch.Name,
+		Race:      ch.Race,
+		Languages: ch.Languages,
+	}
+
+	var classes []character.ClassEntry
+	if len(ch.Classes) > 0 {
+		_ = json.Unmarshal(ch.Classes, &classes)
+	}
+	sub.Classes = classes
+	if primary := primaryClassEntry(classes); primary != nil {
+		sub.Class = primary.Class
+		sub.Subclass = primary.Subclass
+	}
+
+	var scores character.AbilityScores
+	if len(ch.AbilityScores) > 0 {
+		_ = json.Unmarshal(ch.AbilityScores, &scores)
+	}
+	sub.AbilityScores = PointBuyScoresFromCharacter(scores)
+
+	if ch.Proficiencies.Valid {
+		var prof character.Proficiencies
+		if json.Unmarshal(ch.Proficiencies.RawMessage, &prof) == nil {
+			sub.Skills = prof.Skills
+			sub.Expertise = prof.Expertise
+		}
+	}
+
+	var background string
+	if ch.CharacterData.Valid {
+		var cd struct {
+			Spells          []string `json:"spells"`
+			WeaponMasteries []string `json:"weapon_masteries"`
+			Subrace         string   `json:"subrace"`
+			Background      string   `json:"background"`
+			Appearance      string   `json:"appearance"`
+			Backstory       string   `json:"backstory"`
+		}
+		if json.Unmarshal(ch.CharacterData.RawMessage, &cd) == nil {
+			sub.Spells = cd.Spells
+			sub.WeaponMasteries = cd.WeaponMasteries
+			sub.Subrace = cd.Subrace
+			sub.Background = cd.Background
+			sub.Appearance = cd.Appearance
+			sub.Backstory = cd.Backstory
+			background = cd.Background
+		}
+	}
+
+	if ch.Inventory.Valid {
+		bgPack := make(map[string]bool)
+		for _, id := range BackgroundEquipmentPack(background) {
+			bgPack[id] = true
+		}
+		var items []character.InventoryItem
+		if json.Unmarshal(ch.Inventory.RawMessage, &items) == nil {
+			for _, it := range items {
+				if bgPack[it.ItemID] {
+					continue
+				}
+				sub.Equipment = append(sub.Equipment, it.ItemID)
+			}
+		}
+	}
+	if ch.EquippedMainHand.Valid {
+		sub.EquippedWeapon = ch.EquippedMainHand.String
+	}
+	if ch.EquippedArmor.Valid {
+		sub.WornArmor = ch.EquippedArmor.String
+	}
+	return sub
+}
+
 // HasActiveEncounter reports whether the character is in an active encounter.
 func (a *BuilderStoreAdapter) HasActiveEncounter(ctx context.Context, characterID string) (bool, error) {
 	charID, err := uuid.Parse(characterID)

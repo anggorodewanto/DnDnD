@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // RaceInfo is the API response for a race.
@@ -304,6 +305,78 @@ func (h *APIHandler) GetCharacterDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, draftResponse{Draft: draft})
+}
+
+// GetCharacterEditData returns an existing character reconstructed as a builder
+// submission, for edit-mode prefill. The requester (from the portal session)
+// must be the owner or the campaign DM.
+func (h *APIHandler) GetCharacterEditData(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	characterID := chi.URLParam(r, "characterID")
+	if characterID == "" {
+		http.Error(w, "missing character ID", http.StatusBadRequest)
+		return
+	}
+
+	sub, err := h.builderSvc.LoadEditData(r.Context(), characterID, userID)
+	if err != nil {
+		h.writeEditError(w, err, "loading edit data")
+		return
+	}
+	writeJSON(w, http.StatusOK, sub)
+}
+
+// UpdateCharacter applies an edit to an existing character. The requester (from
+// the portal session) must be the owner or the campaign DM; a player's edit
+// reverts the character to pending for DM re-approval.
+func (h *APIHandler) UpdateCharacter(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	characterID := chi.URLParam(r, "characterID")
+	if characterID == "" {
+		http.Error(w, "missing character ID", http.StatusBadRequest)
+		return
+	}
+
+	var sub CharacterSubmission
+	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.builderSvc.UpdateCharacter(r.Context(), characterID, userID, sub)
+	if err != nil {
+		h.writeEditError(w, err, "updating character")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"character_id":        result.CharacterID,
+		"player_character_id": result.PlayerCharacterID,
+	})
+}
+
+// writeEditError maps the edit-flow service errors to HTTP statuses.
+func (h *APIHandler) writeEditError(w http.ResponseWriter, err error, logMsg string) {
+	switch {
+	case isValidationError(err):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, ErrEditNotAllowed):
+		http.Error(w, "forbidden", http.StatusForbidden)
+	case errors.Is(err, ErrCharacterNotFound):
+		http.Error(w, "character not found", http.StatusNotFound)
+	case errors.Is(err, ErrCharacterInEncounter):
+		http.Error(w, err.Error(), http.StatusConflict)
+	default:
+		h.logger.Error(logMsg, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func isValidationError(err error) bool {

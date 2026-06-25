@@ -71,6 +71,10 @@ func (m *dmMockStore) HasActiveEncounter(ctx context.Context, characterID string
 	return false, nil
 }
 
+func (m *dmMockStore) LoadEditSubmission(ctx context.Context, characterID string) (CharacterSubmission, error) {
+	return CharacterSubmission{}, nil
+}
+
 // dmMockFeatureProvider implements FeatureProvider for the DM-flow tests.
 type dmMockFeatureProvider struct {
 	classFeatures    map[string]map[string][]character.Feature

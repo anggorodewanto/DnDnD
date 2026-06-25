@@ -105,6 +105,8 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 						r.Get("/characters/draft", cfg.apiH.GetCharacterDraft)
 						r.Post("/characters", cfg.apiH.SubmitCharacter)
 						r.Post("/characters/preview", cfg.apiH.PreviewCharacter)
+						r.Get("/characters/{characterID}/edit-data", cfg.apiH.GetCharacterEditData)
+						r.Put("/characters/{characterID}", cfg.apiH.UpdateCharacter)
 					}
 					if cfg.prepH != nil {
 						r.Get("/characters/{characterID}/preparation", cfg.prepH.GetPreparation)

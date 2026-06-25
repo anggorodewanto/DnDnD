@@ -291,6 +291,10 @@ type BuilderStore interface {
 	// HasActiveEncounter reports whether the character is currently in an
 	// active encounter (edits are blocked while true).
 	HasActiveEncounter(ctx context.Context, characterID string) (bool, error)
+	// LoadEditSubmission reconstructs a builder submission from a saved
+	// character so the builder can prefill in edit mode. Returns
+	// ErrCharacterNotFound when the character does not exist.
+	LoadEditSubmission(ctx context.Context, characterID string) (CharacterSubmission, error)
 	// ActivePlayerCharacter returns the non-retired player_characters row for
 	// the (campaign, player), or (nil, nil) when none exists.
 	ActivePlayerCharacter(ctx context.Context, campaignID, discordUserID string) (*ActivePlayerCharacter, error)
@@ -618,6 +622,23 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		CharacterID:       charID,
 		PlayerCharacterID: pcID,
 	}, nil
+}
+
+// LoadEditData authorizes the requester (owner or campaign DM) and returns the
+// character reconstructed as a builder submission for edit-mode prefill.
+// Returns ErrCharacterNotFound when the character is missing, or
+// ErrEditNotAllowed when the requester may not edit it.
+func (svc *BuilderService) LoadEditData(ctx context.Context, characterID, requesterID string) (CharacterSubmission, error) {
+	ec, err := svc.store.GetEditContext(ctx, characterID)
+	if err != nil {
+		return CharacterSubmission{}, err
+	}
+	isOwner := ec.OwnerID != "" && ec.OwnerID == requesterID
+	isDM := ec.DMUserID != "" && ec.DMUserID == requesterID
+	if !isOwner && !isDM {
+		return CharacterSubmission{}, ErrEditNotAllowed
+	}
+	return svc.store.LoadEditSubmission(ctx, characterID)
 }
 
 // UpdateCharacter rewrites an existing character from a fresh builder

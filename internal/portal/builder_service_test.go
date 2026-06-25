@@ -576,6 +576,8 @@ type mockBuilderStore struct {
 	lastSetPendingPCID string
 	hasActiveEncounter bool
 	hasActiveEncErr    error
+	editSubmission     portal.CharacterSubmission
+	editSubmissionErr  error
 }
 
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
@@ -670,6 +672,52 @@ func (m *mockBuilderStore) SetPlayerCharacterPending(_ context.Context, pcID str
 
 func (m *mockBuilderStore) HasActiveEncounter(_ context.Context, _ string) (bool, error) {
 	return m.hasActiveEncounter, m.hasActiveEncErr
+}
+
+func (m *mockBuilderStore) LoadEditSubmission(_ context.Context, _ string) (portal.CharacterSubmission, error) {
+	return m.editSubmission, m.editSubmissionErr
+}
+
+func TestBuilderService_LoadEditData_OwnerAllowed(t *testing.T) {
+	want := portal.CharacterSubmission{Name: "Thorin", Race: "dwarf"}
+	store := &mockBuilderStore{
+		editContext:    &portal.EditContext{CampaignID: "c1", OwnerID: "player-1", DMUserID: "dm-1"},
+		editSubmission: want,
+	}
+	svc := portal.NewBuilderService(store)
+
+	got, err := svc.LoadEditData(context.Background(), "char-1", "player-1")
+	require.NoError(t, err)
+	assert.Equal(t, "Thorin", got.Name)
+}
+
+func TestBuilderService_LoadEditData_DMAllowed(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext:    &portal.EditContext{CampaignID: "c1", OwnerID: "player-1", DMUserID: "dm-1"},
+		editSubmission: portal.CharacterSubmission{Name: "Thorin"},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.LoadEditData(context.Background(), "char-1", "dm-1")
+	require.NoError(t, err)
+}
+
+func TestBuilderService_LoadEditData_StrangerForbidden(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{CampaignID: "c1", OwnerID: "player-1", DMUserID: "dm-1"},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.LoadEditData(context.Background(), "char-1", "stranger")
+	require.ErrorIs(t, err, portal.ErrEditNotAllowed)
+}
+
+func TestBuilderService_LoadEditData_NotFound(t *testing.T) {
+	store := &mockBuilderStore{editContextErr: portal.ErrCharacterNotFound}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.LoadEditData(context.Background(), "missing", "player-1")
+	require.ErrorIs(t, err, portal.ErrCharacterNotFound)
 }
 
 func TestBuilderService_UpdateCharacter_PlayerEditResetsToPending(t *testing.T) {

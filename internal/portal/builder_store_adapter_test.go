@@ -1420,3 +1420,58 @@ func TestBuilderStoreAdapter_HasActiveEncounter(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, in)
 }
+
+func TestBuilderStoreAdapter_LoadEditSubmission_Reconstructs(t *testing.T) {
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "wizard", Subclass: "Evocation", Level: 3, IsPrimary: true}})
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 13, CHA: 10})
+	profJSON, _ := json.Marshal(character.Proficiencies{Skills: []string{"arcana", "history"}, Expertise: []string{"arcana"}})
+	cdJSON, _ := json.Marshal(map[string]any{
+		"spells":     []string{"fireball"},
+		"subrace":    "high-elf",
+		"background": "sage",
+		"appearance": "tall",
+		"backstory":  "studied",
+	})
+	invJSON, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1},
+		{ItemID: "leather", Name: "Leather", Quantity: 1},
+	})
+
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			Name:             "Gandalf",
+			Race:             "elf",
+			Classes:          classesJSON,
+			AbilityScores:    scoresJSON,
+			Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
+			CharacterData:    pqtype.NullRawMessage{RawMessage: cdJSON, Valid: true},
+			Inventory:        pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+			EquippedMainHand: sql.NullString{String: "longsword", Valid: true},
+			EquippedArmor:    sql.NullString{String: "leather", Valid: true},
+			Languages:        []string{"Common", "Elvish"},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	sub, err := adapter.LoadEditSubmission(context.Background(), uuid.New().String())
+	require.NoError(t, err)
+
+	assert.Equal(t, "Gandalf", sub.Name)
+	assert.Equal(t, "elf", sub.Race)
+	assert.Equal(t, "wizard", sub.Class)
+	assert.Equal(t, "Evocation", sub.Subclass)
+	require.Len(t, sub.Classes, 1)
+	assert.Equal(t, 3, sub.Classes[0].Level)
+	assert.Equal(t, 16, sub.AbilityScores.INT)
+	assert.ElementsMatch(t, []string{"arcana", "history"}, sub.Skills)
+	assert.Equal(t, []string{"arcana"}, sub.Expertise)
+	assert.Equal(t, []string{"fireball"}, sub.Spells)
+	assert.Equal(t, "high-elf", sub.Subrace)
+	assert.Equal(t, "sage", sub.Background)
+	assert.Equal(t, "tall", sub.Appearance)
+	assert.Equal(t, "studied", sub.Backstory)
+	assert.ElementsMatch(t, []string{"longsword", "leather"}, sub.Equipment)
+	assert.Equal(t, "longsword", sub.EquippedWeapon)
+	assert.Equal(t, "leather", sub.WornArmor)
+	assert.Equal(t, []string{"Common", "Elvish"}, sub.Languages)
+}
