@@ -246,7 +246,7 @@ func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 		"interact", "done", "map", "deathsave", "command", "reaction", "check",
 		"save", "roll", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
-		"register", "import", "create-character", "character", "recap",
+		"register", "import", "create-character", "character", "edit-character", "recap",
 		"distance", "help", "setup",
 	}
 

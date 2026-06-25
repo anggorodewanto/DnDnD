@@ -814,6 +814,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	}
 	if set.character != nil {
 		r.SetCharacterHandler(set.character)
+		r.SetEditCharacterHandler(set.character)
 	}
 	if set.asi != nil {
 		r.SetASIHandler(set.asi)

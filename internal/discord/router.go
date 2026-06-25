@@ -189,6 +189,18 @@ func (r *CommandRouter) SetCharacterHandler(h *CharacterHandler) {
 	r.handlers["character"] = h
 }
 
+// commandHandlerFunc adapts a plain handler function to the CommandHandler
+// interface so one type can serve more than one command.
+type commandHandlerFunc func(*discordgo.Interaction)
+
+func (f commandHandlerFunc) Handle(i *discordgo.Interaction) { f(i) }
+
+// SetEditCharacterHandler registers the /edit-character command, served by the
+// CharacterHandler's edit path.
+func (r *CommandRouter) SetEditCharacterHandler(h *CharacterHandler) {
+	r.handlers["edit-character"] = commandHandlerFunc(h.HandleEdit)
+}
+
 // SetASIHandler registers the ASIHandler for ASI/Feat component callbacks.
 func (r *CommandRouter) SetASIHandler(h *ASIHandler) {
 	r.asiHandler = h
@@ -311,7 +323,7 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		"interact", "done", "deathsave", "command", "reaction", "check",
 		"save", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
-		"character", "recap", "distance", "help",
+		"character", "edit-character", "recap", "distance", "help",
 	}
 
 	regCommands := []string{"register", "import", "create-character"}

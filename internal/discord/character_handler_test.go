@@ -558,6 +558,38 @@ func userOption(name, snowflake string) *discordgo.ApplicationCommandInteraction
 	}
 }
 
+func TestCharacterHandler_HandleEdit_LinksToEditPage(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := approvedLookup(t, "player-1", "Thorn")
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.HandleEdit(makeInteraction("edit-character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "https://portal.dndnd.app/portal/character/") || !strings.Contains(rc.Content, "/edit") {
+		t.Errorf("expected an edit-page link, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected ephemeral response")
+	}
+}
+
+func TestCharacterHandler_HandleEdit_NoCharacter(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := &mockCharacterLookup{pcErr: sql.ErrNoRows}
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.HandleEdit(makeInteraction("edit-character", "player-1", "guild-1"))
+
+	if strings.Contains(rc.Content, "/portal/character/") {
+		t.Errorf("did not expect an edit link when the caller has no character, got: %s", rc.Content)
+	}
+	if !strings.Contains(rc.Content, "No character found") {
+		t.Errorf("expected a friendly no-character message, got: %s", rc.Content)
+	}
+}
+
 func approvedLookup(t *testing.T, discordUserID, name string) *mockCharacterLookup {
 	t.Helper()
 	charID := uuid.New()

@@ -610,6 +610,10 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:        "edit-character",
+			Description: "Get a link to edit your character (changes go to the DM for re-approval)",
+		},
+		{
 			Name:        "recap",
 			Description: "Show a recap of recent combat rounds",
 			Options: []*discordgo.ApplicationCommandOption{

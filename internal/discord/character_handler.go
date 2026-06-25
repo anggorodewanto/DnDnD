@@ -107,6 +107,32 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 	})
 }
 
+// HandleEdit processes an /edit-character interaction: it resolves the caller's
+// own character and replies with an ephemeral link to the portal builder in
+// edit mode. Editing another player's character is a DM action available from
+// the dashboard Party page, so this command is self-only.
+func (h *CharacterHandler) HandleEdit(interaction *discordgo.Interaction) {
+	callerID := interactionUserID(interaction)
+
+	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "No campaign found for this server.")
+		return
+	}
+
+	pc, err := h.lookup.GetPlayerCharacterByDiscordUser(context.Background(), refdata.GetPlayerCharacterByDiscordUserParams{
+		CampaignID:    campaign.ID,
+		DiscordUserID: callerID,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, "No character found. Use /register, /import, or /create-character first.")
+		return
+	}
+
+	editLink := fmt.Sprintf("%s/portal/character/%s/edit", h.portalBaseURL, pc.CharacterID.String())
+	respondEphemeral(h.session, interaction, fmt.Sprintf("Edit your character here: %s\n\nYour changes are sent back to the DM for re-approval.", editLink))
+}
+
 // characterTargetOption returns the snowflake ID of the optional "target" user
 // option, or "" when absent. ApplicationCommandOptionUser values arrive over the
 // wire as a string snowflake, so the value is read as a string rather than via
