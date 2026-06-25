@@ -42,6 +42,7 @@ type CharacterSubmission struct {
 	AbilityMethod   AbilityScoreMethod     `json:"ability_method,omitempty"`
 	AbilityRolls    map[string][]int       `json:"ability_rolls,omitempty"`
 	Skills          []string               `json:"skills"`
+	Expertise       []string               `json:"expertise,omitempty"`
 	Equipment       []string               `json:"equipment,omitempty"`
 	Spells          []string               `json:"spells,omitempty"`
 	WeaponMasteries []string               `json:"weapon_masteries,omitempty"`
@@ -225,6 +226,7 @@ type CreateCharacterParams struct {
 	ProfBonus       int
 	Skills          []string
 	Saves           []string
+	Expertise       []string
 	Equipment       []string
 	Spells          []string
 	WeaponMasteries []string
@@ -457,6 +459,12 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	if err := validateSubmittedSkills(sub, svc.racialTraits(sub.Race)); err != nil {
 		errs = append(errs, err.Error())
 	}
+	// ISSUE-005: reject illegal Expertise (off the proficient list, over the
+	// class+level grant, or on a non-expert class). Only Rogue/Bard grant skill
+	// Expertise, gated by level.
+	if err := validateSubmittedExpertise(sub); err != nil {
+		errs = append(errs, err.Error())
+	}
 	// A missing campaign_id (both modes) or token (player flow) is a bad
 	// request, not a server error: reject it here so the handler returns 400
 	// instead of letting a token lookup miss or campaign_id parse failure
@@ -507,6 +515,7 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		ProfBonus:       stats.ProficiencyBonus,
 		Skills:          skills,
 		Saves:           stats.SaveProficiencies,
+		Expertise:       expertiseSkillsForSubmission(sub),
 		Equipment:       sub.Equipment,
 		Spells:          sub.Spells,
 		WeaponMasteries: sub.WeaponMasteries,

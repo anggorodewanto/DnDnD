@@ -469,6 +469,116 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_NoFeatures(t *testing.T) {
 	assert.False(t, creator.capturedParams.Features.Valid, "Features should not be set when empty")
 }
 
+// proficienciesReaderShape mirrors the inline struct the play/combat read path
+// decodes the characters.proficiencies JSONB column into
+// (internal/combat/standard_actions.go parseProficiencies). The persisted blob
+// MUST match this exact shape or expertise is silently dropped at read time.
+type proficienciesReaderShape struct {
+	Skills          []string `json:"skills"`
+	Expertise       []string `json:"expertise"`
+	JackOfAllTrades bool     `json:"jack_of_all_trades"`
+}
+
+// ISSUE-005: a built Rogue must persist its expertise skills under the
+// "expertise" key the combat reader parses, so SkillModifier doubles the
+// proficiency bonus in play.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsExpertise(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Sneak",
+		Race:          "Human",
+		Class:         "Rogue",
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 13, WIS: 14, CHA: 10},
+		HPMax:         9,
+		AC:            14,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Skills:        []string{"stealth", "perception", "acrobatics"},
+		Expertise:     []string{"stealth", "perception"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.Proficiencies.Valid, "Proficiencies should be valid")
+
+	var profs proficienciesReaderShape
+	err = json.Unmarshal(creator.capturedParams.Proficiencies.RawMessage, &profs)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"stealth", "perception", "acrobatics"}, profs.Skills)
+	assert.Equal(t, []string{"stealth", "perception"}, profs.Expertise, "expertise must be persisted under the reader's 'expertise' key")
+}
+
+// A non-expert class (Fighter) must persist NO expertise — the read path then
+// applies single proficiency only. Guards against writing a stray/empty key.
+func TestBuilderStoreAdapter_CreateCharacterRecord_NoExpertiseForNonExpertClass(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Soldier",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Skills:        []string{"athletics", "perception"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.Proficiencies.Valid)
+	var profs proficienciesReaderShape
+	err = json.Unmarshal(creator.capturedParams.Proficiencies.RawMessage, &profs)
+	require.NoError(t, err)
+	assert.Empty(t, profs.Expertise, "non-expert class persists no expertise")
+}
+
+// End-to-end contract check: the persisted proficiencies blob, fed straight
+// into the play-path SkillModifier, yields DOUBLE proficiency on an expert
+// skill and SINGLE on a merely-proficient skill. This is the bug ISSUE-005
+// reported — without the expertise key the Rogue got single proficiency.
+func TestBuilderStoreAdapter_PersistedExpertise_DoublesSkillModifier(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	scores := character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 13, WIS: 14, CHA: 10}
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Sneak",
+		Race:          "Human",
+		Class:         "Rogue",
+		AbilityScores: scores,
+		HPMax:         9,
+		AC:            14,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Skills:        []string{"stealth", "perception"},
+		Expertise:     []string{"stealth"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	var profs proficienciesReaderShape
+	require.NoError(t, json.Unmarshal(creator.capturedParams.Proficiencies.RawMessage, &profs))
+
+	// Stealth (DEX +3, prof +2): expertise → +3 + 2*2 = +7.
+	stealth := character.SkillModifier(scores, "stealth", profs.Skills, profs.Expertise, profs.JackOfAllTrades, 2)
+	assert.Equal(t, 7, stealth, "expert stealth should get double proficiency")
+
+	// Perception (WIS +2, prof +2): proficient only → +2 + 2 = +4.
+	perception := character.SkillModifier(scores, "perception", profs.Skills, profs.Expertise, profs.JackOfAllTrades, 2)
+	assert.Equal(t, 4, perception, "proficient-only perception should get single proficiency")
+}
+
 // TestBuilderStoreAdapter_CreateCharacterRecord_PersistsPactMagicSlots_Warlock
 // verifies a created single-class warlock persists pact_magic_slots equal to
 // PactMagicSlotsForLevel(totalWarlockLevel). Without this the stored character

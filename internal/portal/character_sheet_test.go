@@ -163,3 +163,50 @@ func TestLoadCharacterSheet_ComputedFields(t *testing.T) {
 	// 6 saving throws
 	assert.Len(t, data.SavingThrows, 6)
 }
+
+// ISSUE-005: the character sheet must reflect Expertise (double proficiency)
+// and Jack of All Trades, matching the modifiers the combat/play path computes
+// from the same proficiencies blob. Without this the dashboard understated a
+// Rogue/Bard's expert skills.
+func TestLoadCharacterSheet_ReflectsExpertiseAndJackOfAllTrades(t *testing.T) {
+	store := &mockCharacterSheetStore{
+		ownerID: "user-123",
+		character: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Sneak",
+			Race:             "Human",
+			Level:            5,
+			ProficiencyBonus: 3,
+			Classes:          []character.ClassEntry{{Class: "Bard", Level: 5}},
+			AbilityScores:    character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 10, WIS: 14, CHA: 16},
+			Proficiencies: character.Proficiencies{
+				Skills:          []string{"stealth", "perception"},
+				Expertise:       []string{"stealth"},
+				JackOfAllTrades: true,
+			},
+		},
+	}
+
+	svc := portal.NewCharacterSheetService(store)
+	data, err := svc.LoadCharacterSheet(context.Background(), "char-1", "user-123")
+	require.NoError(t, err)
+
+	var stealth, perception, arcana portal.SkillDisplay
+	for _, s := range data.Skills {
+		switch s.Name {
+		case "Stealth":
+			stealth = s
+		case "Perception":
+			perception = s
+		case "Arcana":
+			arcana = s
+		}
+	}
+
+	// Stealth: DEX +3, expert → +3 + 3*2 = +9.
+	assert.Equal(t, 9, stealth.Modifier, "expert stealth should get double proficiency")
+	// Perception: WIS +2, proficient only → +2 + 3 = +5.
+	assert.Equal(t, 5, perception.Modifier, "proficient-only perception gets single proficiency")
+	// Arcana: INT +0, not proficient, Jack of All Trades → +0 + 3/2 = +1.
+	assert.Equal(t, 1, arcana.Modifier, "non-proficient skill gets half proficiency via Jack of All Trades")
+}

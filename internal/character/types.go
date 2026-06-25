@@ -44,11 +44,21 @@ type ClassEntry struct {
 }
 
 // Proficiencies represents all character proficiencies.
+//
+// Expertise lists the skill slugs that get double the proficiency bonus
+// (Rogue/Bard). A skill must also appear in Skills to count — the play-path
+// reader (combat.parseProficiencies / SkillModifier) only doubles a skill that
+// is both proficient and expert. JackOfAllTrades adds half proficiency to
+// non-proficient skill checks (Bard). Both serialize under the exact keys the
+// play path reads ("expertise", "jack_of_all_trades"); omitempty keeps the
+// blob unchanged for the common case of no expertise.
 type Proficiencies struct {
-	Saves   []string `json:"saves"`
-	Skills  []string `json:"skills"`
-	Weapons []string `json:"weapons"`
-	Armor   []string `json:"armor"`
+	Saves           []string `json:"saves"`
+	Skills          []string `json:"skills"`
+	Weapons         []string `json:"weapons"`
+	Armor           []string `json:"armor"`
+	Expertise       []string `json:"expertise,omitempty"`
+	JackOfAllTrades bool     `json:"jack_of_all_trades,omitempty"`
 }
 
 // FeatureUse tracks a single feature with limited uses.

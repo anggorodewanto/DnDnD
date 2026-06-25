@@ -224,6 +224,43 @@ func TestBuilderService_CreateCharacter_Valid(t *testing.T) {
 	assert.Equal(t, "discord-user-1", store.lastPCDiscordUserID)
 }
 
+// ISSUE-005: a Rogue (L1) submission carries its 2 chosen Expertise skills
+// through the service into CreateCharacterParams.Expertise, so persistence can
+// write the "expertise" key the combat reader parses.
+func TestBuilderService_CreateCharacter_CarriesExpertise_Rogue(t *testing.T) {
+	store := &mockBuilderStore{charID: "char-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store)
+
+	// soldier background locks athletics + intimidation; the rogue then takes 4
+	// class picks. Two of the proficient skills are chosen for Expertise.
+	sub := portal.CharacterSubmission{
+		Name:          "Sneak",
+		Race:          "human",
+		Background:    "soldier",
+		Class:         "rogue",
+		AbilityScores: portal.PointBuyScores{STR: 8, DEX: 15, CON: 14, INT: 13, WIS: 12, CHA: 10},
+		Skills:        []string{"athletics", "intimidation", "stealth", "perception", "acrobatics", "investigation"},
+		Expertise:     []string{"stealth", "perception"},
+	}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"stealth", "perception"}, store.lastCharExpertise)
+}
+
+// A non-expert class never carries expertise even if the payload smuggles some:
+// the service rejects the illegal submission.
+func TestBuilderService_CreateCharacter_RejectsExpertiseForNonExpertClass(t *testing.T) {
+	store := &mockBuilderStore{charID: "char-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission() // fighter
+	sub.Expertise = []string{"athletics"}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	assert.Error(t, err)
+}
+
 func TestBuilderService_CreateCharacter_NotifiesDMQueue(t *testing.T) {
 	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
 	notifier := &mockDMQueueNotifier{}
@@ -499,6 +536,7 @@ type mockBuilderStore struct {
 	lastCharSubrace     string
 	lastCharClasses     []character.ClassEntry
 	lastCharEquipment   []string
+	lastCharExpertise   []string
 	lastCharProfBonus   int
 	lastPCStatus        string
 	lastPCCreatedVia    string
@@ -533,6 +571,7 @@ func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.Cre
 	m.lastCharSubrace = p.Subrace
 	m.lastCharClasses = p.Classes
 	m.lastCharEquipment = p.Equipment
+	m.lastCharExpertise = p.Expertise
 	m.lastCharProfBonus = p.ProfBonus
 	if m.createCharErr != nil {
 		return "", m.createCharErr

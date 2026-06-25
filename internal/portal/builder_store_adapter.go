@@ -87,8 +87,9 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	}
 	hitDiceJSON, _ := json.Marshal(hitDice)
 	profJSON, _ := json.Marshal(character.Proficiencies{
-		Skills: p.Skills,
-		Saves:  p.Saves,
+		Skills:    p.Skills,
+		Saves:     p.Saves,
+		Expertise: p.Expertise,
 	})
 
 	var inventoryMsg pqtype.NullRawMessage

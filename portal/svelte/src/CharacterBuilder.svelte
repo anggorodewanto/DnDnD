@@ -12,7 +12,7 @@
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
   import { proficientWeaponIds, masteryEligibleWeapons } from './lib/weapon-proficiency.js';
   import { formatSkillChoices } from './lib/class-perks.js';
-  import { computeSkillState, reconcileSkills, isSkillSelectionComplete } from './lib/skill-selection.js';
+  import { computeSkillState, reconcileSkills, isSkillSelectionComplete, computeExpertiseState, reconcileExpertise } from './lib/skill-selection.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
@@ -54,6 +54,9 @@
   let abilityMethod = $state('point_buy');
   let abilityRolls = $state({});
   let selectedSkills = $state([]);
+  // Expertise skills (Rogue L1 / Bard L3+) — a subset of the proficient skills
+  // that gets double proficiency. Empty for every other class. ISSUE-005.
+  let selectedExpertise = $state([]);
   let selectedSpells = $state([]);
   let selectedMasteries = $state([]); // weapon ids whose mastery the character knows
 
@@ -153,6 +156,20 @@
     if (!sameSkillSet(next, selectedSkills)) selectedSkills = next;
   });
 
+  // Keep Expertise legal as proficiencies / class / level change: prune picks
+  // that are no longer proficient, exceed the class+level grant, or belong to a
+  // non-expert class. Mirrors the skills reconcile effect. ISSUE-005.
+  $effect(() => {
+    if (selectedClass && !selectedClassData) return;
+    const next = reconcileExpertise({
+      className: selectedClass,
+      level: Number(classEntries[0]?.level) || 1,
+      proficientSkills: selectedSkills,
+      selected: selectedExpertise,
+    });
+    if (!sameSkillSet(next, selectedExpertise)) selectedExpertise = next;
+  });
+
   // --- Draft persistence (localStorage) --------------------------------
   // Survive an accidental reload: restore unsubmitted fields on init,
   // re-save on every change, and clear once the character is submitted.
@@ -194,6 +211,7 @@
     if (d.abilityMethod !== undefined) abilityMethod = d.abilityMethod;
     if (d.abilityRolls !== undefined) abilityRolls = d.abilityRolls;
     if (Array.isArray(d.selectedSkills)) selectedSkills = d.selectedSkills;
+    if (Array.isArray(d.selectedExpertise)) selectedExpertise = d.selectedExpertise;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
     if (d.packChoices !== undefined) packChoices = d.packChoices;
@@ -212,7 +230,7 @@
     return $state.snapshot({
       currentStep, name, race, subrace, background,
       classEntries, scores, abilityMethod, abilityRolls,
-      selectedSkills, selectedSpells, selectedMasteries, packChoices, manualEquipment,
+      selectedSkills, selectedExpertise, selectedSpells, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
     });
   }
@@ -343,6 +361,14 @@
       selectedSkills = selectedSkills.filter(s => s !== skill);
     } else {
       selectedSkills = [...selectedSkills, skill];
+    }
+  }
+
+  function toggleExpertise(skill) {
+    if (selectedExpertise.includes(skill)) {
+      selectedExpertise = selectedExpertise.filter(s => s !== skill);
+    } else {
+      selectedExpertise = [...selectedExpertise, skill];
     }
   }
 
@@ -529,6 +555,14 @@
       classChoices: selectedClassData?.skill_choices ?? null,
       selected: selectedSkills,
     });
+    // Reconcile Expertise against the final proficient set so a stale draft or
+    // a class/level change never submits an illegal expertise pick (ISSUE-005).
+    const expertise = reconcileExpertise({
+      className: selectedClass,
+      level: Number(classEntries[0]?.level) || 1,
+      proficientSkills: skills,
+      selected: selectedExpertise,
+    });
     // Filter out incomplete class rows so the backend never sees a blank
     // class entry.
     const classes = classEntries
@@ -546,6 +580,7 @@
       ability_method: abilityMethod,
       ability_rolls: abilityRolls,
       skills,
+      expertise,
       equipment: selectedEquipment(),
       spells: selectedSpells,
       weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),
@@ -935,6 +970,13 @@
         selected: selectedSkills,
       })}
       {@const sk = skillState.summary}
+      {@const proficientSkills = skillState.skills.filter(s => s.checked).map(s => s.skill)}
+      {@const expertiseState = computeExpertiseState({
+        className: selectedClass,
+        level: Number(classEntries[0]?.level) || 1,
+        proficientSkills,
+        selected: selectedExpertise,
+      })}
       <div class="step-content">
         <h3>Skills & Proficiencies</h3>
         {#if !selectedClass}
@@ -983,6 +1025,39 @@
             </label>
           {/each}
         </div>
+
+        <!-- Expertise (Rogue L1 / Bard L3+): double proficiency on chosen
+             skills, selectable only from skills the character is proficient in.
+             Hidden for every other class / level. ISSUE-005. -->
+        {#if expertiseState.max > 0}
+          <div class="expertise-section">
+            <h3>Expertise</h3>
+            <p class="skill-budget">
+              <strong>Expertise:</strong> {expertiseState.chosen}/{expertiseState.max}
+              {#if expertiseState.chosen < expertiseState.max}
+                <span class="skill-incomplete">— choose {expertiseState.max - expertiseState.chosen} more (doubles your proficiency bonus)</span>
+              {/if}
+            </p>
+            {#if expertiseState.skills.length === 0}
+              <p class="skill-warn">Pick your proficient skills above first, then choose Expertise from them.</p>
+            {:else}
+              <div class="skill-grid">
+                {#each expertiseState.skills as s}
+                  <label
+                    class="skill-option"
+                    class:skill-disabled={s.disabled}
+                  >
+                    <input type="checkbox" checked={s.checked} disabled={s.disabled} onchange={() => toggleExpertise(s.skill)} />
+                    {s.skill.replace(/-/g, ' ')}
+                    {#if abilityLabel(s.skill)}
+                      <span class="skill-ability">({abilityLabel(s.skill)})</span>
+                    {/if}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
 
     <!-- Step 4: Equipment -->
@@ -1385,6 +1460,8 @@
   .skill-budget strong { color: #e94560; }
   .skill-incomplete { color: #e9a045; font-size: 0.85rem; margin-left: 0.25rem; }
   .skill-warn { color: #e9a045; font-size: 0.85rem; margin: 0 0 0.5rem; }
+  .expertise-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #2a2a3a; }
+  .expertise-section h3 { margin: 0 0 0.5rem; }
 
   .spell-cap-hint { color: #aaa; font-size: 0.85rem; margin: 0 0 0.6rem; }
   .spell-cap-hint strong { color: #e94560; }

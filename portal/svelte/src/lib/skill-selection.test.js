@@ -6,6 +6,9 @@ import {
   computeSkillState,
   reconcileSkills,
   isSkillSelectionComplete,
+  classExpertiseGrant,
+  computeExpertiseState,
+  reconcileExpertise,
 } from './skill-selection.js';
 
 // --- Fixtures (shapes mirror the DB seed data) -----------------------------
@@ -279,5 +282,133 @@ describe('isSkillSelectionComplete', () => {
 
   it('is true when class and race budgets are exactly met', () => {
     expect(isSkillSelectionComplete({ ...base, raceTraits: TIEFLING_TRAITS, selected: ['insight', 'religion', 'arcana', 'deception'] })).toBe(true);
+  });
+});
+
+// --- classExpertiseGrant (ISSUE-005) ---------------------------------------
+
+describe('classExpertiseGrant', () => {
+  it('grants Rogue 2 at L1 and 4 at L6', () => {
+    expect(classExpertiseGrant('rogue', 1)).toBe(2);
+    expect(classExpertiseGrant('rogue', 5)).toBe(2);
+    expect(classExpertiseGrant('rogue', 6)).toBe(4);
+    expect(classExpertiseGrant('rogue', 20)).toBe(4);
+  });
+
+  it('grants Bard 0 below L3, 2 at L3, 4 at L10', () => {
+    expect(classExpertiseGrant('bard', 1)).toBe(0);
+    expect(classExpertiseGrant('bard', 2)).toBe(0);
+    expect(classExpertiseGrant('bard', 3)).toBe(2);
+    expect(classExpertiseGrant('bard', 9)).toBe(2);
+    expect(classExpertiseGrant('bard', 10)).toBe(4);
+  });
+
+  it('grants 0 to non-expert classes and is case-insensitive', () => {
+    expect(classExpertiseGrant('fighter', 20)).toBe(0);
+    expect(classExpertiseGrant('wizard', 6)).toBe(0);
+    expect(classExpertiseGrant('Rogue', 1)).toBe(2);
+    expect(classExpertiseGrant('BARD', 3)).toBe(2);
+    expect(classExpertiseGrant('', 1)).toBe(0);
+    expect(classExpertiseGrant(undefined, 1)).toBe(0);
+  });
+});
+
+// --- computeExpertiseState (ISSUE-005) -------------------------------------
+
+describe('computeExpertiseState', () => {
+  const proficient = ['stealth', 'perception', 'acrobatics', 'investigation'];
+
+  it('Rogue L1: cap 2, selectable only from proficient skills', () => {
+    const state = computeExpertiseState({
+      className: 'rogue',
+      level: 1,
+      proficientSkills: proficient,
+      selected: [],
+    });
+    expect(state.max).toBe(2);
+    expect(state.chosen).toBe(0);
+    // every option is a proficient skill
+    expect(state.skills.map((s) => s.skill).sort()).toEqual([...proficient].sort());
+    state.skills.forEach((s) => expect(proficient).toContain(s.skill));
+  });
+
+  it('Bard L3: cap 2', () => {
+    const state = computeExpertiseState({
+      className: 'bard',
+      level: 3,
+      proficientSkills: proficient,
+      selected: ['stealth'],
+    });
+    expect(state.max).toBe(2);
+    expect(state.chosen).toBe(1);
+  });
+
+  it('non-expert class: cap 0, no options', () => {
+    const state = computeExpertiseState({
+      className: 'fighter',
+      level: 5,
+      proficientSkills: proficient,
+      selected: [],
+    });
+    expect(state.max).toBe(0);
+    expect(state.skills.length).toBe(0);
+  });
+
+  it('disables unchosen options once the cap is reached', () => {
+    const state = computeExpertiseState({
+      className: 'rogue',
+      level: 1,
+      proficientSkills: proficient,
+      selected: ['stealth', 'perception'],
+    });
+    expect(state.chosen).toBe(2);
+    const acro = state.skills.find((s) => s.skill === 'acrobatics');
+    expect(acro).toMatchObject({ checked: false, disabled: true });
+    const stealth = state.skills.find((s) => s.skill === 'stealth');
+    expect(stealth).toMatchObject({ checked: true, disabled: false });
+  });
+});
+
+// --- reconcileExpertise (ISSUE-005) ----------------------------------------
+
+describe('reconcileExpertise', () => {
+  it('drops picks not in the proficient set', () => {
+    const out = reconcileExpertise({
+      className: 'rogue',
+      level: 1,
+      proficientSkills: ['stealth', 'perception'],
+      selected: ['stealth', 'arcana'],
+    });
+    expect(out).toEqual(['stealth']);
+  });
+
+  it('caps to the class+level grant in input order', () => {
+    const out = reconcileExpertise({
+      className: 'rogue',
+      level: 1,
+      proficientSkills: ['stealth', 'perception', 'acrobatics'],
+      selected: ['stealth', 'perception', 'acrobatics'],
+    });
+    expect(out).toEqual(['stealth', 'perception']);
+  });
+
+  it('returns [] for non-expert classes', () => {
+    const out = reconcileExpertise({
+      className: 'fighter',
+      level: 5,
+      proficientSkills: ['athletics'],
+      selected: ['athletics'],
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('de-duplicates', () => {
+    const out = reconcileExpertise({
+      className: 'rogue',
+      level: 1,
+      proficientSkills: ['stealth'],
+      selected: ['stealth', 'stealth'],
+    });
+    expect(out).toEqual(['stealth']);
   });
 });

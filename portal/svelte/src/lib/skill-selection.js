@@ -197,3 +197,90 @@ export function isSkillSelectionComplete({ background, raceTraits, classChoices,
   });
   return summary.classChosen >= classMax && summary.raceChosen >= raceMax;
 }
+
+// --- Expertise (Rogue/Bard double proficiency, ISSUE-005) ------------------
+//
+// Expertise doubles the proficiency bonus on a chosen skill. Only Rogue and
+// Bard grant skill Expertise, gated by class level (skill expertise only —
+// thieves'-tools expertise is out of scope). A skill is only eligible for
+// Expertise if the character is already proficient in it.
+
+/**
+ * Returns how many SKILL Expertise picks a class grants at the given level
+ * (5e RAW). Rogue: 2 at L1, +2 at L6. Bard: 2 at L3, +2 at L10. Every other
+ * class (and a Rogue/Bard below its first gate) grants 0. Case-insensitive.
+ * @param {string} className - class slug/name
+ * @param {number} level - the character's level in that class
+ * @returns {number}
+ */
+export function classExpertiseGrant(className, level) {
+  const lvl = Number(level) || 0;
+  switch (String(className || '').toLowerCase()) {
+    case 'rogue':
+      if (lvl >= 6) return 4;
+      if (lvl >= 1) return 2;
+      return 0;
+    case 'bard':
+      if (lvl >= 10) return 4;
+      if (lvl >= 3) return 2;
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Computes per-skill Expertise UI state plus a budget summary. Options are
+ * exactly the proficient skills (de-duplicated, canonical); each entry is
+ * `{ skill, checked, disabled }`. An unchosen box is disabled once the
+ * class+level cap is reached; a chosen box stays enabled so it can be toggled
+ * off. A non-expert class yields an empty option list and a cap of 0.
+ *
+ * @param {{ className: string, level: number, proficientSkills: string[], selected: string[] }} args
+ * @returns {{ skills: Array<{skill:string, checked:boolean, disabled:boolean}>, max: number, chosen: number }}
+ */
+export function computeExpertiseState({ className, level, proficientSkills, selected }) {
+  const max = classExpertiseGrant(className, level);
+
+  const seen = new Set();
+  const options = (proficientSkills || []).filter((s) => {
+    if (!isCanonical(s) || seen.has(s)) return false;
+    seen.add(s);
+    return true;
+  });
+
+  const selectedSet = new Set(selected || []);
+  const chosen = options.filter((s) => selectedSet.has(s)).length;
+  const remaining = Math.max(0, max - chosen);
+
+  const skills = max === 0 ? [] : options.map((skill) => {
+    const checked = selectedSet.has(skill);
+    return { skill, checked, disabled: !checked && remaining === 0 };
+  });
+
+  return { skills, max, chosen };
+}
+
+/**
+ * Reduces an arbitrary Expertise list to a legal set: keeps only proficient,
+ * canonical, de-duplicated picks (in input order), capped at the class+level
+ * grant. Non-expert classes always reconcile to []. Idempotent.
+ *
+ * @param {{ className: string, level: number, proficientSkills: string[], selected: string[] }} args
+ * @returns {string[]}
+ */
+export function reconcileExpertise({ className, level, proficientSkills, selected }) {
+  const max = classExpertiseGrant(className, level);
+  if (max === 0) return [];
+
+  const profSet = new Set(proficientSkills || []);
+  const seen = new Set();
+  const kept = [];
+  for (const s of selected || []) {
+    if (kept.length >= max) break;
+    if (!isCanonical(s) || !profSet.has(s) || seen.has(s)) continue;
+    seen.add(s);
+    kept.push(s);
+  }
+  return kept;
+}

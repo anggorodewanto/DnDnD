@@ -154,7 +154,7 @@ func computeSkills(scores character.AbilityScores, profs character.Proficiencies
 	skills := make([]SkillDisplay, 0, len(skillNames))
 	for _, name := range skillNames {
 		ability := character.SkillAbilityMap[name]
-		mod := character.SkillModifier(scores, name, profs.Skills, nil, false, profBonus)
+		mod := character.SkillModifier(scores, name, profs.Skills, profs.Expertise, profs.JackOfAllTrades, profBonus)
 		proficient := slices.Contains(profs.Skills, name)
 		skills = append(skills, SkillDisplay{
 			Name:       formatSkillName(name),
