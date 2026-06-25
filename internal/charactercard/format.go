@@ -31,6 +31,7 @@ type CardData struct {
 	EquippedMainHand   string
 	EquippedOffHand    string
 	SpellSlots         map[string]character.SlotInfo
+	PactMagicSlots     *character.PactMagicSlots
 	Conditions         []ConditionInfo
 	Concentration      string
 	Exhaustion         int
@@ -78,7 +79,7 @@ func FormatCard(d CardData) string {
 
 	// Spell slots
 	b.WriteString("Spell Slots: ")
-	b.WriteString(formatSpellSlots(d.SpellSlots))
+	b.WriteString(formatSpellSlots(d.SpellSlots, d.PactMagicSlots))
 	b.WriteByte('\n')
 
 	// Spell count
@@ -150,28 +151,48 @@ func slotOrdinal(level string) string {
 	}
 }
 
-func formatSpellSlots(slots map[string]character.SlotInfo) string {
-	if len(slots) == 0 {
+// formatSpellSlots renders the standard spell slots followed by any pact-magic
+// slots. A multiclass caster with both shows both, joined by " | ". A pure
+// warlock (empty standard slots, pact slots present) shows only the pact line.
+// Non-casters / empty render the canonical "—".
+func formatSpellSlots(slots map[string]character.SlotInfo, pact *character.PactMagicSlots) string {
+	parts := make([]string, 0, len(slots)+1)
+
+	if len(slots) > 0 {
+		// Sort by level numerically (not lexicographically)
+		keys := make([]string, 0, len(slots))
+		for k := range slots {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			a, _ := strconv.Atoi(keys[i])
+			b, _ := strconv.Atoi(keys[j])
+			return a < b
+		})
+		for _, k := range keys {
+			s := slots[k]
+			parts = append(parts, fmt.Sprintf("%s: %d/%d", slotOrdinal(k), s.Current, s.Max))
+		}
+	}
+
+	if pactLine := formatPactMagicSlots(pact); pactLine != "" {
+		parts = append(parts, pactLine)
+	}
+
+	if len(parts) == 0 {
 		return "—"
 	}
-
-	// Sort by level numerically (not lexicographically)
-	keys := make([]string, 0, len(slots))
-	for k := range slots {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		a, _ := strconv.Atoi(keys[i])
-		b, _ := strconv.Atoi(keys[j])
-		return a < b
-	})
-
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		s := slots[k]
-		parts = append(parts, fmt.Sprintf("%s: %d/%d", slotOrdinal(k), s.Current, s.Max))
-	}
 	return strings.Join(parts, " | ")
+}
+
+// formatPactMagicSlots renders a warlock's pact-magic slots (e.g.
+// "Pact Magic: 2 × Lvl 2") or "" when there are none. Pact slots are always all
+// the same level, so a single "count × level" line captures them.
+func formatPactMagicSlots(pact *character.PactMagicSlots) string {
+	if pact == nil || pact.Max == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Pact Magic: %d × Lvl %d", pact.Current, pact.SlotLevel)
 }
 
 func formatConditions(conditions []ConditionInfo) string {

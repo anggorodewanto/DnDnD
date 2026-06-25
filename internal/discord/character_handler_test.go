@@ -498,3 +498,106 @@ func TestCommandRouter_SetCharacterHandler(t *testing.T) {
 		t.Fatal("expected embeds from character handler, got stub response")
 	}
 }
+
+func TestCharacterHandler_WarlockPactSlots(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 18})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Warlock", Subclass: "Fiend", Level: 3}})
+	pactJSON, _ := json.Marshal(character.PactMagicSlots{SlotLevel: 2, Current: 2, Max: 2})
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Hexblood",
+			Race:          "Tiefling",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpMax:         21,
+			HpCurrent:     21,
+			Ac:            13,
+			SpeedFt:       30,
+			Languages:     []string{"Common"},
+			// spell_slots empty; pact_magic_slots carries the warlock's slots.
+			PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+
+	embed := rc.Embeds[0]
+	if !strings.Contains(embed.Description, "Pact Magic: 2 × Lvl 2") {
+		t.Errorf("expected pact magic slot line in description, got: %s", embed.Description)
+	}
+}
+
+func TestCharacterHandler_FullCasterStandardSlots(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 5}})
+	slotsJSON, _ := json.Marshal(map[string]character.SlotInfo{
+		"1": {Current: 4, Max: 4},
+		"3": {Current: 2, Max: 2},
+	})
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Merlin",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpMax:         22,
+			HpCurrent:     22,
+			Ac:            12,
+			SpeedFt:       30,
+			Languages:     []string{"Common"},
+			SpellSlots:    pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+
+	embed := rc.Embeds[0]
+	if !strings.Contains(embed.Description, "Spell Slots: 1st: 4/4 | 3rd: 2/2") {
+		t.Errorf("expected standard spell slot line in description, got: %s", embed.Description)
+	}
+	if strings.Contains(embed.Description, "Pact Magic") {
+		t.Errorf("did not expect pact magic line for a full caster, got: %s", embed.Description)
+	}
+}

@@ -437,3 +437,113 @@ func TestFormatCard_OnlyOffHand(t *testing.T) {
 	assert.Contains(t, result, "Shield (off-hand)")
 	assert.NotContains(t, result, "(main)")
 }
+
+func TestFormatCard_PactMagicSlotsOnly(t *testing.T) {
+	data := CardData{
+		Name:    "Warlock",
+		ShortID: "WA",
+		Level:   3,
+		Race:    "Tiefling",
+		Classes: []character.ClassEntry{
+			{Class: "Warlock", Subclass: "Fiend", Level: 3},
+		},
+		HpCurrent:     21,
+		HpMax:         21,
+		AC:            13,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 14, WIS: 12, INT: 10, CHA: 18},
+		// No standard SpellSlots — pure warlock slots live in pact magic.
+		PactMagicSlots: &character.PactMagicSlots{SlotLevel: 2, Current: 2, Max: 2},
+		Gold:           30,
+		Languages:      []string{"Common", "Infernal"},
+	}
+
+	result := FormatCard(data)
+	// A warlock must show a visible pact-magic slot line, not "—".
+	assert.Contains(t, result, "Spell Slots: ")
+	assert.NotContains(t, result, "Spell Slots: —")
+	assert.Contains(t, result, "Pact Magic: 2 × Lvl 2")
+}
+
+func TestFormatCard_PactMagicSlotsMulticlass(t *testing.T) {
+	data := CardData{
+		Name:    "Sorlock",
+		ShortID: "SO",
+		Level:   5,
+		Race:    "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Sorcerer", Level: 3},
+			{Class: "Warlock", Level: 2},
+		},
+		HpCurrent:     32,
+		HpMax:         32,
+		AC:            13,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 14, WIS: 10, INT: 12, CHA: 18},
+		SpellSlots: map[string]character.SlotInfo{
+			"1": {Current: 4, Max: 4},
+			"2": {Current: 2, Max: 2},
+		},
+		PactMagicSlots: &character.PactMagicSlots{SlotLevel: 1, Current: 2, Max: 2},
+		Gold:           40,
+		Languages:      []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	// Both standard and pact slots must render.
+	assert.Contains(t, result, "1st: 4/4")
+	assert.Contains(t, result, "2nd: 2/2")
+	assert.Contains(t, result, "Pact Magic: 2 × Lvl 1")
+}
+
+func TestFormatCard_NoPactMagicForNonCaster(t *testing.T) {
+	data := CardData{
+		Name:    "Brute",
+		ShortID: "BR",
+		Level:   5,
+		Race:    "Half-Orc",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 5},
+		},
+		HpCurrent:     55,
+		HpMax:         55,
+		AC:            14,
+		SpeedFt:       30,
+		AbilityScores: character.AbilityScores{STR: 18, DEX: 14, CON: 16, WIS: 10, INT: 8, CHA: 8},
+		Gold:          20,
+		Languages:     []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.Contains(t, result, "Spell Slots: —")
+	assert.NotContains(t, result, "Pact Magic")
+}
+
+func TestParsePactMagicSlots(t *testing.T) {
+	validJSON, err := json.Marshal(character.PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2})
+	require.NoError(t, err)
+	zeroJSON, err := json.Marshal(character.PactMagicSlots{SlotLevel: 0, Current: 0, Max: 0})
+	require.NoError(t, err)
+
+	t.Run("valid pact slots parse", func(t *testing.T) {
+		got := parsePactMagicSlots(validJSON, true)
+		require.NotNil(t, got)
+		assert.Equal(t, character.PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2}, *got)
+	})
+
+	t.Run("invalid column returns nil", func(t *testing.T) {
+		assert.Nil(t, parsePactMagicSlots(validJSON, false))
+	})
+
+	t.Run("empty raw returns nil", func(t *testing.T) {
+		assert.Nil(t, parsePactMagicSlots(nil, true))
+	})
+
+	t.Run("zero-max slots return nil", func(t *testing.T) {
+		assert.Nil(t, parsePactMagicSlots(zeroJSON, true))
+	})
+
+	t.Run("malformed JSON returns nil", func(t *testing.T) {
+		assert.Nil(t, parsePactMagicSlots([]byte("{not json"), true))
+	})
+}

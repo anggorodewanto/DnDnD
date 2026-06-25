@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -128,6 +129,10 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 		fmt.Fprintf(&desc, "Languages: %s\n", strings.Join(ch.Languages, ", "))
 	}
 
+	if slotSummary := buildSpellSlotSummary(ch); slotSummary != "" {
+		fmt.Fprintf(&desc, "Spell Slots: %s\n", slotSummary)
+	}
+
 	if spellSummary := h.buildSpellSummary(ch); spellSummary != "" {
 		fmt.Fprintf(&desc, "Spells: %s", spellSummary)
 	}
@@ -228,6 +233,46 @@ func (h *CharacterHandler) lookupSpellLevels(ids []string) map[string]refdata.Sp
 		m[s.ID] = s
 	}
 	return m
+}
+
+// buildSpellSlotSummary renders the character's spell slots for the /character
+// embed: standard slots when present, plus a pact-magic line for warlocks. A
+// pure warlock's slots live only in pact_magic_slots (spell_slots is empty), so
+// reading both is what keeps warlocks from showing nothing (ISSUE-012). Returns
+// "" when the character has no slots of either kind. Mirrors the character
+// card's "1st: N/M | ... | Pact Magic: N × Lvl L" format.
+func buildSpellSlotSummary(ch refdata.Character) string {
+	var parts []string
+
+	if ch.SpellSlots.Valid && len(ch.SpellSlots.RawMessage) > 0 {
+		var slots map[string]character.SlotInfo
+		if err := json.Unmarshal(ch.SpellSlots.RawMessage, &slots); err == nil {
+			levels := make([]int, 0, len(slots))
+			byLevel := make(map[int]character.SlotInfo, len(slots))
+			for k, v := range slots {
+				lvl, convErr := strconv.Atoi(k)
+				if convErr != nil {
+					continue
+				}
+				levels = append(levels, lvl)
+				byLevel[lvl] = v
+			}
+			sort.Ints(levels)
+			for _, lvl := range levels {
+				s := byLevel[lvl]
+				parts = append(parts, fmt.Sprintf("%s: %d/%d", slotOrdinal(lvl), s.Current, s.Max))
+			}
+		}
+	}
+
+	if ch.PactMagicSlots.Valid && len(ch.PactMagicSlots.RawMessage) > 0 {
+		var pact character.PactMagicSlots
+		if err := json.Unmarshal(ch.PactMagicSlots.RawMessage, &pact); err == nil && pact.Max > 0 {
+			parts = append(parts, fmt.Sprintf("Pact Magic: %d × Lvl %d", pact.Current, pact.SlotLevel))
+		}
+	}
+
+	return strings.Join(parts, " | ")
 }
 
 // slotOrdinal converts a number to ordinal string.

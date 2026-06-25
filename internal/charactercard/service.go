@@ -225,6 +225,8 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 		_ = json.Unmarshal(char.SpellSlots.RawMessage, &spellSlots)
 	}
 
+	pactSlots := parsePactMagicSlots(char.PactMagicSlots.RawMessage, char.PactMagicSlots.Valid)
+
 	spellCount, preparedCount, homebrewSpellCount := extractSpellCounts(char)
 
 	conditions, concentration, exhaustion := s.fetchCombatantState(ctx, char.ID)
@@ -245,6 +247,7 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 		EquippedMainHand:   char.EquippedMainHand.String,
 		EquippedOffHand:    char.EquippedOffHand.String,
 		SpellSlots:         spellSlots,
+		PactMagicSlots:     pactSlots,
 		SpellCount:         spellCount,
 		PreparedCount:      preparedCount,
 		HomebrewSpellCount: homebrewSpellCount,
@@ -256,6 +259,26 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 		Retired:            retired,
 		ASIFeatPending:     asiFeatPending,
 	}
+}
+
+// parsePactMagicSlots decodes the character's pact_magic_slots JSONB column
+// ({"slot_level":L,"current":N,"max":N}) into the canonical
+// character.PactMagicSlots shape. It returns nil when the column is absent or
+// the character has no pact slots, so the card renders the standard "—" for
+// non-warlocks. Pure warlocks carry their slots here (the spell_slots column is
+// empty), which is why the card must read it too (ISSUE-012).
+func parsePactMagicSlots(raw []byte, valid bool) *character.PactMagicSlots {
+	if !valid || len(raw) == 0 {
+		return nil
+	}
+	var pact character.PactMagicSlots
+	if err := json.Unmarshal(raw, &pact); err != nil {
+		return nil
+	}
+	if pact.Max == 0 {
+		return nil
+	}
+	return &pact
 }
 
 func (s *Service) hasPendingASI(ctx context.Context, characterID uuid.UUID) bool {
