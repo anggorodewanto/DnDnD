@@ -1049,6 +1049,11 @@ func combatantsToRendererForm(in []refdata.Combatant) []renderer.Combatant {
 			HPMax:       int(c.HpMax),
 			HPCurrent:   int(c.HpCurrent),
 			IsPlayer:    !c.IsNpc,
+			// Carry the hide state so the player-view fog filter
+			// (filterCombatantsForFog) only drops genuinely hidden enemies.
+			// Without this every enemy defaults to IsVisible=false and is
+			// excluded from #combat-map even when a PC can plainly see it.
+			IsVisible: c.IsVisible,
 		})
 	}
 	return out

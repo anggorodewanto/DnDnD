@@ -81,3 +81,28 @@ func TestResolveMapImages_MissingAssetLeavesNilNotFatal(t *testing.T) {
 	})
 	assert.Nil(t, md.Tilesets[0].ImagePNG)
 }
+
+// TestCombatantsToRendererForm_PropagatesIsVisible guards the player-view fog
+// filter: filterCombatantsForFog drops any non-player token whose IsVisible is
+// false BEFORE it checks line-of-sight, so the conversion must carry the
+// combatant's is_visible flag through. Without it every enemy renders as
+// "hidden" and never appears on the player-facing #combat-map even when a PC
+// can plainly see it.
+func TestCombatantsToRendererForm_PropagatesIsVisible(t *testing.T) {
+	in := []refdata.Combatant{
+		{ShortID: "G1", DisplayName: "Ghoul", PositionCol: "C", PositionRow: 7, IsNpc: true, IsVisible: true, HpMax: 22, HpCurrent: 22},
+		{ShortID: "HID", DisplayName: "Lurker", PositionCol: "D", PositionRow: 8, IsNpc: true, IsVisible: false, HpMax: 10, HpCurrent: 10},
+		{ShortID: "VA", DisplayName: "Vale", PositionCol: "K", PositionRow: 6, IsNpc: false, IsVisible: true, HpMax: 24, HpCurrent: 24},
+	}
+
+	out := combatantsToRendererForm(in)
+	require.Len(t, out, 3)
+
+	byID := map[string]renderer.Combatant{}
+	for _, c := range out {
+		byID[c.ShortID] = c
+	}
+	assert.True(t, byID["G1"].IsVisible, "a visible enemy must carry IsVisible=true so fog can show it when seen")
+	assert.False(t, byID["HID"].IsVisible, "a hidden enemy must stay IsVisible=false")
+	assert.True(t, byID["VA"].IsVisible, "a visible PC must carry IsVisible=true")
+}

@@ -116,13 +116,27 @@ to initiative; Round 1, Forge's turn first vs the cellar wretch)._
   - **Vale's pending action:** declared *hold person* pre-initiative; per the player
     it's HELD and **resolves on Vale's turn** (3rd, after the wretch moves) — WIS save
     vs **DC 13**. Don't pre-resolve it. Vale has 1 pact slot left after it (2→1).
-  - PCs auto-placed at combat start (Vale token at top-left (0,0); Forge near the
-    party). Monster HP hidden from players in #initiative-tracker (good).
+  - **Token positions (2026-06-25):** Forge **J7**, Vale **K6** (party by the
+    door), the wretch **C7** (cellar mouth, just NE of the corner pit). All three
+    render on the board. Monster HP hidden from players in #initiative-tracker (good).
+  - **Two map-render bugs found + fixed (2026-06-25):**
+    1. *PCs had no tokens.* The blank dashboard-built map has **no authored spawn
+       zones**, so combat-start's PC seater bailed and wrote the zero-value
+       position (col `""`, row 0) for Vale + Forge — unparseable, so the renderer
+       skipped them. **Fix:** `seatPCsInSpawnZones` now falls back to open
+       in-bounds tiles (skipping monster tiles) when a map has no spawn zones
+       (`spawnzone.AssignPCsToOpenTiles`). Live data patched to J7/K6.
+    2. *Enemy never showed on the player map.* `combatantsToRendererForm` never
+       set `IsVisible`, so every enemy defaulted to hidden and `filterCombatantsForFog`
+       dropped it *before* the line-of-sight check — enemies were excluded from
+       #combat-map regardless of sight. **Fix:** propagate `c.IsVisible`. Now a
+       visible enemy in a PC's line of sight shows; genuinely hidden / out-of-sight
+       enemies stay fogged (fog-of-war retained by design choice).
   - **#combat-map note:** this combat started BEFORE the `7b6c125` deploy, so the
     opening board was NOT auto-posted (that feature only fires on *future*
-    StartCombat). The board now lands in #combat-map on the first `/done`, on a
-    DM-run enemy turn, or — **new this deploy** — when any player runs **`/map`**
-    on demand. To show the current board now, a player can run `/map`.
+    StartCombat). The board lands in #combat-map on the first `/done`, on a DM-run
+    enemy turn, or when any player runs **`/map`**. Player-view fog is ON: it now
+    shows every token a PC can see (the wretch included), and hides the rest.
   - **Reserve:** if 1 wretch proves light for two L3 PCs, a 2nd can claw up from the
     pit mid-fight (the door was scored by something *desperate*).
 
