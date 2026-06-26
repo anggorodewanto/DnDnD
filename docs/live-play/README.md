@@ -142,5 +142,18 @@ Concretely each turn:
   cleared its AC) without stating the AC value, and never hand out the precise
   HP fraction. (Real correction: a damage whisper-reply leaked a ghoul's `15/22`
   HP **and** `AC 12` to the player — exactly the kind of slip this rule prevents.)
+- **Keep narration AND the state docs in lockstep with the mechanics — never let
+  them fall behind.** The combat engine advances in Discord on its own whenever a
+  player runs a slash command (`/attack`, `/done`, even a paralyzed enemy's
+  auto-skipped turn) — *without* the DM doing anything. So after **every** mechanical
+  beat, before you stop, you must: **(1) narrate** the beat to #the-story (read-aloud
+  block), and **(2) update** `game-state.md` + `play-log.md` to match the live DB.
+  The worst failure mode this folder has actually hit is *mechanics racing ahead of
+  the story*: a fight resolved over Rounds 2–3 in #combat-log (Forge auto-critting a
+  paralyzed wretch to death) while #the-story and the save file were both frozen two
+  rounds back at "Round 1, wretch alive." **On resume, treat the DB + #combat-log as
+  the source of truth** (per the DM Console note above): if the DB's round/HP is ahead
+  of the docs, stop and reconcile — narrate the un-narrated beats, correct the docs —
+  *before* taking any new action.
 </content>
 </invoke>

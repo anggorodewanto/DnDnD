@@ -4,15 +4,17 @@
 > "where are we right now." Timestamps in the campaign's local fiction are loose;
 > real-world dates are absolute.
 
-_Last updated: 2026-06-25 (session 1 — combat LIVE: Round 1 resolved through Forge's
-handaxe + the wretch's whiffed Multiattack; Vale's hold person LANDED → wretch
-PARALYZED. Vale's turn still active (movement/bonus action pending), then Round 2
-opens with Forge auto-critting the paralyzed wretch. App redeployed **again ~22:50 UTC**
-with two more live-play fixes live — **ISSUE-016** (`/done` phantom-attack after a spell
-cast) + the **ISSUE-015 DISPLAY half** (paralysis no longer renders as "[object Object]")
-— on top of the earlier ~13:45 UTC **ISSUE-014** DM-Console fix; combat state preserved.
-Cosmetic caveat: Vale's current turn still shows the pre-fix phantom attack — confirm
-`/done` past it once. The **Hold Person** narration is posted to #the-story)._
+_Last updated: 2026-06-26 (session 1 — **COMBAT OVER. Victory.** The wretch (Ghoul G1)
+is dead; the DM **narrated the kill** to #the-story (read-aloud, 2026-06-26 13:45 UTC,
+Discord msg `1520062389649670288`) and **ended the encounter** via the new dashboard
+**End Combat** button — encounter `status=completed`, Vale's hold-person concentration
+auto-cleared, both PCs full HP (Forge 32/32, Vale 24/24, 1 pact slot left). The party
+stands over the corpse in the waystation common room; the cellar still gapes, clawed from
+the inside. **Next scene = the cellar descent** (reserve wretch lives down there).
+Shipped this beat: an **End Combat button** on the Combat Manager (it didn't exist — only
+End Turn), wired to `POST /api/combat/{id}/end`, TDD'd + redeployed; and a README
+"keep narration + docs in lockstep" diligence rule (this session's whole drift was the
+failure mode it prevents).)_
 
 ## Stack status
 
@@ -135,35 +137,39 @@ Cosmetic caveat: Vale's current turn still shows the pre-fix phantom attack — 
 
 ## Encounter / combat
 
-- **LIVE — Round 1 (Vale's turn active).** Encounter "Waystation — the cellar wretch"
-  (combat id `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`), on the common-room map above.
+- **OVER — encounter `completed` (DM ended combat in Round 3). Victory.** Encounter
+  "Waystation — the cellar wretch" (combat id `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`),
+  ended 2026-06-26 ~13:58 UTC via the dashboard **End Combat** button (which auto-cleared
+  Vale's hold-person concentration). The wretch (Ghoul G1) is DEAD; both PCs untouched.
   - **Initiative:** Forge **22** → the wretch **19** → Vale **19** (Forge up first).
-  - **Threat:** 1× **Ghoul** stat block (G1) — **AC 12, HP now 15/22 (bloodied)**,
-    climbed out of the cellar mouth (2,7) and into melee. **DM RULING: it is a
-    LIVING wretch (Humanoid), not undead** — a person rotted/maddened by whatever's
-    in the cellar. Reflavored so Vale's *hold person* is a valid target (the engine
-    just labels the stat block "Ghoul"; ignore the type tag). Ghoul claws/bite +
-    paralysing touch reflavored as a sickening grip; run RAW numbers.
-  - **CONDITION — the wretch is PARALYZED** (source_spell *hold person*, applied in the
-    engine, indefinite until Vale drops concentration). **Hidden from players** — describe
-    it as "bloodied and rigid / seized", never "paralyzed". Mechanical consequences: it
-    auto-fails STR/DEX saves, attackers have advantage against it, and any melee hit from
-    within 5 ft is an **auto-crit**. This sets up Forge for a huge Round-2 swing.
-  - **Round 1 resolved so far (chronological):**
-    1. **Forge (init 22):** freeform *throw* — **handaxe HIT** (roll 15 vs AC 12) for
-       **7 damage**. Wretch 22→15 HP, now **bloodied**. Turn done.
-    2. **The wretch (init 19):** moved from the cellar mouth into melee (now **D7**,
-       adjacent to Forge at E7); **Multiattack — bite (8) and claws (10) BOTH MISSED**
-       Forge's AC 14. No damage. Turn done.
-    3. **Vale (init 19) — ACTIVE:** cast **hold person** on the wretch (action used,
-       now **concentrating**); the wretch's **WIS save 6 vs DC 13 → FAIL → PARALYZED**.
-       Vale spent a pact slot (**2→1, one left**). Her **movement (30 ft) + bonus
-       action are still available** — the player's call; her turn is NOT yet ended.
-  - **Vale's concentration:** on **hold person** — if she takes damage she rolls a CON
-    save (DC = max(10, ½ damage)) or the wretch un-paralyzes. Keep the wretch pinned.
-  - **Token positions (2026-06-25):** Forge **E7** (HP 32/32), Vale **K6** (HP 24/24,
-    concentrating), the wretch **D7** (HP 15/22, PARALYZED — adjacent to Forge). All
-    three render on the board. Monster HP hidden from players in #initiative-tracker (good).
+  - **Threat (DEAD):** 1× **Ghoul** stat block (G1) — **AC 12, HP `0/22`, `is_alive=f`**,
+    killed by Forge's auto-crit handaxe in **Round 3** (2026-06-26 13:32 UTC). It climbed
+    out of the cellar mouth (2,7) into melee at D7 and never landed a hit. **DM RULING: it
+    was a LIVING wretch (Humanoid), not undead** — reflavored so Vale's *hold person* was a
+    valid target (engine labels the stat block "Ghoul"; ignore the type tag). Corpse still
+    carries the stale `paralyzed` tag — cosmetic, it's dead.
+  - **PARALYSIS was the kill enabler (now moot).** *Hold person* paralyzed it from R1 (auto-fail
+    STR/DEX saves, attackers have advantage, any melee hit within 5 ft is an **auto-crit**),
+    so Forge auto-crit it across R2 and R3. **Vale is still flagged concentrating on hold
+    person against a dead target** (`concentration_spell_id=hold-person`) — stale; should drop.
+    If players are told anything, the wretch "seized up, then came apart" — never "paralyzed".
+  - **Full combat chronology (R1→R3, from DB turns + Discord #combat-log):**
+    - **R1 Forge (22):** freeform *throw* — **handaxe HIT** (15 vs AC 12) **7 dmg**. Wretch
+      22→**15** (bloodied). *(Throw was DM-applied, not auto-logged in #combat-log.)*
+    - **R1 wretch (19):** moved cellar-mouth → **D7** (adjacent Forge E7); **Multiattack
+      bite (8) + claws (10) BOTH MISSED** AC 14. No damage. *(Also DM-narrated, not auto-logged.)*
+    - **R1 Vale (19):** cast **hold person** → wretch **WIS 6 vs DC 13 FAIL → PARALYZED**.
+      Pact slot **2→1**. Concentrating. Turn completed.
+    - **R2 Forge:** auto-crit dual handaxe — main **10** (2d6+2) + off-hand vex **2** (2d6)
+      = **12**. Wretch 15→**3** (**survived** — the light-weapon crits underperformed).
+    - **R2 wretch:** turn **auto-skipped** (paralyzed).
+    - **R2 Vale:** **light crossbow → MISS** (roll 10). Turn completed.
+    - **R3 Forge:** auto-crit handaxe **12** (2d6+2) — already lethal (3−12); off-hand **6**
+      overkill. Wretch → **0/22, DEAD** (13:32 UTC 2026-06-26).
+    - **R3 Vale — ACTIVE:** turn open, action unused. *(But the only enemy is already dead.)*
+  - **Token positions (2026-06-26):** Forge **E7** (HP 32/32, untouched, **not raging**),
+    Vale **K6** (HP 24/24, still flagged concentrating — moot), the wretch corpse **D7**
+    (**0/22, DEAD**). Monster HP stays hidden from players in #initiative-tracker.
   - **Two map-render bugs found + fixed (2026-06-25):**
     1. *PCs had no tokens.* The blank dashboard-built map has **no authored spawn
        zones**, so combat-start's PC seater bailed and wrote the zero-value
@@ -207,31 +213,21 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 
 ## Next action
 
-- **COMBAT IS LIVE — Round 1, Vale's turn (post-hold-person).** All three Round-1
-  initiative slots have acted on their *actions*: Forge threw a handaxe (HIT, 7 dmg →
-  wretch bloodied 15/22), the wretch closed to melee (D7) and **whiffed its whole
-  Multiattack** on Forge, and Vale's **hold person LANDED** — the wretch failed its WIS
-  save (6 vs DC 13) and is **PARALYZED** (Vale concentrating; pact slots 2→1). See the
-  **Encounter / combat** section above for the full chronology, ids, and the
-  hidden-condition handling.
-- **Already done this beat:** the **Hold Person narration is POSTED to #the-story**
-  (dashboard Narrate editor → "Post to #the-story" → bot relayed; `narration_posts`
-  row at **13:51:18 UTC**, Discord msg id **`1519701526946386084`**) — no re-post
-  needed. The app was **redeployed ~13:45 UTC with the ISSUE-014 fix live** (DM
-  Console now logs player combat actions; combat state preserved).
-1. **Vale finishes her turn (init 19) — the player's call.** Her *action* is spent on
-   hold person, but she still has her **30 ft of movement and her bonus action**. Wait
-   for her to declare in `#in-character` (or `/move`); **do not act for her.** When she's
-   done, `/done` (or End Turn) advances to Round 2.
-2. **Round 2 opens with Forge (init 22)** standing adjacent (E7 ↔ D7, within 5 ft) to a
-   **PARALYZED** target. Forge's melee attacks get **advantage and auto-crit on hit** —
-   a big swing that should drop or nearly drop the wretch. **His choices are his own; the
-   DM does not act for him.** (Forge is the remote 2nd player on the cloudflared tunnel.)
-3. **Keep the wretch pinned:** the paralysis holds only while Vale concentrates. If the
-   wretch (or anything) deals damage to Vale, she rolls a **CON save (DC max(10, ½ dmg))**
-   or hold person drops and the wretch un-paralyzes. Track concentration on her panel.
-4. **DM cadence each turn:** advance the Combat Manager turn queue (End Turn), narrate
-   results to `#the-story` (describe the wretch as "rigid / seized", never "paralyzed"),
-   apply damage/conditions on the combatant panels. If the lone wretch is trivial, a 2nd
-   can claw up from the pit (see Reserve note above).
+- **COMBAT IS OVER — victory, encounter `completed`.** The kill was **narrated** to
+  #the-story (read-aloud, 2026-06-26 13:45 UTC, Discord msg `1520062389649670288`) and the
+  DM **ended the encounter** via the new dashboard **End Combat** button (status→completed,
+  Vale's concentration auto-cleared). The party (Forge 32/32, Vale 24/24, 1 pact slot) stands
+  over the wretch's corpse in the waystation common room. Nothing is owed on the fight.
+- **The scene now:** post-combat lull. The thing is dead; up close it was a *person* once
+  (the keeper, maybe), hollowed out. The **cellar mouth still gapes** in the SW corner (the
+  2×2 pit), its door clawed to splinters **from the inside**. The dread points downward.
+1. **Next beat — the cellar descent.** Wait for the players (Vale / Forge) to decide in
+   `#in-character` — search the body, loot the room, descend, or rest. Narrate what they
+   find; **don't act for them.** Likely they go down. The **reserve 2nd wretch** (see the
+   Reserve note in Encounter / combat) lives down there — start a fresh encounter if they
+   descend and you want the fight. Build it via Encounters → New, then Start Combat.
+2. **Loot / aftermath (optional):** the keeper's body / the common room may hold a clue to
+   what's below (a key, a journal, claw-scored boards). DM's call whether to seed any.
+3. **Bookkeeping done:** concentration cleared, no pending dm-queue from the fight. Vale's
+   leather armor still unequipped (AC 10; `/equip item:leather armor:true` → AC 11) if she wants it.
 </content>

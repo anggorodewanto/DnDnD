@@ -202,4 +202,63 @@ concentration intact (CON save on any damage to her, or the paralysis drops).
 **Next (unchanged):** Vale finishes her turn (movement/bonus action — player decides),
 then `/done` opens Round 2 with Forge auto-critting the paralyzed wretch. Keep Vale's
 concentration intact.
+
+**Rounds 2–3 — Forge auto-crits the wretch to death (2026-06-26, reconstructed)**
+
+> Reconstructed 2026-06-26 from live DB (`turns` / `combatants`) + Discord #combat-log —
+> these beats had played out in Discord but were never logged here, and `game-state.md`
+> had drifted to a stale "Round 1." **No DM narration was posted for any of this** (last
+> #the-story post is still the R1 Hold Person beat, 2026-06-25 13:51 UTC).
+
+- **R2 Forge — auto-crit, wretch survives.** Forge (adjacent E7↔D7, target paralyzed) hit
+  with dual handaxes, both **auto-crit**: main **10** (2d6+2) + bonus-action off-hand vex
+  **2** (2d6) = **12 dmg**. Wretch **15→3** — it **did not drop** (the light-weapon crits
+  rolled low). **Wretch's R2 turn auto-skipped** (paralyzed, can't act).
+- **R2 Vale — crossbow miss.** Vale fired her **light crossbow** at the paralyzed wretch
+  (advantage) → **roll 10, MISS**. Turn completed (~13:31 UTC). *(This is the R2 turn the
+  player flagged as already done.)*
+- **R3 Forge — the kill.** Forge auto-crit handaxe again: main **12** (2d6+2) — already
+  lethal against 3 HP — off-hand **6** overkill. **Wretch → `0/22`, DEAD** at **13:32 UTC**
+  (`is_alive=f`). Notably Forge was **not raging**; an unraged barbarian's 2d6+2 crits took
+  **two rounds** to finish a 15-HP target. The wretch never landed a hit the entire fight.
+- **R3 Vale — turn currently ACTIVE but moot.** The turn queue advanced to Vale (action
+  unused), but the only enemy is already dead.
+- **State left open:** encounter status is still **`active`** (no End-Combat fired), and
+  Vale is still flagged **concentrating on hold person** against a corpse.
+
+**Next:** (1) **narrate the kill** to #the-story (2 rounds behind — wrap in `:::read-aloud:::`;
+never say "paralyzed"); (2) **resolve the encounter** — End Combat for victory, or send the
+reserve 2nd wretch up the pit if one kill is too light; (3) drop Vale's stale concentration.
+See `game-state.md` "Next action."
+
+**Kill narrated + combat ended + End Combat button shipped (2026-06-26)**
+
+- **Kill narrated.** Posted the wretch's death beat to #the-story via the dashboard Narrate
+  editor (read-aloud block) — `narration_posts` 2026-06-26 **13:45:15 UTC**, Discord msg
+  **`1520062389649670288`**. The bot rendered it as a read-aloud box. Masked throughout:
+  "locks rigid / seized," the wretch "comes apart at the shoulder," no HP/AC numbers, the
+  word "paralyzed" never used. Aftermath teed up the cellar (the thing had a face once; the
+  pit still gapes, door clawed from the inside).
+- **End Combat button added to the dashboard (it didn't exist).** The Combat Manager only had
+  **End Turn** — no way to end the whole encounter from the UI (the `POST /api/combat/{id}/end`
+  endpoint existed but was unwired on the frontend). Added it TDD:
+  - `endCombat(encounterId)` in `dashboard/svelte/src/lib/api.js` (red/green `api.test.js`,
+    70/70 then full suite **591/591** vitest green).
+  - **End Combat** button in `CombatManager.svelte`'s encounter header with an **inline
+    two-step confirm** (End Combat → "End this combat? Confirm/Cancel") — deliberately *not*
+    a native `window.confirm` (those block claude-in-chrome automation and are worse UX). On
+    confirm it calls `endCombat`, then `loadWorkspace()` so the ended encounter drops out.
+  - Rebuilt embedded assets (`npm run build` → `internal/dashboard/assets`) + redeployed
+    (`docker compose up -d --build app`). Clean boot; combat state preserved through the redeploy.
+- **Combat ended via the new button.** Clicked End Combat → Confirm End on the live encounter.
+  Result (verified in DB): encounter `status=completed`, **Vale's `concentration_spell_id`
+  cleared** by the EndCombat service, ghoul `0/22 is_alive=f`, PCs full. Combat Manager now
+  reads "No active encounters." Victory banked.
+- **README diligence rule added** (`docs/live-play/README.md`, Hard constraints): keep
+  narration + state docs in lockstep with the engine; on resume treat DB + #combat-log as the
+  source of truth and reconcile before acting. This whole session's "Round 1 vs reality Round 3"
+  drift is exactly what it guards against.
+
+**Next:** players decide in `#in-character` — most likely the cellar descent. Start a fresh
+encounter (reserve wretch) if they go down and want a fight. See `game-state.md` "Next action."
 </content>
