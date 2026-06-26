@@ -190,7 +190,7 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 		case "release-drag", "releasedrag":
 			h.dispatchReleaseDrag(ctx, interaction, bctx)
 		default:
-			respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag. Run `/help bonus` for examples.", action))
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try %s. Run `/help bonus` for examples.", action, strings.Join(bonusSubcommandKeys, ", ")))
 		}
 		return errAlreadyResponded
 	}

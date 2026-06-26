@@ -95,6 +95,12 @@ func (h *CharacterSheetHandler) renderSheet(w http.ResponseWriter, data *Charact
 		})
 		data.SortedSlotLevels = levels
 	}
+	// Template prep: derive the "Possible Actions" reference from the character's
+	// classes unless a caller pre-populated it. Done here (not in the service's
+	// enrich step) so it is set on every render path, mirroring SortedSlotLevels.
+	if len(data.PossibleActions) == 0 {
+		data.PossibleActions = buildActionGroups(data.Classes)
+	}
 	var buf bytes.Buffer
 	if err := h.sheetTmpl.Execute(&buf, data); err != nil {
 		h.logger.Error("failed to render character sheet template", "error", err)
@@ -303,6 +309,18 @@ const characterSheetTemplate = `{{define "weaponStat"}}<dl class="eq-meta">
         .equip-slot { margin-bottom: 0.6rem; }
         .equip-label { color: #a0a0b0; font-weight: bold; margin-right: 0.4rem; }
         .equip-name { color: #e0e0e8; }
+        .action-hint { color: #a0a0b0; font-size: 0.82rem; margin-bottom: 0.7rem; line-height: 1.4; }
+        .action-group { margin-bottom: 0.9rem; }
+        .action-group-label { color: #e94560; font-weight: bold; margin-bottom: 0.3rem; }
+        .action-entry { border-bottom: 1px solid #0f346033; }
+        .action-summary { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.3rem 0; cursor: pointer; list-style: none; }
+        .action-summary::-webkit-details-marker { display: none; }
+        .action-summary > span:first-child::before { content: '\25B8'; color: #6a6a80; margin-right: 0.4rem; font-size: 0.75rem; }
+        details[open] > .action-summary > span:first-child::before { content: '\25BE'; }
+        .action-class { color: #a0a0b0; font-size: 0.78rem; margin-left: 0.3rem; }
+        .action-cmd { color: #7fd1b9; font-size: 0.8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+        .action-detail-body { padding: 0.1rem 0 0.55rem 1.15rem; }
+        .action-desc { font-size: 0.88rem; line-height: 1.45; color: #c0c0d0; margin: 0; }
         @media (max-width: 700px) {
             .grid-2 { grid-template-columns: 1fr; }
             .ability-grid { grid-template-columns: repeat(3, 1fr); }
@@ -442,6 +460,29 @@ const characterSheetTemplate = `{{define "weaponStat"}}<dl class="eq-meta">
                 </ul>
             </div>
         </div>
+
+        {{if .PossibleActions}}
+        <div class="section">
+            <h3>Actions</h3>
+            <p class="action-hint">What you can do on your turn — a reference, not live tracking. Each turn you get one Action, one Bonus Action, one Reaction, plus movement. Class abilities you've earned are tagged with their class.</p>
+            {{range .PossibleActions}}
+            <div class="action-group">
+                <div class="action-group-label">{{.Economy}}</div>
+                {{range .Actions}}
+                <details class="action-entry">
+                    <summary class="action-summary">
+                        <span>{{.Name}}{{if .Classes}}<span class="action-class">{{.Classes}}</span>{{end}}</span>
+                        <span class="action-cmd">{{.Command}}</span>
+                    </summary>
+                    <div class="action-detail-body">
+                        <p class="action-desc">{{.Summary}}</p>
+                    </div>
+                </details>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        {{end}}
 
         <div class="section">
             <h3>Equipment</h3>

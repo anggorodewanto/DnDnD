@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 var (
@@ -62,6 +63,31 @@ type CharacterSheetData struct {
 	Skills           []SkillDisplay
 	SavingThrows     []SavingThrowDisplay
 	ClassSummary     string
+
+	// PossibleActions is the reference list of what this character can do on a
+	// turn, grouped by action economy and derived from the canonical action
+	// catalog (refdata.ActionCatalog) filtered by the character's classes. It is
+	// guidance ("what CAN you do?"), not live turn tracking — the read-only
+	// sheet has no encounter/Turn context. Computed in renderSheet (template
+	// prep) so it is set on every render path.
+	PossibleActions []ActionGroup
+}
+
+// ActionGroup is a set of available actions sharing one action-economy slot,
+// rendered as one labelled block on the sheet.
+type ActionGroup struct {
+	Economy string // display label: "Actions", "Bonus Actions", "Reactions", "Other"
+	Actions []ActionDisplay
+}
+
+// ActionDisplay is one row in the "Possible Actions" section.
+type ActionDisplay struct {
+	Name    string
+	Command string
+	Summary string
+	// Classes is the human-readable gating class(es) for a class-specific
+	// action (e.g. "Barbarian", "Cleric / Paladin"); empty when universal.
+	Classes string
 }
 
 // SpellDisplayEntry holds data for displaying a single spell on the character sheet.
@@ -151,6 +177,72 @@ func enrichCharacterSheet(data *CharacterSheetData) {
 	data.Skills = computeSkills(data.AbilityScores, data.Proficiencies, data.ProficiencyBonus)
 	data.SavingThrows = computeSavingThrows(data.AbilityScores, data.Proficiencies.Saves, data.ProficiencyBonus)
 	data.ClassSummary = character.FormatClassSummary(data.Classes)
+}
+
+// actionEconomyLabels maps a catalog economy to its sheet section label.
+var actionEconomyLabels = map[refdata.ActionEconomy]string{
+	refdata.EconomyAction:      "Actions",
+	refdata.EconomyBonusAction: "Bonus Actions",
+	refdata.EconomyReaction:    "Reactions",
+	refdata.EconomyFree:        "Other",
+}
+
+// buildActionGroups filters the canonical action catalog by the character's
+// classes and groups the result by action economy in display order. Only
+// non-empty groups are returned. The grouping is deterministic: economy order
+// follows refdata.ActionEconomyOrder and within a group the catalog's
+// declaration order is preserved.
+func buildActionGroups(classes []character.ClassEntry) []ActionGroup {
+	available := refdata.AvailableActions(classLevelMap(classes))
+
+	byEconomy := make(map[refdata.ActionEconomy][]ActionDisplay)
+	for _, e := range available {
+		byEconomy[e.Economy] = append(byEconomy[e.Economy], ActionDisplay{
+			Name:    e.Name,
+			Command: e.Command,
+			Summary: e.Summary,
+			Classes: formatGatingClasses(e.Classes),
+		})
+	}
+
+	groups := make([]ActionGroup, 0, len(refdata.ActionEconomyOrder))
+	for _, economy := range refdata.ActionEconomyOrder {
+		actions := byEconomy[economy]
+		if len(actions) == 0 {
+			continue
+		}
+		groups = append(groups, ActionGroup{
+			Economy: actionEconomyLabels[economy],
+			Actions: actions,
+		})
+	}
+	return groups
+}
+
+// classLevelMap reduces the character's classes to a class-name → highest-level
+// map for action gating. Case folding is owned by refdata.AvailableActions (the
+// public consumer), so it is not repeated here.
+func classLevelMap(classes []character.ClassEntry) map[string]int {
+	levels := make(map[string]int, len(classes))
+	for _, c := range classes {
+		if c.Level > levels[c.Class] {
+			levels[c.Class] = c.Level
+		}
+	}
+	return levels
+}
+
+// formatGatingClasses renders gating class slugs as a capitalized,
+// slash-joined label (e.g. "Cleric / Paladin"). Empty for universal actions.
+func formatGatingClasses(classes []string) string {
+	if len(classes) == 0 {
+		return ""
+	}
+	titled := make([]string, len(classes))
+	for i, c := range classes {
+		titled[i] = formatSkillName(c) // capitalizes each hyphen-separated word
+	}
+	return strings.Join(titled, " / ")
 }
 
 func computeAbilityModifiers(scores character.AbilityScores) map[string]int {

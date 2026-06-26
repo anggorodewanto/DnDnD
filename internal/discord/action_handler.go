@@ -318,19 +318,11 @@ func normalizeActionSubcommand(raw string) string {
 }
 
 // isDispatchSubcommand reports whether the subcommand name routes to a
-// dedicated combat service rather than the freeform fallback.
+// dedicated combat service rather than the freeform fallback. The accepted set
+// is single-sourced in action_keys.go (canonicalActionSubcommand) so it stays
+// in lockstep with the action catalog's contract test.
 func (h *ActionHandler) isDispatchSubcommand(sub string) bool {
-	switch sub {
-	case "surge", "action-surge",
-		"dash", "disengage", "dodge", "help", "hide",
-		"stand", "drop-prone", "dropprone",
-		"escape", "grapple",
-		"channel-divinity", "channeldivinity",
-		"lay-on-hands", "layonhands",
-		"stabilize":
-		return true
-	}
-	return false
+	return canonicalActionSubcommand(sub) != ""
 }
 
 // handleCombat handles the combat-mode freeform post or cancel. Requires an
