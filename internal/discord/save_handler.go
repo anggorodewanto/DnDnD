@@ -83,6 +83,9 @@ type SaveHandler struct {
 	// nearby paladin ally's Aura of Protection onto the saver's FES. Nil
 	// disables the feature (degrades silently — SR-006 convention).
 	paladinLookup SaveNearbyPaladinLookup
+	// channelIDProvider mirrors the player's own save result to #combat-log
+	// while in combat (mirrors ShoveHandler). Nil keeps /save channel-silent.
+	channelIDProvider CampaignSettingsProvider
 }
 
 // SetAoESaveResolver wires the combat-side resolver for AoE pending saves.
@@ -102,6 +105,13 @@ func (h *SaveHandler) SetCreatureLookup(l CheckCreatureLookup) { h.creatureLooku
 // onto the saver's FES. Nil keeps the historical behaviour ("no aura for
 // allies" — SR-006 silent-skip convention). SR-024.
 func (h *SaveHandler) SetNearbyPaladinLookup(l SaveNearbyPaladinLookup) { h.paladinLookup = l }
+
+// SetChannelIDProvider wires the campaign settings provider so a player's own
+// /save result is mirrored to #combat-log while in an active encounter. Nil
+// keeps the historical behaviour (ephemeral-only). Mirrors ShoveHandler.
+func (h *SaveHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
+	h.channelIDProvider = p
+}
 
 // HasAoESaveResolver reports whether a non-nil AoESaveResolver has been
 // wired. Production-wiring tests use this to detect the AOE-CAST follow-up
@@ -221,6 +231,10 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	msg := save.FormatSaveResult(char.Name, result)
 	respondEphemeral(h.session, interaction, msg)
 
+	// Mirror the player's own save result to #combat-log when in combat. Out
+	// of combat we post nothing extra (the ephemeral above is enough).
+	h.maybeMirrorToCombatLog(ctx, interaction, msg)
+
 	// Log to roll history
 	if h.rollLogger != nil && !result.AutoFail {
 		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
@@ -238,6 +252,22 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	// combatant + ability. When this was the last outstanding save for the
 	// spell, the resolver fires damage application via ResolveAoESaves.
 	h.maybeResolveAoESave(ctx, interaction, char, ability, result)
+}
+
+// maybeMirrorToCombatLog mirrors the player's own /save result to the
+// encounter's #combat-log channel when the player is in an active encounter.
+// Out of combat (no active encounter) it posts nothing — the roll is the
+// player's own so it is safe to surface publicly. Best-effort: any wiring gap
+// (no provider, no encounter, no channel) is a silent no-op.
+func (h *SaveHandler) maybeMirrorToCombatLog(ctx context.Context, interaction *discordgo.Interaction, msg string) {
+	if h.encounterProvider == nil || h.channelIDProvider == nil {
+		return
+	}
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
+	if err != nil {
+		return
+	}
+	postCombatLogChannel(ctx, h.session, h.channelIDProvider, encounterID, msg)
 }
 
 // maybeResolveAoESave looks up the rolling combatant's encounter and asks

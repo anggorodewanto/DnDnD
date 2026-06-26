@@ -714,6 +714,7 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	if deps.campaignSettings != nil {
 		handlers.attack.SetChannelIDProvider(deps.campaignSettings)
 		handlers.bonus.SetChannelIDProvider(deps.campaignSettings)
+		handlers.save.SetChannelIDProvider(deps.campaignSettings)
 		handlers.shove.SetChannelIDProvider(deps.campaignSettings)
 		handlers.interact.SetChannelIDProvider(deps.campaignSettings)
 		handlers.deathsave.SetChannelIDProvider(deps.campaignSettings)

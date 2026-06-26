@@ -710,6 +710,122 @@ func TestSaveHandler_NotWildShaped_StrSaveUsesDruidStr(t *testing.T) {
 	}
 }
 
+// TestSaveHandler_PostsToCombatLogWhenInEncounter verifies that a player's
+// own /save result is mirrored to #combat-log while in an active encounter,
+// in addition to the ephemeral reply. The roll is the player's own, so it is
+// safe to surface publicly.
+func TestSaveHandler_PostsToCombatLogWhenInEncounter(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+	var captured []string
+	sess.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		captured = append(captured, channelID+"|"+content)
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(_ int) int { return 12 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{CharacterID: uuid.NullUUID{UUID: char.ID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetChannelIDProvider(&mockDeathSaveCSP{
+		fn: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "C123"}, nil
+		},
+	})
+
+	h.Handle(makeSaveInteraction("wis", false, false))
+
+	if len(captured) != 1 {
+		t.Fatalf("expected 1 combat-log post, got %d: %v", len(captured), captured)
+	}
+	if !strings.HasPrefix(captured[0], "C123|") {
+		t.Errorf("expected combat-log post to C123, got %q", captured[0])
+	}
+	if !strings.Contains(captured[0], "Aria") || !strings.Contains(captured[0], "WIS Save") {
+		t.Errorf("expected combat-log to contain the save line, got %q", captured[0])
+	}
+	// Ephemeral reply still happens.
+	if !strings.Contains(responded, "WIS Save") {
+		t.Errorf("expected ephemeral WIS Save reply, got %q", responded)
+	}
+}
+
+// TestSaveHandler_NoCombatLogPostWhenNotInEncounter verifies that out of
+// combat (no active encounter) /save posts nothing extra — only the ephemeral
+// reply is sent.
+func TestSaveHandler_NoCombatLogPostWhenNotInEncounter(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+	var captured []string
+	sess.ChannelMessageSendFunc = func(channelID, _ string) (*discordgo.Message, error) {
+		captured = append(captured, channelID)
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(_ int) int { return 12 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		nil,
+		&mockCheckRollLogger{},
+	)
+	h.SetChannelIDProvider(&mockDeathSaveCSP{
+		fn: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "C123"}, nil
+		},
+	})
+
+	h.Handle(makeSaveInteraction("wis", false, false))
+
+	if len(captured) != 0 {
+		t.Errorf("expected no combat-log post when not in an encounter, got %v", captured)
+	}
+	// Ephemeral reply still happens.
+	if !strings.Contains(responded, "WIS Save") {
+		t.Errorf("expected ephemeral WIS Save reply, got %q", responded)
+	}
+}
+
 // TestSaveHandler_RagingCombatantGetsAdvantageOnSTRSave verifies that when a
 // raging barbarian makes a STR save, the EffectContext.IsRaging is set to true
 // so the rage FES grants advantage. (D-C04)
