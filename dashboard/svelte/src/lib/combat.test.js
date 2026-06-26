@@ -7,6 +7,7 @@ import {
   addCondition,
   removeCondition,
   conditionName,
+  conditionKey,
   colToIndex,
   indexToCol,
   tokenOpacity,
@@ -163,6 +164,29 @@ describe('conditionName', () => {
     expect(conditionName({})).toBe('');
     expect(conditionName(null)).toBe('');
     expect(conditionName(undefined)).toBe('');
+  });
+});
+
+// ISSUE-015 (write half): the dashboard works in the engine's canonical
+// lowercase condition keys so add/remove/dedup compare consistently and the
+// PATCH body carries names the server reconciles into the engine object shape.
+describe('conditionKey', () => {
+  it('extracts the lowercase name from an engine object condition', () => {
+    expect(conditionKey({ condition: 'paralyzed', duration_rounds: 10 })).toBe('paralyzed');
+  });
+
+  it('lowercases a Title-Cased dropdown string', () => {
+    expect(conditionKey('Paralyzed')).toBe('paralyzed');
+  });
+
+  it('passes a lowercase string through', () => {
+    expect(conditionKey('prone')).toBe('prone');
+  });
+
+  it('returns empty string for malformed / empty entries', () => {
+    expect(conditionKey({})).toBe('');
+    expect(conditionKey(null)).toBe('');
+    expect(conditionKey(undefined)).toBe('');
   });
 });
 

@@ -23,7 +23,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-012 | 2026-06-25 | character card / spellcasting | minor | FIXED | Discord character card + `/character` embed show **"Spell Slots: —" for warlocks** — they read only the `spell_slots` column and never fall back to `pact_magic_slots`. **Fixed (TDD, `main` 5090e02):** both surfaces now pact-aware — parse the canonical `character.PactMagicSlots` ({slot_level,current,max}) and render `Pact Magic: N × Lvl L`; a multiclass caster shows standard + pact joined by ` | `; non-casters keep `—`. `charactercard/format.go`+`service.go` (`CardData.PactMagicSlots`, `formatPactMagicSlots`, `parsePactMagicSlots`), `discord/character_handler.go` (`buildSpellSlotSummary` + a Spell Slots line in `buildCharacterEmbed`). cover-check green. |
 | ISSUE-013 | 2026-06-25 | builder / submit (server) | blocker | FIXED | Friend's **barbarian / guild-artisan** submit 400s: `skill "insight" is not selectable for this class`. Root cause = **slug drift** between two hand-maintained Go background maps and the builder's kebab-case slugs. `backgroundSkillProficiencies` (`derive_stats.go`) had **no `guild-artisan`** case and keyed folk-hero as `"folk hero"` (space); both backgrounds therefore resolved to ∅ locked skills, so their PHB grants (insight+persuasion) were treated as off-list class picks and rejected. `backgroundStartingEquipment` (`starting_equipment.go`) had the same space-slug bug → those two backgrounds also silently got no starting-equipment pack. **Fixed (TDD, `main`):** both Go maps re-keyed to the exact 13 builder slugs (kebab-case) + `guild-artisan` added; two contract tests (`TestBackgroundSkillProficiencies_AllBuilderBackgrounds`, `TestBackgroundEquipmentPack_AllBuilderBackgrounds`) lock every builder slug so future drift fails CI; removed a stale test that asserted the old Title-Case `"Folk Hero"` input (never sent by the real builder — why the bug hid). cover-check green. **Deeper fix (SSOT) tracked separately.** |
 | ISSUE-014 | 2026-06-25 | dm console / action log | medium | FIXED + DEPLOYED | DM Console didn't track player combat actions — spell casts + freeform actions post to #combat-log but were never written to `action_log`, so `GET /api/dm/situation` `timeline[]` showed nothing for them. **Fixed (`main` f1e3aeb, pushed, redeployed ~13:45 UTC):** a best-effort `recordCombatAction` helper (new `internal/combat/action_log_record.go`) now writes an `action_log` row at the success tail of every player combat path (`Cast`, `CastAoE`, `FreeformAction`, `Attack`, `attackImprovised`, `OffhandAttack`). **DM-side only** — player-facing #combat-log output is unchanged; the Console is behind DM auth. Save adjudication stays a manual DM roll (no auto #dm-queue item, no auto NPC save). |
-| ISSUE-015 | 2026-06-25 | dashboard / conditions | high | DISPLAY FIXED / WRITE OPEN | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half STILL OPEN:** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` (+ Svelte tracker) still write a bare string array (`["paralyzed"]`) the engine's `parseConditions` ignores, so a button-added condition renders but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) **never fire**. Correct-shape writer remains the DM-Override POST `/api/combat/{id}/override/combatant/{cid}/conditions`. |
+| ISSUE-015 | 2026-06-25 | dashboard / conditions | high | FIXED | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half FIXED (2026-06-26):** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` used to persist a bare string array (`["paralyzed"]`) that `parseConditions` can't unmarshal, so a button-added condition rendered but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) never fired. New server-side `reconcileConditionNames` (`workspace_handler.go`) maps the DM-supplied condition *names* into the canonical `[]CombatCondition` object shape — reusing the combatant's existing condition object when the name is already present (so a spell-applied duration/source/timing survives a re-send) and minting an indefinite `{condition: name}` for new ones, lowercased + de-duped. Frontend now works in lowercase canonical keys (`conditionKey` helper). |
 | ISSUE-016 | 2026-06-25 | combat / spellcasting | medium | FIXED + DEPLOYED | `/done` falsely warned "you still have 1 attack" after a player cast a spell with their ACTION. Casting a spell is the Cast-a-Spell action, not the Attack action, so no weapon attack remains — but `Service.Cast`/`Service.CastAoE` consumed the action while leaving the seeded `attacks_remaining=1`, so the `/done` unused-resource check (and the "Remaining" summary) reported a phantom attack. **Fixed (`b108bf2`):** zero `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled); bonus-action casts left untouched (they keep the Attack action + its attacks). Found in live play: Vale (Warlock 3, no Extra Attack) cast Hold Person, then `/done` warned of an attack she never had. |
 
 ---
@@ -323,13 +323,13 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   saving throw (and/or surfacing a `#dm-queue` prompt) for player save-spells is a
   worthwhile future enhancement — today it remains a manual DM roll.
 
-### ISSUE-015 — Condition shape mismatch: dashboard vs the engine (DISPLAY half FIXED · WRITE half OPEN)
-- **Date:** 2026-06-25
+### ISSUE-015 — Condition shape mismatch: dashboard vs the engine (FIXED — both halves)
+- **Date:** 2026-06-25 (write half fixed 2026-06-26)
 - **Area:** dashboard / combat conditions (Combat Manager render + workspace PATCH +
   Svelte tracker vs engine `parseConditions`)
-- **Severity:** high — the WRITE half is a **silent mechanical no-op**: a
-  button-added condition shows on the tracker but does nothing in the rules engine.
-- **Status:** **DISPLAY half FIXED** (`b108bf2`, deployed) · **WRITE half STILL OPEN**.
+- **Severity:** high — the WRITE half was a **silent mechanical no-op**: a
+  button-added condition showed on the tracker but did nothing in the rules engine.
+- **Status:** **FIXED** — DISPLAY half (`b108bf2`, deployed) · WRITE half (2026-06-26).
 - **Two halves:**
   - **DISPLAY (the render) — FIXED.** The Combat Manager rendered a combatant's
     condition as **"[object Object]"** because the engine stores conditions as objects
@@ -357,9 +357,36 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   or a bare string; `CombatManager.svelte` now renders `conditionName(cond)` instead of
   interpolating the raw entry. vitest 64/64, svelte build clean, embedded assets
   regenerated. **Display-only** — the persisted WRITE shape is untouched.
-- **Remaining WRITE-half fix idea:** align the PATCH endpoint + Svelte tracker to the
-  object shape, or have the engine's `parseConditions` accept both the string-array and
-  object shapes.
+- **FIX (WRITE half, 2026-06-26, TDD, `main` working tree):** aligned the PATCH
+  endpoint to the engine object shape, server-side (the canonical-shape boundary), so
+  the API and the Svelte tracker stay simple (they speak condition *names*).
+  - **Server** (`internal/combat/workspace_handler.go`): new
+    `reconcileConditionNames(existing, names)` maps the DM-supplied condition *names*
+    (`updateConditionsRequest.Conditions []string`, unchanged) to the canonical
+    `[]CombatCondition` object array `parseConditions` reads. It **reconciles** against
+    the combatant's existing stored conditions: a name already present keeps its
+    existing object (so a spell-/engine-applied condition's `duration_rounds`,
+    `started_round`, `source_combatant_id`, `expires_on`, `source_spell` survive a
+    re-send of the full set), a new name becomes an indefinite manual condition
+    (`{condition: name}`, matching DM-toggle semantics). Names are lowercased to the
+    engine's canonical keys, blanks skipped, de-duped first-seen. An unparseable
+    existing value (e.g. a legacy bare-string write) is treated as empty, so the next
+    PATCH self-heals the row into the object shape. `UpdateCombatantConditions` now
+    calls it instead of `json.Marshal(req.Conditions)`.
+  - **Frontend** (`dashboard/svelte/src/lib/combat.js` + `CombatManager.svelte`): new
+    `conditionKey(c)` returns the engine's lowercase name for a string **or** object
+    entry; `currentConditions()` maps stored entries through it, and `handleAddCondition`
+    canonicalizes the dropdown value (`conditionKey(conditionToAdd)`), so add/remove/
+    dedup compare consistently and the PATCH body is a clean lowercase name array.
+  - **Tests (red→green):** Go `workspace_handler_test.go` — `WritesEngineObjectShape`
+    (Title-Cased input → object array, lowercase names, `HasCondition` fires),
+    `PreservesExistingObjectMetadata` (duration/source/timing survive a re-send),
+    `DedupesAndDropsRemoved`, `RecoversFromLegacyStringShape`. JS `combat.test.js` —
+    `conditionKey` cases. `make cover-check` green (combat 91.7%); 575 vitest green;
+    Svelte bundle rebuilt (`internal/dashboard/assets/` is git-tracked).
+  - **Not changed:** the engine's `parseConditions` (kept strict — object shape only)
+    and the DM-Override POST path (already correct). Both writers now converge on the
+    one canonical shape.
 
 ### ISSUE-016 — `/done` phantom "1 attack" warning after casting a spell with the action (FIXED)
 - **Date:** 2026-06-25

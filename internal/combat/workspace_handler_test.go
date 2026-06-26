@@ -735,6 +735,162 @@ func TestWorkspaceHandler_UpdateCombatantConditions_StoreError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+// --- ISSUE-015 write half: the PATCH endpoint must persist the canonical
+// object shape ([{"condition":"paralyzed",...}]) the engine's parseConditions
+// reads, not the bare string array (["paralyzed"]) that mechanically no-ops. ---
+
+func TestWorkspaceHandler_UpdateCombatantConditions_WritesEngineObjectShape(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	var captured json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: json.RawMessage(`[]`)}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			captured = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	// Frontend sends Title-Cased names from the dropdown.
+	body := `{"conditions":["Paralyzed","Prone"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Must persist the object shape the engine reads, with canonical lowercase names.
+	conds, err := parseConditions(captured)
+	require.NoError(t, err, "persisted shape must unmarshal as []CombatCondition")
+	require.Len(t, conds, 2)
+	assert.Equal(t, "paralyzed", conds[0].Condition)
+	assert.Equal(t, "prone", conds[1].Condition)
+	// The mechanical-effect readers key off .Condition — they must now fire.
+	assert.True(t, HasCondition(captured, "paralyzed"))
+}
+
+func TestWorkspaceHandler_UpdateCombatantConditions_PreservesExistingObjectMetadata(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	sourceID := uuid.New().String()
+
+	// paralyzed was applied by a spell with a duration + source + timing.
+	existing := json.RawMessage(`[{"condition":"paralyzed","duration_rounds":10,"started_round":2,"source_combatant_id":"` + sourceID + `","expires_on":"end_of_turn","source_spell":"hold-person"}]`)
+
+	var captured json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: existing}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			captured = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	// Re-send the full set (paralyzed already present) plus a new manual condition.
+	body := `{"conditions":["paralyzed","prone"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	conds, err := parseConditions(captured)
+	require.NoError(t, err)
+	require.Len(t, conds, 2)
+
+	para, ok := GetCondition(captured, "paralyzed")
+	require.True(t, ok)
+	assert.Equal(t, 10, para.DurationRounds, "existing condition's duration must survive a re-send")
+	assert.Equal(t, 2, para.StartedRound)
+	assert.Equal(t, sourceID, para.SourceCombatantID)
+	assert.Equal(t, "end_of_turn", para.ExpiresOn)
+	assert.Equal(t, "hold-person", para.SourceSpell)
+
+	// The newly added manual condition is indefinite (no duration/source).
+	prone, ok := GetCondition(captured, "prone")
+	require.True(t, ok)
+	assert.Equal(t, 0, prone.DurationRounds)
+	assert.Empty(t, prone.SourceCombatantID)
+}
+
+func TestWorkspaceHandler_UpdateCombatantConditions_DedupesAndDropsRemoved(t *testing.T) {
+	combatantID := uuid.New()
+	existing := json.RawMessage(`[{"condition":"poisoned","duration_rounds":3}]`)
+
+	var captured json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: existing}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			captured = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	// poisoned dropped from the set; blinded sent twice (different casing).
+	body := `{"conditions":["Blinded","blinded",""]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+uuid.New().String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	conds, err := parseConditions(captured)
+	require.NoError(t, err)
+	require.Len(t, conds, 1, "blank dropped, duplicate collapsed, removed condition gone")
+	assert.Equal(t, "blinded", conds[0].Condition)
+	assert.False(t, HasCondition(captured, "poisoned"))
+}
+
+func TestWorkspaceHandler_UpdateCombatantConditions_RecoversFromLegacyStringShape(t *testing.T) {
+	combatantID := uuid.New()
+	// A combatant whose conditions were written by the old (buggy) bare-string path.
+	legacy := json.RawMessage(`["paralyzed"]`)
+
+	var captured json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: legacy}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			captured = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"conditions":["paralyzed"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+uuid.New().String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Legacy unparseable shape is rewritten into a clean object the engine reads.
+	conds, err := parseConditions(captured)
+	require.NoError(t, err)
+	require.Len(t, conds, 1)
+	assert.Equal(t, "paralyzed", conds[0].Condition)
+}
+
 func TestWorkspaceHandler_GetWorkspace_ListEncountersError(t *testing.T) {
 	campaignID := uuid.New()
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -377,7 +378,7 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 		return
 	}
 
-	conditionsJSON, err := json.Marshal(req.Conditions)
+	conditionsJSON, err := reconcileConditionNames(existing.Conditions, req.Conditions)
 	if err != nil {
 		http.Error(w, "failed to serialize conditions", http.StatusInternalServerError)
 		return
@@ -390,6 +391,48 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, toWorkspaceCombatantResponse(c))
+}
+
+// reconcileConditionNames maps a DM-supplied list of condition NAMES (what the
+// Combat Manager's add/remove buttons send) to the canonical []CombatCondition
+// object shape the engine's parseConditions reads. Without this the endpoint
+// persisted a bare string array (`["paralyzed"]`) that parseConditions cannot
+// unmarshal, so a button-added condition rendered but its mechanical effects
+// (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) silently no-op'd
+// (ISSUE-015 write half).
+//
+// Names already present on the combatant keep their existing object, so a
+// spell- or engine-applied condition's duration/source/timing survives a
+// re-send of the full set; new names become indefinite manual conditions
+// (`{condition: name}`), matching DM-toggle semantics. Names are canonicalized
+// to the engine's lowercase keys, blanks skipped, and de-duplicated first-seen.
+// An unparseable existing value (e.g. a legacy bare-string write) is treated as
+// empty so the request rewrites it into the clean object shape.
+func reconcileConditionNames(existing json.RawMessage, names []string) (json.RawMessage, error) {
+	prior, err := parseConditions(existing)
+	if err != nil {
+		prior = nil
+	}
+	byName := make(map[string]CombatCondition, len(prior))
+	for _, c := range prior {
+		byName[c.Condition] = c
+	}
+
+	out := make([]CombatCondition, 0, len(names))
+	seen := make(map[string]bool, len(names))
+	for _, raw := range names {
+		name := strings.ToLower(strings.TrimSpace(raw))
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		if existingCond, ok := byName[name]; ok {
+			out = append(out, existingCond)
+			continue
+		}
+		out = append(out, CombatCondition{Condition: name})
+	}
+	return json.Marshal(out)
 }
 
 // UpdateCombatantPosition handles PATCH /api/combat/{encounterID}/combatants/{combatantID}/position.

@@ -109,6 +109,19 @@ export function conditionName(c) {
 }
 
 /**
+ * Canonical engine key for a condition entry (string or object): the lowercase
+ * condition name the combat engine matches on. The dashboard works in these
+ * keys so add/remove/dedup compare consistently and the PATCH body carries the
+ * names the server reconciles into the engine's object shape — without which a
+ * button-added condition rendered but never fired its mechanical effects
+ * (ISSUE-015 write half).
+ */
+export function conditionKey(c) {
+  const raw = typeof c === 'string' ? c : (c && c.condition) || '';
+  return raw.toLowerCase();
+}
+
+/**
  * Returns the opacity for a combatant token on the DM map.
  * Invisible combatants are rendered with reduced opacity.
  */

@@ -22,6 +22,7 @@
     addCondition,
     removeCondition,
     conditionName,
+    conditionKey,
     colToIndex,
     indexToCol,
     tokenOpacity,
@@ -869,8 +870,14 @@
     }
   }
 
+  // Work in the engine's canonical lowercase condition keys: the stored
+  // conditions are objects ({condition:"paralyzed",...}); mapping them to keys
+  // lets addCondition/removeCondition/dedup compare consistently and makes the
+  // PATCH body a clean name array the server reconciles into the object shape
+  // (ISSUE-015 write half).
   function currentConditions() {
-    return Array.isArray(selectedCombatant?.conditions) ? selectedCombatant.conditions : [];
+    const raw = Array.isArray(selectedCombatant?.conditions) ? selectedCombatant.conditions : [];
+    return raw.map(conditionKey).filter(Boolean);
   }
 
   async function saveConditions(newConditions) {
@@ -881,7 +888,7 @@
   async function handleAddCondition() {
     if (!selectedCombatant || !conditionToAdd) return;
     try {
-      await saveConditions(addCondition(currentConditions(), conditionToAdd));
+      await saveConditions(addCondition(currentConditions(), conditionKey(conditionToAdd)));
       conditionToAdd = '';
     } catch (e) {
       error = e.message;
