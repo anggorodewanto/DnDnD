@@ -186,6 +186,22 @@ func (a *RefDataAdapter) ListEquipment(ctx context.Context, campaignID string) (
 			ACBase:    int(ar.AcBase),
 		})
 	}
+	// Append SRD ammunition + adventuring gear from the canonical catalog
+	// (ISSUE-017 phase 4) so /api/equipment lists the full item set, not just
+	// weapons + armor. These have no per-campaign/homebrew variant, so the
+	// in-process catalog is their authoritative source; weapons/armor stay
+	// DB-sourced above for their stats and any homebrew rows.
+	for _, e := range refdata.ItemCatalog() {
+		if e.Category != "ammunition" && e.Category != "gear" {
+			continue
+		}
+		items = append(items, EquipmentItem{
+			ID:              e.ID,
+			Name:            e.Name,
+			Category:        e.Category,
+			DefaultQuantity: e.DefaultQuantity,
+		})
+	}
 	return items, nil
 }
 

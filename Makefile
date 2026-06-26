@@ -1,10 +1,10 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check backgrounds-check local-env local-up local-down local-logs local-reset tunnel-up tunnel-down tunnel-status
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check backgrounds-check items-catalog-check local-env local-up local-down local-logs local-reset tunnel-up tunnel-down tunnel-status
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
 # all of which are structurally untestable or tested via integration. See
 # docs/testing.md for the rationale.
-COVER_EXCLUDE := (internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/dashboard_apis\.go|cmd/dndnd/situation_adapter\.go|cmd/dndnd/notifier\.go|cmd/dndnd/lifecycle_adapters\.go|cmd/playtest-player/live_session\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|scripts/sqlc_drift_check/main\.go|scripts/gen_backgrounds/main\.go|internal/testutil/.*\.go)
+COVER_EXCLUDE := (internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/dashboard_apis\.go|cmd/dndnd/situation_adapter\.go|cmd/dndnd/notifier\.go|cmd/dndnd/lifecycle_adapters\.go|cmd/playtest-player/live_session\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|scripts/sqlc_drift_check/main\.go|scripts/gen_backgrounds/main\.go|scripts/gen_items_catalog/main\.go|internal/testutil/.*\.go)
 COVER_MIN_OVERALL ?= 90
 COVER_MIN_PER_PACKAGE ?= 85
 
@@ -81,6 +81,14 @@ sqlc-check:
 backgrounds-check:
 	go generate ./internal/portal/...
 	git diff --exit-code -- internal/portal/backgrounds_gen.go
+
+# Regenerate portal/svelte/src/lib/items-catalog.json from the canonical Go item
+# catalog (internal/refdata.ItemCatalog, the SSOT) and fail if the committed
+# JSON drifts. Guards against the hand-maintained-id drift that caused the
+# crossbow-ammo and item slug/type/quantity bugs (ISSUE-017).
+items-catalog-check:
+	go generate ./internal/portal/...
+	git diff --exit-code -- portal/svelte/src/lib/items-catalog.json
 
 # Phase 120: end-to-end test target. Runs only the scenario tests built
 # under the `e2e` build tag, against a freshly-spun testcontainers Postgres.

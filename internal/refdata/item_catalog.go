@@ -14,11 +14,11 @@ package refdata
 // display name lives in exactly one place. Ammunition and gear, which had no
 // home before, are authored here.
 type ItemCatalogEntry struct {
-	ID              string
-	Name            string
-	Category        string // "weapon" | "armor" | "ammunition" | "gear"
-	DefaultQuantity int
-	Stackable       bool
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Category        string `json:"category"` // "weapon" | "armor" | "ammunition" | "gear"
+	DefaultQuantity int    `json:"default_quantity"`
+	Stackable       bool   `json:"stackable"`
 }
 
 // ammoCatalog holds the SRD ammunition ids. DefaultQuantity is the size of a

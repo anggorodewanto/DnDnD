@@ -1,0 +1,716 @@
+[
+  {
+    "id": "club",
+    "name": "Club",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "dagger",
+    "name": "Dagger",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "greatclub",
+    "name": "Greatclub",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "handaxe",
+    "name": "Handaxe",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "javelin",
+    "name": "Javelin",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "light-hammer",
+    "name": "Light hammer",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "mace",
+    "name": "Mace",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "quarterstaff",
+    "name": "Quarterstaff",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "sickle",
+    "name": "Sickle",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "spear",
+    "name": "Spear",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "light-crossbow",
+    "name": "Light crossbow",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "dart",
+    "name": "Dart",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "shortbow",
+    "name": "Shortbow",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "sling",
+    "name": "Sling",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "battleaxe",
+    "name": "Battleaxe",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "flail",
+    "name": "Flail",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "glaive",
+    "name": "Glaive",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "greataxe",
+    "name": "Greataxe",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "greatsword",
+    "name": "Greatsword",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "halberd",
+    "name": "Halberd",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "lance",
+    "name": "Lance",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "longsword",
+    "name": "Longsword",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "maul",
+    "name": "Maul",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "morningstar",
+    "name": "Morningstar",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "pike",
+    "name": "Pike",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "rapier",
+    "name": "Rapier",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "scimitar",
+    "name": "Scimitar",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "shortsword",
+    "name": "Shortsword",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "trident",
+    "name": "Trident",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "war-pick",
+    "name": "War pick",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "warhammer",
+    "name": "Warhammer",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "whip",
+    "name": "Whip",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "blowgun",
+    "name": "Blowgun",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "hand-crossbow",
+    "name": "Hand crossbow",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "heavy-crossbow",
+    "name": "Heavy crossbow",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "longbow",
+    "name": "Longbow",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "net",
+    "name": "Net",
+    "category": "weapon",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "padded",
+    "name": "Padded",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "leather",
+    "name": "Leather",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "studded-leather",
+    "name": "Studded leather",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "hide",
+    "name": "Hide",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "chain-shirt",
+    "name": "Chain shirt",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "scale-mail",
+    "name": "Scale mail",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "breastplate",
+    "name": "Breastplate",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "half-plate",
+    "name": "Half plate",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "ring-mail",
+    "name": "Ring mail",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "chain-mail",
+    "name": "Chain mail",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "splint",
+    "name": "Splint",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "plate",
+    "name": "Plate",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "shield",
+    "name": "Shield",
+    "category": "armor",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "crossbow-bolt",
+    "name": "Crossbow Bolts",
+    "category": "ammunition",
+    "default_quantity": 20,
+    "stackable": true
+  },
+  {
+    "id": "arrow",
+    "name": "Arrows",
+    "category": "ammunition",
+    "default_quantity": 20,
+    "stackable": true
+  },
+  {
+    "id": "sling-bullet",
+    "name": "Sling Bullets",
+    "category": "ammunition",
+    "default_quantity": 20,
+    "stackable": true
+  },
+  {
+    "id": "blowgun-needle",
+    "name": "Blowgun Needles",
+    "category": "ammunition",
+    "default_quantity": 50,
+    "stackable": true
+  },
+  {
+    "id": "explorers-pack",
+    "name": "Explorer's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "diplomats-pack",
+    "name": "Diplomat's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "entertainers-pack",
+    "name": "Entertainer's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "priests-pack",
+    "name": "Priest's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "dungeoneers-pack",
+    "name": "Dungeoneer's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "burglars-pack",
+    "name": "Burglar's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "scholars-pack",
+    "name": "Scholar's Pack",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "druidic-focus",
+    "name": "Druidic Focus",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "arcane-focus",
+    "name": "Arcane Focus",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "component-pouch",
+    "name": "Component Pouch",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "spellbook",
+    "name": "Spellbook",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "holy-symbol",
+    "name": "Holy Symbol",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "thieves-tools",
+    "name": "Thieves' Tools",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "disguise-kit",
+    "name": "Disguise Kit",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "con-tools",
+    "name": "Con Tools",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "artisans-tools",
+    "name": "Artisan's Tools",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "herbalism-kit",
+    "name": "Herbalism Kit",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "dice-set",
+    "name": "Set of Dice",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "musical-instrument",
+    "name": "Musical Instrument",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "hunting-trap",
+    "name": "Hunting Trap",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "vestments",
+    "name": "Vestments",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "common-clothes",
+    "name": "Common Clothes",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "fine-clothes",
+    "name": "Fine Clothes",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "dark-common-clothes",
+    "name": "Dark Common Clothes",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "travelers-clothes",
+    "name": "Traveler's Clothes",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "costume",
+    "name": "Costume",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "prayer-book",
+    "name": "Prayer Book",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "scroll-case",
+    "name": "Scroll Case",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "ink-bottle",
+    "name": "Bottle of Ink",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "quill",
+    "name": "Quill",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "letter",
+    "name": "Letter",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "letter-of-introduction",
+    "name": "Letter of Introduction",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "scroll-of-pedigree",
+    "name": "Scroll of Pedigree",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "map-of-city",
+    "name": "Map of your City",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "incense",
+    "name": "Incense",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": true
+  },
+  {
+    "id": "crowbar",
+    "name": "Crowbar",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "shovel",
+    "name": "Shovel",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "iron-pot",
+    "name": "Iron Pot",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "winter-blanket",
+    "name": "Winter Blanket",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "signet-ring",
+    "name": "Signet Ring",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "staff",
+    "name": "Staff",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "trophy",
+    "name": "Trophy",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "small-knife",
+    "name": "Small Knife",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "belaying-pin",
+    "name": "Belaying Pin",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "silk-rope-50ft",
+    "name": "Silk Rope (50 ft)",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "insignia-of-rank",
+    "name": "Insignia of Rank",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "pet-mouse",
+    "name": "Pet Mouse",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  },
+  {
+    "id": "token",
+    "name": "Token of Remembrance",
+    "category": "gear",
+    "default_quantity": 1,
+    "stackable": false
+  }
+]

@@ -140,7 +140,9 @@ func TestRefDataAdapter_ListEquipment(t *testing.T) {
 
 	items, err := adapter.ListEquipment(context.Background(), "")
 	require.NoError(t, err)
-	assert.Len(t, items, 2)
+	// Weapons and armor come first (DB-sourced, with stats), then the catalog's
+	// ammunition + gear are appended (ISSUE-017 phase 4).
+	require.GreaterOrEqual(t, len(items), 2)
 	assert.Equal(t, "longsword", items[0].ID)
 	assert.Equal(t, "weapon", items[0].Category)
 	assert.Equal(t, "1d8", items[0].Damage)
@@ -149,6 +151,19 @@ func TestRefDataAdapter_ListEquipment(t *testing.T) {
 	assert.Equal(t, "chain-mail", items[1].ID)
 	assert.Equal(t, "armor", items[1].Category)
 	assert.Equal(t, 16, items[1].ACBase)
+
+	byID := map[string]portal.EquipmentItem{}
+	byCategory := map[string]int{}
+	for _, it := range items {
+		byID[it.ID] = it
+		byCategory[it.Category]++
+	}
+	assert.Positive(t, byCategory["ammunition"], "ammunition should be listed")
+	assert.Positive(t, byCategory["gear"], "gear should be listed")
+	// Ammo carries its catalog default bundle quantity.
+	assert.Equal(t, "ammunition", byID["crossbow-bolt"].Category)
+	assert.Equal(t, 20, byID["crossbow-bolt"].DefaultQuantity)
+	assert.Equal(t, "Explorer's Pack", byID["explorers-pack"].Name)
 }
 
 func TestRefDataAdapter_ListEquipment_WeaponsError(t *testing.T) {

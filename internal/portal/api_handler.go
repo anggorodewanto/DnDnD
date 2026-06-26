@@ -53,6 +53,9 @@ type EquipmentItem struct {
 	Mastery    string   `json:"mastery,omitempty"`
 	ArmorType  string   `json:"armor_type,omitempty"`
 	ACBase     int      `json:"ac_base,omitempty"`
+	// DefaultQuantity is the catalog's default bundle size, set for ammunition
+	// and adventuring gear (ISSUE-017 phase 4); 0/omitted for weapons & armor.
+	DefaultQuantity int `json:"default_quantity,omitempty"`
 }
 
 // SpellInfo is the API response for a spell.

@@ -63,6 +63,18 @@ describe('weaponOptionIds', () => {
     expect(opts).toContain('light-crossbow');
     expect(opts).toContain('dagger');
   });
+
+  // ISSUE-017 phase 4: the static weapon/armor sets are derived from the
+  // generated items-catalog.json, not a hand-typed list. An SRD id that is NOT
+  // in the async catalog fixture above must still classify from the generated
+  // catalog with an empty byId — proving the codegen wiring drives it.
+  it('classifies an SRD weapon/armor id from the generated catalog (empty byId)', () => {
+    expect(weaponOptionIds(['greatsword'], new Map())).toEqual(['greatsword']);
+    expect(armorOptionIds(['plate'], new Map())).toEqual(['plate']);
+    // ammunition is neither weapon nor armor.
+    expect(weaponOptionIds(['arrow'], new Map())).toEqual([]);
+    expect(armorOptionIds(['arrow'], new Map())).toEqual([]);
+  });
 });
 
 describe('reconcileEquipPick', () => {

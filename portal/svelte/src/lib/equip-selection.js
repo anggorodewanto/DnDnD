@@ -14,30 +14,22 @@
 // The fix: recognise an item as equippable from a static SRD id set as a
 // fallback, so a pick that is genuinely in the selected-equipment list survives
 // the pre-catalog window; and only clear a pick when its id is truly absent
-// from the selected equipment (not merely unresolved). Mirrors the Go
-// knownWeapons / knownArmor maps in builder_store_adapter.go.
+// from the selected equipment (not merely unresolved).
+//
+// ISSUE-017 phase 4: those static id sets are no longer hand-maintained. They
+// are derived from items-catalog.json, GENERATED from the canonical Go item
+// catalog (internal/refdata.ItemCatalog via scripts/gen_items_catalog), so the
+// Go backend and this classifier share ONE source — no parallel SRD list to
+// drift. `shield` is category 'armor' in the catalog, so it lands in the armor
+// set as the builder expects (it occupies the off-hand at persist time but is
+// surfaced under Worn Armor).
+import itemsCatalog from './items-catalog.json';
 
-// SRD weapon ids (mirror of knownWeapons in internal/portal/builder_store_adapter.go).
-const KNOWN_WEAPON_IDS = new Set([
-  'club', 'dagger', 'greatclub', 'handaxe', 'javelin',
-  'light-hammer', 'mace', 'quarterstaff', 'sickle', 'spear',
-  'light-crossbow', 'dart', 'shortbow', 'sling',
-  'battleaxe', 'flail', 'glaive', 'greataxe', 'greatsword',
-  'halberd', 'lance', 'longsword', 'maul', 'morningstar',
-  'pike', 'rapier', 'scimitar', 'shortsword', 'trident',
-  'war-pick', 'warhammer', 'whip', 'blowgun', 'hand-crossbow',
-  'heavy-crossbow', 'longbow', 'net',
-]);
+const idsForCategory = (category) =>
+  new Set(itemsCatalog.filter((it) => it.category === category).map((it) => it.id));
 
-// SRD armor ids (mirror of knownArmor in internal/portal/builder_store_adapter.go).
-// `shield` lives in the armor slot's option list (it occupies the off-hand at
-// persist time, but the builder surfaces it under Worn Armor like the shield).
-const KNOWN_ARMOR_IDS = new Set([
-  'padded', 'leather', 'studded-leather',
-  'hide', 'chain-shirt', 'scale-mail', 'breastplate', 'half-plate',
-  'ring-mail', 'chain-mail', 'splint', 'plate',
-  'shield',
-]);
+const KNOWN_WEAPON_IDS = idsForCategory('weapon');
+const KNOWN_ARMOR_IDS = idsForCategory('armor');
 
 function isArmorId(id, byId) {
   if (KNOWN_ARMOR_IDS.has(id)) return true;
