@@ -9,6 +9,7 @@
   // UUID preselected, so the DM can send a DM (and see history) without
   // leaving the party page.
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
+  import InventoryEditorPanel from './InventoryEditorPanel.svelte';
 
   let { campaignId } = $props();
 
@@ -17,6 +18,7 @@
   let characters = $state([]);
   let partyLanguages = $state([]);
   let messagingCharacterId = $state(null);
+  let inventoryCharacterId = $state(null);
 
   async function load() {
     if (!campaignId) {
@@ -115,6 +117,23 @@
                 playerCharacterId={c.character_id}
                 playerName={c.name}
                 hidePicker={true}
+              />
+            </div>
+          {/if}
+          <button
+            class="msg-toggle"
+            data-testid="character-inventory-toggle-{c.character_id}"
+            onclick={() => (inventoryCharacterId = inventoryCharacterId === c.character_id ? null : c.character_id)}
+          >
+            {inventoryCharacterId === c.character_id ? 'Close inventory' : 'Manage inventory'}
+          </button>
+          {#if inventoryCharacterId === c.character_id}
+            <div class="msg-embed">
+              <InventoryEditorPanel
+                {campaignId}
+                characterId={c.character_id}
+                characterName={c.name}
+                party={characters.map((p) => ({ character_id: p.character_id, name: p.name }))}
               />
             </div>
           {/if}

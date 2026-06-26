@@ -88,6 +88,7 @@ func RegisterExplorationRoutes(r chi.Router, h ExplorationHandler, authMiddlewar
 func RegisterInventoryAPI(r chi.Router, invHandler *inventory.APIHandler, authMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/inventory", func(r chi.Router) {
 		r.Use(authMiddleware)
+		r.Get("/", invHandler.HandleGetInventory)
 		r.Post("/add", invHandler.HandleAddItem)
 		r.Post("/remove", invHandler.HandleRemoveItem)
 		r.Post("/transfer", invHandler.HandleTransferItem)

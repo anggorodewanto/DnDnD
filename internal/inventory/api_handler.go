@@ -155,6 +155,52 @@ type IdentifyItemRequest struct {
 	Identified  bool   `json:"identified"`
 }
 
+// GetInventoryResponse is the response body for GET /api/inventory. It gives
+// the DM dashboard a character's current inventory and gold so the inventory
+// editor can render before any mutation (the mutating endpoints only return a
+// status). Items is always a non-nil slice so the UI can iterate unguarded.
+type GetInventoryResponse struct {
+	CharacterID string                    `json:"character_id"`
+	Name        string                    `json:"name"`
+	Gold        int                       `json:"gold"`
+	Items       []character.InventoryItem `json:"items"`
+}
+
+// HandleGetInventory handles GET /api/inventory?character_id=<uuid>. Read-only;
+// guarded by the same DM-only middleware as the mutating endpoints.
+func (h *APIHandler) HandleGetInventory(w http.ResponseWriter, r *http.Request) {
+	idParam := r.URL.Query().Get("character_id")
+	if idParam == "" {
+		http.Error(w, "character_id required", http.StatusBadRequest)
+		return
+	}
+
+	charID, err := uuid.Parse(idParam)
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	char, err := h.store.GetCharacter(r.Context(), charID)
+	if err != nil {
+		http.Error(w, "character not found", http.StatusNotFound)
+		return
+	}
+
+	items := parseInventoryItems(char)
+	if items == nil {
+		items = []character.InventoryItem{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(GetInventoryResponse{
+		CharacterID: charID.String(),
+		Name:        char.Name,
+		Gold:        int(char.Gold),
+		Items:       items,
+	})
+}
+
 // HandleIdentifyItem handles POST /api/inventory/identify.
 // DM can set identified = true (reveal) or false (hide) on a magic item.
 func (h *APIHandler) HandleIdentifyItem(w http.ResponseWriter, r *http.Request) {

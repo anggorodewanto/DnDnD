@@ -686,6 +686,106 @@ export async function postLootAnnouncement(campaignId, encounterId) {
   return res.json();
 }
 
+// --- DM Inventory API ---
+//
+// DM-only endpoints (guarded server-side by dmAuthMw) for adjusting a player
+// character's inventory and gold from the Party page. The mutating calls return
+// only { status: "ok" }; reload via getCharacterInventory to refresh the view.
+
+/**
+ * Fetch a character's current inventory and gold.
+ * @param {string} characterId - Character UUID.
+ * @returns {Promise<{character_id: string, name: string, gold: number, items: object[]}>}
+ */
+export async function getCharacterInventory(characterId) {
+  const res = await apiFetch(`/api/inventory?character_id=${encodeURIComponent(characterId)}`);
+  return res.json();
+}
+
+/**
+ * Add an item to a character's inventory (stacks if the item id already exists).
+ * @param {string} characterId - Character UUID.
+ * @param {object} item - InventoryItem payload ({ item_id, name, quantity, type, ... }).
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function addInventoryItem(characterId, item) {
+  const res = await apiFetch('/api/inventory/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: characterId, item }),
+  });
+  return res.json();
+}
+
+/**
+ * Remove a quantity of an item from a character's inventory.
+ * @param {string} characterId - Character UUID.
+ * @param {string} itemId - Item id to decrement.
+ * @param {number} quantity - How many to remove.
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function removeInventoryItem(characterId, itemId, quantity) {
+  const res = await apiFetch('/api/inventory/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity }),
+  });
+  return res.json();
+}
+
+/**
+ * Set a character's gold to an absolute value (not additive).
+ * @param {string} characterId - Character UUID.
+ * @param {number} gold - New gold total.
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function setCharacterGold(characterId, gold) {
+  const res = await apiFetch('/api/inventory/gold', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: characterId, gold }),
+  });
+  return res.json();
+}
+
+/**
+ * Reveal or hide a magic item's identification for a character.
+ * @param {string} characterId - Character UUID.
+ * @param {string} itemId - Item id to toggle.
+ * @param {boolean} identified - true reveals, false hides.
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function setInventoryItemIdentified(characterId, itemId, identified) {
+  const res = await apiFetch('/api/inventory/identify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: characterId, item_id: itemId, identified }),
+  });
+  return res.json();
+}
+
+/**
+ * Transfer a quantity of an item from one character to another.
+ * @param {string} fromCharacterId - Source character UUID.
+ * @param {string} toCharacterId - Target character UUID.
+ * @param {string} itemId - Item id to move.
+ * @param {number} quantity - How many to transfer.
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function transferInventoryItem(fromCharacterId, toCharacterId, itemId, quantity) {
+  const res = await apiFetch('/api/inventory/transfer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from_character_id: fromCharacterId,
+      to_character_id: toCharacterId,
+      item_id: itemId,
+      quantity,
+    }),
+  });
+  return res.json();
+}
+
 // --- Combat Workspace API ---
 
 /**

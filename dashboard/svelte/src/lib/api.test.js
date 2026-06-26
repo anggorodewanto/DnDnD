@@ -26,6 +26,12 @@ import {
   setLootGold,
   postLootAnnouncement,
   listEligibleLootEncounters,
+  getCharacterInventory,
+  addInventoryItem,
+  removeInventoryItem,
+  setCharacterGold,
+  setInventoryItemIdentified,
+  transferInventoryItem,
   applyLevelUp,
   getCurrentUser,
   listCampaigns,
@@ -1108,5 +1114,97 @@ describe('updateMap', () => {
     expect(url).toBe('/api/maps/map-uuid?campaign_id=campaign-uuid');
     expect(options.method).toBe('PUT');
     expect(JSON.parse(options.body)).toEqual({ name: 'Cave' });
+  });
+});
+
+describe('DM Inventory API', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('getCharacterInventory fetches by character_id', async () => {
+    const mock = { character_id: 'char-1', name: 'Aria', gold: 120, items: [] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mock),
+    });
+
+    const result = await getCharacterInventory('char-1');
+    expect(result).toEqual(mock);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory?character_id=char-1');
+    expect(options).toBeUndefined();
+  });
+
+  it('addInventoryItem posts character_id + item', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    const item = { item_id: 'rope', name: 'Rope', quantity: 1, type: 'gear' };
+    const result = await addInventoryItem('char-1', item);
+    expect(result).toEqual({ status: 'ok' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory/add');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ character_id: 'char-1', item });
+  });
+
+  it('removeInventoryItem posts character_id, item_id, quantity', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    await removeInventoryItem('char-1', 'rope', 2);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory/remove');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ character_id: 'char-1', item_id: 'rope', quantity: 2 });
+  });
+
+  it('setCharacterGold posts character_id + gold', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    await setCharacterGold('char-1', 50);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory/gold');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ character_id: 'char-1', gold: 50 });
+  });
+
+  it('setInventoryItemIdentified posts character_id, item_id, identified', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    await setInventoryItemIdentified('char-1', 'cloak', true);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory/identify');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ character_id: 'char-1', item_id: 'cloak', identified: true });
+  });
+
+  it('transferInventoryItem posts from/to/item_id/quantity', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    await transferInventoryItem('char-1', 'char-2', 'rope', 3);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/inventory/transfer');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({
+      from_character_id: 'char-1',
+      to_character_id: 'char-2',
+      item_id: 'rope',
+      quantity: 3,
+    });
   });
 });
