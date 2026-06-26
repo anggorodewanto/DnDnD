@@ -28,6 +28,7 @@ type stubStore struct {
 	magicItems    []refdata.MagicItem
 	gear          []itempicker.GearItem
 	consumables   []itempicker.ConsumableItem
+	ammunition    []itempicker.AmmunitionItem
 	combatants    []refdata.Combatant
 	characters    map[uuid.UUID]refdata.Character
 	weaponErr     error
@@ -35,6 +36,7 @@ type stubStore struct {
 	magicErr      error
 	gearErr       error
 	consumableErr error
+	ammunitionErr error
 	combatantErr  error
 	characterErr  error
 }
@@ -57,6 +59,10 @@ func (s *stubStore) ListGear(ctx context.Context) ([]itempicker.GearItem, error)
 
 func (s *stubStore) ListConsumables(ctx context.Context) ([]itempicker.ConsumableItem, error) {
 	return s.consumables, s.consumableErr
+}
+
+func (s *stubStore) ListAmmunition(ctx context.Context) ([]itempicker.AmmunitionItem, error) {
+	return s.ammunition, s.ammunitionErr
 }
 
 func (s *stubStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
@@ -722,6 +728,57 @@ func TestHandleSearch_ReturnsGear(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Equal(t, "rope-50ft", results[0].ID)
 	assert.Equal(t, "gear", results[0].Type)
+}
+
+func TestHandleSearch_ReturnsAmmunition(t *testing.T) {
+	store := &stubStore{
+		ammunition: []itempicker.AmmunitionItem{
+			{ID: "crossbow-bolt", Name: "Crossbow Bolts"},
+			{ID: "arrow", Name: "Arrows"},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=bolt", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "crossbow-bolt", results[0].ID)
+	assert.Equal(t, "ammunition", results[0].Type)
+}
+
+func TestHandleSearch_AmmunitionCategoryFilter(t *testing.T) {
+	store := &stubStore{
+		weapons:    []refdata.Weapon{{ID: "light-crossbow", Name: "Light Crossbow"}},
+		ammunition: []itempicker.AmmunitionItem{{ID: "crossbow-bolt", Name: "Crossbow Bolts"}},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?category=ammunition", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "ammunition", results[0].Type)
+	assert.Equal(t, "crossbow-bolt", results[0].ID)
+}
+
+func TestHandleSearch_AmmunitionError(t *testing.T) {
+	store := &stubStore{ammunitionErr: errors.New("boom")}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?category=ammunition", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
 func TestHandleSearch_ReturnsConsumables(t *testing.T) {

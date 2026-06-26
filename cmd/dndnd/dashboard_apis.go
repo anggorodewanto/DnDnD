@@ -118,10 +118,13 @@ func (s *itemPickerStore) ListMagicItems(ctx context.Context) ([]refdata.MagicIt
 	return s.q.ListMagicItems(ctx)
 }
 func (s *itemPickerStore) ListGear(_ context.Context) ([]itempicker.GearItem, error) {
-	return itempicker.StaticGear(), nil
+	return itempicker.MergedGear(), nil
 }
 func (s *itemPickerStore) ListConsumables(_ context.Context) ([]itempicker.ConsumableItem, error) {
 	return itempicker.StaticConsumables(), nil
+}
+func (s *itemPickerStore) ListAmmunition(_ context.Context) ([]itempicker.AmmunitionItem, error) {
+	return itempicker.CatalogAmmunition(), nil
 }
 func (s *itemPickerStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
 	return s.q.ListCombatantsByEncounterID(ctx, encounterID)

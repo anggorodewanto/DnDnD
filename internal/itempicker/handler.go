@@ -20,6 +20,7 @@ type Store interface {
 	ListMagicItems(ctx context.Context) ([]refdata.MagicItem, error)
 	ListGear(ctx context.Context) ([]GearItem, error)
 	ListConsumables(ctx context.Context) ([]ConsumableItem, error)
+	ListAmmunition(ctx context.Context) ([]AmmunitionItem, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 }
@@ -34,6 +35,16 @@ type GearItem struct {
 
 // ConsumableItem represents a consumable item (potions, scrolls, etc.).
 type ConsumableItem struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	CostGP      int    `json:"cost_gp"`
+}
+
+// AmmunitionItem represents a stack of ammunition (arrows, bolts, etc.).
+// Sourced from the canonical item catalog so its ID matches what characters
+// already store, letting DM "add" calls stack onto an existing bundle.
+type AmmunitionItem struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -187,6 +198,26 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 				Type:        "gear",
 				Description: g.Description,
 				CostGP:      g.CostGP,
+			})
+		}
+	}
+
+	if category == "" || category == "ammunition" {
+		ammo, err := h.store.ListAmmunition(r.Context())
+		if err != nil {
+			jsonError(w, "failed to list ammunition", http.StatusInternalServerError)
+			return
+		}
+		for _, am := range ammo {
+			if q != "" && !strings.Contains(strings.ToLower(am.Name), q) {
+				continue
+			}
+			results = append(results, SearchResult{
+				ID:          am.ID,
+				Name:        am.Name,
+				Type:        "ammunition",
+				Description: am.Description,
+				CostGP:      am.CostGP,
 			})
 		}
 	}

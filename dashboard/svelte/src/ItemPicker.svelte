@@ -153,6 +153,9 @@
         <option value="weapons">Weapons</option>
         <option value="armor">Armor</option>
         <option value="magic_items">Magic Items</option>
+        <option value="ammunition">Ammunition</option>
+        <option value="gear">Gear</option>
+        <option value="consumables">Consumables</option>
       </select>
     </div>
 
