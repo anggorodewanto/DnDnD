@@ -872,6 +872,23 @@ export async function advanceTurn(encounterId) {
 }
 
 /**
+ * End the active combat for an encounter (POST /api/combat/{id}/end).
+ *
+ * Sets the encounter to completed, breaks lingering concentration, pauses
+ * timers, and posts the encounter end to Discord. Rejects if the encounter
+ * is not active (HTTP 409).
+ *
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} End-of-combat summary (encounter, casualties, rounds…).
+ */
+export async function endCombat(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/end`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
  * Get pending actions for an encounter.
  * @param {string} encounterId - Encounter UUID.
  * @returns {Promise<object[]>} Array of pending actions.

@@ -12,6 +12,7 @@
     overrideCombatantInitiative,
     overrideCharacterSpellSlots,
     updateEncounterDisplayName,
+    endCombat,
     combatMapUrl,
   } from './lib/api.js';
   import {
@@ -49,6 +50,11 @@
   let encounters = $state([]);
   let loading = $state(true);
   let error = $state(null);
+
+  // End-combat flow. Uses an inline two-step confirm (not a native
+  // window.confirm) so the DM can't end a fight on a stray click.
+  let endingCombat = $state(false);
+  let confirmingEndCombat = $state(false);
 
   // Tab state
   let activeEncounterIndex = $state(0);
@@ -192,6 +198,24 @@
       await loadWorkspace();
     } catch (e) {
       dmOverrideMessage = 'Undo failed: ' + e.message;
+    }
+  }
+
+  // End the active combat: marks the encounter completed, breaks lingering
+  // concentration, pauses timers, and posts the wrap-up to Discord. Reloads
+  // the workspace so the ended encounter drops out of the active list.
+  async function handleEndCombat() {
+    if (!activeEncounter || endingCombat) return;
+    endingCombat = true;
+    try {
+      await endCombat(activeEncounter.id);
+      confirmingEndCombat = false;
+      error = null;
+      await loadWorkspace();
+    } catch (e) {
+      error = e.message;
+    } finally {
+      endingCombat = false;
     }
   }
 
@@ -956,6 +980,36 @@
         onCommit={handleDisplayNameCommit}
         label="Player-facing Name"
       />
+      <div class="end-combat-controls" data-testid="end-combat-controls">
+        {#if confirmingEndCombat}
+          <span class="end-combat-prompt">End this combat?</span>
+          <button
+            class="end-combat-btn end-combat-confirm"
+            onclick={handleEndCombat}
+            disabled={endingCombat}
+            data-testid="end-combat-confirm-btn"
+          >
+            {endingCombat ? 'Ending…' : 'Confirm End'}
+          </button>
+          <button
+            class="end-combat-btn end-combat-cancel"
+            onclick={() => (confirmingEndCombat = false)}
+            disabled={endingCombat}
+            data-testid="end-combat-cancel-btn"
+          >
+            Cancel
+          </button>
+        {:else}
+          <button
+            class="end-combat-btn"
+            onclick={() => (confirmingEndCombat = true)}
+            title="End this combat: marks the encounter completed, drops concentration, and posts the wrap-up to Discord"
+            data-testid="end-combat-btn"
+          >
+            End Combat
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -1538,6 +1592,59 @@
     background: #fbbf24;
     color: #1a1a2e;
     border-color: #fbbf24;
+  }
+
+  .encounter-header {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .end-combat-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .end-combat-prompt {
+    color: #fbbf24;
+    font-size: 0.85rem;
+  }
+
+  .end-combat-btn {
+    padding: 0.3rem 0.8rem;
+    background: transparent;
+    color: #e94560;
+    border: 1px solid #e94560;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .end-combat-btn:hover:not(:disabled) {
+    background: #e94560;
+    color: #fff;
+  }
+
+  .end-combat-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .end-combat-confirm {
+    background: #e94560;
+    color: #fff;
+  }
+
+  .end-combat-cancel {
+    color: #e0e0e0;
+    border-color: #0f3460;
+  }
+
+  .end-combat-cancel:hover:not(:disabled) {
+    background: #0f3460;
+    color: #fff;
   }
 
   .measure-result {

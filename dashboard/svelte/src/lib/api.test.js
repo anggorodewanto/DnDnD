@@ -13,6 +13,7 @@ import {
   overrideCharacterSpellSlots,
   updateEncounterDisplayName,
   startCombat,
+  endCombat,
   combatMapUrl,
   importTiledMap,
   reimportTiledMap,
@@ -216,6 +217,43 @@ describe('executeEnemyTurn', () => {
     expect(url).toBe('/api/combat/encounter-uuid/enemy-turn');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual(plan);
+  });
+});
+
+describe('endCombat', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs to the end endpoint and returns the summary', async () => {
+    const mockResult = {
+      encounter: { id: 'enc-1', status: 'completed' },
+      combatants: [],
+      summary: 'Victory',
+      casualties: 1,
+      rounds_elapsed: 3,
+      initiative_tracker: '',
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await endCombat('enc-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/end');
+    expect(options.method).toBe('POST');
+  });
+
+  it('throws on a non-ok response (e.g. encounter not active)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('encounter is not active'),
+    });
+    await expect(endCombat('enc-1')).rejects.toThrow('encounter is not active');
   });
 });
 
