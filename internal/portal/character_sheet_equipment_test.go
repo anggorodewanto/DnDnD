@@ -52,6 +52,8 @@ func TestGetCharacterForSheet_EnrichesInventoryAndEquipment(t *testing.T) {
 		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Equipped: true, Type: "weapon"},
 		{ItemID: "chain-mail", Name: "Chain mail", Quantity: 1, Equipped: true, Type: "armor"},
 		{ItemID: "rope", Name: "Rope", Quantity: 1, Type: "gear"},
+		// Legacy row: name stored as the raw id; sheet should show catalog name.
+		{ItemID: "crossbow-bolt", Name: "crossbow-bolt", Quantity: 1, Type: "gear"},
 	}
 	inventoryJSON, _ := json.Marshal(inventory)
 
@@ -75,7 +77,10 @@ func TestGetCharacterForSheet_EnrichesInventoryAndEquipment(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inventory weapon stats joined by item id.
-	require.Len(t, data.Inventory, 3)
+	require.Len(t, data.Inventory, 4)
+
+	// Legacy raw-id name resolves to the catalog display name.
+	assert.Equal(t, "Crossbow Bolts", data.Inventory[3].Name)
 	require.NotNil(t, data.Inventory[0].Weapon)
 	assert.Equal(t, "1d8 slashing", data.Inventory[0].Weapon.Damage)
 	assert.Equal(t, "1d10", data.Inventory[0].Weapon.Versatile)

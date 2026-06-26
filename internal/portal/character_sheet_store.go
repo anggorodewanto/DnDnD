@@ -149,6 +149,12 @@ func (a *CharacterSheetStoreAdapter) enrichEquipment(ctx context.Context, data *
 
 	for i := range data.Inventory {
 		id := data.Inventory[i].ItemID
+		// Resolve the display name from the catalog so legacy rows that stored a
+		// raw id as the name (e.g. "crossbow-bolt") render as "Crossbow Bolts".
+		// Off-catalog ids (magic items) keep their stored name.
+		if e, ok := catalog[id]; ok {
+			data.Inventory[i].Name = e.Name
+		}
 		if w, ok := weapons[id]; ok {
 			data.Inventory[i].Weapon = w
 		}
