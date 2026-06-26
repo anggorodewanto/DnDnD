@@ -681,14 +681,10 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 		return
 	}
 
-	msg := fmt.Sprintf("\U0001f3c3 Moved to %s%d.", destLabel, destRow+1)
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: msg,
-			Flags:   discordgo.MessageFlagsEphemeral,
-		},
-	})
+	// All-public: post the exploration move RESULT to the invoking channel
+	// (non-ephemeral) and name the mover so the whole party sees who moved.
+	msg := fmt.Sprintf("\U0001f3c3 %s Moved to %s%d.", mover.DisplayName, destLabel, destRow+1)
+	respondPublic(h.session, interaction, msg)
 
 	// T19 / Finding 11: the move above is otherwise invisible — only the mover
 	// sees the ephemeral text. Post the rendered map to #combat-map so the rest
@@ -753,17 +749,21 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 	h.runMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt, "", 0)
 }
 
-// moveVerb returns the success-message prefix (emoji + verb) for a confirmed
-// move of the given mode. "" is a standard walk; "stand_and_move" stands a
-// prone combatant up first; "crawl" moves while staying prone. (T43)
-func moveVerb(mode string) string {
+// moveVerb returns the success-message prefix (emoji + mover name + verb) for
+// a confirmed move of the given mode. "" is a standard walk; "stand_and_move"
+// stands a prone combatant up first; "crawl" moves while staying prone. (T43)
+//
+// The mover's display name is woven in so the all-public move RESULT (and the
+// #combat-log mirror that reuses the same string) identifies WHO moved for the
+// whole party.
+func moveVerb(mode, name string) string {
 	switch mode {
 	case "stand_and_move":
-		return "\U0001f3c3 Stood up and moved to"
+		return fmt.Sprintf("\U0001f3c3 %s Stood up and moved to", name)
 	case "crawl":
-		return "\U0001f41b Crawled to"
+		return fmt.Sprintf("\U0001f41b %s Crawled to", name)
 	default:
-		return "\U0001f3c3 Moved to"
+		return fmt.Sprintf("\U0001f3c3 %s Moved to", name)
 	}
 }
 
@@ -842,7 +842,7 @@ func (h *MoveHandler) runMoveConfirm(interaction *discordgo.Interaction, turnID,
 		}
 
 		remaining := combat.FormatRemainingResources(updatedTurn, nil)
-		responseMsg = fmt.Sprintf("%s %s%d. %s", moveVerb(mode), destLabel, destRow+1, remaining)
+		responseMsg = fmt.Sprintf("%s %s%d. %s", moveVerb(mode, moverCombatant.DisplayName), destLabel, destRow+1, remaining)
 		return nil
 	}
 
@@ -890,17 +890,28 @@ func (h *MoveHandler) runMoveConfirm(interaction *discordgo.Interaction, turnID,
 		}
 	}
 
-	// F-24: mirror move to #combat-log (best-effort, nil-safe).
+	// F-24: mirror move to #combat-log (best-effort, nil-safe). Reuse the same
+	// rich result string as the public reply so the log is consistent and names
+	// the mover, destination, and remaining resources.
 	if moverFetchOK {
-		logMsg := fmt.Sprintf("\U0001f3c3 %s moves to %s%d.", moverCombatant.DisplayName, destLabel, destRow+1)
-		postCombatLogChannel(ctx, h.session, h.oaChannels, turn.EncounterID, logMsg)
+		postCombatLogChannel(ctx, h.session, h.oaChannels, turn.EncounterID, responseMsg)
 	}
 
+	// All-public: post the move RESULT to the invoking channel so the whole
+	// party sees who moved where. This arrives via the Confirm *button*
+	// (a component interaction), so we can't use respondPublic — that would
+	// leave the ephemeral prompt's Confirm/Cancel buttons live and re-clickable
+	// into a duplicate move. Instead, post the public message to the channel and
+	// acknowledge the button with an UpdateMessage that clears the buttons.
+	if interaction.ChannelID != "" {
+		_, _ = h.session.ChannelMessageSend(interaction.ChannelID, responseMsg)
+	}
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
 			Content:    responseMsg,
-			Components: []discordgo.MessageComponent{}, // remove buttons
+			Components: []discordgo.MessageComponent{},
+			Flags:      discordgo.MessageFlagsEphemeral,
 		},
 	})
 }

@@ -2026,6 +2026,266 @@ func TestActionHandler_Ready_WiresSpellAndSlot(t *testing.T) {
 	}
 }
 
+// --- Public-result behaviour (combat action RESULTs are non-ephemeral) ---
+//
+// Decided all-public: every combat action *result* must be visible to the
+// whole party in the invoking channel (non-ephemeral) and mirrored to
+// #combat-log. Errors/validation stay ephemeral. These tests lock that in
+// for the freeform, ready, and a subcommand (dash) success paths, plus a
+// regression guard that the freeform error path stays ephemeral.
+
+// captureFlagsAndMirror wires a MockSession + combat-log provider so a test
+// can assert both the interaction-response flags and any #combat-log mirror.
+type capturedActionResponse struct {
+	resp          *discordgo.InteractionResponse
+	mirrorChannel string
+	mirrorContent string
+	mirrorCount   int
+}
+
+func runActionHandlerCapturingFlags(t *testing.T, h *ActionHandler, sess *MockSession, i *discordgo.Interaction) *capturedActionResponse {
+	t.Helper()
+	cap := &capturedActionResponse{}
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, r *discordgo.InteractionResponse) error {
+		cap.resp = r
+		return nil
+	}
+	sess.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		cap.mirrorChannel = channelID
+		cap.mirrorContent = content
+		cap.mirrorCount++
+		return &discordgo.Message{}, nil
+	}
+	h.SetChannelIDProvider(&mockDeathSaveCSP{
+		fn: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "ch-cl"}, nil
+		},
+	})
+	h.Handle(i)
+	return cap
+}
+
+func TestActionHandler_CombatMode_Freeform_IsPublicAndMirrors(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		freeformResult: combat.FreeformActionResult{
+			CombatLog: "🎭 Thorn: \"flip the table\"",
+		},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	cap := runActionHandlerCapturingFlags(t, h, sess, makeActionInteraction("g1", "u1", "flip the table", ""))
+
+	if cap.resp == nil {
+		t.Fatal("expected a response")
+	}
+	if cap.resp.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("freeform result must be PUBLIC (non-ephemeral), got flags %d", cap.resp.Data.Flags)
+	}
+	if cap.mirrorCount != 1 || cap.mirrorChannel != "ch-cl" {
+		t.Errorf("expected 1 combat-log mirror to ch-cl, got count=%d channel=%q", cap.mirrorCount, cap.mirrorChannel)
+	}
+	if cap.mirrorContent != svc.freeformResult.CombatLog {
+		t.Errorf("mirror content = %q want %q", cap.mirrorContent, svc.freeformResult.CombatLog)
+	}
+}
+
+func TestActionHandler_CombatMode_Freeform_ErrorStaysEphemeral(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		freeformErr: errors.New("resource spent"),
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	cap := runActionHandlerCapturingFlags(t, h, sess, makeActionInteraction("g1", "u1", "flip the table", ""))
+
+	if cap.resp == nil {
+		t.Fatal("expected a response")
+	}
+	if cap.resp.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("freeform error must stay EPHEMERAL, got flags %d", cap.resp.Data.Flags)
+	}
+	if cap.mirrorCount != 0 {
+		t.Errorf("freeform error must not mirror to combat-log, got %d", cap.mirrorCount)
+	}
+}
+
+func TestActionHandler_Ready_IsPublicAndMirrors(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		readyResult: combat.ReadyActionResult{
+			CombatLog: "⏳ Thorn readies an action: \"shoot if a goblin opens the door\"",
+		},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	cap := runActionHandlerCapturingFlags(t, h, sess, makeActionInteraction("g1", "u1", "ready", "shoot if a goblin opens the door"))
+
+	if cap.resp == nil {
+		t.Fatal("expected a response")
+	}
+	if cap.resp.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("ready result must be PUBLIC (non-ephemeral), got flags %d", cap.resp.Data.Flags)
+	}
+	if cap.mirrorCount != 1 || cap.mirrorChannel != "ch-cl" {
+		t.Errorf("expected 1 combat-log mirror to ch-cl, got count=%d channel=%q", cap.mirrorCount, cap.mirrorChannel)
+	}
+	if cap.mirrorContent != svc.readyResult.CombatLog {
+		t.Errorf("mirror content = %q want %q", cap.mirrorContent, svc.readyResult.CombatLog)
+	}
+}
+
+func TestActionHandler_Dispatch_Dash_IsPublic(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		dashResult:  combat.DashResult{CombatLog: "🏃 Thorn dashes!"},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	cap := runActionHandlerCapturingFlags(t, h, sess, makeActionInteraction("g1", "u1", "dash", ""))
+
+	if cap.resp == nil {
+		t.Fatal("expected a response")
+	}
+	if cap.resp.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("dash subcommand result must be PUBLIC (non-ephemeral), got flags %d", cap.resp.Data.Flags)
+	}
+	if len(svc.dashCalls) != 1 {
+		t.Errorf("expected 1 dash call, got %d", len(svc.dashCalls))
+	}
+	if cap.mirrorCount != 1 || cap.mirrorChannel != "ch-cl" {
+		t.Errorf("expected 1 combat-log mirror to ch-cl, got count=%d channel=%q", cap.mirrorCount, cap.mirrorChannel)
+	}
+}
+
 // When no spell/slot options are supplied, /action ready stays on the
 // description-only path so non-spell readies (e.g. ready an attack) are
 // unchanged.

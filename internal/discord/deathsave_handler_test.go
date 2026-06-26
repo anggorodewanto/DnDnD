@@ -128,6 +128,9 @@ func TestDeathSaveHandler_RollsAndPersistsSuccess(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "Success") {
 		t.Errorf("expected success message, got: %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected death-save result to be public (non-ephemeral)")
+	}
 	if store.updatedDS == nil {
 		t.Fatal("expected death saves to be persisted")
 	}
@@ -158,6 +161,9 @@ func TestDeathSaveHandler_NotDying(t *testing.T) {
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "not dying") {
 		t.Errorf("expected 'not dying' rejection, got: %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected not-dying rejection to stay ephemeral")
 	}
 	if store.updatedDS != nil || store.updatedHP != nil {
 		t.Error("expected no persistence when combatant is not dying")

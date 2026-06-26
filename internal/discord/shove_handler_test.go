@@ -156,6 +156,9 @@ func TestShoveHandler_DefaultModeIsPush(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "Pushed") {
 		t.Errorf("expected push log, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected shove result to be public (non-ephemeral)")
+	}
 }
 
 func TestShoveHandler_ProneMode(t *testing.T) {
@@ -185,6 +188,9 @@ func TestShoveHandler_GrappleMode(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "grapples") {
 		t.Errorf("expected grapple log, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected grapple result to be public (non-ephemeral)")
+	}
 }
 
 func TestShoveHandler_TargetNotFound(t *testing.T) {
@@ -197,6 +203,9 @@ func TestShoveHandler_TargetNotFound(t *testing.T) {
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "not found") {
 		t.Errorf("expected target-missing rejection, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected target-missing error to stay ephemeral")
 	}
 }
 

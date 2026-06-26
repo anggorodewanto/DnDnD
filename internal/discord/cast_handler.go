@@ -535,7 +535,7 @@ func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *disc
 
 	logLine := combat.FormatCastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
-	respondEphemeral(h.session, interaction, logLine)
+	respondPublic(h.session, interaction, logLine)
 
 	// SR-026: dm_required spells + narrative teleports surface a real
 	// dm_queue_items row so the DM dashboard receives the cast. The
@@ -841,7 +841,7 @@ func (h *CastHandler) runAoECast(ctx context.Context, interaction *discordgo.Int
 
 	logLine := combat.FormatAoECastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
-	respondEphemeral(h.session, interaction, logLine)
+	respondPublic(h.session, interaction, logLine)
 
 	// E-59: ping affected player combatants in the combat-log channel
 	// asking them to roll /save <ability>. Each ping names the combatant so

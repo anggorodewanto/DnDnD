@@ -252,7 +252,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 
 		logLine := combat.FormatAttackLog(result)
 		h.postCombatLog(ctx, encounterID, logLine)
-		respondEphemeral(h.session, interaction, logLine)
+		respondPublic(h.session, interaction, logLine)
 
 		// D-48b/D-49/D-51 follow-up: surface post-hit class-feature prompts
 		// (Stunning Strike / Divine Smite / Bardic Inspiration) when the service
@@ -298,7 +298,7 @@ func (h *AttackHandler) dispatchOffhand(
 	}
 	logLine := combat.FormatAttackLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
-	respondEphemeral(h.session, interaction, logLine)
+	respondPublic(h.session, interaction, logLine)
 	h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, target, encounter, result)
 }
 

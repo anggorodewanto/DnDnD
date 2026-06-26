@@ -263,6 +263,10 @@ func TestCastHandler_DispatchesSingleTargetCast(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "Aria") {
 		t.Errorf("expected cast log, got %q", sess.lastResponse.Data.Content)
 	}
+	// Combat result responses are public so the whole party sees the cast.
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("single-target cast result must be public (non-ephemeral), got flags %d", sess.lastResponse.Data.Flags)
+	}
 }
 
 func TestCastHandler_ResolvesSpellByDisplayName(t *testing.T) {
@@ -302,6 +306,10 @@ func TestCastHandler_DispatchesAoECastForAreaSpell(t *testing.T) {
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "Fireball") {
 		t.Errorf("expected AoE log, got %q", sess.lastResponse.Data.Content)
+	}
+	// Combat result responses are public so the whole party sees the cast.
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("AoE cast result must be public (non-ephemeral), got flags %d", sess.lastResponse.Data.Flags)
 	}
 }
 
@@ -545,6 +553,10 @@ func TestCastHandler_TargetNotFound_SingleTarget(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "not found") {
 		t.Errorf("expected target-missing rejection, got %q", sess.lastResponse.Data.Content)
 	}
+	// Validation errors stay ephemeral (only the caster should see them).
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("target-not-found error must remain ephemeral, got flags %d", sess.lastResponse.Data.Flags)
+	}
 }
 
 func TestCastHandler_AoENoTarget(t *testing.T) {
@@ -574,6 +586,10 @@ func TestCastHandler_ServiceError(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "Cast failed") {
 		t.Errorf("expected service-error rejection, got %q", sess.lastResponse.Data.Content)
 	}
+	// Cast errors stay ephemeral.
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("cast service error must remain ephemeral, got flags %d", sess.lastResponse.Data.Flags)
+	}
 }
 
 func TestCastHandler_AoEServiceError(t *testing.T) {
@@ -587,6 +603,10 @@ func TestCastHandler_AoEServiceError(t *testing.T) {
 
 	if !strings.Contains(sess.lastResponse.Data.Content, "Cast failed") {
 		t.Errorf("expected service-error rejection, got %q", sess.lastResponse.Data.Content)
+	}
+	// AoE cast errors stay ephemeral.
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("AoE cast service error must remain ephemeral, got flags %d", sess.lastResponse.Data.Flags)
 	}
 }
 

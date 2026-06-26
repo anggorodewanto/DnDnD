@@ -465,15 +465,15 @@ func (h *BonusHandler) resolveTargetArg(interaction *discordgo.Interaction, comb
 	return target, true
 }
 
-// respondAndLog sends the ephemeral confirmation to the invoker and
-// mirrors the same log line to #combat-log when the channel provider is
-// wired. Centralized so every subcommand uses the same shape.
+// respondAndLog posts the public result to the whole party and mirrors
+// the same log line to #combat-log when the channel provider is wired.
+// Centralized so every subcommand uses the same shape.
 func (h *BonusHandler) respondAndLog(interaction *discordgo.Interaction, encounterID uuid.UUID, log string) {
 	if log == "" {
 		log = "Bonus action resolved."
 	}
 	h.postCombatLog(context.Background(), encounterID, log)
-	respondEphemeral(h.session, interaction, log)
+	respondPublic(h.session, interaction, log)
 }
 
 // postCombatLog mirrors a combat log line to #combat-log when wired.

@@ -107,7 +107,7 @@ func (h *DeathSaveHandler) Handle(interaction *discordgo.Interaction) {
 
 	msg := joinMessages(outcome.Messages)
 	h.postCombatLog(ctx, encounterID, msg)
-	respondEphemeral(h.session, interaction, msg)
+	respondPublic(h.session, interaction, msg)
 }
 
 // persistOutcome applies the death-save outcome to the combatant row.

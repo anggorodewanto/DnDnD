@@ -284,6 +284,10 @@ func TestMoveHandler_ValidMove_ShowsConfirmation(t *testing.T) {
 	if len(sess.lastResponse.Data.Components) == 0 {
 		t.Error("expected buttons in response")
 	}
+	// The interactive confirmation PROMPT stays ephemeral (only the RESULT is public).
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("move confirmation prompt must stay ephemeral")
+	}
 }
 
 func TestMoveHandler_InvalidCoordinate(t *testing.T) {
@@ -369,7 +373,7 @@ func TestMoveHandler_HandleMoveConfirm(t *testing.T) {
 			return refdata.Encounter{}, nil
 		},
 		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
-			return refdata.Combatant{}, nil
+			return refdata.Combatant{ID: combatantID, DisplayName: "Aragorn"}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
@@ -382,9 +386,10 @@ func TestMoveHandler_HandleMoveConfirm(t *testing.T) {
 	}
 
 	interaction := &discordgo.Interaction{
-		Type:    discordgo.InteractionMessageComponent,
-		GuildID: "guild1",
-		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Type:      discordgo.InteractionMessageComponent,
+		GuildID:   "guild1",
+		ChannelID: "chan-main",
+		Member:    &discordgo.Member{User: &discordgo.User{ID: "user1"}},
 	}
 
 	handler.HandleMoveConfirm(interaction, turnID, combatantID, 3, 0, 15)
@@ -396,9 +401,96 @@ func TestMoveHandler_HandleMoveConfirm(t *testing.T) {
 		t.Errorf("expected position row 1, got %d", updatedRow)
 	}
 
+	// All-public result: the move RESULT is posted to the invoking channel so
+	// the whole party sees it, naming WHO moved where.
+	var publicMove *moveSessionChannelSend
+	for i := range sess.channelSends {
+		if sess.channelSends[i].ChannelID == "chan-main" {
+			publicMove = &sess.channelSends[i]
+			break
+		}
+	}
+	if publicMove == nil {
+		t.Fatalf("expected a public move result posted to the invoking channel, got sends: %+v", sess.channelSends)
+	}
+	if !strings.Contains(publicMove.Content, "Moved to D1") {
+		t.Errorf("expected moved confirmation in public post, got: %s", publicMove.Content)
+	}
+	if !strings.Contains(publicMove.Content, "Aragorn") {
+		t.Errorf("expected mover display name in public move result, got: %s", publicMove.Content)
+	}
+
+	// The Confirm button press is acknowledged with an UpdateMessage that clears
+	// the prompt's buttons so it can't be re-clicked into a duplicate move.
+	if sess.lastResponse.Type != discordgo.InteractionResponseUpdateMessage {
+		t.Errorf("expected UpdateMessage ack to clear the confirm prompt, got type: %d", sess.lastResponse.Type)
+	}
+	if len(sess.lastResponse.Data.Components) != 0 {
+		t.Errorf("expected confirm prompt buttons to be cleared, got %d component rows", len(sess.lastResponse.Data.Components))
+	}
+}
+
+// TestMoveHandler_ExplorationMode_ResultIsPublicWithName asserts the
+// exploration /move RESULT is posted publicly (non-ephemeral) and names the
+// mover so the whole party sees who moved where.
+func TestMoveHandler_ExplorationMode_ResultIsPublicWithName(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, combatantID := setupMoveHandler(sess)
+
+	encID := uuid.New()
+	mapID := uuid.New()
+	charID := uuid.New()
+
+	mover := refdata.Combatant{
+		ID:          combatantID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		HpCurrent:   10,
+		IsNpc:       false,
+		DisplayName: "Bilbo",
+	}
+
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{
+				ID:     encID,
+				Status: "active",
+				Mode:   "exploration",
+				MapID:  uuid.NullUUID{UUID: mapID, Valid: true},
+			}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return mover, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	handler.encounterProvider = &mockMoveEncounterProvider{
+		getActiveEncounterID: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encID, nil
+		},
+	}
+
+	handler.Handle(makeMoveInteraction("D1"))
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Moved to D1") {
-		t.Errorf("expected moved confirmation, got: %s", content)
+		t.Errorf("expected 'Moved to D1' confirmation, got: %s", content)
+	}
+	if !strings.Contains(content, "Bilbo") {
+		t.Errorf("expected mover display name in exploration move result, got: %s", content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("exploration move result must be public (non-ephemeral), got flags: %d", sess.lastResponse.Data.Flags)
 	}
 }
 
@@ -998,6 +1090,10 @@ func TestMoveHandler_ProneShowsChoicePrompt(t *testing.T) {
 	// Should have Stand & Move and Crawl buttons
 	if len(sess.lastResponse.Data.Components) == 0 {
 		t.Error("expected buttons in response")
+	}
+	// The interactive prone choice PROMPT stays ephemeral (only the RESULT is public).
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("prone choice prompt must stay ephemeral")
 	}
 }
 

@@ -254,6 +254,24 @@ func TestBonusHandler_Rage(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "rages") {
 		t.Errorf("expected rage log, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected rage result to be public (non-ephemeral), got flags %d", sess.lastResponse.Data.Flags)
+	}
+}
+
+func TestBonusHandler_DragPromptStaysEphemeral(t *testing.T) {
+	h, sess, svc, provider := setupBonusHandler()
+	svc.dragCheckResult = combat.DragCheckResult{
+		HasTargets:      true,
+		GrappledTargets: []refdata.Combatant{provider.target},
+	}
+	h.Handle(makeBonusInteraction("drag", ""))
+	if svc.dragCheckCalls != 1 {
+		t.Fatalf("expected 1 drag check call, got %d", svc.dragCheckCalls)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected drag prompt to remain ephemeral, got flags %d", sess.lastResponse.Data.Flags)
+	}
 }
 
 func TestBonusHandler_EndRage(t *testing.T) {
