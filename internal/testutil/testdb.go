@@ -139,6 +139,7 @@ var MutableTables = []string{
 var ReferenceTables = []string{
 	"weapons",
 	"armor",
+	"items",
 	"conditions_ref",
 	"classes",
 	"races",

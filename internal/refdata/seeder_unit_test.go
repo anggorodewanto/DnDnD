@@ -424,7 +424,7 @@ func TestSeedAll_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount + CreatureCount + MagicItemCount
+	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount + CreatureCount + MagicItemCount + ItemCount
 	if mock.callCount != totalUpserts {
 		t.Fatalf("expected %d ExecContext calls, got %d", totalUpserts, mock.callCount)
 	}
@@ -641,6 +641,35 @@ func TestSeedAll_MagicItemsErrorWrapping(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "seeding magic_items") {
 		t.Fatalf("expected error to contain 'seeding magic_items', got %q", err.Error())
+	}
+}
+
+func TestSeedItems_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedItems(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting item") {
+		t.Fatalf("expected error to contain 'upserting item', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_ItemsErrorWrapping(t *testing.T) {
+	dbErr := errors.New("item exec failed")
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount + CreatureCount + MagicItemCount}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding items") {
+		t.Fatalf("expected error to contain 'seeding items', got %q", err.Error())
 	}
 }
 

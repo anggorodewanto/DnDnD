@@ -54,6 +54,9 @@ func SeedAll(ctx context.Context, db DBTX) error {
 	if err := seedMagicItems(ctx, q); err != nil {
 		return fmt.Errorf("seeding magic_items: %w", err)
 	}
+	if err := seedItems(ctx, q); err != nil {
+		return fmt.Errorf("seeding items: %w", err)
+	}
 
 	return nil
 }
@@ -84,7 +87,14 @@ func optBool(v bool) sql.NullBool {
 }
 
 func seedWeapons(ctx context.Context, q *Queries) error {
-	weapons := []UpsertWeaponParams{
+	return seedEntities(ctx, weaponSeeds(), q.UpsertWeapon, "weapon")
+}
+
+// weaponSeeds is the SRD weapon seed data. It is the single source of truth for
+// weapon ids + display names, consumed by both seedWeapons and the item catalog
+// (item_catalog.go) so a weapon's name is never duplicated.
+func weaponSeeds() []UpsertWeaponParams {
+	return []UpsertWeaponParams{
 		// Simple Melee
 		{ID: "club", Name: "Club", Damage: "1d4", DamageType: "bludgeoning", WeightLb: optFloat(2), Properties: []string{"light"}, WeaponType: "simple_melee", Mastery: "slow"},
 		{ID: "dagger", Name: "Dagger", Damage: "1d4", DamageType: "piercing", WeightLb: optFloat(1), Properties: []string{"finesse", "light", "thrown"}, RangeNormalFt: optInt(20), RangeLongFt: optInt(60), WeaponType: "simple_melee", Mastery: "nick"},
@@ -127,12 +137,16 @@ func seedWeapons(ctx context.Context, q *Queries) error {
 		{ID: "longbow", Name: "Longbow", Damage: "1d8", DamageType: "piercing", WeightLb: optFloat(2), Properties: []string{"ammunition", "heavy", "two-handed"}, RangeNormalFt: optInt(150), RangeLongFt: optInt(600), WeaponType: "martial_ranged", Mastery: "slow"},
 		{ID: "net", Name: "Net", Damage: "0", DamageType: "none", WeightLb: optFloat(3), Properties: []string{"special", "thrown"}, RangeNormalFt: optInt(5), RangeLongFt: optInt(15), WeaponType: "martial_ranged"},
 	}
-
-	return seedEntities(ctx, weapons, q.UpsertWeapon, "weapon")
 }
 
 func seedArmor(ctx context.Context, q *Queries) error {
-	armor := []UpsertArmorParams{
+	return seedEntities(ctx, armorSeeds(), q.UpsertArmor, "armor")
+}
+
+// armorSeeds is the SRD armor seed data — single source of truth for armor ids
+// + display names, shared by seedArmor and the item catalog (item_catalog.go).
+func armorSeeds() []UpsertArmorParams {
+	return []UpsertArmorParams{
 		// Light
 		{ID: "padded", Name: "Padded", AcBase: 11, AcDexBonus: optBool(true), ArmorType: "light", WeightLb: optFloat(8), StealthDisadv: optBool(true)},
 		{ID: "leather", Name: "Leather", AcBase: 11, AcDexBonus: optBool(true), ArmorType: "light", WeightLb: optFloat(10)},
@@ -151,8 +165,24 @@ func seedArmor(ctx context.Context, q *Queries) error {
 		// Shield
 		{ID: "shield", Name: "Shield", AcBase: 2, AcDexBonus: optBool(false), ArmorType: "shield", WeightLb: optFloat(6)},
 	}
+}
 
-	return seedEntities(ctx, armor, q.UpsertArmor, "armor")
+// seedItems populates the canonical item catalog (items table) from
+// ItemCatalog() — the SSOT for every equipment id's name / category /
+// default quantity (item_catalog.go).
+func seedItems(ctx context.Context, q *Queries) error {
+	entries := ItemCatalog()
+	params := make([]UpsertItemParams, 0, len(entries))
+	for _, e := range entries {
+		params = append(params, UpsertItemParams{
+			ID:              e.ID,
+			Name:            e.Name,
+			Category:        e.Category,
+			DefaultQuantity: int32(e.DefaultQuantity),
+			Stackable:       e.Stackable,
+		})
+	}
+	return seedEntities(ctx, params, q.UpsertItem, "item")
 }
 
 func mustJSON(v any) json.RawMessage {

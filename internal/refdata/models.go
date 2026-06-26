@@ -325,6 +325,16 @@ type InitiativeTrackerMessage struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type Item struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Category        string    `json:"category"`
+	DefaultQuantity int32     `json:"default_quantity"`
+	Stackable       bool      `json:"stackable"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 type LootPool struct {
 	ID          uuid.UUID `json:"id"`
 	EncounterID uuid.UUID `json:"encounter_id"`
