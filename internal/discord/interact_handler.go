@@ -184,7 +184,7 @@ func (h *InteractHandler) handleViaCombat(
 	if result.CombatLog != "" {
 		h.postCombatLog(ctx, encounterID, result.CombatLog)
 	}
-	respondEphemeral(h.session, interaction, result.CombatLog)
+	respondPublic(h.session, interaction, result.CombatLog)
 }
 
 // handleLegacy is the pre-SR-005 path used when no combat service is wired
@@ -217,7 +217,7 @@ func (h *InteractHandler) handleLegacy(
 
 	logLine := fmt.Sprintf("\U0001f9d0  %s interacts with the environment: \"%s\"", name, desc)
 	h.postCombatLog(ctx, encounterID, logLine)
-	respondEphemeral(h.session, interaction, logLine)
+	respondPublic(h.session, interaction, logLine)
 }
 
 // postCombatLog mirrors a combat log line to #combat-log when wired.

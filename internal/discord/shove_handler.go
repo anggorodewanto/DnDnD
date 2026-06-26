@@ -175,7 +175,7 @@ func (h *ShoveHandler) dispatchShove(
 	}
 
 	h.postCombatLog(ctx, encounterID, result.CombatLog)
-	respondEphemeral(h.session, interaction, result.CombatLog)
+	respondPublic(h.session, interaction, result.CombatLog)
 }
 
 // dispatchGrapple invokes combat.Service.Grapple when /shove was invoked
@@ -200,7 +200,7 @@ func (h *ShoveHandler) dispatchGrapple(
 	}
 
 	h.postCombatLog(ctx, encounterID, result.CombatLog)
-	respondEphemeral(h.session, interaction, result.CombatLog)
+	respondPublic(h.session, interaction, result.CombatLog)
 }
 
 // postCombatLog mirrors a combat log line to #combat-log when wired.

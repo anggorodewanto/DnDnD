@@ -229,7 +229,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	msg := save.FormatSaveResult(char.Name, result)
-	respondEphemeral(h.session, interaction, msg)
+	respondPublic(h.session, interaction, msg)
 
 	// Mirror the player's own save result to #combat-log when in combat. Out
 	// of combat we post nothing extra (the ephemeral above is enough).

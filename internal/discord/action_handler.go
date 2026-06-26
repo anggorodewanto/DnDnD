@@ -398,7 +398,8 @@ func (h *ActionHandler) handleCombat(
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to post action: %v", err))
 		return
 	}
-	respondEphemeral(h.session, interaction, result.CombatLog)
+	postCombatLogChannel(context.Background(), h.session, h.channelIDProvider, encounter.ID, result.CombatLog)
+	respondPublic(h.session, interaction, result.CombatLog)
 }
 
 // performReadyAction dispatches /action ready into combat.Service.ReadyAction
@@ -432,7 +433,8 @@ func (h *ActionHandler) performReadyAction(
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Ready action failed: %v", err))
 		return
 	}
-	respondEphemeral(h.session, interaction, result.CombatLog)
+	postCombatLogChannel(context.Background(), h.session, h.channelIDProvider, combatant.EncounterID, result.CombatLog)
+	respondPublic(h.session, interaction, result.CombatLog)
 }
 
 // performCombatCancel invokes CancelFreeformAction and translates the
@@ -680,7 +682,7 @@ func (h *ActionHandler) respondAndLog(interaction *discordgo.Interaction, encoun
 		log = "Action resolved."
 	}
 	postCombatLogChannel(context.Background(), h.session, h.channelIDProvider, encounterID, log)
-	respondEphemeral(h.session, interaction, log)
+	respondPublic(h.session, interaction, log)
 }
 
 // dispatchActionSurge wires /action surge (D-53).

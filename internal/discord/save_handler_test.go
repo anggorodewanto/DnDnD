@@ -276,9 +276,11 @@ func (m *mockAoESaveAdapterBackend) ResolveAoEPendingSaves(_ context.Context, _ 
 
 func TestSaveHandler_BasicSave(t *testing.T) {
 	var responded string
+	var respFlags discordgo.MessageFlags
 	sess := newTestMock()
 	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
 		responded = resp.Data.Content
+		respFlags = resp.Data.Flags
 		return nil
 	}
 
@@ -287,6 +289,9 @@ func TestSaveHandler_BasicSave(t *testing.T) {
 
 	if responded == "" {
 		t.Fatal("expected a response")
+	}
+	if respFlags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected save result to be public (non-ephemeral)")
 	}
 	if !strings.Contains(responded, "Aria") {
 		t.Errorf("expected Aria in response, got: %s", responded)
@@ -321,9 +326,11 @@ func TestSaveHandler_AdvantageFlag(t *testing.T) {
 
 func TestSaveHandler_NoAbility(t *testing.T) {
 	var responded string
+	var respFlags discordgo.MessageFlags
 	sess := newTestMock()
 	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
 		responded = resp.Data.Content
+		respFlags = resp.Data.Flags
 		return nil
 	}
 
@@ -341,6 +348,9 @@ func TestSaveHandler_NoAbility(t *testing.T) {
 
 	if !strings.Contains(responded, "specify") {
 		t.Errorf("expected specify prompt, got: %s", responded)
+	}
+	if respFlags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected missing-ability validation to stay ephemeral")
 	}
 }
 

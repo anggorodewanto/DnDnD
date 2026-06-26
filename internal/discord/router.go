@@ -753,6 +753,19 @@ func respondEphemeral(s Session, interaction *discordgo.Interaction, msg string)
 	})
 }
 
+// respondPublic sends a non-ephemeral interaction response, visible to
+// everyone in the channel where the command was invoked. Used for combat
+// action *results* so the party sees them live; errors, validation, and
+// interactive prompts stay ephemeral via respondEphemeral.
+func respondPublic(s Session, interaction *discordgo.Interaction, msg string) {
+	_ = s.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+		},
+	})
+}
+
 // stubHandler responds with a "not yet implemented" message for a command.
 type stubHandler struct {
 	session Session

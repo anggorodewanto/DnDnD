@@ -198,10 +198,13 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "attacks") {
 		t.Errorf("expected attack log, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected attack result to be public (non-ephemeral), got flags %d", sess.lastResponse.Data.Flags)
+	}
 }
 
 func TestAttackHandler_OffhandRoutesToOffhandService(t *testing.T) {
-	h, _, svc, _ := setupAttackHandler()
+	h, sess, svc, _ := setupAttackHandler()
 
 	h.Handle(makeAttackInteraction(map[string]any{
 		"target":  "OS",
@@ -213,6 +216,9 @@ func TestAttackHandler_OffhandRoutesToOffhandService(t *testing.T) {
 	}
 	if len(svc.attackCalls) != 0 {
 		t.Errorf("expected no main-hand calls when offhand=true, got %d", len(svc.attackCalls))
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected offhand result to be public (non-ephemeral), got flags %d", sess.lastResponse.Data.Flags)
 	}
 }
 
@@ -298,6 +304,9 @@ func TestAttackHandler_ServiceError(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "Attack failed") {
 		t.Errorf("expected service-error rejection, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected service-error response to stay ephemeral")
+	}
 }
 
 func TestAttackHandler_OffhandServiceError(t *testing.T) {
@@ -308,6 +317,9 @@ func TestAttackHandler_OffhandServiceError(t *testing.T) {
 
 	if !strings.Contains(sess.lastResponse.Data.Content, "Off-hand attack failed") {
 		t.Errorf("expected offhand-error rejection, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected offhand-error response to stay ephemeral")
 	}
 }
 

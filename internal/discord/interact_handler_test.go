@@ -122,6 +122,9 @@ func TestInteractHandler_MarksFreeInteractUsed(t *testing.T) {
 	if !strings.Contains(sess.lastResponse.Data.Content, "draw longsword") {
 		t.Errorf("expected description in response, got %q", sess.lastResponse.Data.Content)
 	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected interact result to be public (non-ephemeral)")
+	}
 }
 
 func TestInteractHandler_RejectsWhenAlreadyUsed(t *testing.T) {
@@ -135,6 +138,9 @@ func TestInteractHandler_RejectsWhenAlreadyUsed(t *testing.T) {
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "Cannot interact") {
 		t.Errorf("expected rejection, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected already-used rejection to stay ephemeral")
 	}
 }
 
@@ -263,6 +269,9 @@ func TestInteractHandler_SR005_FirstFreeInteractConsumesFreeFlag(t *testing.T) {
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "draw longsword") {
 		t.Errorf("expected combat-log line in response, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected combat interact result to be public (non-ephemeral)")
 	}
 	// SR-005: handler must no longer touch the legacy turn store when the
 	// combat service is wired — combat.Interact owns the UpdateTurnActions
