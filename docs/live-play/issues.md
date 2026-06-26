@@ -26,6 +26,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-015 | 2026-06-26 | combat / ammunition | major | FIXED | Crossbow `/attack` falsely reports **"No bolts remaining"** with bolts in inventory — ammo match required name `"Bolts"` + type `"ammunition"`, but the builder seeds `{item_id:"crossbow-bolt", type:"gear"}` (slug drift, cf. ISSUE-013). **Fixed (TDD):** tolerant whole-word matcher on name/`item_id` (bolts/arrows), lossless full-inventory write (the old narrow re-marshal would have dropped every item's equipped/magic/charges fields once the shot succeeded), and a real empty quiver now routes to `#dm-queue` as a freeform action for lenient DM adjudication (attack resource not spent). Needs rebuild+restart to apply live. |
 | ISSUE-015 | 2026-06-25 | dashboard / conditions | high | FIXED | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half FIXED (2026-06-26):** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` used to persist a bare string array (`["paralyzed"]`) that `parseConditions` can't unmarshal, so a button-added condition rendered but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) never fired. New server-side `reconcileConditionNames` (`workspace_handler.go`) maps the DM-supplied condition *names* into the canonical `[]CombatCondition` object shape — reusing the combatant's existing condition object when the name is already present (so a spell-applied duration/source/timing survives a re-send) and minting an indefinite `{condition: name}` for new ones, lowercased + de-duped. Frontend now works in lowercase canonical keys (`conditionKey` helper). |
 | ISSUE-016 | 2026-06-25 | combat / spellcasting | medium | FIXED + DEPLOYED | `/done` falsely warned "you still have 1 attack" after a player cast a spell with their ACTION. Casting a spell is the Cast-a-Spell action, not the Attack action, so no weapon attack remains — but `Service.Cast`/`Service.CastAoE` consumed the action while leaving the seeded `attacks_remaining=1`, so the `/done` unused-resource check (and the "Remaining" summary) reported a phantom attack. **Fixed (`b108bf2`):** zero `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled); bonus-action casts left untouched (they keep the Attack action + its attacks). Found in live play: Vale (Warlock 3, no Extra Attack) cast Hold Person, then `/done` warned of an attack she never had. |
+| ISSUE-017 | 2026-06-26 | refdata / item catalog (SSOT) | major (tech-debt) | OPEN — SCOPED | **Permanent SSOT fix** for the recurring slug/type/quantity drift class (ISSUE-013 background slugs, ISSUE-015 ammo, the builder-ammo follow-up). Item metadata is fragmented across **5 hand-maintained sources** and **ammo + adventuring gear have no refdata row at all**. Scope a single canonical seeded **item catalog** (`id → {name, type, default_quantity, weapon/armor/ammo metadata, weapon→ammo FK}`); route the builder inventory seeder, combat ammo derivation, the ammo matcher, and `/api/equipment` through it; codegen the JS-side table from the same Go source (as backgrounds already do). Full plan + file pointers in Details. **For a fresh agent.** |
 
 ---
 
@@ -471,6 +472,83 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   `gear` slug. Go + vitest TDD; bundle rebuilt.
 - **Still open:** the same narrow-projection field-drop exists on the spell
   material-component path (`spellcasting.go`) — unrelated to ammo, left as-is.
+
+### ISSUE-017 — Permanent SSOT item catalog (kills the slug/type/quantity drift class) — SCOPED for a fresh agent
+- **Date:** 2026-06-26
+- **Area:** refdata / item catalog (cross-cutting: refdata, portal builder, combat, dashboard JS)
+- **Severity:** major (tech-debt; each occurrence has been a player-facing bug)
+- **Status:** OPEN — SCOPED (no code yet). This entry is the spec; implement in phases.
+- **Why this exists:** three+ separate live-play bugs share ONE root cause — item/equipment
+  metadata is fragmented with no single source of truth, so any new item id (or a slug
+  rename) silently drifts between layers:
+  - **ISSUE-013** — background→skill/equipment slug drift between two hand-maintained Go maps.
+  - **ISSUE-015 (ammo)** — combat matcher expected name `"Bolts"`/type `"ammunition"`; the
+    builder seeded `{item_id:"crossbow-bolt", type:"gear"}`. Patched with a tolerant matcher.
+  - **builder-ammo follow-up** — ammo had no name/type/quantity anywhere; patched with a local
+    `knownAmmo` map + `:N` parsing. **Explicitly a stopgap.**
+- **The 5 fragmented sources today (grep-verified 2026-06-26):**
+  1. `internal/refdata` seeders (`seeder.go`) — **weapons + armor only**. Ammo
+     (`crossbow-bolt`, `arrow`, `sling-bullet`, `blowgun-needle`) and adventuring gear
+     (packs, tools, torches…) have **no refdata row at all** — they exist only as bare ids
+     inside `internal/portal/starting_equipment.go` strings.
+  2. `internal/portal/builder_store_adapter.go` — hand-maintained `knownWeapons`,
+     `knownArmor`, `knownAmmo` Go maps + `itemDisplayName` + `itemType` + `parseEquipmentEntry`.
+  3. `portal/svelte/src/lib/equip-selection.js` — a PARALLEL JS SRD-id fallback set
+     (`knownWeapons`/`knownArmor` mirrors) used so pickers work before the async catalog loads.
+  4. `internal/combat/attack.go` — `GetAmmunitionName` hardcodes crossbow→`"Bolts"` by
+     substring; `ammoMatches` matches by name/`item_id` keyword because **no weapon→ammo-item
+     link exists in data**.
+  5. `internal/portal/refdata_adapter.go` `ListEquipment` (serves `/api/equipment`) — builds
+     its catalog from `ListWeapons`+`ListArmor` only, so ammo/gear never appear in the API.
+- **Target design — one canonical seeded item catalog:**
+  - A new refdata table (e.g. `items`) or an extension that gives **every** equipment id a row:
+    `id, name, category ("weapon"|"armor"|"ammunition"|"gear"|"tool"|"pack"|…), default_quantity,
+    stackable bool`, plus category-specific metadata. Weapons/armor can stay in their existing
+    tables if the catalog references them, but ammo + gear MUST get rows.
+  - A **weapon→ammo link**: add `ammunition_id` (FK to the ammo item) to weapons with the
+    `ammunition` property (light/hand/heavy-crossbow → `crossbow-bolt`; shortbow/longbow →
+    `arrow`; sling → `sling-bullet`; blowgun → `blowgun-needle`). This replaces the
+    `GetAmmunitionName` substring heuristic AND lets the matcher match by **item id**, not a
+    name keyword (removes the `"Lightning Bolt Scroll"` false-positive risk entirely).
+- **Phased implementation (TDD each phase; keep each independently shippable):**
+  1. **Catalog schema + seed.** New migration + refdata seeder rows for SRD ammo + the
+     adventuring gear / packs / tools referenced by `starting_equipment.go` and
+     `backgrounds_gen.go`. sqlc queries (`ListItems`, `GetItem`). **Migration test hooks:** a
+     new migration breaks `internal/testutil/testdb.go` table lists + the database `MigrateDown`
+     test unless BOTH are updated (see the `project_new_migration_test_hooks` memory).
+  2. **Weapon→ammo FK.** Add `ammunition_id` to the weapon rows; expose via the weapon model.
+     Rewrite `combat.GetAmmunitionName` to read the FK (fallback to current heuristic if null),
+     and switch `ammoMatches` to prefer item-id equality against the weapon's `ammunition_id`,
+     keeping the keyword match only as a legacy fallback. Existing combat ammo tests must stay
+     green.
+  3. **Builder seeds via catalog.** `EquipmentToInventoryWithEquipped` resolves name / type /
+     default_quantity from the catalog instead of `knownWeapons`/`knownArmor`/`knownAmmo` /
+     `itemDisplayName`. Keep `:N` override (explicit quantity wins over default). Retire the
+     three local Go maps once the catalog covers their ids; add a **contract test** that every
+     id in `starting_equipment.go` + `backgrounds_gen.go` resolves to a catalog row (mirrors
+     ISSUE-013's `TestBackground*_AllBuilderBackgrounds`, so future drift fails CI).
+  4. **API + frontend SSOT.** `ListEquipment` serves the full catalog (ammo + gear, with
+     `category` + `default_quantity`). Retire the JS SRD-fallback maps in `equip-selection.js`
+     by **generating** the JS catalog/classifier from the Go source — follow the existing
+     codegen precedent (`portal/svelte/src/lib/backgrounds.json` ← `backgrounds_gen.go` /
+     `generate.go`). One source, both languages, no hand-sync.
+  5. **Cleanup.** Delete the now-dead stopgaps (`knownAmmo`, duplicated maps); update the
+     `project_item_catalog_ssot_gap` memory to RESOLVED.
+- **Acceptance criteria:**
+  - A brand-new portal-built crossbow user has `{item_id:"crossbow-bolt", name:"Crossbow Bolts",
+    type:"ammunition", quantity:20}` sourced from the catalog (no local map).
+  - `combat.GetAmmunitionName`/`ammoMatches` resolve a weapon's ammo via the FK; the substring
+    heuristic is gone from the hot path.
+  - `/api/equipment` lists ammo + gear; `equip-selection.js` no longer hand-maintains SRD ids.
+  - A contract test fails CI if any starting-equipment / background id lacks a catalog row.
+  - `make cover-check` (90%/85%), full vitest, `make sqlc-check`, and a Svelte rebuild all green.
+- **Effort:** ~M–L (new migration + seeder + sqlc + rewiring 4 call sites + codegen + contract
+  tests). Phases 1–3 deliver the bulk of the value (correct seeding + combat); 4–5 remove the
+  remaining duplication. Each phase is independently shippable.
+- **Pointers:** codegen precedent `internal/portal/backgrounds_gen.go` + `generate.go`; current
+  stopgaps `internal/portal/builder_store_adapter.go` (`knownAmmo`/`itemType`/`itemDisplayName`),
+  `internal/combat/attack.go` (`GetAmmunitionName`/`ammoMatches`); catalog source
+  `internal/portal/refdata_adapter.go` `ListEquipment`. Memory: `project_item_catalog_ssot_gap`.
 
 <!-- Append a section per issue:
 
