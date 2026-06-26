@@ -473,11 +473,27 @@ Push the target 5ft away or knock them prone.`
 
 const helpBonus = `/bonus — Bonus Action
 
-Usage:
-  /bonus [action]                     Use a bonus action
-  /bonus [action] [args]              Bonus action with additional arguments
+One bonus action per turn. Write the action in [action]; if it needs more
+detail, add it after the action or in the optional args field.
 
-Examples: /bonus offhand, /bonus cunning-action dash, /bonus rage, /bonus flurry-of-blows`
+Common:
+  /bonus offhand                      Off-hand weapon attack (two-weapon fighting)
+  /bonus drag [target]                Drag a grappled creature when you move
+  /bonus release-drag                 Stop dragging
+
+Class actions:
+  /bonus cunning-action dash          Rogue: dash, disengage, or hide
+  /bonus martial-arts [target]        Monk: bonus unarmed strike
+  /bonus flurry-of-blows              Monk: two unarmed strikes (1 ki)
+  /bonus step-of-the-wind dash        Monk: dash or disengage (1 ki)
+  /bonus patient-defense              Monk: dodge as a bonus action (1 ki)
+  /bonus rage                         Barbarian: enter rage (end-rage to stop)
+  /bonus font-of-magic convert 2      Sorcerer: convert/create a slot at [level]
+  /bonus lay-on-hands [target] 10     Paladin: heal target by 10 hp
+  /bonus bardic-inspiration [target]  Bard: grant an inspiration die
+  /bonus wild-shape wolf              Druid: transform (revert-wild-shape to undo)
+
+Examples: /bonus offhand, /bonus cunning-action dash, /bonus rage, /bonus font-of-magic convert 2`
 
 const helpFly = `/fly — Fly to Altitude
 

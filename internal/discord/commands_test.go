@@ -123,6 +123,48 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 	}
 }
 
+// TestBonusCommand_OptionDescriptionsHaveExamples guards the /bonus inline
+// hints: both the action and args option descriptions must carry concrete
+// examples (the command is confusing without them) and stay within Discord's
+// 100-character description limit.
+func TestBonusCommand_OptionDescriptionsHaveExamples(t *testing.T) {
+	cmd, ok := commandMap()["bonus"]
+	if !ok {
+		t.Fatal("bonus command not found")
+	}
+
+	tests := []struct {
+		option   string
+		contains []string
+	}{
+		{"action", []string{"e.g.", "cunning-action dash", "/help bonus"}},
+		{"args", []string{"e.g.", "lay-on-hands"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.option, func(t *testing.T) {
+			var desc string
+			for _, opt := range cmd.Options {
+				if opt.Name == tt.option {
+					desc = opt.Description
+					break
+				}
+			}
+			if desc == "" {
+				t.Fatalf("option %q not found or empty description", tt.option)
+			}
+			if n := len([]rune(desc)); n > 100 {
+				t.Errorf("option %q description is %d chars, exceeds Discord limit of 100", tt.option, n)
+			}
+			for _, want := range tt.contains {
+				if !strings.Contains(desc, want) {
+					t.Errorf("option %q description %q missing %q", tt.option, desc, want)
+				}
+			}
+		})
+	}
+}
+
 func TestCommandDefinitions_NoParamCommands(t *testing.T) {
 	noParamCmds := []string{
 		"done", "deathsave", "status", "inventory", "loot",

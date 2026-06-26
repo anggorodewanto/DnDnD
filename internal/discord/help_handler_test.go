@@ -190,6 +190,13 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 		{"paladin", []string{"Paladin Abilities", "Divine Smite", "Lay on Hands", "Aura of Protection"}},
 		{"metamagic", []string{"Metamagic", "Sorcery Point", "careful:true", "subtle:true", "twin:true", "font-of-magic"}},
 		{"action", []string{"/action — Actions on Your Turn", "disengage", "dash", "dodge", "grapple", "Freeform actions"}},
+		{"bonus", []string{
+			"/bonus — Bonus Action",
+			"offhand", "cunning-action dash", "step-of-the-wind",
+			"patient-defense", "flurry-of-blows", "rage",
+			"font-of-magic convert", "lay-on-hands", "bardic-inspiration",
+			"wild-shape", "drag",
+		}},
 		{"register", []string{"Get a Character", "Claim Existing", "Build New", "Import from D&D Beyond"}},
 	}
 

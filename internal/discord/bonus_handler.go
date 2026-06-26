@@ -145,7 +145,7 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 
 	action := strings.ToLower(strings.TrimSpace(optionString(interaction, "action")))
 	if action == "" {
-		respondEphemeral(h.session, interaction, "Please specify a bonus action (e.g. `/bonus rage`).")
+		respondEphemeral(h.session, interaction, "Please specify a bonus action (e.g. `/bonus rage`, `/bonus cunning-action dash`). See `/help bonus` for the full list.")
 		return
 	}
 	args := strings.TrimSpace(optionString(interaction, "args"))
@@ -190,7 +190,7 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 		case "release-drag", "releasedrag":
 			h.dispatchReleaseDrag(ctx, interaction, bctx)
 		default:
-			respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag. Run `/help bonus` for examples.", action))
 		}
 		return errAlreadyResponded
 	}
