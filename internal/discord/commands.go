@@ -208,13 +208,13 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "action",
-					Description: "Bonus action + args (e.g. offhand, cunning-action dash, rage). See /help bonus for all",
+					Description: "Bonus action + args (e.g. offhand, cunning-action dash, rage, flurry). /help bonus for full list",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "args",
-					Description: "Extra args some actions need (e.g. cunning-action dash, lay-on-hands AR 10)",
+					Description: "Args some actions need, e.g. lay-on-hands AR 10, font-of-magic convert 2, cunning-action dash",
 				},
 			},
 		},
