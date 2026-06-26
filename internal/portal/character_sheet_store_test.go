@@ -29,6 +29,10 @@ type mockCharacterQuerier struct {
 	campaignErr error
 	viewerPC    refdata.PlayerCharacter
 	viewerPCErr error
+	weapons     []refdata.Weapon
+	weaponsErr  error
+	armor       []refdata.Armor
+	armorErr    error
 }
 
 func (m *mockCharacterQuerier) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -53,6 +57,14 @@ func (m *mockCharacterQuerier) GetCampaignByID(_ context.Context, _ uuid.UUID) (
 
 func (m *mockCharacterQuerier) GetPlayerCharacterByDiscordUser(_ context.Context, _ refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error) {
 	return m.viewerPC, m.viewerPCErr
+}
+
+func (m *mockCharacterQuerier) ListWeapons(_ context.Context) ([]refdata.Weapon, error) {
+	return m.weapons, m.weaponsErr
+}
+
+func (m *mockCharacterQuerier) ListArmor(_ context.Context) ([]refdata.Armor, error) {
+	return m.armor, m.armorErr
 }
 
 func TestCharacterSheetStoreAdapter_CanViewCharacter_DM(t *testing.T) {
@@ -254,7 +266,7 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet(t *testing.T) {
 	assert.Equal(t, 18, data.AC)
 	assert.Equal(t, 30, data.SpeedFt)
 	assert.Equal(t, 2, data.ProficiencyBonus)
-	assert.Equal(t, "Longsword", data.EquippedMainHand)
+	assert.Equal(t, "Longsword", data.EquippedMainHand.Name)
 	assert.Equal(t, 16, data.AbilityScores.STR)
 	assert.Len(t, data.Classes, 1)
 	assert.Equal(t, "Fighter", data.Classes[0].Class)

@@ -147,9 +147,9 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_EquippedItems(t *testin
 	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
 
 	require.NoError(t, err)
-	assert.Equal(t, "Longsword", data.EquippedMainHand)
-	assert.Equal(t, "Shield", data.EquippedOffHand)
-	assert.Equal(t, "Chain Mail", data.EquippedArmor)
+	assert.Equal(t, "Longsword", data.EquippedMainHand.Name)
+	assert.Equal(t, "Shield", data.EquippedOffHand.Name)
+	assert.Equal(t, "Chain Mail", data.EquippedArmor.Name)
 	assert.Equal(t, "10 + DEX + CON", data.ACFormula)
 }
 
@@ -219,8 +219,8 @@ func TestServeCharacterSheet_FullRender(t *testing.T) {
 			TempHP:           5,
 			AC:               15,
 			SpeedFt:          30,
-			EquippedMainHand: "Staff",
-			EquippedArmor:    "Mage Armor",
+			EquippedMainHand: portal.EquippedSlot{ItemID: "staff", Name: "Staff"},
+			EquippedArmor:    portal.EquippedSlot{ItemID: "mage-armor", Name: "Mage Armor"},
 			Gold:             200,
 			Languages:        []string{"Common", "Elvish", "Draconic"},
 			Features: []character.Feature{
@@ -228,10 +228,10 @@ func TestServeCharacterSheet_FullRender(t *testing.T) {
 			},
 			SpellSlots:     map[string]character.SlotInfo{"1": {Current: 3, Max: 4}, "2": {Current: 2, Max: 3}},
 			PactMagicSlots: &character.PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2},
-			Inventory: []character.InventoryItem{
-				{Name: "Staff", Quantity: 1, Equipped: true, Type: "weapon"},
-				{Name: "Wand of Fireballs", Quantity: 1, IsMagic: true, Rarity: "rare"},
-				{Name: "Potion of Healing", Quantity: 3, Type: "consumable"},
+			Inventory: []portal.InventoryDisplayItem{
+				{InventoryItem: character.InventoryItem{Name: "Staff", Quantity: 1, Equipped: true, Type: "weapon"}},
+				{InventoryItem: character.InventoryItem{Name: "Wand of Fireballs", Quantity: 1, IsMagic: true, Rarity: "rare"}},
+				{InventoryItem: character.InventoryItem{Name: "Potion of Healing", Quantity: 3, Type: "consumable"}},
 			},
 			AttunementSlots: []character.AttunementSlot{
 				{ItemID: "wand-fb", Name: "Wand of Fireballs"},

@@ -32,9 +32,9 @@ type CharacterSheetData struct {
 	ACFormula        string
 	SpeedFt          int
 	ProficiencyBonus int
-	EquippedMainHand string
-	EquippedOffHand  string
-	EquippedArmor    string
+	EquippedMainHand EquippedSlot
+	EquippedOffHand  EquippedSlot
+	EquippedArmor    EquippedSlot
 	SpellSlots       map[string]character.SlotInfo
 	SortedSlotLevels []string // numerically sorted keys of SpellSlots
 	PactMagicSlots   *character.PactMagicSlots
@@ -45,7 +45,7 @@ type CharacterSheetData struct {
 	Gold             int
 	AttunementSlots  []character.AttunementSlot
 	Languages        []string
-	Inventory        []character.InventoryItem
+	Inventory        []InventoryDisplayItem
 	Conditions       []string // active conditions (poisoned, frightened, etc.)
 	ExhaustionLevel  int
 	ConcentrationOn  string // spell name if concentrating, empty otherwise

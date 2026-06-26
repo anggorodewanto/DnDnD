@@ -207,7 +207,18 @@ func groupSpellsByLevel(spells []SpellDisplayEntry) []SpellLevelGroup {
 	return result
 }
 
-const characterSheetTemplate = `<!DOCTYPE html>
+const characterSheetTemplate = `{{define "weaponStat"}}<dl class="eq-meta">
+    <div><dt>Damage</dt><dd>{{.Damage}}{{if .Versatile}} (versatile {{.Versatile}}){{end}}</dd></div>
+    {{if .Range}}<div><dt>Range</dt><dd>{{.Range}}</dd></div>{{end}}
+    {{if .WeaponType}}<div><dt>Type</dt><dd>{{.WeaponType}}</dd></div>{{end}}
+    {{if .Mastery}}<div><dt>Mastery</dt><dd>{{.Mastery}}</dd></div>{{end}}
+    {{if .Properties}}<div><dt>Properties</dt><dd>{{join .Properties ", "}}</dd></div>{{end}}
+</dl>{{end}}{{define "armorStat"}}<dl class="eq-meta">
+    <div><dt>Armor Class</dt><dd>{{.AC}}</dd></div>
+    {{if .ArmorType}}<div><dt>Type</dt><dd>{{.ArmorType}}</dd></div>{{end}}
+    {{if gt .StrengthReq 0}}<div><dt>Strength</dt><dd>STR {{.StrengthReq}}</dd></div>{{end}}
+    {{if .StealthDisadv}}<div><dt>Stealth</dt><dd>Disadvantage</dd></div>{{end}}
+</dl>{{end}}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -272,6 +283,26 @@ const characterSheetTemplate = `<!DOCTYPE html>
         .desc-block { margin-bottom: 0.75rem; }
         .desc-label { color: #a0a0b0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
         .desc-text { color: #c0c0d0; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; }
+        .item-entry { border-bottom: 1px solid #0f346033; }
+        .item-summary { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.3rem 0; cursor: pointer; list-style: none; }
+        .item-summary::-webkit-details-marker { display: none; }
+        .item-summary > span:first-child::before { content: '\25B8'; color: #6a6a80; margin-right: 0.4rem; font-size: 0.75rem; }
+        details[open] > .item-summary > span:first-child::before { content: '\25BE'; }
+        .item-detail-body { padding: 0.25rem 0 0.65rem 1.15rem; }
+        .item-qty { color: #ffd166; font-size: 0.8rem; margin-left: 0.3rem; }
+        .item-rarity { color: #a0a0b0; font-size: 0.8rem; }
+        .item-source { color: #a0a0b0; font-size: 0.75rem; margin-left: 0.35rem; }
+        .item-aside { display: flex; gap: 0.5rem; align-items: center; }
+        .tag-homebrew { color: #ffd166; font-size: 0.75rem; margin-left: 0.35rem; }
+        .item-note { font-size: 0.82rem; color: #c0c0d0; margin: 0.15rem 0; }
+        .item-magic-props { font-size: 0.85rem; color: #c0c0d0; margin: 0.15rem 0; white-space: pre-wrap; }
+        .eq-meta { margin: 0.25rem 0 0.4rem; }
+        .eq-meta > div { display: flex; gap: 0.5rem; font-size: 0.82rem; padding: 0.1rem 0; }
+        .eq-meta dt { color: #a0a0b0; min-width: 6rem; }
+        .eq-meta dd { margin: 0; color: #e0e0e8; }
+        .equip-slot { margin-bottom: 0.6rem; }
+        .equip-label { color: #a0a0b0; font-weight: bold; margin-right: 0.4rem; }
+        .equip-name { color: #e0e0e8; }
         @media (max-width: 700px) {
             .grid-2 { grid-template-columns: 1fr; }
             .ability-grid { grid-template-columns: repeat(3, 1fr); }
@@ -414,10 +445,23 @@ const characterSheetTemplate = `<!DOCTYPE html>
 
         <div class="section">
             <h3>Equipment</h3>
-            <div style="margin-bottom: 0.5rem;">
-                <strong>Main Hand:</strong> {{if .EquippedMainHand}}{{.EquippedMainHand}}{{else}}<span class="empty-msg">empty</span>{{end}} |
-                <strong>Off Hand:</strong> {{if .EquippedOffHand}}{{.EquippedOffHand}}{{else}}<span class="empty-msg">empty</span>{{end}} |
-                <strong>Armor:</strong> {{if .EquippedArmor}}{{.EquippedArmor}}{{else}}<span class="empty-msg">none</span>{{end}}
+            <div class="equip-slot">
+                <span class="equip-label">Main Hand:</span>
+                {{if .EquippedMainHand.Empty}}<span class="empty-msg">empty</span>{{else}}<span class="equip-name">{{.EquippedMainHand.Name}}</span>{{end}}
+                {{with .EquippedMainHand.Weapon}}{{template "weaponStat" .}}{{end}}
+                {{with .EquippedMainHand.Armor}}{{template "armorStat" .}}{{end}}
+            </div>
+            <div class="equip-slot">
+                <span class="equip-label">Off Hand:</span>
+                {{if .EquippedOffHand.Empty}}<span class="empty-msg">empty</span>{{else}}<span class="equip-name">{{.EquippedOffHand.Name}}</span>{{end}}
+                {{with .EquippedOffHand.Weapon}}{{template "weaponStat" .}}{{end}}
+                {{with .EquippedOffHand.Armor}}{{template "armorStat" .}}{{end}}
+            </div>
+            <div class="equip-slot">
+                <span class="equip-label">Armor:</span>
+                {{if .EquippedArmor.Empty}}<span class="empty-msg">none</span>{{else}}<span class="equip-name">{{.EquippedArmor.Name}}</span>{{end}}
+                {{with .EquippedArmor.Armor}}{{template "armorStat" .}}{{end}}
+                {{with .EquippedArmor.Weapon}}{{template "weaponStat" .}}{{end}}
             </div>
         </div>
 
@@ -527,19 +571,43 @@ const characterSheetTemplate = `<!DOCTYPE html>
             <h3>Inventory</h3>
             {{if .Inventory}}
             {{range .Inventory}}
+            {{if .HasDetail}}
+            <details class="item-entry">
+                <summary class="item-summary">
+                    <span class="item-name {{if .IsMagic}}item-magic{{end}}">
+                        {{.Name}}
+                        {{if gt .Quantity 1}}<span class="item-qty">x{{.Quantity}}</span>{{end}}
+                        {{if .IsMagic}}✦{{end}}
+                        {{if .Homebrew}}<span class="tag-homebrew">Homebrew</span>{{end}}
+                    </span>
+                    <span class="item-aside">
+                        {{if .Equipped}}<span class="item-equipped">Equipped</span>{{end}}
+                        {{if .Rarity}}<span class="item-rarity">{{.Rarity}}</span>{{end}}
+                    </span>
+                </summary>
+                <div class="item-detail-body">
+                    {{with .Weapon}}{{template "weaponStat" .}}{{end}}
+                    {{with .Armor}}{{template "armorStat" .}}{{end}}
+                    {{if .MagicProperties}}<p class="item-magic-props">{{.MagicProperties}}</p>{{end}}
+                    {{if .RequiresAttunement}}<p class="item-note">Requires attunement{{if .AttunementRestriction}} ({{.AttunementRestriction}}){{end}}{{if .IsAttuned}} — attuned{{end}}</p>{{end}}
+                    {{if gt .MaxCharges 0}}<p class="item-note">Charges: {{.Charges}}/{{.MaxCharges}}</p>{{end}}
+                    {{if .Source}}<p class="item-note">Source: {{.Source}}</p>{{end}}
+                </div>
+            </details>
+            {{else}}
             <div class="item-row">
-                <span class="item-name {{if .IsMagic}}item-magic{{end}}">
+                <span class="item-name">
                     {{.Name}}
-                    {{if gt .Quantity 1}}(x{{.Quantity}}){{end}}
-                    {{if .IsMagic}}✦{{end}}
-                    {{if .Homebrew}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Homebrew</span>{{end}}
-                    {{if .Source}}<span style="color:#a0a0b0; font-size:0.75rem; margin-left:0.35rem;">{{.Source}}</span>{{end}}
+                    {{if gt .Quantity 1}}<span class="item-qty">x{{.Quantity}}</span>{{end}}
+                    {{if .Homebrew}}<span class="tag-homebrew">Homebrew</span>{{end}}
+                    {{if .Source}}<span class="item-source">{{.Source}}</span>{{end}}
                 </span>
-                <span>
+                <span class="item-aside">
                     {{if .Equipped}}<span class="item-equipped">Equipped</span>{{end}}
-                    {{if .Rarity}}<span style="color:#a0a0b0; font-size:0.8rem;">{{.Rarity}}</span>{{end}}
+                    {{if .Rarity}}<span class="item-rarity">{{.Rarity}}</span>{{end}}
                 </span>
             </div>
+            {{end}}
             {{end}}
             {{else}}
             <p class="empty-msg">No items</p>

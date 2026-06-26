@@ -21,6 +21,8 @@ type CharacterQuerier interface {
 	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
 	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
+	ListWeapons(ctx context.Context) ([]refdata.Weapon, error)
+	ListArmor(ctx context.Context) ([]refdata.Armor, error)
 }
 
 // CharacterSheetStoreAdapter implements CharacterSheetStore using refdata.Queries.
@@ -130,7 +132,76 @@ func (a *CharacterSheetStoreAdapter) GetCharacterForSheet(ctx context.Context, c
 		a.enrichSpells(ctx, data.Spells)
 	}
 
+	// Join weapon/armor stats onto inventory items and equipped slots.
+	a.enrichEquipment(ctx, data)
+
 	return data, nil
+}
+
+// enrichEquipment joins reference weapon/armor stats onto inventory items (by
+// item id) and resolves each equipped slot's id to a display name plus its stat
+// block. Best-effort, like enrichSpells: a missing ref table or an unmatched id
+// just leaves the item name-only, never failing the sheet load.
+func (a *CharacterSheetStoreAdapter) enrichEquipment(ctx context.Context, data *CharacterSheetData) {
+	weapons := a.loadWeaponStats(ctx)
+	armor := a.loadArmorStats(ctx)
+	catalog := refdata.ItemCatalogByID()
+
+	for i := range data.Inventory {
+		id := data.Inventory[i].ItemID
+		if w, ok := weapons[id]; ok {
+			data.Inventory[i].Weapon = w
+		}
+		if ar, ok := armor[id]; ok {
+			data.Inventory[i].Armor = ar
+		}
+	}
+
+	for _, slot := range []*EquippedSlot{&data.EquippedMainHand, &data.EquippedOffHand, &data.EquippedArmor} {
+		if slot.ItemID == "" {
+			continue
+		}
+		if e, ok := catalog[slot.ItemID]; ok {
+			slot.Name = e.Name
+		}
+		if slot.Name == "" {
+			slot.Name = slot.ItemID
+		}
+		if w, ok := weapons[slot.ItemID]; ok {
+			slot.Weapon = w
+		}
+		if ar, ok := armor[slot.ItemID]; ok {
+			slot.Armor = ar
+		}
+	}
+}
+
+// loadWeaponStats returns reference weapon stat blocks keyed by item id, or nil
+// when the lookup fails (enrichment degrades to name-only).
+func (a *CharacterSheetStoreAdapter) loadWeaponStats(ctx context.Context) map[string]*WeaponStats {
+	rows, err := a.q.ListWeapons(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]*WeaponStats, len(rows))
+	for _, w := range rows {
+		out[w.ID] = weaponStatsFrom(w)
+	}
+	return out
+}
+
+// loadArmorStats returns reference armor stat blocks keyed by item id, or nil
+// when the lookup fails.
+func (a *CharacterSheetStoreAdapter) loadArmorStats(ctx context.Context) map[string]*ArmorStats {
+	rows, err := a.q.ListArmor(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]*ArmorStats, len(rows))
+	for _, ar := range rows {
+		out[ar.ID] = armorStatsFrom(ar)
+	}
+	return out
 }
 
 func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
@@ -149,15 +220,15 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 		Languages:        ch.Languages,
 	}
 
-	// Equipped items
+	// Equipped slots hold item ids; name + stats are resolved by enrichEquipment.
 	if ch.EquippedMainHand.Valid {
-		data.EquippedMainHand = ch.EquippedMainHand.String
+		data.EquippedMainHand = EquippedSlot{ItemID: ch.EquippedMainHand.String}
 	}
 	if ch.EquippedOffHand.Valid {
-		data.EquippedOffHand = ch.EquippedOffHand.String
+		data.EquippedOffHand = EquippedSlot{ItemID: ch.EquippedOffHand.String}
 	}
 	if ch.EquippedArmor.Valid {
-		data.EquippedArmor = ch.EquippedArmor.String
+		data.EquippedArmor = EquippedSlot{ItemID: ch.EquippedArmor.String}
 	}
 	if ch.AcFormula.Valid {
 		data.ACFormula = ch.AcFormula.String
@@ -173,7 +244,7 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 
 	data.Proficiencies = parseNullJSON[character.Proficiencies](ch.Proficiencies)
 	data.Features = parseNullJSON[[]character.Feature](ch.Features)
-	data.Inventory = parseNullJSON[[]character.InventoryItem](ch.Inventory)
+	data.Inventory = wrapInventory(parseNullJSON[[]character.InventoryItem](ch.Inventory))
 	data.AttunementSlots = parseNullJSON[[]character.AttunementSlot](ch.AttunementSlots)
 	data.SpellSlots = parseNullJSON[map[string]character.SlotInfo](ch.SpellSlots)
 	data.PactMagicSlots = parseNullJSONPtr[character.PactMagicSlots](ch.PactMagicSlots)
