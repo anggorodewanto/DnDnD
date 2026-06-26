@@ -22,7 +22,7 @@
   async function handleDelete(id, name) {
     if (!confirm(`Delete encounter "${name}"?`)) return;
     try {
-      await deleteEncounter(id);
+      await deleteEncounter(id, campaignId);
       await loadEncounters();
     } catch (e) {
       error = e.message;
@@ -31,7 +31,7 @@
 
   async function handleDuplicate(id) {
     try {
-      await duplicateEncounter(id);
+      await duplicateEncounter(id, campaignId);
       await loadEncounters();
     } catch (e) {
       error = e.message;

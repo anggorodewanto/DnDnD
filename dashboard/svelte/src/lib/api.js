@@ -229,10 +229,11 @@ export async function createEncounter(params) {
 /**
  * Get an encounter template by ID.
  * @param {string} id - Encounter UUID.
+ * @param {string} campaignId - Campaign UUID (required by the backend).
  * @returns {Promise<object>} The encounter.
  */
-export async function getEncounter(id) {
-  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}`);
+export async function getEncounter(id, campaignId) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}?campaign_id=${encodeURIComponent(campaignId)}`);
   return res.json();
 }
 
@@ -250,10 +251,11 @@ export async function listEncounters(campaignId) {
  * Update an encounter template.
  * @param {string} id - Encounter UUID.
  * @param {object} params - { name, display_name?, map_id?, creatures? }
+ * @param {string} campaignId - Campaign UUID (required by the backend).
  * @returns {Promise<object>} The updated encounter.
  */
-export async function updateEncounter(id, params) {
-  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}`, {
+export async function updateEncounter(id, params, campaignId) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}?campaign_id=${encodeURIComponent(campaignId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -264,10 +266,11 @@ export async function updateEncounter(id, params) {
 /**
  * Delete an encounter template.
  * @param {string} id - Encounter UUID.
+ * @param {string} campaignId - Campaign UUID (required by the backend).
  * @returns {Promise<void>}
  */
-export async function deleteEncounter(id) {
-  await apiFetch(`${ENCOUNTERS_BASE}/${id}`, {
+export async function deleteEncounter(id, campaignId) {
+  await apiFetch(`${ENCOUNTERS_BASE}/${id}?campaign_id=${encodeURIComponent(campaignId)}`, {
     method: 'DELETE',
   });
 }
@@ -275,10 +278,11 @@ export async function deleteEncounter(id) {
 /**
  * Duplicate an encounter template.
  * @param {string} id - Encounter UUID.
+ * @param {string} campaignId - Campaign UUID (required by the backend).
  * @returns {Promise<object>} The duplicated encounter.
  */
-export async function duplicateEncounter(id) {
-  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}/duplicate`, {
+export async function duplicateEncounter(id, campaignId) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}/duplicate?campaign_id=${encodeURIComponent(campaignId)}`, {
     method: 'POST',
   });
   return res.json();

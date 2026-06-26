@@ -12,6 +12,10 @@ import {
   overrideCombatantInitiative,
   overrideCharacterSpellSlots,
   updateEncounterDisplayName,
+  getEncounter,
+  updateEncounter,
+  deleteEncounter,
+  duplicateEncounter,
   startCombat,
   endCombat,
   combatMapUrl,
@@ -345,6 +349,49 @@ describe('updateCombatantPosition', () => {
     expect(url).toBe('/api/combat/enc-1/combatants/comb-1/position');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body)).toEqual({ position_col: 'D', position_row: 4 });
+  });
+});
+
+// Encounter CRUD must pass campaign_id as a query param — the backend
+// requires it on GET/PUT/DELETE/duplicate (400 "campaign_id query parameter
+// required" otherwise).
+describe('encounter CRUD passes campaign_id', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('getEncounter GETs with campaign_id', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ id: 'enc-1' }) });
+    await getEncounter('enc-1', 'camp-9');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/encounters/enc-1?campaign_id=camp-9');
+    expect(options).toBeUndefined();
+  });
+
+  it('updateEncounter PUTs with campaign_id and JSON body', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ id: 'enc-1' }) });
+    const payload = { name: 'Cellar', creatures: [] };
+    await updateEncounter('enc-1', payload, 'camp-9');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/encounters/enc-1?campaign_id=camp-9');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('deleteEncounter DELETEs with campaign_id', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
+    await deleteEncounter('enc-1', 'camp-9');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/encounters/enc-1?campaign_id=camp-9');
+    expect(options.method).toBe('DELETE');
+  });
+
+  it('duplicateEncounter POSTs to /duplicate with campaign_id', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ id: 'enc-2' }) });
+    await duplicateEncounter('enc-1', 'camp-9');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/encounters/enc-1/duplicate?campaign_id=camp-9');
+    expect(options.method).toBe('POST');
   });
 });
 

@@ -109,7 +109,7 @@
     loading = true;
     error = null;
     try {
-      const data = await getEncounter(id);
+      const data = await getEncounter(id, campaignId);
       encounterName = data.name;
       displayName = data.display_name || '';
       selectedMapId = data.map_id;
@@ -430,7 +430,7 @@
       };
 
       if (savedEncounterId) {
-        await updateEncounter(savedEncounterId, payload);
+        await updateEncounter(savedEncounterId, payload, campaignId);
         statusMsg = 'Encounter saved.';
       } else {
         payload.campaign_id = campaignId;
