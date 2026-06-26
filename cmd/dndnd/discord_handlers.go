@@ -209,6 +209,25 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		campaignSvc = deps.queries
 	}
 
+	// After every economy-consuming command the active player's remaining
+	// action economy is re-posted to #your-turn (mirroring the combat-store
+	// decorator in main.go). The move/fly turn provider (here) and the /use and
+	// /give providers (the latter wired in attachInventoryAndCharacterHandlers)
+	// decorate UpdateTurnActions; /interact is already covered by the combat
+	// store. No-op without a Discord session, so headless test wiring is
+	// unaffected.
+	econPost := economyPostFor(deps)
+	var econTurnProvider *economyTurnProvider
+	if econPost != nil && deps.queries != nil {
+		econTurnProvider = newEconomyTurnProvider(deps.queries, econPost)
+		turnSvc = econTurnProvider
+	}
+	useGive := newUseGiveTurnAdapter(deps.queries)
+	var useProv discord.UseCombatProvider = useGive
+	if econPost != nil && useGive != nil {
+		useProv = &economyUseGiveProvider{UseCombatProvider: useGive, post: econPost}
+	}
+
 	characterLookup := newCharacterByDiscordAdapter(deps.queries)
 	combatantLookup := newCombatantByDiscordAdapter(deps.queries)
 	recapSvc := newRecapServiceAdapter(deps.queries, deps.combatService)
@@ -279,7 +298,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		recap:    discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
 		reaction: discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
 		use: func() *discord.UseHandler {
-			h := discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, newUseGiveTurnAdapter(deps.queries))
+			h := discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, useProv)
 			if deps.cardUpdater != nil {
 				h.SetCardUpdater(deps.cardUpdater)
 			}
@@ -584,7 +603,12 @@ func attachInventoryAndCharacterHandlers(
 	)
 	// med-35: wire turn provider so /give in combat costs the per-turn
 	// free object interaction. Out-of-combat /give carries no cost.
-	handlers.give.SetTurnProvider(newUseGiveTurnAdapter(deps.queries))
+	giveAdapter := newUseGiveTurnAdapter(deps.queries)
+	var giveProv discord.GiveTurnProvider = giveAdapter
+	if econPost := economyPostFor(deps); econPost != nil && giveAdapter != nil {
+		giveProv = &economyUseGiveProvider{UseCombatProvider: giveAdapter, post: econPost}
+	}
+	handlers.give.SetTurnProvider(giveProv)
 	// T25: wire receiver DM lookup so /give DMs the receiver.
 	handlers.give.SetPlayerLookup(newGivePlayerLookupAdapter(deps.queries))
 	if deps.cardUpdater != nil {
@@ -650,6 +674,10 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	handlers.attack = discord.NewAttackHandler(deps.session, deps.combatService, combatLookup, deps.roller)
 	handlers.bonus = discord.NewBonusHandler(deps.session, deps.combatService, combatLookup, deps.roller)
 	handlers.shove = discord.NewShoveHandler(deps.session, deps.combatService, combatLookup, deps.roller)
+	// /interact persists economy through combat.Interact (the SR-005
+	// handleViaCombat path), so its #your-turn re-post comes from the
+	// combat.Store decorator in main.go. The handler's own turnStore is the
+	// combat-service-less legacy fallback only, so it is left undecorated.
 	handlers.interact = discord.NewInteractHandler(deps.session, combatLookup, deps.queries)
 	// SR-005: route /interact through combat.Interact so the second interact
 	// on a turn falls back to the action (instead of being rejected outright)

@@ -1085,21 +1085,37 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// publisher wired in.
 		snapshotBuilder := dashboard.NewSnapshotBuilder(queries, time.Now)
 		publisher := dashboard.NewPublisher(hub, snapshotBuilder)
-		combatStore := combat.NewStoreAdapter(queries)
-		combatSvc := combat.NewService(combatStore)
-		combatSvc.SetPublisher(publisher)
-		combatHandler := combat.NewHandler(combatSvc, cfg.newRoller())
 
 		// Phase 22 wiring (high-10): the campaign-settings provider resolves
 		// encounter-id -> channel_ids map for the DM combat-log poster
 		// (G-97b) and is reused by the Discord slash-command handlers below.
-		// Constructed here (before the Discord session block) so the DM
-		// dashboard handler can post corrections even when the bot is offline.
+		// Constructed here (before the combat service) so the DM dashboard
+		// handler can post corrections even when the bot is offline AND so the
+		// #your-turn economy notifier below can be wired into the combat store.
 		campaignSettingsProvider := discord.NewDefaultCampaignSettingsProvider(
 			func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error) {
 				return queries.GetCampaignByEncounterID(ctx, encounterID)
 			},
 		)
+
+		// After every economy-consuming action the active player's remaining
+		// action economy is re-posted to #your-turn. UpdateTurnActions is the
+		// chokepoint every resource change funnels through; the one seam both
+		// families literally share is (*refdata.Queries).UpdateTurnActions, but
+		// that concrete sqlc type has a large consumer blast radius, so we
+		// decorate the per-family interfaces instead. Decorating the combat
+		// store here covers every combat-package handler (attack, standard
+		// actions, monk, rage, spellcasting, reactions, and /interact via
+		// combat.Interact); the Discord move/fly/use/give handlers get the same
+		// treatment in buildDiscordHandlers. Best-effort, no-op without a
+		// Discord session.
+		combatStore := combat.NewStoreAdapter(queries)
+		if poster := newTurnEconomyPoster(discordSession, campaignSettingsProvider, queries); poster != nil {
+			combatStore = newEconomyNotifyingStore(combatStore, poster.Post)
+		}
+		combatSvc := combat.NewService(combatStore)
+		combatSvc.SetPublisher(publisher)
+		combatHandler := combat.NewHandler(combatSvc, cfg.newRoller())
 
 		// G-97b: DM correction poster. Best-effort — nil session means
 		// corrections silently drop, matching the cardPoster pattern.
