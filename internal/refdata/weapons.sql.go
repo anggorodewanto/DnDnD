@@ -42,7 +42,7 @@ func (q *Queries) DeleteHomebrewWeapon(ctx context.Context, arg DeleteHomebrewWe
 }
 
 const getWeapon = `-- name: GetWeapon :one
-SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source, mastery FROM weapons WHERE id = $1
+SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source, mastery, ammunition_id FROM weapons WHERE id = $1
 `
 
 func (q *Queries) GetWeapon(ctx context.Context, id string) (Weapon, error) {
@@ -65,12 +65,13 @@ func (q *Queries) GetWeapon(ctx context.Context, id string) (Weapon, error) {
 		&i.Homebrew,
 		&i.Source,
 		&i.Mastery,
+		&i.AmmunitionID,
 	)
 	return i, err
 }
 
 const listWeapons = `-- name: ListWeapons :many
-SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source, mastery FROM weapons ORDER BY name
+SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source, mastery, ammunition_id FROM weapons ORDER BY name
 `
 
 func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
@@ -99,6 +100,7 @@ func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
 			&i.Homebrew,
 			&i.Source,
 			&i.Mastery,
+			&i.AmmunitionID,
 		); err != nil {
 			return nil, err
 		}
@@ -114,8 +116,8 @@ func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
 }
 
 const upsertWeapon = `-- name: UpsertWeapon :exec
-INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, mastery, campaign_id, homebrew, source)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, mastery, campaign_id, homebrew, source, ammunition_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     damage = EXCLUDED.damage,
@@ -130,6 +132,7 @@ ON CONFLICT (id) DO UPDATE SET
     campaign_id = EXCLUDED.campaign_id,
     homebrew = EXCLUDED.homebrew,
     source = EXCLUDED.source,
+    ammunition_id = EXCLUDED.ammunition_id,
     updated_at = now()
 `
 
@@ -148,6 +151,7 @@ type UpsertWeaponParams struct {
 	CampaignID      uuid.NullUUID   `json:"campaign_id"`
 	Homebrew        sql.NullBool    `json:"homebrew"`
 	Source          sql.NullString  `json:"source"`
+	AmmunitionID    sql.NullString  `json:"ammunition_id"`
 }
 
 func (q *Queries) UpsertWeapon(ctx context.Context, arg UpsertWeaponParams) error {
@@ -166,6 +170,7 @@ func (q *Queries) UpsertWeapon(ctx context.Context, arg UpsertWeaponParams) erro
 		arg.CampaignID,
 		arg.Homebrew,
 		arg.Source,
+		arg.AmmunitionID,
 	)
 	return err
 }

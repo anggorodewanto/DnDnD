@@ -656,4 +656,5 @@ type Weapon struct {
 	Homebrew        sql.NullBool    `json:"homebrew"`
 	Source          sql.NullString  `json:"source"`
 	Mastery         string          `json:"mastery"`
+	AmmunitionID    sql.NullString  `json:"ammunition_id"`
 }

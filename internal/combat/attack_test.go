@@ -2376,7 +2376,7 @@ func TestInventoryItem_ParseAndDeduct(t *testing.T) {
 	assert.Equal(t, "Arrows", items[0].Name)
 	assert.Equal(t, 18, items[0].Quantity)
 
-	items, err = DeductAmmunition(items, "Arrows")
+	items, err = DeductAmmunition(items, "Arrows", "")
 	require.NoError(t, err)
 	assert.Equal(t, 17, items[0].Quantity)
 }
@@ -2390,7 +2390,7 @@ func TestDeductAmmunition_SeededCrossbowBolt(t *testing.T) {
 	items := []character.InventoryItem{
 		{ItemID: "crossbow-bolt", Name: "crossbow-bolt", Quantity: 20, Type: "gear"},
 	}
-	items, err := DeductAmmunition(items, "Bolts")
+	items, err := DeductAmmunition(items, "Bolts", "")
 	require.NoError(t, err)
 	assert.Equal(t, 19, items[0].Quantity)
 }
@@ -2400,7 +2400,7 @@ func TestDeductAmmunition_SeededCrossbowBolt(t *testing.T) {
 func TestDeductAmmunition_NameVariants(t *testing.T) {
 	for _, name := range []string{"Bolts", "Crossbow Bolts", "Crossbow Bolt", "crossbow-bolt", "bolt"} {
 		items := []character.InventoryItem{{Name: name, Quantity: 5, Type: "gear"}}
-		got, err := DeductAmmunition(items, "Bolts")
+		got, err := DeductAmmunition(items, "Bolts", "")
 		require.NoErrorf(t, err, "name %q should match", name)
 		assert.Equalf(t, 4, got[0].Quantity, "name %q", name)
 	}
@@ -2413,7 +2413,7 @@ func TestDeductAmmunition_IgnoresLookalikeConsumable(t *testing.T) {
 	items := []character.InventoryItem{
 		{Name: "Lightning Bolt Scroll", Quantity: 1, Type: "consumable"},
 	}
-	_, err := DeductAmmunition(items, "Bolts")
+	_, err := DeductAmmunition(items, "Bolts", "")
 	require.Error(t, err)
 	var noAmmo NoAmmunitionError
 	require.ErrorAs(t, err, &noAmmo)
@@ -2421,7 +2421,7 @@ func TestDeductAmmunition_IgnoresLookalikeConsumable(t *testing.T) {
 
 func TestDeductAmmunition_Empty(t *testing.T) {
 	items := []character.InventoryItem{{Name: "Arrows", Quantity: 0, Type: "ammunition"}}
-	_, err := DeductAmmunition(items, "Arrows")
+	_, err := DeductAmmunition(items, "Arrows", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "No arrows remaining")
 	var noAmmo NoAmmunitionError
@@ -2431,7 +2431,7 @@ func TestDeductAmmunition_Empty(t *testing.T) {
 
 func TestDeductAmmunition_NotFound(t *testing.T) {
 	items := []character.InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
-	_, err := DeductAmmunition(items, "Arrows")
+	_, err := DeductAmmunition(items, "Arrows", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "No arrows remaining")
 	var noAmmo NoAmmunitionError
@@ -2441,7 +2441,7 @@ func TestDeductAmmunition_NotFound(t *testing.T) {
 func TestRecoverAmmunition(t *testing.T) {
 	items := []character.InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
 	// Used 8 arrows (had 18, now 10): recover half of 8 = 4
-	items = RecoverAmmunition(items, "Arrows", 8)
+	items = RecoverAmmunition(items, "Arrows", "", 8)
 	assert.Equal(t, 14, items[0].Quantity)
 }
 
@@ -2451,14 +2451,14 @@ func TestRecoverAmmunition_SeededSlug(t *testing.T) {
 	items := []character.InventoryItem{
 		{ItemID: "crossbow-bolt", Name: "crossbow-bolt", Quantity: 10, Type: "gear"},
 	}
-	items = RecoverAmmunition(items, "Bolts", 8)
+	items = RecoverAmmunition(items, "Bolts", "", 8)
 	assert.Equal(t, 14, items[0].Quantity)
 }
 
 func TestRecoverAmmunition_RoundsDown(t *testing.T) {
 	items := []character.InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
 	// Used 7 arrows: recover half of 7 = 3 (rounded down)
-	items = RecoverAmmunition(items, "Arrows", 7)
+	items = RecoverAmmunition(items, "Arrows", "", 7)
 	assert.Equal(t, 13, items[0].Quantity)
 }
 
@@ -2550,7 +2550,7 @@ func TestParseInventory_InvalidJSON(t *testing.T) {
 
 func TestRecoverAmmunition_NotFound(t *testing.T) {
 	items := []character.InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
-	items = RecoverAmmunition(items, "Arrows", 5)
+	items = RecoverAmmunition(items, "Arrows", "", 5)
 	// No change since "Arrows" not found
 	assert.Equal(t, 10, items[0].Quantity)
 }

@@ -107,10 +107,10 @@ func weaponSeeds() []UpsertWeaponParams {
 		{ID: "sickle", Name: "Sickle", Damage: "1d4", DamageType: "slashing", WeightLb: optFloat(2), Properties: []string{"light"}, WeaponType: "simple_melee", Mastery: "nick"},
 		{ID: "spear", Name: "Spear", Damage: "1d6", DamageType: "piercing", WeightLb: optFloat(3), Properties: []string{"thrown", "versatile"}, RangeNormalFt: optInt(20), RangeLongFt: optInt(60), VersatileDamage: optStr("1d8"), WeaponType: "simple_melee", Mastery: "sap"},
 		// Simple Ranged
-		{ID: "light-crossbow", Name: "Light crossbow", Damage: "1d8", DamageType: "piercing", WeightLb: optFloat(5), Properties: []string{"ammunition", "loading", "two-handed"}, RangeNormalFt: optInt(80), RangeLongFt: optInt(320), WeaponType: "simple_ranged", Mastery: "slow"},
+		{ID: "light-crossbow", Name: "Light crossbow", Damage: "1d8", DamageType: "piercing", WeightLb: optFloat(5), Properties: []string{"ammunition", "loading", "two-handed"}, RangeNormalFt: optInt(80), RangeLongFt: optInt(320), WeaponType: "simple_ranged", Mastery: "slow", AmmunitionID: optStr("crossbow-bolt")},
 		{ID: "dart", Name: "Dart", Damage: "1d4", DamageType: "piercing", WeightLb: optFloat(0.25), Properties: []string{"finesse", "thrown"}, RangeNormalFt: optInt(20), RangeLongFt: optInt(60), WeaponType: "simple_ranged", Mastery: "vex"},
-		{ID: "shortbow", Name: "Shortbow", Damage: "1d6", DamageType: "piercing", WeightLb: optFloat(2), Properties: []string{"ammunition", "two-handed"}, RangeNormalFt: optInt(80), RangeLongFt: optInt(320), WeaponType: "simple_ranged", Mastery: "vex"},
-		{ID: "sling", Name: "Sling", Damage: "1d4", DamageType: "bludgeoning", WeightLb: optFloat(0), Properties: []string{"ammunition"}, RangeNormalFt: optInt(30), RangeLongFt: optInt(120), WeaponType: "simple_ranged", Mastery: "slow"},
+		{ID: "shortbow", Name: "Shortbow", Damage: "1d6", DamageType: "piercing", WeightLb: optFloat(2), Properties: []string{"ammunition", "two-handed"}, RangeNormalFt: optInt(80), RangeLongFt: optInt(320), WeaponType: "simple_ranged", Mastery: "vex", AmmunitionID: optStr("arrow")},
+		{ID: "sling", Name: "Sling", Damage: "1d4", DamageType: "bludgeoning", WeightLb: optFloat(0), Properties: []string{"ammunition"}, RangeNormalFt: optInt(30), RangeLongFt: optInt(120), WeaponType: "simple_ranged", Mastery: "slow", AmmunitionID: optStr("sling-bullet")},
 		// Martial Melee
 		{ID: "battleaxe", Name: "Battleaxe", Damage: "1d8", DamageType: "slashing", WeightLb: optFloat(4), Properties: []string{"versatile"}, VersatileDamage: optStr("1d10"), WeaponType: "martial_melee", Mastery: "topple"},
 		{ID: "flail", Name: "Flail", Damage: "1d8", DamageType: "bludgeoning", WeightLb: optFloat(2), Properties: []string{}, WeaponType: "martial_melee", Mastery: "sap"},
@@ -131,10 +131,10 @@ func weaponSeeds() []UpsertWeaponParams {
 		{ID: "warhammer", Name: "Warhammer", Damage: "1d8", DamageType: "bludgeoning", WeightLb: optFloat(2), Properties: []string{"versatile"}, VersatileDamage: optStr("1d10"), WeaponType: "martial_melee", Mastery: "push"},
 		{ID: "whip", Name: "Whip", Damage: "1d4", DamageType: "slashing", WeightLb: optFloat(3), Properties: []string{"finesse", "reach"}, WeaponType: "martial_melee", Mastery: "slow"},
 		// Martial Ranged
-		{ID: "blowgun", Name: "Blowgun", Damage: "1", DamageType: "piercing", WeightLb: optFloat(1), Properties: []string{"ammunition", "loading"}, RangeNormalFt: optInt(25), RangeLongFt: optInt(100), WeaponType: "martial_ranged", Mastery: "vex"},
-		{ID: "hand-crossbow", Name: "Hand crossbow", Damage: "1d6", DamageType: "piercing", WeightLb: optFloat(3), Properties: []string{"ammunition", "light", "loading"}, RangeNormalFt: optInt(30), RangeLongFt: optInt(120), WeaponType: "martial_ranged", Mastery: "vex"},
-		{ID: "heavy-crossbow", Name: "Heavy crossbow", Damage: "1d10", DamageType: "piercing", WeightLb: optFloat(18), Properties: []string{"ammunition", "heavy", "loading", "two-handed"}, RangeNormalFt: optInt(100), RangeLongFt: optInt(400), WeaponType: "martial_ranged", Mastery: "push"},
-		{ID: "longbow", Name: "Longbow", Damage: "1d8", DamageType: "piercing", WeightLb: optFloat(2), Properties: []string{"ammunition", "heavy", "two-handed"}, RangeNormalFt: optInt(150), RangeLongFt: optInt(600), WeaponType: "martial_ranged", Mastery: "slow"},
+		{ID: "blowgun", Name: "Blowgun", Damage: "1", DamageType: "piercing", WeightLb: optFloat(1), Properties: []string{"ammunition", "loading"}, RangeNormalFt: optInt(25), RangeLongFt: optInt(100), WeaponType: "martial_ranged", Mastery: "vex", AmmunitionID: optStr("blowgun-needle")},
+		{ID: "hand-crossbow", Name: "Hand crossbow", Damage: "1d6", DamageType: "piercing", WeightLb: optFloat(3), Properties: []string{"ammunition", "light", "loading"}, RangeNormalFt: optInt(30), RangeLongFt: optInt(120), WeaponType: "martial_ranged", Mastery: "vex", AmmunitionID: optStr("crossbow-bolt")},
+		{ID: "heavy-crossbow", Name: "Heavy crossbow", Damage: "1d10", DamageType: "piercing", WeightLb: optFloat(18), Properties: []string{"ammunition", "heavy", "loading", "two-handed"}, RangeNormalFt: optInt(100), RangeLongFt: optInt(400), WeaponType: "martial_ranged", Mastery: "push", AmmunitionID: optStr("crossbow-bolt")},
+		{ID: "longbow", Name: "Longbow", Damage: "1d8", DamageType: "piercing", WeightLb: optFloat(2), Properties: []string{"ammunition", "heavy", "two-handed"}, RangeNormalFt: optInt(150), RangeLongFt: optInt(600), WeaponType: "martial_ranged", Mastery: "slow", AmmunitionID: optStr("arrow")},
 		{ID: "net", Name: "Net", Damage: "0", DamageType: "none", WeightLb: optFloat(3), Properties: []string{"special", "thrown"}, RangeNormalFt: optInt(5), RangeLongFt: optInt(15), WeaponType: "martial_ranged"},
 	}
 }

@@ -141,7 +141,10 @@ func (s *Service) recoverEncounterAmmunition(ctx context.Context, encounterID uu
 			return fmt.Errorf("parsing inventory for %s: %w", c.DisplayName, err)
 		}
 		for ammoName, spent := range spentByAmmo {
-			items = RecoverAmmunition(items, ammoName, spent)
+			// The in-memory tracker keys spend by the conventional ammo name
+			// only, so recovery matches by keyword (ammoID ""); the keyword
+			// scan still finds the canonical seeded ammo stack.
+			items = RecoverAmmunition(items, ammoName, "", spent)
 		}
 		invJSON, err := character.MarshalInventory(items)
 		if err != nil {

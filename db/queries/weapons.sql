@@ -8,8 +8,8 @@ SELECT * FROM weapons ORDER BY name;
 SELECT count(*) FROM weapons;
 
 -- name: UpsertWeapon :exec
-INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, mastery, campaign_id, homebrew, source)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, mastery, campaign_id, homebrew, source, ammunition_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     damage = EXCLUDED.damage,
@@ -24,6 +24,7 @@ ON CONFLICT (id) DO UPDATE SET
     campaign_id = EXCLUDED.campaign_id,
     homebrew = EXCLUDED.homebrew,
     source = EXCLUDED.source,
+    ammunition_id = EXCLUDED.ammunition_id,
     updated_at = now();
 
 -- name: DeleteHomebrewWeapon :execrows

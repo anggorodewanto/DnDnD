@@ -224,10 +224,17 @@ func (e NoAmmunitionError) Error() string {
 // item_id contains the singular ammo keyword ("bolt"/"arrow") as a whole
 // word, so a "Lightning Bolt Scroll" (a consumable) is never mistaken for
 // crossbow ammo.
-func ammoMatches(item character.InventoryItem, ammoName string) bool {
+func ammoMatches(item character.InventoryItem, ammoName, ammoID string) bool {
 	switch strings.ToLower(item.Type) {
 	case "weapon", "armor", "consumable":
 		return false
+	}
+	// Prefer exact item-id equality against the weapon's ammunition_id FK
+	// (ISSUE-017 phase 2): when the weapon links to its ammo item, a precise id
+	// match avoids any name-keyword ambiguity. The keyword scan below stays as a
+	// legacy fallback for weapon/inventory rows that predate the FK.
+	if ammoID != "" && strings.EqualFold(item.ItemID, ammoID) {
+		return true
 	}
 	keyword := strings.TrimSuffix(strings.ToLower(ammoName), "s") // "Bolts" -> "bolt"
 	for _, tok := range ammoWords(item.Name + " " + item.ItemID) {
@@ -250,9 +257,9 @@ func ammoWords(s string) []string {
 // DeductAmmunition decrements the matching ammunition stack by 1. Returns a
 // NoAmmunitionError when no matching ammo is found or the stack is empty, so
 // the caller can offer DM adjudication rather than a dead-end rejection.
-func DeductAmmunition(items []character.InventoryItem, ammoName string) ([]character.InventoryItem, error) {
+func DeductAmmunition(items []character.InventoryItem, ammoName, ammoID string) ([]character.InventoryItem, error) {
 	for i := range items {
-		if !ammoMatches(items[i], ammoName) {
+		if !ammoMatches(items[i], ammoName, ammoID) {
 			continue
 		}
 		if items[i].Quantity <= 0 {
@@ -266,13 +273,13 @@ func DeductAmmunition(items []character.InventoryItem, ammoName string) ([]chara
 
 // RecoverAmmunition adds back half (rounded down) of spent ammunition to the
 // matching stack after combat (Phase 37).
-func RecoverAmmunition(items []character.InventoryItem, ammoName string, spent int) []character.InventoryItem {
+func RecoverAmmunition(items []character.InventoryItem, ammoName, ammoID string, spent int) []character.InventoryItem {
 	recovered := spent / 2
 	if recovered <= 0 {
 		return items
 	}
 	for i := range items {
-		if ammoMatches(items[i], ammoName) {
+		if ammoMatches(items[i], ammoName, ammoID) {
 			items[i].Quantity += recovered
 			return items
 		}
@@ -280,9 +287,30 @@ func RecoverAmmunition(items []character.InventoryItem, ammoName string, spent i
 	return items
 }
 
-// GetAmmunitionName returns the conventional ammunition name for a weapon.
-// Crossbows use "Bolts", other ammunition weapons use "Arrows".
+// ammunitionItemID returns the canonical ammo item id a weapon consumes, from
+// its ammunition_id FK (ISSUE-017 phase 2), or "" for a legacy/homebrew weapon
+// row that predates the link.
+func ammunitionItemID(weapon refdata.Weapon) string {
+	if weapon.AmmunitionID.Valid {
+		return weapon.AmmunitionID.String
+	}
+	return ""
+}
+
+// GetAmmunitionName returns the conventional short ammunition name for a weapon
+// ("Bolts", "Arrows", "Bullets", "Needles"), used for player-facing messages
+// and the ammo-spent tracker key. It reads the weapon's ammunition_id FK and
+// derives the name from the canonical item catalog (the last word of the
+// display name keeps it keyword-matcher friendly), falling back to the legacy
+// "crossbow" substring heuristic when the FK is absent.
 func GetAmmunitionName(weapon refdata.Weapon) string {
+	if id := ammunitionItemID(weapon); id != "" {
+		if e, ok := refdata.ItemCatalogByID()[id]; ok {
+			if fields := strings.Fields(e.Name); len(fields) > 0 {
+				return fields[len(fields)-1]
+			}
+		}
+	}
 	if strings.Contains(strings.ToLower(weapon.Name), "crossbow") {
 		return "Bolts"
 	}
@@ -1119,11 +1147,12 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	// the narrow projection used previously silently dropped them on each shot.
 	if HasProperty(weapon, "ammunition") && char != nil {
 		ammoName := GetAmmunitionName(weapon)
+		ammoID := ammunitionItemID(weapon)
 		items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
 		if err != nil {
 			return AttackResult{}, fmt.Errorf("parsing inventory: %w", err)
 		}
-		items, err = DeductAmmunition(items, ammoName)
+		items, err = DeductAmmunition(items, ammoName, ammoID)
 		if err != nil {
 			return AttackResult{}, err
 		}

@@ -70,6 +70,7 @@ func TestIntegration_MigrateDown(t *testing.T) {
 
 	// Roll back migrations from most recent to oldest.
 	for _, name := range []string{
+		"add_weapon_ammunition_id",
 		"create_items",
 		"create_initiative_tracker_messages",
 		"create_open5e_custom_sources",
