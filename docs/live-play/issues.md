@@ -461,11 +461,16 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Live caveat:** the running stack must be **rebuilt (`make build`) and restarted** for
   the fix to apply. Existing characters need no data change — the matcher now reads their
   current inventory correctly.
-- **Follow-ups (not in this change):** the builder seeds starting ammo as **quantity 1**
-  (the Svelte builder strips the `:20` from `crossbow-bolt:20` before submit) and tags it
-  `type:"gear"` rather than `"ammunition"` — proper starting counts/typing is a separate
-  frontend fix. The same narrow-projection field-drop still exists on the spell
-  material-component path (`spellcasting.go`).
+- **Follow-up FIXED (2026-06-26, separate commit):** builder ammo seeding corrected.
+  `EquipmentToInventoryWithEquipped` now parses a `:N` quantity suffix (and comma-batched
+  options), classifies SRD ammo IDs (`crossbow-bolt`, `arrow`, …) as `type:"ammunition"`,
+  and gives them a proper display name (`"Crossbow Bolts"`). The Svelte builder no longer
+  strips `:20` on submit (new `lib/equipment-assembly.js` `assembleEquipment` —
+  bare-id list still feeds the equipped pickers; a quantity-preserving list goes to the
+  backend). So a new crossbow user starts with **20 bolts**, typed ammunition, not one
+  `gear` slug. Go + vitest TDD; bundle rebuilt.
+- **Still open:** the same narrow-projection field-drop exists on the spell
+  material-component path (`spellcasting.go`) — unrelated to ammo, left as-is.
 
 <!-- Append a section per issue:
 

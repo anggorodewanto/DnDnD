@@ -23,6 +23,7 @@
   import { submissionRequirements, canSubmit } from './lib/submission-requirements.js';
   import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState } from './lib/builder-steps.js';
   import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
+  import { assembleEquipment } from './lib/equipment-assembly.js';
 
   let { mode = 'player', token = '', campaignId = '', editCharacterId = '' } = $props();
 
@@ -512,40 +513,27 @@
     manualEquipment = manualEquipment.filter(id => id !== itemId);
   }
 
-  // Derive the final equipment list from pack choices + manual items
-  let selectedEquipment = $derived(() => {
-    const items = [];
-    // Add items from pack choices
-    if (startingPacks.length > 0 && startingPacks[0]) {
-      const pack = startingPacks[0];
-      // Add guaranteed items
-      if (pack.guaranteed) {
-        for (const g of pack.guaranteed) {
-          items.push(g.split(':')[0]);
-        }
-      }
-      // Add chosen options
-      if (pack.choices) {
-        for (let i = 0; i < pack.choices.length; i++) {
-          const chosen = packChoices[i];
-          if (chosen !== undefined && pack.choices[i].options[chosen]) {
-            const opt = pack.choices[i].options[chosen];
-            // Option may contain comma-separated items with quantities
-            for (const part of opt.split(',')) {
-              items.push(part.split(':')[0]);
-            }
-          }
-        }
-      }
-    }
-    // Add manual items
-    for (const id of manualEquipment) {
-      if (!items.includes(id)) {
-        items.push(id);
-      }
-    }
-    return items;
-  });
+  // Bare-id equipment list (quantities stripped) — feeds the equipped-weapon /
+  // armor pickers, display, and dedup, all of which match on plain ids.
+  let selectedEquipment = $derived(() =>
+    assembleEquipment({
+      pack: startingPacks.length > 0 ? startingPacks[0] : null,
+      packChoices,
+      manualEquipment,
+    })
+  );
+
+  // Submission list — identical contents but PRESERVES ":N" quantities so the
+  // backend seeds real stack sizes (a full quiver of 20 bolts, two handaxes)
+  // instead of one of each. Backend parses the suffix in EquipmentToInventory.
+  let submissionEquipment = $derived(() =>
+    assembleEquipment({
+      pack: startingPacks.length > 0 ? startingPacks[0] : null,
+      packChoices,
+      manualEquipment,
+      preserveQuantities: true,
+    })
+  );
 
   // Filtered equipment for search
   let filteredEquipment = $derived(() => {
@@ -712,7 +700,7 @@
       ability_rolls: abilityRolls,
       skills,
       expertise,
-      equipment: selectedEquipment(),
+      equipment: submissionEquipment(),
       spells: selectedSpells,
       languages: assembleLanguages(raceBaseLanguages(selectedRaceData), chosenLanguages),
       weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),

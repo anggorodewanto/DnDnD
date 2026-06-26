@@ -237,6 +237,38 @@ func TestBuilderStoreAdapter_EquipmentToInventory_UnknownItems(t *testing.T) {
 	assert.Equal(t, "gear", items[0].Type)
 }
 
+// TestBuilderStoreAdapter_EquipmentToInventory_Ammo locks in the builder-ammo
+// fix: SRD ammunition IDs become a proper {type:"ammunition", display-name,
+// quantity} stack so /attack deducts them and inventory cards read naturally.
+func TestBuilderStoreAdapter_EquipmentToInventory_Ammo(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"crossbow-bolt:20", "arrow:20"})
+	require.Len(t, items, 2)
+
+	assert.Equal(t, "crossbow-bolt", items[0].ItemID)
+	assert.Equal(t, "Crossbow Bolts", items[0].Name)
+	assert.Equal(t, "ammunition", items[0].Type)
+	assert.Equal(t, 20, items[0].Quantity)
+
+	assert.Equal(t, "arrow", items[1].ItemID)
+	assert.Equal(t, "Arrows", items[1].Name)
+	assert.Equal(t, "ammunition", items[1].Type)
+	assert.Equal(t, 20, items[1].Quantity)
+}
+
+// TestBuilderStoreAdapter_EquipmentToInventory_Quantity confirms a ":N" suffix
+// sets the stack size for any item (handaxes, javelins), and a combined
+// comma-batched option expands into separate items.
+func TestBuilderStoreAdapter_EquipmentToInventory_Quantity(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"handaxe:2", "light-crossbow:1,crossbow-bolt:20"})
+	require.Len(t, items, 3)
+	assert.Equal(t, "handaxe", items[0].ItemID)
+	assert.Equal(t, 2, items[0].Quantity)
+	assert.Equal(t, "light-crossbow", items[1].ItemID)
+	assert.Equal(t, 1, items[1].Quantity)
+	assert.Equal(t, "crossbow-bolt", items[2].ItemID)
+	assert.Equal(t, 20, items[2].Quantity)
+}
+
 func TestBuilderStoreAdapter_EquipmentToInventory_SkipsPlaceholders(t *testing.T) {
 	items := portal.EquipmentToInventory([]string{"longsword", "any-martial", "shield", "any-simple-melee"})
 	assert.Len(t, items, 2)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -703,7 +704,18 @@ var knownArmor = map[string]bool{
 	"shield": true,
 }
 
-// itemType returns "weapon", "armor", or "gear" for an item ID.
+// knownAmmo maps SRD ammunition item IDs (which have no refdata weapon/armor
+// row — the builder mints them straight into inventory) to their display name.
+// The combat ammo matcher keys off the "bolt"/"arrow" word, so these names
+// must contain it. Kept local until a real gear catalog (SSOT) exists.
+var knownAmmo = map[string]string{
+	"crossbow-bolt":  "Crossbow Bolts",
+	"arrow":          "Arrows",
+	"sling-bullet":   "Sling Bullets",
+	"blowgun-needle": "Blowgun Needles",
+}
+
+// itemType returns "weapon", "armor", "ammunition", or "gear" for an item ID.
 func itemType(id string) string {
 	if knownWeapons[id] {
 		return "weapon"
@@ -711,7 +723,35 @@ func itemType(id string) string {
 	if knownArmor[id] {
 		return "armor"
 	}
+	if _, ok := knownAmmo[id]; ok {
+		return "ammunition"
+	}
 	return "gear"
+}
+
+// itemDisplayName returns a human label for an item ID. Ammunition gets a
+// proper plural name (so inventory cards read naturally and the combat ammo
+// matcher resolves it); everything else falls back to the raw ID.
+func itemDisplayName(id string) string {
+	if name, ok := knownAmmo[id]; ok {
+		return name
+	}
+	return id
+}
+
+// parseEquipmentEntry splits an equipment token into its item ID and quantity.
+// A trailing ":N" sets the quantity ("crossbow-bolt:20" -> 20); a missing or
+// malformed suffix defaults to 1. SRD starting-equipment strings carry these
+// counts, so honoring them gives a crossbow user a full quiver instead of a
+// single bolt.
+func parseEquipmentEntry(entry string) (id string, qty int) {
+	id, qty = entry, 1
+	if i := strings.LastIndex(entry, ":"); i >= 0 {
+		if n, err := strconv.Atoi(entry[i+1:]); err == nil && n > 0 {
+			id, qty = entry[:i], n
+		}
+	}
+	return id, qty
 }
 
 // EquipmentToInventory converts equipment ID strings to InventoryItem structs.
@@ -728,29 +768,34 @@ func EquipmentToInventoryWithEquipped(equipment []string, equippedWeapon, wornAr
 		return nil
 	}
 	items := make([]character.InventoryItem, 0, len(equipment))
-	for _, id := range equipment {
-		if strings.HasPrefix(id, "any-") {
-			continue // skip unresolved placeholder
+	for _, raw := range equipment {
+		// A token may batch comma-separated items ("light-crossbow:1,crossbow-bolt:20")
+		// and each may carry a ":N" quantity. Split both so a quiver lands as 20.
+		for entry := range strings.SplitSeq(raw, ",") {
+			id, qty := parseEquipmentEntry(strings.TrimSpace(entry))
+			if id == "" || strings.HasPrefix(id, "any-") {
+				continue // skip empty / unresolved placeholder
+			}
+			item := character.InventoryItem{
+				ItemID:   id,
+				Name:     itemDisplayName(id),
+				Quantity: qty,
+				Type:     itemType(id),
+			}
+			if equippedWeapon != "" && strings.EqualFold(id, equippedWeapon) {
+				item.Equipped = true
+				item.EquipSlot = "main_hand"
+			}
+			if wornArmor != "" && strings.EqualFold(id, wornArmor) {
+				item.Equipped = true
+				item.EquipSlot = "armor"
+			}
+			if strings.EqualFold(id, "shield") {
+				item.Equipped = true
+				item.EquipSlot = "off_hand"
+			}
+			items = append(items, item)
 		}
-		item := character.InventoryItem{
-			ItemID:   id,
-			Name:     id,
-			Quantity: 1,
-			Type:     itemType(id),
-		}
-		if equippedWeapon != "" && strings.EqualFold(id, equippedWeapon) {
-			item.Equipped = true
-			item.EquipSlot = "main_hand"
-		}
-		if wornArmor != "" && strings.EqualFold(id, wornArmor) {
-			item.Equipped = true
-			item.EquipSlot = "armor"
-		}
-		if strings.EqualFold(id, "shield") {
-			item.Equipped = true
-			item.EquipSlot = "off_hand"
-		}
-		items = append(items, item)
 	}
 	return items
 }
