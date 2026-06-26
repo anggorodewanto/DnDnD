@@ -776,6 +776,21 @@ func (s *Service) advanceRound(ctx context.Context, encounterID uuid.UUID, round
 	// each via the DM notifier so #dm-queue visibly forfeits the prompt
 	// instead of leaving it pending forever.
 	s.ForfeitPendingOAs(ctx, encounterID)
+	// Auto-recap the round that just finished to #combat-log. roundNumber is
+	// the NEW round, so the completed round is one lower. Best-effort: a list
+	// error or an empty recap silently no-ops — a recap hiccup must never undo
+	// the successfully-persisted round advance.
+	completedRound := roundNumber - 1
+	if completedRound < 1 {
+		return nil
+	}
+	logs, lerr := s.store.ListActionLogWithRounds(ctx, encounterID)
+	if lerr != nil {
+		return nil
+	}
+	if msg, ok := BuildRoundRecap(logs, completedRound); ok {
+		s.postCombatLog(ctx, encounterID, msg)
+	}
 	return nil
 }
 

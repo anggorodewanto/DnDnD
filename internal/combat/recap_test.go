@@ -187,3 +187,40 @@ func TestFormatRecap_GroupsByRound(t *testing.T) {
 	assert.Contains(t, result, "Goblin #1 Disengaged")
 	assert.Contains(t, result, "\U0001f4dc Recap \u2014 Rounds 1\u20132")
 }
+
+func TestBuildRoundRecap_OnlyTargetRound(t *testing.T) {
+	logs := []refdata.ListActionLogWithRoundsRow{
+		{RoundNumber: 1, Description: sql.NullString{String: "Aria attacked Goblin", Valid: true}},
+		{RoundNumber: 1, Description: sql.NullString{String: "Goblin attacked Aria", Valid: true}},
+		{RoundNumber: 2, Description: sql.NullString{String: "Aria Disengaged", Valid: true}},
+	}
+
+	msg, ok := BuildRoundRecap(logs, 1)
+	assert.True(t, ok)
+	assert.Contains(t, msg, "Round 1 complete")
+	assert.Contains(t, msg, "Aria attacked Goblin")
+	assert.Contains(t, msg, "Goblin attacked Aria")
+	// Round 2's line must not leak into the round-1 recap.
+	assert.NotContains(t, msg, "Aria Disengaged")
+}
+
+func TestBuildRoundRecap_NoEntriesForRound(t *testing.T) {
+	logs := []refdata.ListActionLogWithRoundsRow{
+		{RoundNumber: 1, Description: sql.NullString{String: "Aria attacked Goblin", Valid: true}},
+	}
+
+	msg, ok := BuildRoundRecap(logs, 2)
+	assert.False(t, ok)
+	assert.Equal(t, "", msg)
+}
+
+func TestBuildRoundRecap_AllDescriptionsEmpty(t *testing.T) {
+	logs := []refdata.ListActionLogWithRoundsRow{
+		{RoundNumber: 1, Description: sql.NullString{Valid: false}},
+		{RoundNumber: 1, Description: sql.NullString{String: "", Valid: true}},
+	}
+
+	msg, ok := BuildRoundRecap(logs, 1)
+	assert.False(t, ok)
+	assert.Equal(t, "", msg)
+}

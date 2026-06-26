@@ -95,6 +95,23 @@ func RecapRoundRange(logs []refdata.ListActionLogWithRoundsRow) string {
 	return fmt.Sprintf("Rounds %d\u2013%d", first, last)
 }
 
+// BuildRoundRecap formats a #combat-log recap for the single completed round.
+// Returns ok=false when that round produced no describable action-log entries,
+// so callers skip posting an empty "Round N complete" line.
+func BuildRoundRecap(logs []refdata.ListActionLogWithRoundsRow, completedRound int32) (string, bool) {
+	var filtered []refdata.ListActionLogWithRoundsRow
+	for _, l := range logs {
+		if l.RoundNumber == completedRound && l.Description.Valid && l.Description.String != "" {
+			filtered = append(filtered, l)
+		}
+	}
+	if len(filtered) == 0 {
+		return "", false
+	}
+	msg := FormatRecap(filtered, fmt.Sprintf("Round %d complete", completedRound))
+	return TruncateRecap(msg, 2000), true
+}
+
 // FormatRecap formats action log entries grouped by round into a readable recap string.
 // The subtitle describes the scope (e.g., "Rounds 1–3" or "since your last turn").
 func FormatRecap(logs []refdata.ListActionLogWithRoundsRow, subtitle string) string {

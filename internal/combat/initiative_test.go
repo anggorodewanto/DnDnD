@@ -1172,6 +1172,131 @@ func TestService_AdvanceTurn_RoundAdvancement(t *testing.T) {
 	assert.Equal(t, combatant1ID, turnInfo.CombatantID)
 }
 
+func TestService_AdvanceTurn_RoundRecapPosted(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	combatant1ID := uuid.New()
+	combatant2ID := uuid.New()
+	activeTurnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: combatant1ID, InitiativeOrder: 1, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true},
+			{ID: combatant2ID, InitiativeOrder: 2, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`), IsAlive: true},
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: activeTurnID, CombatantID: combatant2ID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.completeTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		if arg.RoundNumber == 1 {
+			return []refdata.Turn{
+				{CombatantID: combatant1ID, Status: "completed"},
+				{CombatantID: combatant2ID, Status: "completed"},
+			}, nil
+		}
+		return []refdata.Turn{}, nil
+	}
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	// Two round-1 action-log rows with non-empty descriptions to recap.
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+		return []refdata.ListActionLogWithRoundsRow{
+			{RoundNumber: 1, Description: sql.NullString{String: "Aria attacked Goblin", Valid: true}},
+			{RoundNumber: 1, Description: sql.NullString{String: "Goblin attacked Aria", Valid: true}},
+		}, nil
+	}
+
+	logNotifier := &fakeCombatLog{}
+	svc := NewService(store)
+	svc.SetCombatLogNotifier(logNotifier)
+
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	// Completing round 1 (→ round 2) should fire exactly one recap post.
+	posts := logNotifier.all()
+	require.Len(t, posts, 1)
+	assert.Equal(t, encounterID, posts[0].encounterID)
+	assert.Contains(t, posts[0].content, "Round 1 complete")
+	assert.Contains(t, posts[0].content, "Aria attacked Goblin")
+	assert.Contains(t, posts[0].content, "Goblin attacked Aria")
+}
+
+func TestService_AdvanceTurn_RoundRecapSkippedWhenEmpty(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	combatant1ID := uuid.New()
+	combatant2ID := uuid.New()
+	activeTurnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: combatant1ID, InitiativeOrder: 1, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true},
+			{ID: combatant2ID, InitiativeOrder: 2, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`), IsAlive: true},
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: activeTurnID, CombatantID: combatant2ID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.completeTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		if arg.RoundNumber == 1 {
+			return []refdata.Turn{
+				{CombatantID: combatant1ID, Status: "completed"},
+				{CombatantID: combatant2ID, Status: "completed"},
+			}, nil
+		}
+		return []refdata.Turn{}, nil
+	}
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	// No round-1 entries to recap — the recap post must be skipped.
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+		return nil, nil
+	}
+
+	logNotifier := &fakeCombatLog{}
+	svc := NewService(store)
+	svc.SetCombatLogNotifier(logNotifier)
+
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	assert.Empty(t, logNotifier.all())
+}
+
 // --- TDD Cycle 70: FormatCompletedInitiativeTracker ---
 
 func TestFormatCompletedInitiativeTracker_Basic(t *testing.T) {
