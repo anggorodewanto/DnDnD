@@ -221,13 +221,30 @@ builds (a cleric senses wrongness; a rogue spots the pried lock; etc.).
 - **The scene now:** post-combat lull. The thing is dead; up close it was a *person* once
   (the keeper, maybe), hollowed out. The **cellar mouth still gapes** in the SW corner (the
   2×2 pit), its door clawed to splinters **from the inside**. The dread points downward.
-1. **Next beat — the cellar descent.** Wait for the players (Vale / Forge) to decide in
-   `#in-character` — search the body, loot the room, descend, or rest. Narrate what they
-   find; **don't act for them.** Likely they go down. The **reserve 2nd wretch** (see the
-   Reserve note in Encounter / combat) lives down there — start a fresh encounter if they
-   descend and you want the fight. Build it via Encounters → New, then Start Combat.
+1. **Next beat — the cellar descent. The encounter is PRE-BUILT and ready.** Wait for the
+   players (Vale / Forge) to decide in `#in-character` — search the body, loot the room,
+   descend, or rest. Narrate what they find; **don't act for them.** When they go down,
+   just open the pre-built encounter and **Start Combat** — no setup needed:
+   - **Encounter:** "**Cellar — the brood**" (player-facing "**The Cellar**"),
+     `encounter_templates` id `0a54efd4-a3a2-47b5-ac7f-0030a9cb22d1`.
+   - **Map:** "**Ashfall Waystation — cellar**" (`d2fe03c6-9749-4a24-a6e3-cb9d3a77e3cd`),
+     12×10 blank stone grid with a **PC spawn zone at the top-center stairs landing**
+     (party seats there on Start Combat). Cellar features (pillars, the deeper shaft, the
+     reek) are **narrated, not painted** — same convention as the common room.
+   - **Enemies:** **2× Ghoul wretches** (same living-wretch reflavor as upstairs — *hold
+     person* etc. valid), placed in the **back corners**: **G1 at (2,8)**, **G2 at (9,8)**,
+     away from the PC entry. "Surprised" toggles are OFF — adjudicate surprise live (the
+     brood lurking in the dark could surprise the party; the player's light/perception decides).
+   - **Difficulty note:** 2 Ghouls for two L3 PCs is a real fight, especially if Vale is
+     down to **1 pact slot** (no long rest yet) — she can't hold-person-lock both. Drop one
+     wretch (delete G2 in the builder) if you want it lighter.
 2. **Loot / aftermath (optional):** the keeper's body / the common room may hold a clue to
    what's below (a key, a journal, claw-scored boards). DM's call whether to seed any.
 3. **Bookkeeping done:** concentration cleared, no pending dm-queue from the fight. Vale's
    leather armor still unequipped (AC 10; `/equip item:leather armor:true` → AC 11) if she wants it.
+4. **App fixes shipped this session (both TDD + redeployed):** the **End Combat** button on
+   the Combat Manager, and an **encounter-builder bug** — `getEncounter`/`updateEncounter`/
+   `deleteEncounter`/`duplicateEncounter` never sent the backend-required `campaign_id` query
+   param, so **editing/saving any existing encounter 400'd** ("campaign_id query parameter
+   required"). Now fixed; that's how G2's placement above could be saved at all.
 </content>

@@ -261,4 +261,31 @@ See `game-state.md` "Next action."
 
 **Next:** players decide in `#in-character` — most likely the cellar descent. Start a fresh
 encounter (reserve wretch) if they go down and want a fight. See `game-state.md` "Next action."
+
+**Cellar descent encounter pre-built + encounter-builder bug fixed (2026-06-26)**
+
+- **Pre-built the next fight** (the cellar descent) so it's one click to run when the party
+  goes down:
+  - **Map:** built "Ashfall Waystation — cellar" (`d2fe03c6-…`), 12×10 blank stone grid via
+    Maps → New Map, with a **PC spawn zone** at the top-center stairs landing. Features narrated.
+  - **Encounter:** "Cellar — the brood" / player-facing "The Cellar" (`0a54efd4-…`) on that
+    map — **2× Ghoul wretches** placed in the back corners, **G1 (2,8)** + **G2 (9,8)**, party
+    Vale + Forge. DM design call (delegated): two wretches = a real fight for two L3s.
+- **Bug found + fixed mid-build: encounter builder couldn't save edits to an existing
+  encounter.** While placing the 2nd wretch, the builder Save kept no-op'ing; the page
+  surfaced **`campaign_id query parameter required`**. Root cause: the frontend
+  `getEncounter` / `updateEncounter` / `deleteEncounter` / `duplicateEncounter`
+  (`dashboard/svelte/src/lib/api.js`) never appended the backend-required `?campaign_id=`
+  (only `createEncounter`/`listEncounters` did) — so **Edit, Save-after-create, Delete, and
+  Duplicate of any existing encounter all 400'd.** G1 only persisted because it was placed
+  before the first *create*-save (which sends campaign_id in the body).
+  - **Fixed TDD:** added 4 red→green `api.test.js` cases asserting `campaign_id` is in each
+    URL; added the param to all four api.js fns + their call sites (`EncounterBuilder.svelte`
+    ×2, `EncounterList.svelte` ×2). Full vitest **595/595**. Rebuilt embedded assets +
+    redeployed (`docker compose up -d --build app`, clean boot). Re-opened the encounter via
+    **Edit** (now works), placed G2, Saved → "Encounter saved." → DB confirms G1 (2,8) + G2
+    (9,8). Severity: real — you couldn't edit/save/delete/duplicate any saved encounter.
+
+**Next:** players decide in `#in-character`; on descent, open "Cellar — the brood" → Start
+Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `game-state.md`.
 </content>
