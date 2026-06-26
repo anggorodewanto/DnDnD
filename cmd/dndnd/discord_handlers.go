@@ -761,6 +761,14 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	handlers.cast.SetCharacterLookup(characterLookup)
 	handlers.attack.SetClassFeaturePromptPoster(discord.NewClassFeaturePromptPoster(prompts))
 	handlers.attack.SetClassFeatureService(deps.combatService)
+	// Out-of-ammo routing: a crossbow/bow shot with no usable ammunition posts
+	// a #dm-queue item for lenient DM adjudication instead of dead-ending. The
+	// campaign-by-guild provider goes alongside the notifier so PgStore.Insert
+	// gets a CampaignID (SR-002).
+	if deps.notifier != nil {
+		handlers.attack.SetNotifier(deps.notifier)
+	}
+	handlers.attack.SetCampaignProvider(checkCampProv)
 
 	if deps.db != nil {
 		gate := newTurnGateAdapter(deps.db, deps.queries)

@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -72,6 +74,11 @@ type AttackHandler struct {
 	// AttackResult are simply ignored and no prompt fires.
 	classFeaturePrompts *ClassFeaturePromptPoster
 	classFeatureService AttackClassFeatureService
+	// Out-of-ammo routing: when both are wired, a shot that finds no usable
+	// ammunition posts a #dm-queue item for lenient DM adjudication instead
+	// of dead-ending with "No bolts remaining". Both nil-safe.
+	notifier     dmqueue.Notifier
+	campaignProv CheckCampaignProvider
 }
 
 // NewAttackHandler constructs an /attack handler.
@@ -130,6 +137,17 @@ func (h *AttackHandler) SetClassFeatureService(s AttackClassFeatureService) {
 // has been wired. Used by production-wiring tests to detect the
 // D-48b/D-49/D-51 follow-up regression.
 func (h *AttackHandler) HasClassFeaturePromptPoster() bool { return h.classFeaturePrompts != nil }
+
+// SetNotifier wires the shared #dm-queue Notifier. When set alongside a
+// CampaignProvider, a shot that finds no usable ammunition posts a
+// dm_queue_items row so the DM can wave the player through (DMs often
+// hand-wave precise ammo counts) instead of the shot dead-ending. nil-safe.
+func (h *AttackHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetCampaignProvider wires the campaign-by-guild lookup used to populate
+// CampaignID on the out-of-ammo dm-queue item (required by PgStore.Insert
+// per SR-002). nil-safe.
+func (h *AttackHandler) SetCampaignProvider(p CheckCampaignProvider) { h.campaignProv = p }
 
 // loadWalls best-effort fetches map wall segments for an encounter, mirroring
 // cast_handler.loadWalls. Any failure path returns nil so the cover calc
@@ -246,6 +264,11 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 
 		result, err := h.combatService.Attack(ctx, cmd, h.roller)
 		if err != nil {
+			var noAmmo combat.NoAmmunitionError
+			if errors.As(err, &noAmmo) {
+				h.handleOutOfAmmo(ctx, interaction, attacker, *target, noAmmo)
+				return errAlreadyResponded
+			}
 			respondEphemeral(h.session, interaction, formatAttackError(err))
 			return errAlreadyResponded
 		}
@@ -300,6 +323,45 @@ func (h *AttackHandler) dispatchOffhand(
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondPublic(h.session, interaction, logLine)
 	h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, target, encounter, result)
+}
+
+// handleOutOfAmmo responds to a shot that found no usable ammunition. When a
+// Notifier is wired it posts a #dm-queue item so the DM can adjudicate
+// leniently (waive the ammo / drop a few bolts in the player's pack), and
+// tells the player the DM has been pinged. Without a Notifier it degrades to
+// the plain "no ammo" message. The attack resource is NOT consumed on this
+// path (the service returns before persisting the turn), so the player can
+// re-issue /attack once the DM resolves it.
+func (h *AttackHandler) handleOutOfAmmo(ctx context.Context, interaction *discordgo.Interaction, attacker, target refdata.Combatant, noAmmo combat.NoAmmunitionError) {
+	ammo := strings.ToLower(noAmmo.AmmoName)
+	if h.notifier == nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("You're out of %s.", ammo))
+		return
+	}
+	_, _ = h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindFreeformAction,
+		PlayerName: attacker.DisplayName,
+		Summary:    fmt.Sprintf("is out of %s — wants to shoot %s anyway (DM may waive ammo)", ammo, target.DisplayName),
+		GuildID:    interaction.GuildID,
+		CampaignID: h.resolveCampaignID(ctx, interaction.GuildID),
+	})
+	respondEphemeral(h.session, interaction, fmt.Sprintf("You're out of %s — I've flagged the DM. They may waive ammo and let the shot fly; hold for their call.", ammo))
+}
+
+// resolveCampaignID looks up the campaign UUID for a guild via the wired
+// CheckCampaignProvider. Returns "" when no provider is wired or the lookup
+// fails — the in-memory Notifier tolerates an empty CampaignID, and the
+// PgStore reject in production matches the SR-002 invariant for unwired
+// handlers.
+func (h *AttackHandler) resolveCampaignID(ctx context.Context, guildID string) string {
+	if h.campaignProv == nil {
+		return ""
+	}
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return ""
+	}
+	return campaign.ID.String()
 }
 
 // formatAttackError translates a service-level attack error into the

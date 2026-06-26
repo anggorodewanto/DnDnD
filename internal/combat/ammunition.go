@@ -2,13 +2,13 @@ package combat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -136,14 +136,14 @@ func (s *Service) recoverEncounterAmmunition(ctx context.Context, encounterID uu
 		if err != nil {
 			return fmt.Errorf("recovering ammunition for %s: %w", c.DisplayName, err)
 		}
-		items, err := ParseInventory(char.Inventory.RawMessage)
+		items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
 		if err != nil {
 			return fmt.Errorf("parsing inventory for %s: %w", c.DisplayName, err)
 		}
 		for ammoName, spent := range spentByAmmo {
 			items = RecoverAmmunition(items, ammoName, spent)
 		}
-		invJSON, err := json.Marshal(items)
+		invJSON, err := character.MarshalInventory(items)
 		if err != nil {
 			return fmt.Errorf("marshaling inventory for %s: %w", c.DisplayName, err)
 		}

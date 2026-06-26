@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
@@ -2369,7 +2370,7 @@ func TestHasFeat_InvalidJSON(t *testing.T) {
 
 func TestInventoryItem_ParseAndDeduct(t *testing.T) {
 	inv := json.RawMessage(`[{"name":"Arrows","quantity":18,"type":"ammunition"}]`)
-	items, err := ParseInventory(inv)
+	items, err := character.ParseInventoryItems(inv, true)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.Equal(t, "Arrows", items[0].Name)
@@ -2380,32 +2381,160 @@ func TestInventoryItem_ParseAndDeduct(t *testing.T) {
 	assert.Equal(t, 17, items[0].Quantity)
 }
 
+// TestDeductAmmunition_SeededCrossbowBolt reproduces the live-play bug: the
+// character builder seeds a light crossbow's ammo as {item_id:"crossbow-bolt",
+// name:"crossbow-bolt", type:"gear"} — neither name "Bolts" nor type
+// "ammunition" — so the old strict matcher reported "No bolts remaining"
+// despite a full quiver. The tolerant matcher must deduct it.
+func TestDeductAmmunition_SeededCrossbowBolt(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "crossbow-bolt", Name: "crossbow-bolt", Quantity: 20, Type: "gear"},
+	}
+	items, err := DeductAmmunition(items, "Bolts")
+	require.NoError(t, err)
+	assert.Equal(t, 19, items[0].Quantity)
+}
+
+// TestDeductAmmunition_NameVariants confirms the matcher accepts every common
+// stored form of crossbow ammo (display-name, import name, raw slug).
+func TestDeductAmmunition_NameVariants(t *testing.T) {
+	for _, name := range []string{"Bolts", "Crossbow Bolts", "Crossbow Bolt", "crossbow-bolt", "bolt"} {
+		items := []character.InventoryItem{{Name: name, Quantity: 5, Type: "gear"}}
+		got, err := DeductAmmunition(items, "Bolts")
+		require.NoErrorf(t, err, "name %q should match", name)
+		assert.Equalf(t, 4, got[0].Quantity, "name %q", name)
+	}
+}
+
+// TestDeductAmmunition_IgnoresLookalikeConsumable guards against a false
+// positive: a "Lightning Bolt Scroll" consumable must never be spent as
+// crossbow ammo.
+func TestDeductAmmunition_IgnoresLookalikeConsumable(t *testing.T) {
+	items := []character.InventoryItem{
+		{Name: "Lightning Bolt Scroll", Quantity: 1, Type: "consumable"},
+	}
+	_, err := DeductAmmunition(items, "Bolts")
+	require.Error(t, err)
+	var noAmmo NoAmmunitionError
+	require.ErrorAs(t, err, &noAmmo)
+}
+
 func TestDeductAmmunition_Empty(t *testing.T) {
-	items := []InventoryItem{{Name: "Arrows", Quantity: 0, Type: "ammunition"}}
+	items := []character.InventoryItem{{Name: "Arrows", Quantity: 0, Type: "ammunition"}}
 	_, err := DeductAmmunition(items, "Arrows")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "No arrows remaining")
+	var noAmmo NoAmmunitionError
+	require.ErrorAs(t, err, &noAmmo)
+	assert.Equal(t, "Arrows", noAmmo.AmmoName)
 }
 
 func TestDeductAmmunition_NotFound(t *testing.T) {
-	items := []InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
+	items := []character.InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
 	_, err := DeductAmmunition(items, "Arrows")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "No arrows remaining")
+	var noAmmo NoAmmunitionError
+	require.ErrorAs(t, err, &noAmmo)
 }
 
 func TestRecoverAmmunition(t *testing.T) {
-	items := []InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
+	items := []character.InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
 	// Used 8 arrows (had 18, now 10): recover half of 8 = 4
 	items = RecoverAmmunition(items, "Arrows", 8)
 	assert.Equal(t, 14, items[0].Quantity)
 }
 
+// TestRecoverAmmunition_SeededSlug confirms post-combat recovery finds the
+// builder-seeded ammo stack by the same tolerant match used on deduction.
+func TestRecoverAmmunition_SeededSlug(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "crossbow-bolt", Name: "crossbow-bolt", Quantity: 10, Type: "gear"},
+	}
+	items = RecoverAmmunition(items, "Bolts", 8)
+	assert.Equal(t, 14, items[0].Quantity)
+}
+
 func TestRecoverAmmunition_RoundsDown(t *testing.T) {
-	items := []InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
+	items := []character.InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
 	// Used 7 arrows: recover half of 7 = 3 (rounded down)
 	items = RecoverAmmunition(items, "Arrows", 7)
 	assert.Equal(t, 13, items[0].Quantity)
+}
+
+func makeLightCrossbow() refdata.Weapon {
+	return refdata.Weapon{
+		ID:            "light-crossbow",
+		Name:          "Light crossbow",
+		Damage:        "1d8",
+		DamageType:    "piercing",
+		WeaponType:    "simple_ranged",
+		Properties:    []string{"ammunition", "loading", "two-handed"},
+		RangeNormalFt: sql.NullInt32{Int32: 80, Valid: true},
+		RangeLongFt:   sql.NullInt32{Int32: 320, Valid: true},
+	}
+}
+
+// TestServiceAttack_CrossbowDeductsSeededBoltLossless is the end-to-end guard
+// for the live-play bug: a crossbow attack must (a) deduct the builder-seeded
+// {item_id:"crossbow-bolt", type:"gear"} bolt instead of falsely reporting
+// "No bolts remaining", and (b) persist the inventory without clobbering any
+// other item's fields. The fix routes the write through the full
+// character.InventoryItem, so the wand's magic/charge metadata round-trips —
+// the old narrow 3-field marshal silently dropped it on every shot.
+func TestServiceAttack_CrossbowDeductsSeededBoltLossless(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	invJSON := json.RawMessage(`[
+		{"item_id":"wand-magic-missiles","name":"Wand of Magic Missiles","quantity":1,"type":"gear","is_magic":true,"charges":3,"max_charges":7},
+		{"item_id":"crossbow-bolt","name":"crossbow-bolt","quantity":20,"type":"gear"}
+	]`)
+	char := makeCharacter(10, 16, 3, "light-crossbow")
+	char.ID = charID
+	char.Inventory = nullRawMessage(invJSON)
+
+	var persisted json.RawMessage
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) { return char, nil }
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) { return makeLightCrossbow(), nil }
+	ms.updateCharacterInventoryFn = func(ctx context.Context, id uuid.UUID, inv pqtype.NullRawMessage) error {
+		persisted = inv.RawMessage
+		return nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Bolt-slinger", PositionCol: "B", PositionRow: 2, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 2, Ac: 12, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.NoError(t, err)
+	require.NotNil(t, persisted, "inventory must be persisted after an ammo shot")
+
+	items, err := character.ParseInventoryItems(persisted, true)
+	require.NoError(t, err)
+	byID := map[string]character.InventoryItem{}
+	for _, it := range items {
+		byID[it.ItemID] = it
+	}
+	bolt, ok := byID["crossbow-bolt"]
+	require.True(t, ok, "bolt stack must survive the write")
+	assert.Equal(t, 19, bolt.Quantity, "one bolt should be spent")
+
+	wand, ok := byID["wand-magic-missiles"]
+	require.True(t, ok, "the wand must survive the write")
+	assert.True(t, wand.IsMagic, "wand magic flag must not be dropped")
+	assert.Equal(t, 3, wand.Charges, "wand charges must not be dropped")
+	assert.Equal(t, 7, wand.MaxCharges, "wand max charges must not be dropped")
 }
 
 func TestParseInventory_Empty(t *testing.T) {
@@ -2420,7 +2549,7 @@ func TestParseInventory_InvalidJSON(t *testing.T) {
 }
 
 func TestRecoverAmmunition_NotFound(t *testing.T) {
-	items := []InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
+	items := []character.InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
 	items = RecoverAmmunition(items, "Arrows", 5)
 	// No change since "Arrows" not found
 	assert.Equal(t, 10, items[0].Quantity)

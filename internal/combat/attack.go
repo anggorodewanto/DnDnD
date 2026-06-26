@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
@@ -200,26 +201,78 @@ func ParseInventory(raw json.RawMessage) ([]InventoryItem, error) {
 	return items, nil
 }
 
-// DeductAmmunition decrements the quantity of the named ammo by 1.
-// Returns an error if the ammo is not found or has 0 quantity.
-func DeductAmmunition(items []InventoryItem, ammoName string) ([]InventoryItem, error) {
-	for i := range items {
-		if strings.EqualFold(items[i].Name, ammoName) && items[i].Type == "ammunition" {
-			if items[i].Quantity <= 0 {
-				return items, fmt.Errorf("No %s remaining.", strings.ToLower(ammoName))
-			}
-			items[i].Quantity--
-			return items, nil
-		}
-	}
-	return items, fmt.Errorf("No %s remaining.", strings.ToLower(ammoName))
+// NoAmmunitionError signals that an ammunition-requiring attack found no
+// usable ammo in the attacker's inventory. The /attack handler detects it
+// (errors.As) to route the shot to the DM queue for lenient adjudication
+// instead of hard-failing — DMs commonly hand-wave precise ammo counts.
+type NoAmmunitionError struct {
+	// AmmoName is the conventional ammunition type ("Bolts" / "Arrows").
+	AmmoName string
 }
 
-// RecoverAmmunition adds back half (rounded down) of spent ammunition after combat.
-func RecoverAmmunition(items []InventoryItem, ammoName string, spent int) []InventoryItem {
-	recovered := spent / 2
+func (e NoAmmunitionError) Error() string {
+	return fmt.Sprintf("No %s remaining.", strings.ToLower(e.AmmoName))
+}
+
+// ammoMatches reports whether an inventory item is ammunition usable for the
+// weapon-derived ammoName ("Bolts" / "Arrows"). Matching is deliberately
+// generous so it tolerates every way ammo is actually stored:
+//   - character-builder seeding: {item_id:"crossbow-bolt", name:"crossbow-bolt", type:"gear"}
+//   - hand-curated / imported:   {name:"Bolts"} or {name:"Crossbow Bolts", type:"ammunition"}
+//
+// It matches any non-weapon, non-armor, non-consumable item whose name or
+// item_id contains the singular ammo keyword ("bolt"/"arrow") as a whole
+// word, so a "Lightning Bolt Scroll" (a consumable) is never mistaken for
+// crossbow ammo.
+func ammoMatches(item character.InventoryItem, ammoName string) bool {
+	switch strings.ToLower(item.Type) {
+	case "weapon", "armor", "consumable":
+		return false
+	}
+	keyword := strings.TrimSuffix(strings.ToLower(ammoName), "s") // "Bolts" -> "bolt"
+	for _, tok := range ammoWords(item.Name + " " + item.ItemID) {
+		if tok == keyword || tok == keyword+"s" {
+			return true
+		}
+	}
+	return false
+}
+
+// ammoWords splits a string into lowercase alphabetic tokens, treating any
+// non-letter (space, hyphen, digit) as a separator: "crossbow-bolt 20" ->
+// ["crossbow", "bolt"].
+func ammoWords(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return r < 'a' || r > 'z'
+	})
+}
+
+// DeductAmmunition decrements the matching ammunition stack by 1. Returns a
+// NoAmmunitionError when no matching ammo is found or the stack is empty, so
+// the caller can offer DM adjudication rather than a dead-end rejection.
+func DeductAmmunition(items []character.InventoryItem, ammoName string) ([]character.InventoryItem, error) {
 	for i := range items {
-		if strings.EqualFold(items[i].Name, ammoName) && items[i].Type == "ammunition" {
+		if !ammoMatches(items[i], ammoName) {
+			continue
+		}
+		if items[i].Quantity <= 0 {
+			return items, NoAmmunitionError{AmmoName: ammoName}
+		}
+		items[i].Quantity--
+		return items, nil
+	}
+	return items, NoAmmunitionError{AmmoName: ammoName}
+}
+
+// RecoverAmmunition adds back half (rounded down) of spent ammunition to the
+// matching stack after combat (Phase 37).
+func RecoverAmmunition(items []character.InventoryItem, ammoName string, spent int) []character.InventoryItem {
+	recovered := spent / 2
+	if recovered <= 0 {
+		return items
+	}
+	for i := range items {
+		if ammoMatches(items[i], ammoName) {
 			items[i].Quantity += recovered
 			return items
 		}
@@ -1060,10 +1113,13 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
 	}
 
-	// Ammunition: deduct from inventory
+	// Ammunition: deduct from inventory. Parse/marshal through the full
+	// character.InventoryItem so this write round-trips every other item's
+	// fields (equipped flags, magic props, charges, item_id) losslessly —
+	// the narrow projection used previously silently dropped them on each shot.
 	if HasProperty(weapon, "ammunition") && char != nil {
 		ammoName := GetAmmunitionName(weapon)
-		items, err := ParseInventory(char.Inventory.RawMessage)
+		items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
 		if err != nil {
 			return AttackResult{}, fmt.Errorf("parsing inventory: %w", err)
 		}
@@ -1071,7 +1127,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		if err != nil {
 			return AttackResult{}, err
 		}
-		invJSON, err := json.Marshal(items)
+		invJSON, err := character.MarshalInventory(items)
 		if err != nil {
 			return AttackResult{}, fmt.Errorf("marshaling inventory: %w", err)
 		}

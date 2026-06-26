@@ -23,6 +23,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-012 | 2026-06-25 | character card / spellcasting | minor | FIXED | Discord character card + `/character` embed show **"Spell Slots: —" for warlocks** — they read only the `spell_slots` column and never fall back to `pact_magic_slots`. **Fixed (TDD, `main` 5090e02):** both surfaces now pact-aware — parse the canonical `character.PactMagicSlots` ({slot_level,current,max}) and render `Pact Magic: N × Lvl L`; a multiclass caster shows standard + pact joined by ` | `; non-casters keep `—`. `charactercard/format.go`+`service.go` (`CardData.PactMagicSlots`, `formatPactMagicSlots`, `parsePactMagicSlots`), `discord/character_handler.go` (`buildSpellSlotSummary` + a Spell Slots line in `buildCharacterEmbed`). cover-check green. |
 | ISSUE-013 | 2026-06-25 | builder / submit (server) | blocker | FIXED | Friend's **barbarian / guild-artisan** submit 400s: `skill "insight" is not selectable for this class`. Root cause = **slug drift** between two hand-maintained Go background maps and the builder's kebab-case slugs. `backgroundSkillProficiencies` (`derive_stats.go`) had **no `guild-artisan`** case and keyed folk-hero as `"folk hero"` (space); both backgrounds therefore resolved to ∅ locked skills, so their PHB grants (insight+persuasion) were treated as off-list class picks and rejected. `backgroundStartingEquipment` (`starting_equipment.go`) had the same space-slug bug → those two backgrounds also silently got no starting-equipment pack. **Fixed (TDD, `main`):** both Go maps re-keyed to the exact 13 builder slugs (kebab-case) + `guild-artisan` added; two contract tests (`TestBackgroundSkillProficiencies_AllBuilderBackgrounds`, `TestBackgroundEquipmentPack_AllBuilderBackgrounds`) lock every builder slug so future drift fails CI; removed a stale test that asserted the old Title-Case `"Folk Hero"` input (never sent by the real builder — why the bug hid). cover-check green. **Deeper fix (SSOT) tracked separately.** |
 | ISSUE-014 | 2026-06-25 | dm console / action log | medium | FIXED + DEPLOYED | DM Console didn't track player combat actions — spell casts + freeform actions post to #combat-log but were never written to `action_log`, so `GET /api/dm/situation` `timeline[]` showed nothing for them. **Fixed (`main` f1e3aeb, pushed, redeployed ~13:45 UTC):** a best-effort `recordCombatAction` helper (new `internal/combat/action_log_record.go`) now writes an `action_log` row at the success tail of every player combat path (`Cast`, `CastAoE`, `FreeformAction`, `Attack`, `attackImprovised`, `OffhandAttack`). **DM-side only** — player-facing #combat-log output is unchanged; the Console is behind DM auth. Save adjudication stays a manual DM roll (no auto #dm-queue item, no auto NPC save). |
+| ISSUE-015 | 2026-06-26 | combat / ammunition | major | FIXED | Crossbow `/attack` falsely reports **"No bolts remaining"** with bolts in inventory — ammo match required name `"Bolts"` + type `"ammunition"`, but the builder seeds `{item_id:"crossbow-bolt", type:"gear"}` (slug drift, cf. ISSUE-013). **Fixed (TDD):** tolerant whole-word matcher on name/`item_id` (bolts/arrows), lossless full-inventory write (the old narrow re-marshal would have dropped every item's equipped/magic/charges fields once the shot succeeded), and a real empty quiver now routes to `#dm-queue` as a freeform action for lenient DM adjudication (attack resource not spent). Needs rebuild+restart to apply live. |
 | ISSUE-015 | 2026-06-25 | dashboard / conditions | high | FIXED | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half FIXED (2026-06-26):** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` used to persist a bare string array (`["paralyzed"]`) that `parseConditions` can't unmarshal, so a button-added condition rendered but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) never fired. New server-side `reconcileConditionNames` (`workspace_handler.go`) maps the DM-supplied condition *names* into the canonical `[]CombatCondition` object shape — reusing the combatant's existing condition object when the name is already present (so a spell-applied duration/source/timing survives a re-send) and minting an indefinite `{condition: name}` for new ones, lowercased + de-duped. Frontend now works in lowercase canonical keys (`conditionKey` helper). |
 | ISSUE-016 | 2026-06-25 | combat / spellcasting | medium | FIXED + DEPLOYED | `/done` falsely warned "you still have 1 attack" after a player cast a spell with their ACTION. Casting a spell is the Cast-a-Spell action, not the Attack action, so no weapon attack remains — but `Service.Cast`/`Service.CastAoE` consumed the action while leaving the seeded `attacks_remaining=1`, so the `/done` unused-resource check (and the "Remaining" summary) reported a phantom attack. **Fixed (`b108bf2`):** zero `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled); bonus-action casts left untouched (they keep the Attack action + its attacks). Found in live play: Vale (Warlock 3, no Extra Attack) cast Hold Person, then `/done` warned of an attack she never had. |
 
@@ -418,6 +419,53 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   *current* in-flight turn still carries the pre-fix `attacks_remaining=1`, so `/done`
   will warn **once more** for this turn — she just confirms past it; her **next** cast is
   clean.
+
+### ISSUE-015 — Crossbow `/attack` falsely reports "No bolts remaining" with a full quiver
+- **Date:** 2026-06-26
+- **Area:** combat / ammunition
+- **Severity:** major
+- **Status:** FIXED (TDD; rebuild + redeploy required to take effect live)
+- **Repro:** A character whose inventory holds crossbow bolts runs `/attack` with a
+  crossbow. The bot rejects the shot with **"No bolts remaining."** despite the bolts
+  being present.
+- **Expected:** the shot fires and one bolt is deducted.
+- **Actual:** every crossbow shot is blocked; the player can never fire.
+- **Root cause:** the ammo check matched too strictly. The character builder seeds a
+  light crossbow's ammo as `{item_id:"crossbow-bolt", name:"crossbow-bolt", type:"gear"}`,
+  but `combat.DeductAmmunition` only matched an item whose **name was exactly "Bolts"**
+  **and** whose **type was exactly "ammunition"** — so the seeded slug never matched and
+  the deduction reported empty. (Same class of slug-vs-display-name drift as ISSUE-013.)
+- **Second bug it would have unmasked:** the ammo write round-tripped the *entire*
+  inventory through a narrow 3-field projection (`{name,quantity,type}`), so once the
+  match was fixed and the write path was reached it would have **silently dropped every
+  other item's `equipped`/magic/charges/`item_id` fields on each shot** (un-equipping
+  the player's gear). Fixed at the same time.
+- **FIX (2026-06-26, TDD, `internal/combat` + `internal/discord` + `cmd/dndnd`):**
+  1. **Tolerant matcher** (`ammoMatches`): a crossbow now matches any non-weapon,
+     non-armor, non-consumable item whose name **or** `item_id` contains the whole word
+     `bolt` (bows → `arrow`) — so `"crossbow-bolt"`, `"Crossbow Bolts"`, `"Bolts"`,
+     `"bolt"` all count, while a `"Lightning Bolt Scroll"` consumable does not. Applied to
+     both `DeductAmmunition` and the post-combat `RecoverAmmunition`.
+  2. **Lossless write:** the ammo path now parses/marshals through the full
+     `character.InventoryItem`, preserving every other item's fields.
+  3. **DM-queue fallback:** a genuinely empty quiver now raises a typed
+     `combat.NoAmmunitionError`; `/attack` posts a `#dm-queue` **freeform action**
+     ("is out of bolts — wants to shoot … anyway (DM may waive ammo)") and tells the
+     player the DM was flagged, instead of a dead-end rejection. The attack resource is
+     **not** consumed on this path, so the player can re-fire once the DM resolves it.
+     DMs commonly hand-wave precise ammo counts — this routes that decision to them.
+- **Tests:** `internal/combat/attack_test.go` (seeded-slug deduct, name variants,
+  lookalike-consumable guard, typed-error, lossless end-to-end), `internal/discord/
+  attack_handler_outofammo_test.go` (dm-queue routing + degraded paths). `go build ./...`,
+  `go vet`, combat + discord + cmd wiring suites green.
+- **Live caveat:** the running stack must be **rebuilt (`make build`) and restarted** for
+  the fix to apply. Existing characters need no data change — the matcher now reads their
+  current inventory correctly.
+- **Follow-ups (not in this change):** the builder seeds starting ammo as **quantity 1**
+  (the Svelte builder strips the `:20` from `crossbow-bolt:20` before submit) and tags it
+  `type:"gear"` rather than `"ammunition"` — proper starting counts/typing is a separate
+  frontend fix. The same narrow-projection field-drop still exists on the spell
+  material-component path (`spellcasting.go`).
 
 <!-- Append a section per issue:
 
