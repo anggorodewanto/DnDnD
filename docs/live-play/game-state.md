@@ -52,17 +52,20 @@ Cosmetic caveat: Vale's current turn still shows the pre-fix phantom attack — 
   register. `tunnel-down` stops it and restores `.env`. State lives in `.tunnel/`
   (gitignored). The current live tunnel was started manually this session and
   adopted into that state, so the make targets manage it.
-- **Public URL (EPHEMERAL):** `https://pillow-reproduction-centers-feel.trycloudflare.com`
-  — changes every time the tunnel restarts. On change, `make tunnel-up` redoes the
-  `.env` repoint + app restart automatically; you still must re-register the new
-  `…/portal/auth/callback` in the Discord dev portal.
+- **Public URL (EPHEMERAL):** `https://coupon-affiliates-foto-employees.trycloudflare.com`
+  (updated 2026-06-26; was `pillow-reproduction-centers-feel…`) — changes every time
+  the tunnel restarts. On change, `make tunnel-up` redoes the `.env` repoint + app
+  restart automatically; you still must re-register the new `…/portal/auth/callback`
+  in the Discord dev portal.
 - `.env` changed: `BASE_URL` + `OAUTH_REDIRECT_URL` now point at the tunnel
   (backup: `.env.bak.preTunnel`). App restarted; OAuth `redirect_uri` confirmed =
   `<tunnel>/portal/auth/callback`.
 - **Manual step still owed by the DM:** register
-  `https://pillow-reproduction-centers-feel.trycloudflare.com/portal/auth/callback`
+  `https://coupon-affiliates-foto-employees.trycloudflare.com/portal/auth/callback`
   in Discord Developer Portal → app (`DISCORD_CLIENT_ID` 1507…) → OAuth2 →
   Redirects (Discord rejects unlisted redirect URIs → login fails without it).
+  Verified 2026-06-26 via Chrome: tunnel reachable + app 302s to Discord OAuth, but
+  Discord returns **Invalid OAuth2 redirect_uri** until this callback is registered.
 - **Teardown after the test:** `make tunnel-down` (stops cloudflared, restores
   `.env` from `.env.bak.preTunnel`, restarts the app). App is publicly reachable
   while the tunnel is up (login gated by OAuth; build gated by a minted token;
