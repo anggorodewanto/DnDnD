@@ -26,7 +26,7 @@ func TestItemCatalog_CoversAllBuilderEquipmentIDs(t *testing.T) {
 		// and each may carry a ":N" quantity — split both, mirroring
 		// EquipmentToInventoryWithEquipped.
 		for _, entry := range strings.Split(raw, ",") {
-			id, _ := parseEquipmentEntry(strings.TrimSpace(entry))
+			id, _, _ := parseEquipmentEntry(strings.TrimSpace(entry))
 			if id == "" || strings.HasPrefix(id, "any-") || seen[id] {
 				continue // skip empty / "any-*" choice placeholders
 			}

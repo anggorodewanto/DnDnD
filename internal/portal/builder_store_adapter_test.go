@@ -185,7 +185,7 @@ func TestBuilderStoreAdapter_EquipmentToInventory(t *testing.T) {
 	items := portal.EquipmentToInventory([]string{"longsword", "chain-mail", "shield"})
 	assert.Len(t, items, 3)
 	assert.Equal(t, "longsword", items[0].ItemID)
-	assert.Equal(t, "longsword", items[0].Name)
+	assert.Equal(t, "Longsword", items[0].Name) // catalog display name (ISSUE-017 phase 3), not the raw slug
 	assert.Equal(t, 1, items[0].Quantity)
 	assert.Equal(t, "weapon", items[0].Type)
 	assert.Equal(t, "chain-mail", items[1].ItemID)
@@ -235,6 +235,36 @@ func TestBuilderStoreAdapter_EquipmentToInventory_UnknownItems(t *testing.T) {
 	items := portal.EquipmentToInventory([]string{"magic-wand", "potion-of-healing"})
 	assert.Len(t, items, 2)
 	assert.Equal(t, "gear", items[0].Type)
+}
+
+// TestBuilderStoreAdapter_EquipmentToInventory_CatalogDefaults proves the
+// ISSUE-017 phase 3 wiring: name / type / quantity are sourced from the
+// canonical item catalog. A bare ammo id (no ":N") falls back to the catalog's
+// default bundle quantity, and gear resolves its catalog display name.
+func TestBuilderStoreAdapter_EquipmentToInventory_CatalogDefaults(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"crossbow-bolt", "explorers-pack"})
+	require.Len(t, items, 2)
+
+	// No ":N" -> catalog default bundle of 20.
+	assert.Equal(t, "crossbow-bolt", items[0].ItemID)
+	assert.Equal(t, "Crossbow Bolts", items[0].Name)
+	assert.Equal(t, "ammunition", items[0].Type)
+	assert.Equal(t, 20, items[0].Quantity)
+
+	// Gear resolves a proper display name and type from the catalog.
+	assert.Equal(t, "explorers-pack", items[1].ItemID)
+	assert.Equal(t, "Explorer's Pack", items[1].Name)
+	assert.Equal(t, "gear", items[1].Type)
+	assert.Equal(t, 1, items[1].Quantity)
+}
+
+// TestBuilderStoreAdapter_EquipmentToInventory_ExplicitQtyOverridesDefault
+// confirms an explicit ":N" still wins over the catalog default.
+func TestBuilderStoreAdapter_EquipmentToInventory_ExplicitQtyOverridesDefault(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"arrow:5"})
+	require.Len(t, items, 1)
+	assert.Equal(t, "arrow", items[0].ItemID)
+	assert.Equal(t, 5, items[0].Quantity) // explicit 5, not the catalog default 20
 }
 
 // TestBuilderStoreAdapter_EquipmentToInventory_Ammo locks in the builder-ammo
