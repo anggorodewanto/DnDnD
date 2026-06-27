@@ -9,3 +9,6 @@ code-review-*.md
 dashboard/svelte/coverage/
 .tunnel/
 .env.bak.preTunnel
+
+# Claude Code ephemeral worktrees (isolation mode)
+.claude/worktrees/
