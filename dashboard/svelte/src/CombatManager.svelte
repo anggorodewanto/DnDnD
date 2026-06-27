@@ -157,6 +157,12 @@
   let selectedCombatant = $derived(
     activeEncounter?.combatants?.find(c => c.id === selectedCombatantId) || null
   );
+  // The combatant whose turn it currently is. Drives the discoverable
+  // "Run Enemy Turn" button so the DM can open the Turn Builder for the
+  // active enemy without hunting for the right-click token menu.
+  let activeTurnCombatant = $derived(
+    activeEncounter?.combatants?.find(c => c.id === activeEncounter?.active_turn_combatant_id) || null
+  );
 
   // DM dashboard: undo + manual override controls.
   let dmOverrideOpen = $state(false);
@@ -765,13 +771,21 @@
     };
   }
 
+  // Opens the Turn Builder for an NPC combatant. Single source of truth shared
+  // by the right-click "Plan Turn" context item, the no-map combatant list, and
+  // the Turn Queue "Run Enemy Turn" button so the open logic isn't duplicated.
+  function openTurnBuilder(comb) {
+    if (!activeEncounter || !comb) return;
+    onopenturnbuilder?.(activeEncounter.id, comb.id, comb.display_name);
+  }
+
   function handleContextAction(action) {
     if (!contextMenu) return;
     const combId = contextMenu.combatantId;
 
     if (action === 'plan-turn') {
       const comb = activeEncounter?.combatants?.find(c => c.id === combId);
-      if (comb) onopenturnbuilder?.(activeEncounter.id, combId, comb.display_name);
+      if (comb) openTurnBuilder(comb);
       contextMenu = null;
       return;
     }
@@ -1089,7 +1103,7 @@
                   {#if comb.is_npc}
                     <button
                       class="plan-turn-btn"
-                      onclick={() => onopenturnbuilder?.(activeEncounter.id, comb.id, comb.display_name)}
+                      onclick={() => openTurnBuilder(comb)}
                       data-testid="plan-turn-btn-{comb.id}"
                     >
                       Plan Turn
@@ -1121,6 +1135,22 @@
 
       <!-- Right panel: Turn Queue, Action Resolver, and Tracker -->
       <div class="right-panel" data-testid="right-panel">
+        <!-- Discoverable affordance: when it's an NPC/enemy's turn, surface a
+             prominent button to open the Turn Builder so the DM no longer has
+             to right-click the token. Hidden for PC turns (no character to
+             plan). Reuses the same openTurnBuilder handler as the right-click
+             "Plan Turn" item. -->
+        {#if activeTurnCombatant?.is_npc}
+          <button
+            class="run-enemy-turn-btn"
+            onclick={() => openTurnBuilder(activeTurnCombatant)}
+            title="Open the Turn Builder to plan and run this enemy's turn"
+            data-testid="run-enemy-turn-btn"
+          >
+            ⚔ Run Enemy Turn — {activeTurnCombatant.display_name}
+          </button>
+        {/if}
+
         <TurnQueue
           encounterId={activeEncounter.id}
           activeTurnCombatantId={activeEncounter.active_turn_combatant_id}
@@ -1457,6 +1487,23 @@
   .plan-turn-btn:hover {
     background: #fbbf24;
     color: #0f1a2e;
+  }
+
+  .run-enemy-turn-btn {
+    width: 100%;
+    padding: 0.6rem;
+    background: #fbbf24;
+    color: #1a1a2e;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: bold;
+  }
+
+  .run-enemy-turn-btn:hover {
+    background: #f59e0b;
+    border-color: #f59e0b;
   }
 
   .right-panel {

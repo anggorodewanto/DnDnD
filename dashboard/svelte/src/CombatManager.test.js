@@ -36,3 +36,38 @@ describe('CombatManager character-sheet link', () => {
     expect(block[0]).toContain('rel="noopener"');
   });
 });
+
+describe('CombatManager Run Enemy Turn affordance', () => {
+  it('renders a discoverable Run Enemy Turn button gated on the active NPC turn', () => {
+    expect(src).toContain('data-testid="run-enemy-turn-btn"');
+    // The button is only shown when the current-turn combatant is an NPC, so
+    // PCs on their turn never see it.
+    expect(src).toMatch(
+      /\{#if activeTurnCombatant\?\.is_npc\}[\s\S]*?run-enemy-turn-btn/,
+    );
+  });
+
+  it('detects the current combatant via active_turn_combatant_id', () => {
+    expect(src).toMatch(
+      /let activeTurnCombatant = \$derived\([\s\S]*?active_turn_combatant_id/,
+    );
+  });
+
+  it('opens the Turn Builder via the shared openTurnBuilder handler', () => {
+    const block = src.match(
+      /class="run-enemy-turn-btn"[\s\S]*?<\/button>/,
+    );
+    expect(block).not.toBeNull();
+    expect(block[0]).toContain('data-testid="run-enemy-turn-btn"');
+    expect(block[0]).toContain('openTurnBuilder(activeTurnCombatant)');
+  });
+
+  it('routes the right-click Plan Turn through the same openTurnBuilder helper', () => {
+    expect(src).toMatch(/function openTurnBuilder\(comb\)/);
+    const ctx = src.match(/if \(action === 'plan-turn'\)[\s\S]*?return;/);
+    expect(ctx).not.toBeNull();
+    // The context-menu path reuses the helper rather than calling
+    // onopenturnbuilder inline, so the open logic lives in one place.
+    expect(ctx[0]).toContain('openTurnBuilder(comb)');
+  });
+});
