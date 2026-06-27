@@ -9,17 +9,17 @@
 > / the `#dm-console` tab) is the *generated* source of truth and this file drifts.
 > See [`README.md`](README.md) "DM Console."
 
-_Last updated: 2026-06-27 — **COMBAT LIVE: "The Cellar," Round 1, VALE'S TURN.** Lead
-ghoul (init 19) closed J8→**E2** and **bit Vale for 5** (engine To Hit 15 vs AC 10) →
-Vale **19/24**, bloodied, no paralysis (Bite, not Claws). Bite narrated to #the-story
-(`narration_posts` 5:30:18 PM). Turn advanced to **Vale (init 15)** — her move now.
-**All three live-play fixes are now DEPLOYED:** ISSUE-018 (`before_state` enemy-turn
-crash), ISSUE-019 (Turn-Builder "⚔ Run Enemy Turn" button), and ISSUE-020 (character
-sheets showed stale full HP mid-combat — sheets now overlay the live combatant HP on
-the portal sheet, `/character`, and the dashboard Party Overview). The **Turn Builder is
-now safe to use** for enemy turns. **Next beat = Vale's turn**, then Forge (12), then
-2nd Ghoul (9, at C8) — run it via the new button (first live test of the fixed executor).
-3-4 more players still joining._
+_Last updated: 2026-06-27 — **COMBAT LIVE: "The Cellar," ROUND 2, VALE'S TURN.** Round 1
+fully resolved + Round 2 opened. **R1:** lead ghoul bit Vale (5 → 19/24, bloodied); Vale
+point-blank crossbow on the lead ghoul (hit, 2 → 20/22) then **Misty Step** (bonus, 1 pact
+slot → **1/2 left**) E1→**K2**; Forge greataxe **missed** the lead ghoul; 2nd ghoul (init 9)
+closed C8→**D2** and **bit Forge** (18 vs AC 14 → **12** → Forge **20/32**). **R2 so far:**
+lead ghoul (init 19) **bit at Forge and MISSED** (4 vs AC 14). Turn now **Vale (init 15)**.
+Every beat narrated to #the-story (read-aloud). **Enemy-turn executor (first live runs,
+ISSUE-018 fix): WORKS — no crash, damage + action_log written** — but it resolves the
+**attack only** (no auto-move into reach, no auto-advance); DM drags the token + clicks End
+Turn each enemy turn (→ ISSUE-021). **Next beat = Vale's turn** (player-driven), then Forge
+(12), then 2nd Ghoul (9). 3-4 more players still joining._
 
 ## Ops snapshot
 
@@ -82,44 +82,49 @@ players," then add roster rows.
 ## Active encounter / combat
 
 - **LIVE — "The Cellar"** (internal "Cellar — the brood"), combat/encounter id
-  `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. **Round 1**,
+  `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. **Round 2**,
   4 combatants, no surprise (re-ruled off both sides).
-  - **Positions / HP:** Vale **E1** (**19/24**, bloodied) + Forge **E1** (32/32) — at the
-    stairs landing; **lead Ghoul** now **E2** (22/22, *init 19*, adjacent to the party,
-    just bit Vale) + Ghoul **C8** (22/22, init 9, still at the back).
+  - **Positions / HP:** Vale **K2** (**19/24**, bloodied — Misty Stepped clear; CURRENT) +
+    Forge **E1** (**20/32**, bitten) at the stairs landing; **lead Ghoul E2** (20/22, *init
+    19*, adjacent to Forge) + **2nd Ghoul D2** (22/22, init 9, adjacent to Forge).
   - **Initiative / turn order:** Ghoul 19 → **Vale 15 (CURRENT)** → Forge 12 → Ghoul 9.
-  - **Done:** lead ghoul moved J8→E2 + Bite vs Vale (To Hit 15 vs AC 10 → hit, 5 piercing).
-  - **Turn Builder fixed + safe** (ISSUE-018 deployed). The next enemy turn (2nd ghoul) is
-    the first live run of the fixed executor — reach it via the new **"⚔ Run Enemy Turn"**
-    button (ISSUE-019) or right-click → Plan Turn.
-  - **Sheets now show live combat HP** (ISSUE-020): the portal sheet, `/character`, and the
-    dashboard Party Overview overlay the combatant's HP during a fight (Vale reads 19/24,
-    not the stale 24/24 base-sheet value).
+  - **Done — R1:** lead ghoul bit Vale (5); Vale crossbow (hit, 2) + Misty Step E1→K2; Forge
+    greataxe MISS; 2nd ghoul closed C8→D2 + bit Forge (12). **R2:** lead ghoul bit at Forge →
+    **MISS** (4 vs AC 14).
+  - **Enemy-turn executor (first live runs, ISSUE-018 fix): WORKS — no crash, damage +
+    action_log written.** Residual (→ ISSUE-021): resolves the **attack only** — no NPC move
+    into reach, no turn advance. DM drags the token (did C8→D2 for the 2nd ghoul) + clicks
+    **End Turn** each enemy turn.
+  - **Sheets show live combat HP** (ISSUE-020): portal sheet, `/character`, dashboard Party
+    Overview overlay the combatant HP (Vale 19/24, Forge 20/32).
+  - **Vale pact slots: 1/2** (spent 1 on Misty Step). Pact-slot write-back gap (combat spend
+    not written to the `characters` row, à la ISSUE-020 HP) **fixed by another agent** this
+    session (→ ISSUE-022).
   - Prior fight — "Waystation — the cellar wretch" (id
     `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`) — ended 2026-06-26 in victory. Full
     chronology: [`sessions/session-01.md`](sessions/session-01.md).
 
 ## Current scene
 
-**Down in the cellar, first blood.** Vale trance-walked down, Forge a step behind; two
-ghouls peeled from the dark and battle joined — **no surprise** (the brood heard them).
-The lead ghoul rushed Vale and **bit her** (bloodied, 19/24); a second shape still
-unfolds from the black. It's **Vale's turn** — the cellar holds its breath. World /
-lore: [`world.md`](world.md).
+**Down in the cellar, the brood closes on Forge.** First blood went both ways: the lead
+ghoul bit Vale (bloodied, 19/24); she shot it point-blank and **Misty Stepped** across the
+room to K2, Forge's greataxe whiffed, the **second ghoul lunged from the dark and bit Forge**
+(20/32), and the lead ghoul's follow-up bite **missed**. Both pale things now crowd Forge at
+the foot of the stairs while Vale stands clear and untouched across the cellar. It's
+**Vale's turn** (Round 2). World / lore: [`world.md`](world.md).
 
 ## Next action
 
-1. **Vale's turn (CURRENT, init 15).** The player acts — she types her own
+1. **Vale's turn (CURRENT, init 15, R2).** The player acts — she types her own
    `/move`/`/attack`/`/cast` in Discord and **rolls her own dice**; never roll for her.
-   Adjudicate vs her reported numbers; keep enemy HP/AC secret (describe state, don't
-   quote it). She's bloodied (19/24) and a ghoul is adjacent at E2. After her beat,
-   **narrate** + **update docs** in lockstep.
-2. **Then Forge (12),** same player-driven flow.
-3. **Then the 2nd Ghoul (init 9, C8) — DM enemy turn.** Run it via the new **"⚔ Run Enemy
-   Turn"** button (combat right panel, shown when an NPC is current) or right-click → **Plan
-   Turn**. This is the **first live run of the fixed enemy-turn executor** (ISSUE-018) — watch
-   that damage applies, the action logs, and the turn advances cleanly.
+   Adjudicate vs her reported numbers; keep enemy HP/AC secret (describe state, don't quote
+   it). She's bloodied (19/24), at **K2** — clear of both ghouls (they're on Forge at E1),
+   with 1 pact slot + her light crossbow. After her beat, **narrate** + **update docs**.
+2. **Then Forge (12),** player-driven — bitten (20/32), pinned by two ghouls (D2/E2).
+3. **Then the 2nd Ghoul (init 9, D2) — DM enemy turn.** Run via **"⚔ Run Enemy Turn"** →
+   Review → Confirm & Post, then **manually** drag-into-reach (if needed) + **End Turn**
+   (executor is attack-only — ISSUE-021). It's already adjacent to Forge, so likely no move.
 4. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row
    + sheet → fold in). See [`runbook.md`](runbook.md) + [`big-party.md`](big-party.md).
-5. **Bookkeeping:** Vale's leather armor is now **equipped (AC 11)** — confirmed on the
-   Party Overview. (The bite landed while she was still exposed at AC 10.)
+5. **Bookkeeping:** Vale's leather armor **equipped (AC 11)**; pact slots **1/2**. Forge's
+   equipped weapon is a **greataxe** (roster previously said "dual handaxes" — corrected).

@@ -36,6 +36,8 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-018 | 2026-06-27 | combat / enemy turn (action_log) | blocker | FIXED | **Turn Builder crashed executing any enemy turn:** `null value in column "before_state" of relation "action_log" violates not-null constraint`. `ExecuteEnemyTurn` (`turn_builder_handler.go`) omitted `BeforeState`+`AfterState` (both NOT NULL) in its `CreateActionLog` — unlike every other action_log writer. **Partial commit:** damage was applied but the turn never advanced and nothing logged → combat stuck on the enemy's turn. Found live (lead ghoul biting Vale). **Fixed (TDD):** snapshot the actor's combatant state before/after via the existing `snapshotCombatantState` helper, populate both columns. Red/green `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState`; package green; assets/binary rebuilt + redeployed. Workaround used live: manual End Turn + resolve the dangling queue item. |
 | ISSUE-019 | 2026-06-27 | dashboard / combat UX | minor | FIXED | **Turn Builder was undiscoverable** — the only way to run an NPC turn was to **right-click** the enemy token → "Plan Turn". A DM had no visual cue it existed (cost real table time hunting for it). **Fixed:** added a prominent gold **"⚔ Run Enemy Turn — <name>"** button to the combat right panel (above the Turn Queue), shown only when the current-turn combatant is an NPC (`activeTurnCombatant?.is_npc`); reuses the same `openTurnBuilder` handler as the right-click (no duplicate logic). Right-click menu kept. vitest green; Svelte bundle rebuilt + redeployed. |
 | ISSUE-020 | 2026-06-27 | character sheet / HP source | medium | FIXED | **Character sheets showed stale full HP mid-combat.** Two HP stores: `characters.hp_current` (static base sheet) and `combatants.hp_current` (live combat snapshot). Combat carries HP in at start and **never writes back**, so every sheet that reads the `characters` row showed pre-fight HP during a fight (player saw Vale 24/24 while she was 19/24 and bloodied). **NOT a lost-damage bug** — the bite damage was correctly persisted on the combatant; the sheets just read the wrong table. **Fixed (TDD, 3 surfaces):** overlay the live combatant HP (HpCurrent/HpMax/TempHP only) when the character is in an active encounter — portal sheet (`hydrateFromCombatant`, which already overlaid conditions/exhaustion/concentration but forgot HP), Discord `/character` (mirrors the existing `/status` overlay), and the dashboard Character Overview API (`ListApprovedPartyCharacters`). All best-effort read-side; out of combat falls back to the row. The DM out-of-combat status editor's 409-in-combat write path (cf. status-editor feature) is untouched. cover-check green; redeployed; verified live (Party Overview now shows Vale 19/24). #character-cards excluded (static embed — would need a re-post per HP change). |
+| ISSUE-021 | 2026-06-27 | combat / enemy turn (executor scope) | medium | OPEN | Enemy-turn executor resolves the **attack only** — it does NOT move the NPC into reach or advance the turn. Confirmed across two clean live runs (after the ISSUE-018 fix): the 2nd ghoul "bit" Forge from 35 ft with **no movement emitted**, and every enemy turn stayed `active` after Confirm & Post. DM must **drag the token into reach + click End Turn** manually. Distinct from ISSUE-018 (the `before_state` crash, fixed) — this runs cleanly but under-does the turn. Minor: the "Turn Complete" summary renders the actor name blank (`**'s Turn**`). |
+| ISSUE-022 | 2026-06-27 | combat / warlock pact slots (write-back) | medium | FIXED (other agent) | Combat pact-slot expenditure not written back to `characters.pact_magic_slots` — #combat-log showed "1 remaining" after Vale's Misty Step but the base row read `current: 0` (same two-store gap as ISSUE-020's HP). **Fixed by another agent this session**; logged here for the record. |
 
 ---
 
@@ -696,6 +698,33 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
     require re-posting the card on every damage event (future work if wanted).
   - `make cover-check` green (characteroverview 94.58%, discord 85.93%, portal 89.76%); redeployed;
     **verified live** — DM Party Overview now reads **Vale 19/24**.
+
+### ISSUE-021 — Enemy-turn executor resolves the attack only (no auto-move, no auto-advance)
+- **Date:** 2026-06-27
+- **Area:** combat / enemy turn (Turn Builder → `ExecuteEnemyTurn`)
+- **Severity:** medium — not a crash or lost damage; the turn is *correct but incomplete*, so
+  the board and initiative silently drift unless the DM finishes by hand.
+- **Status:** OPEN.
+- **Context:** first clean live runs of the Turn Builder after the ISSUE-018 `before_state`
+  crash fix — the 2nd ghoul (init 9, **C8**, ~35 ft from Forge) and the lead ghoul (init 19,
+  **E2**, already adjacent to Forge).
+- **Repro:** "⚔ Run Enemy Turn" → the planner generates **only** an ATTACK step (e.g. Bite vs
+  Forge, reach 5 ft) with **no MOVE step**, even when the NPC is out of reach. Confirm & Post →
+  the attack resolves (damage applied on a hit, `enemy_turn` action_log row written, posted to
+  #combat-log) — **but** (a) the token does not move (the 2nd ghoul "bit" from 35 ft, left at
+  C8), and (b) the turn stays `status='active'` / the encounter does not advance.
+- **Expected:** the executor should path the NPC into reach when out of range (it legally can —
+  30 ft move → adjacent) before the attack, and advance the turn on completion.
+- **Actual:** attack-only resolution; DM must **drag the token into reach** and click **End
+  Turn** manually. Did both live (2nd ghoul: drag C8→D2 + End Turn; lead ghoul: already
+  adjacent, miss, End Turn).
+- **Minor:** the "Turn Complete" summary prints the actor name blank — `**'s Turn**` (missing
+  display name in the post template).
+- **Distinct from ISSUE-018:** that was the action_log NOT-NULL crash (fixed + deployed); this
+  is executor *scope* — it now runs cleanly but only does the attack.
+- **Fix idea:** in `ExecuteEnemyTurn` / the plan builder (`turn_builder_handler.go`), emit a
+  move step toward the chosen target when out of reach (reuse the player `/move` pathing) and
+  call the turn-advance path after a successful resolve.
 
 <!-- Append a section per issue:
 

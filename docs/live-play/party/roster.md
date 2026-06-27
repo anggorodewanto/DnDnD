@@ -8,8 +8,8 @@
 
 | PC | Player | Race / Class / Lvl | HP | AC | Key resources | Pos | Status | Sheet |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Vale** | the user | Tiefling Warlock 3 (Fiend) | **19/24** | 10 (11 w/ leather) | **1/2** pact slots @ L2; DC 13 | E1 | **In combat** ("The Cellar", R1) — **bloodied**, ghoul adjacent (E2); her turn | [vale.md](vale.md) |
-| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian 3 (Berserker) | 32/32 | 14 | Rage (unused); dual handaxes | E1 | **In combat** ("The Cellar", R1) — up next after Vale | [forge.md](forge.md) |
+| **Vale** | the user | Tiefling Warlock 3 (Fiend) | **19/24** | **11** (leather) | **1/2** pact slots @ L2; DC 13; light crossbow | **K2** | **In combat** ("The Cellar", R2) — **bloodied**; Misty Stepped clear of the ghouls; **her turn** | [vale.md](vale.md) |
+| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian 3 (Berserker) | **20/32** | 14 | Rage (unused); **greataxe** | E1 | **In combat** ("The Cellar", R2) — **bitten**; both ghouls adjacent (D2/E2) | [forge.md](forge.md) |
 
 _Add a row + a `party/<name>.md` sheet for each new PC on approval._
 

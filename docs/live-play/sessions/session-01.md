@@ -429,4 +429,40 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
   and the dashboard Party Overview API. Out-of-combat falls back to the row; the DM
   out-of-combat status editor's 409 write path is untouched. cover-check green; redeployed;
   **verified live** — Party Overview now reads **Vale 19/24**. See [`issues.md`](issues.md).
+
+---
+
+## 2026-06-27 — Round 1 closes, Round 2 opens (first clean enemy-turn runs)
+
+- **Resumed mid-Round-1; docs were stale.** The save file said "Vale's turn (R1)," but the
+  DB + #combat-log were **ahead**: both player turns had already resolved. Reconciled from the
+  DB/#combat-log (the failure mode `dm-rules` warns about) before acting.
+- **Vale's turn (init 15, R1):** point-blank **light crossbow** at the lead ghoul —
+  **To Hit 15 → HIT, 2 piercing** (disadvantage, hostile within 5 ft) → ghoul **20/22**; then
+  **Misty Step** (bonus action, **1 pact slot → 1/2 left**) teleporting **E1→K2**, out of
+  reach. (Movement bar stayed full — the relocation was the teleport.)
+- **Forge's turn (init 12, R1):** **greataxe** at the lead ghoul — **To Hit 5 → MISS**.
+  (Roster said "dual handaxes"; he's swinging a **greataxe** — corrected in roster.md.)
+- **2nd ghoul's turn (init 9, R1) — DM enemy turn.** "⚔ Run Enemy Turn" → Bite vs Forge,
+  **To Hit 18 (vs AC 14 → HIT), 12 piercing** → **Forge 32→20**. **First clean live run of the
+  ISSUE-018-fixed executor:** applied + posted to #combat-log, **no `before_state` crash**, new
+  `enemy_turn` action_log row. Then **drag-moved C8→D2** (planner emits **no movement** — it had
+  "bitten" from 35 ft) and clicked **End Turn** (no auto-advance). Bite, not Claws → no paralysis.
+- **Round 2 — lead ghoul's turn (init 19) — DM enemy turn.** Already adjacent to Forge (E2).
+  "⚔ Run Enemy Turn" → Bite vs Forge, **To Hit 4 → MISS** (let the NPC roll stand, no fudge).
+  Confirm & Post → posted, no crash; **End Turn** → advanced to **Vale (init 15, R2)**.
+- **All four beats narrated** to #the-story (read-aloud): R1 catch-up (Vale crossbow + Misty
+  Step + Forge whiff) 8:10 PM, 2nd-ghoul bite on Forge 8:16 PM, lead-ghoul miss 8:41 PM.
+  Enemy state described, **no HP/AC numbers leaked**.
+- **⚠ NEW ISSUE-021 (logged):** the enemy-turn executor resolves the **attack only** — it
+  neither **moves the NPC into reach** nor **advances the turn**; both are manual DM steps
+  (drag token + End Turn). Distinct from ISSUE-018 (the crash, fixed). Minor: the "Turn
+  Complete" summary renders the actor name blank (`**'s Turn**`). See [`issues.md`](issues.md).
+- **Pact-slot write-back gap (ISSUE-022 — fixed by another agent, log only):** #combat-log
+  showed "Used pact slot (1 remaining)" but `characters.pact_magic_slots.current` read 0
+  (combat spend not written back to the base row, à la ISSUE-020's HP). Per the user another
+  agent fixed it; recorded here, not re-fixed.
+- **State now:** **Round 2, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
+  Forge E1 (20/32, bitten), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on Forge.
+  **Next:** Vale acts (player-driven), then Forge (12), then 2nd Ghoul (9).
 </content>
