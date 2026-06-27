@@ -69,6 +69,14 @@ type AttackRollResult struct {
 	Critical    bool `json:"critical"`
 	DamageRoll  int  `json:"damage_roll"`
 	DamageTotal int  `json:"damage_total"`
+	// FinalDamage is the damage actually dealt after the target's
+	// resistance/immunity/vulnerability is applied. Only meaningful once
+	// DamageResolved is true (i.e. after the turn executes and damage lands).
+	FinalDamage int `json:"final_damage,omitempty"`
+	// DamageResolved is set once damage has been applied to the target, so the
+	// combat log can report the dealt amount (FinalDamage) rather than the
+	// rolled total. While false (plan preview), the log falls back to DamageTotal.
+	DamageResolved bool `json:"damage_resolved,omitempty"`
 }
 
 // AbilityStep holds a special ability plan data.
@@ -595,16 +603,42 @@ func FormatCombatLog(plan TurnPlan) string {
 
 func formatAttackLog(b *strings.Builder, attack *AttackStep) {
 	r := attack.RollResult
+	dmg := attackDamagePhrase(attack)
 	if r.Critical {
-		fmt.Fprintf(b, "\u2694\ufe0f %s vs %s: \U0001f3af **CRITICAL HIT!** (%d) \u2014 %d %s damage\n",
-			attack.WeaponName, attack.TargetName, r.ToHitTotal, r.DamageTotal, attack.DamageType)
+		fmt.Fprintf(b, "\u2694\ufe0f %s vs %s: \U0001f3af **CRITICAL HIT!** (%d) \u2014 %s\n",
+			attack.WeaponName, attack.TargetName, r.ToHitTotal, dmg)
 		return
 	}
 	if r.Hit {
-		fmt.Fprintf(b, "\u2694\ufe0f %s vs %s: %d to hit \u2014 **Hit!** %d %s damage\n",
-			attack.WeaponName, attack.TargetName, r.ToHitTotal, r.DamageTotal, attack.DamageType)
+		fmt.Fprintf(b, "\u2694\ufe0f %s vs %s: %d to hit \u2014 **Hit!** %s\n",
+			attack.WeaponName, attack.TargetName, r.ToHitTotal, dmg)
 		return
 	}
 	fmt.Fprintf(b, "\u2694\ufe0f %s vs %s: %d to hit \u2014 Miss\n",
 		attack.WeaponName, attack.TargetName, r.ToHitTotal)
+}
+
+// attackDamagePhrase renders the damage portion of an attack log line. Before
+// damage is applied (plan preview, DamageResolved=false) it reports the rolled
+// total. Once resolved it reports the amount actually dealt (FinalDamage),
+// annotating when the target's resistance, immunity, or vulnerability changed
+// it from the rolled total.
+func attackDamagePhrase(attack *AttackStep) string {
+	r := attack.RollResult
+	dealt := r.DamageTotal
+	if r.DamageResolved {
+		dealt = r.FinalDamage
+	}
+	phrase := fmt.Sprintf("%d %s damage", dealt, attack.DamageType)
+	if !r.DamageResolved || r.FinalDamage == r.DamageTotal {
+		return phrase
+	}
+	switch {
+	case r.FinalDamage == 0:
+		return fmt.Sprintf("%s (immune \u2014 %d negated)", phrase, r.DamageTotal)
+	case r.FinalDamage < r.DamageTotal:
+		return fmt.Sprintf("%s (resisted \u2014 halved from %d)", phrase, r.DamageTotal)
+	default:
+		return fmt.Sprintf("%s (vulnerable \u2014 doubled from %d)", phrase, r.DamageTotal)
+	}
 }

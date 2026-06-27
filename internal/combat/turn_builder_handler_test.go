@@ -405,6 +405,73 @@ func TestExecuteEnemyTurn_CombatLogNamesActor(t *testing.T) {
 		"enemy-turn combat log header must name the acting NPC, not render blank")
 }
 
+// The enemy-turn combat log must report the damage actually dealt after the
+// target's resistance — not the raw rolled total — so the DM/players see the
+// halved number (e.g. a raging barbarian taking a bite). ExecuteEnemyTurn must
+// thread ApplyDamage's FinalDamage back onto the attack step before formatting.
+func TestExecuteEnemyTurn_LogShowsResistedDamage(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == npcID {
+				return refdata.Combatant{
+					ID: npcID, EncounterID: encounterID, DisplayName: "Ghoul",
+					IsNpc: true, IsAlive: true, HpCurrent: 22,
+				}, nil
+			}
+			// Resistant target: an NPC whose creature row resists piercing.
+			return refdata.Combatant{
+				ID: targetID, EncounterID: encounterID, DisplayName: "Bonecage",
+				IsNpc: true, IsAlive: true, HpCurrent: 30, Ac: 14,
+				CreatureRefID: sql.NullString{String: "bonecage", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{ID: "bonecage", DamageResistances: []string{"piercing"}}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+		},
+	}
+
+	svc := NewService(store)
+	roller := newDeterministicRoller(15, 4, 3)
+
+	// Pre-rolled hit for 8 raw piercing; resistance must halve it to 4.
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Bite", ToHit: 4, DamageDice: "2d6+2",
+					DamageType: "piercing", ReachFt: 5,
+					TargetID: targetID, TargetName: "Bonecage",
+					RollResult: &AttackRollResult{ToHitTotal: 16, Hit: true, DamageTotal: 8},
+				},
+			},
+		},
+	}
+
+	result, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, roller)
+	require.NoError(t, err)
+	assert.Contains(t, result.CombatLog, "4 piercing damage (resisted — halved from 8)",
+		"combat log must show the halved (post-resistance) damage")
+}
+
 // --- TDD Cycle 13: indexToColLabel ---
 
 func TestIndexToColLabel(t *testing.T) {

@@ -268,6 +268,7 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		targetID   uuid.UUID
 		amount     int32
 		damageType string
+		attack     *AttackStep
 	}
 	var hits []pendingHit
 
@@ -310,6 +311,7 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 					targetID:   step.Attack.TargetID,
 					amount:     int32(step.Attack.RollResult.DamageTotal),
 					damageType: step.Attack.DamageType,
+					attack:     step.Attack,
 				})
 			}
 
@@ -337,6 +339,13 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 			return nil, fmt.Errorf("applying damage to %s: %w", hit.targetID, err)
 		}
 		damageApplied[hit.targetID] += int32(dmgRes.FinalDamage)
+		// Record the dealt amount on the attack step so FormatCombatLog reports
+		// the post-resistance damage (e.g. a raging target's halved bite) rather
+		// than the rolled total.
+		if hit.attack != nil && hit.attack.RollResult != nil {
+			hit.attack.RollResult.FinalDamage = dmgRes.FinalDamage
+			hit.attack.RollResult.DamageResolved = true
+		}
 	}
 
 	// Create action log. action_log.{before_state,after_state} are NOT NULL,

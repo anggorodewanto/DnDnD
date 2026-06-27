@@ -600,6 +600,84 @@ func TestFormatCombatLog_Critical(t *testing.T) {
 	assert.Contains(t, log, "14 slashing damage")
 }
 
+func TestFormatCombatLog_ResistedDamageShowsHalved(t *testing.T) {
+	plan := TurnPlan{
+		DisplayName: "Ghoul",
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Bite",
+					TargetName: "Forge",
+					DamageType: "piercing",
+					RollResult: &AttackRollResult{
+						ToHitTotal:     14,
+						Hit:            true,
+						DamageTotal:    8,
+						FinalDamage:    4,
+						DamageResolved: true,
+					},
+				},
+			},
+		},
+	}
+	log := FormatCombatLog(plan)
+	// The rolled total was 8; Rage halved it to 4. The log must report the
+	// dealt amount and flag that resistance reduced it.
+	assert.Contains(t, log, "4 piercing damage (resisted — halved from 8)")
+}
+
+func TestFormatCombatLog_ImmuneDamageShowsNegated(t *testing.T) {
+	plan := TurnPlan{
+		DisplayName: "Ghoul",
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Bite",
+					TargetName: "Wraith",
+					DamageType: "piercing",
+					RollResult: &AttackRollResult{
+						ToHitTotal:     17,
+						Hit:            true,
+						DamageTotal:    9,
+						FinalDamage:    0,
+						DamageResolved: true,
+					},
+				},
+			},
+		},
+	}
+	log := FormatCombatLog(plan)
+	assert.Contains(t, log, "0 piercing damage (immune — 9 negated)")
+}
+
+func TestFormatCombatLog_ResolvedNoChangeReadsPlain(t *testing.T) {
+	plan := TurnPlan{
+		DisplayName: "Ghoul",
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Bite",
+					TargetName: "Aragorn",
+					DamageType: "piercing",
+					RollResult: &AttackRollResult{
+						ToHitTotal:     16,
+						Hit:            true,
+						DamageTotal:    7,
+						FinalDamage:    7,
+						DamageResolved: true,
+					},
+				},
+			},
+		},
+	}
+	log := FormatCombatLog(plan)
+	assert.Contains(t, log, "7 piercing damage")
+	assert.NotContains(t, log, "resisted")
+}
+
 func TestFormatCombatLog_BonusAction(t *testing.T) {
 	plan := TurnPlan{
 		DisplayName: "Goblin",
