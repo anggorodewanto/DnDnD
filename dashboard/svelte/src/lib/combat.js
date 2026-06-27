@@ -362,3 +362,53 @@ export function collectSurprisedShortIDs(creatures, surprisedByIndex) {
   }
   return out;
 }
+
+/**
+ * All combatants occupying a given tile, in their original array order.
+ * Combatants can share a tile (stacked tokens fully overlap on the canvas);
+ * this is the basis for cycling selection through them.
+ * @param {Array} combatants
+ * @param {number} col - 0-based column index.
+ * @param {number} row - 0-based row index.
+ * @returns {Array} combatants on the tile (possibly empty).
+ */
+export function combatantsAtTile(combatants, col, row) {
+  if (!combatants) return [];
+  return combatants.filter(
+    (c) => colToIndex(c.position_col) === col && c.position_row === row,
+  );
+}
+
+/**
+ * The combatant id to select when a tile is clicked, cycling through a stack
+ * of co-located tokens so each is reachable by repeated clicks. Returns null
+ * for an empty tile; the first token when the current selection is not on the
+ * tile (or nothing is selected); otherwise the next token, wrapping around.
+ * @param {Array} stack - combatants on the clicked tile (see combatantsAtTile).
+ * @param {string|null} currentId - currently selected combatant id.
+ * @returns {string|null}
+ */
+export function nextStackedSelection(stack, currentId) {
+  if (!stack || stack.length === 0) return null;
+  const idx = stack.findIndex((c) => c.id === currentId);
+  return stack[(idx + 1) % stack.length].id;
+}
+
+/**
+ * Map of "col,row" -> count for tiles holding more than one combatant. Drives
+ * the stacked-token badge that tells the DM a tile has co-located tokens.
+ * @param {Array} combatants
+ * @returns {Map<string, number>}
+ */
+export function stackedTileCounts(combatants) {
+  const counts = new Map();
+  if (!combatants) return counts;
+  for (const c of combatants) {
+    const key = `${colToIndex(c.position_col)},${c.position_row}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const [key, n] of counts) {
+    if (n < 2) counts.delete(key);
+  }
+  return counts;
+}

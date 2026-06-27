@@ -16,6 +16,9 @@ import {
   isWallBetween,
   findPath,
   collectSurprisedShortIDs,
+  combatantsAtTile,
+  nextStackedSelection,
+  stackedTileCounts,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -453,5 +456,79 @@ describe('collectSurprisedShortIDs', () => {
     expect(collectSurprisedShortIDs(null, null)).toEqual([]);
     expect(collectSurprisedShortIDs(undefined, { 0: true })).toEqual([]);
     expect(collectSurprisedShortIDs([{ short_id: 'A' }], null)).toEqual([]);
+  });
+});
+
+// Stacked-token selection: combatants can share a tile (e.g. two PCs on the
+// same square). Clicks must reach each one, so selection cycles through the
+// co-located stack on repeated clicks.
+describe('combatantsAtTile', () => {
+  const combs = [
+    { id: 'vale', position_col: 'E', position_row: 1 },
+    { id: 'forge', position_col: 'E', position_row: 1 },
+    { id: 'ghoul', position_col: 'C', position_row: 8 },
+  ];
+
+  it('returns every combatant on the tile in array order', () => {
+    expect(combatantsAtTile(combs, 4, 1).map(c => c.id)).toEqual(['vale', 'forge']);
+  });
+
+  it('returns a single combatant when the tile is not stacked', () => {
+    expect(combatantsAtTile(combs, 2, 8).map(c => c.id)).toEqual(['ghoul']);
+  });
+
+  it('returns an empty array for an empty tile', () => {
+    expect(combatantsAtTile(combs, 0, 0)).toEqual([]);
+  });
+
+  it('tolerates null/undefined combatants', () => {
+    expect(combatantsAtTile(null, 0, 0)).toEqual([]);
+    expect(combatantsAtTile(undefined, 0, 0)).toEqual([]);
+  });
+});
+
+describe('nextStackedSelection', () => {
+  const stack = [{ id: 'vale' }, { id: 'forge' }];
+
+  it('returns null for an empty stack', () => {
+    expect(nextStackedSelection([], 'vale')).toBeNull();
+    expect(nextStackedSelection(null, 'vale')).toBeNull();
+  });
+
+  it('selects the first token when nothing on the tile is selected yet', () => {
+    expect(nextStackedSelection(stack, null)).toBe('vale');
+  });
+
+  it('advances to the next token when the current one is selected', () => {
+    expect(nextStackedSelection(stack, 'vale')).toBe('forge');
+  });
+
+  it('wraps to the first token after the last', () => {
+    expect(nextStackedSelection(stack, 'forge')).toBe('vale');
+  });
+
+  it('selects the first token when the selection is not on this tile', () => {
+    expect(nextStackedSelection(stack, 'ghoul')).toBe('vale');
+  });
+});
+
+describe('stackedTileCounts', () => {
+  it('counts only tiles holding more than one combatant', () => {
+    const combs = [
+      { position_col: 'E', position_row: 1 },
+      { position_col: 'E', position_row: 1 },
+      { position_col: 'C', position_row: 8 },
+    ];
+    const counts = stackedTileCounts(combs);
+    expect(counts.get('4,1')).toBe(2);
+    expect(counts.has('2,8')).toBe(false);
+  });
+
+  it('returns an empty map when nothing is stacked', () => {
+    expect(stackedTileCounts([{ position_col: 'A', position_row: 0 }]).size).toBe(0);
+  });
+
+  it('tolerates null combatants', () => {
+    expect(stackedTileCounts(null).size).toBe(0);
   });
 });

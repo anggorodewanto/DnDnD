@@ -30,6 +30,9 @@
     gridDistance,
     tilesInRange,
     findPath,
+    combatantsAtTile,
+    nextStackedSelection,
+    stackedTileCounts,
   } from './lib/combat.js';
   import {
     terrainByGid,
@@ -522,6 +525,28 @@
 
       ctx.globalAlpha = 1.0;
     }
+
+    // Stacked-tile badge: co-located tokens fully overlap, so flag tiles that
+    // hold more than one combatant with an "×N" count. Signals the DM to
+    // click again to cycle selection through the stack.
+    for (const [key, count] of stackedTileCounts(activeEncounter.combatants)) {
+      const [col, row] = key.split(',').map(Number);
+      const bx = col * tileSize + tileSize * 0.78;
+      const by = row * tileSize + tileSize * 0.22;
+      const br = Math.max(7, tileSize * 0.16);
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, 2 * Math.PI);
+      ctx.fillStyle = '#1e293b';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.max(8, tileSize * 0.18)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`×${count}`, bx, by);
+    }
   }
 
   function drawRangeCircle(ctx, tiledMap, tileSize) {
@@ -670,10 +695,14 @@
     };
   }
 
-  function findCombatantAt(col, row) {
-    return activeEncounter?.combatants?.find(c => {
-      return colToIndex(c.position_col) === col && c.position_row === row;
-    }) || null;
+  // The combatant a drag or right-click should target on a (possibly stacked)
+  // tile: the currently selected token if it sits there, otherwise the top of
+  // the stack. This lets the DM cycle-select a stacked token (left-click) and
+  // then drag or right-click that exact one.
+  function combatantAtFor(col, row) {
+    const stack = combatantsAtTile(activeEncounter?.combatants, col, row);
+    if (stack.length === 0) return null;
+    return stack.find(c => c.id === selectedCombatantId) || stack[0];
   }
 
   function handleCanvasMouseDown(e) {
@@ -688,7 +717,7 @@
 
     if (measureMode) return; // handled by click
 
-    const comb = findCombatantAt(tile.col, tile.row);
+    const comb = combatantAtFor(tile.col, tile.row);
     if (comb) {
       dragging = {
         combatantId: comb.id,
@@ -757,7 +786,7 @@
     const tile = getCanvasTile(e);
     if (!tile) return;
 
-    const comb = findCombatantAt(tile.col, tile.row);
+    const comb = combatantAtFor(tile.col, tile.row);
     if (!comb) {
       contextMenu = null;
       return;
@@ -862,11 +891,13 @@
     // If we were dragging, don't re-select (mouseup handles it)
     if (dragging) return;
 
-    // Find combatant at clicked tile
-    const clicked = findCombatantAt(tile.col, tile.row);
+    // Stacked tokens fully overlap, so cycle selection through the tile's stack
+    // on repeated clicks — each co-located token is reachable this way.
+    const stack = combatantsAtTile(activeEncounter?.combatants, tile.col, tile.row);
+    const nextId = nextStackedSelection(stack, selectedCombatantId);
 
-    if (clicked) {
-      selectedCombatantId = clicked.id;
+    if (nextId) {
+      selectedCombatantId = nextId;
       damageInput = 0;
       healInput = 0;
     } else {

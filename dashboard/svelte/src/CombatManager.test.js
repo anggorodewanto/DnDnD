@@ -101,3 +101,32 @@ describe('CombatManager tracker-panel context actions', () => {
     expect(block[0]).toContain('handleRemoveCombatant(selectedCombatant.id)');
   });
 });
+
+describe('CombatManager stacked-token selection', () => {
+  // Co-located tokens fully overlap on the canvas; a plain left-click must
+  // cycle through them so each stacked combatant is reachable.
+  it('cycles selection through the tile stack on click', () => {
+    const block = src.match(/function handleCanvasClick[\s\S]*?\n  }/);
+    expect(block).not.toBeNull();
+    expect(block[0]).toContain('combatantsAtTile(');
+    expect(block[0]).toContain('nextStackedSelection(stack, selectedCombatantId)');
+  });
+
+  it('targets the selected-or-top token for drag and right-click', () => {
+    expect(src).toMatch(
+      /function combatantAtFor[\s\S]*?stack\.find\(c => c\.id === selectedCombatantId\) \|\| stack\[0\]/,
+    );
+    // Both drag-start and the context menu route through the shared picker.
+    const down = src.match(/function handleCanvasMouseDown[\s\S]*?\n  }/);
+    expect(down[0]).toContain('combatantAtFor(tile.col, tile.row)');
+    const ctx = src.match(/function handleCanvasContextMenu[\s\S]*?\n  }/);
+    expect(ctx[0]).toContain('combatantAtFor(tile.col, tile.row)');
+  });
+
+  it('draws an ×N badge on tiles holding more than one combatant', () => {
+    const block = src.match(/function drawTokens[\s\S]*?\n  }/);
+    expect(block).not.toBeNull();
+    expect(block[0]).toContain('stackedTileCounts(activeEncounter.combatants)');
+    expect(block[0]).toContain('`×${count}`');
+  });
+});
