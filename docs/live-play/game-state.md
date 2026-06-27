@@ -9,17 +9,18 @@
 > / the `#dm-console` tab) is the *generated* source of truth and this file drifts.
 > See [`README.md`](README.md) "DM Console."
 
-_Last updated: 2026-06-27 — **COMBAT LIVE: "The Cellar," ROUND 2, VALE'S TURN.** Round 1
-fully resolved + Round 2 opened. **R1:** lead ghoul bit Vale (5 → 19/24, bloodied); Vale
-point-blank crossbow on the lead ghoul (hit, 2 → 20/22) then **Misty Step** (bonus, 1 pact
-slot → **1/2 left**) E1→**K2**; Forge greataxe **missed** the lead ghoul; 2nd ghoul (init 9)
-closed C8→**D2** and **bit Forge** (18 vs AC 14 → **12** → Forge **20/32**). **R2 so far:**
-lead ghoul (init 19) **bit at Forge and MISSED** (4 vs AC 14). Turn now **Vale (init 15)**.
-Every beat narrated to #the-story (read-aloud). **Enemy-turn executor (first live runs,
-ISSUE-018 fix): WORKS — no crash, damage + action_log written** — but it resolves the
-**attack only** (no auto-move into reach, no auto-advance); DM drags the token + clicks End
-Turn each enemy turn (→ ISSUE-021). **Next beat = Vale's turn** (player-driven), then Forge
-(12), then 2nd Ghoul (9). 3-4 more players still joining._
+_Last updated: 2026-06-27 — **COMBAT LIVE: "The Cellar," ROUND 3, VALE'S TURN.** **R2 + top of
+R3 resolved.** **R2:** Vale (15) held; **Forge (12) RAGED** (resistance to B/P/S, 10 rounds
+left); 2nd ghoul (init 9, D2) **bit Forge** — 8 raw → **4 after Rage resist** → Forge 20→16.
+**R3:** lead ghoul (init 19, E2) **bit Forge** — 8 raw → **4 resisted** → Forge 16→**12/32**.
+Both ghoul turns run via the dashboard Turn Builder (Confirm & Post + manual End Turn).
+**Two fixes verified LIVE this session:** (1) enemy-turn combat log now names the actor —
+posts `**Ghoul's Turn**`, not blank `**'s Turn**` (ISSUE-021 tail); (2) enemy-turn log now
+shows **post-resistance** damage (`4 piercing damage (resisted — halved from 8)`) instead of
+the raw roll (ISSUE-023). NB: the two R2/R3 logs already posted to #combat-log predate fix #2
+so they still read "8 piercing" — actual dealt was 4 each (Rage). **Enemy-turn executor still
+attack-only** (no auto-move/advance; DM ends the turn — ISSUE-021). **Next beat = Vale's turn**
+(player-driven, init 15, R3), then Forge (12), then 2nd Ghoul (9). 3-4 more players still joining._
 
 ## Ops snapshot
 
@@ -82,19 +83,24 @@ players," then add roster rows.
 ## Active encounter / combat
 
 - **LIVE — "The Cellar"** (internal "Cellar — the brood"), combat/encounter id
-  `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. **Round 2**,
+  `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. **Round 3**,
   4 combatants, no surprise (re-ruled off both sides).
-  - **Positions / HP:** Vale **K2** (**19/24**, bloodied — Misty Stepped clear; CURRENT) +
-    Forge **E1** (**20/32**, bitten) at the stairs landing; **lead Ghoul E2** (20/22, *init
-    19*, adjacent to Forge) + **2nd Ghoul D2** (22/22, init 9, adjacent to Forge).
+  - **Positions / HP:** Vale **K2** (**19/24**, bloodied — Misty Stepped clear; **CURRENT**) +
+    Forge **E1** (**12/32**, bitten, **RAGING** — rage_rounds ≈10, B/P/S resist) at the stairs
+    landing; **lead Ghoul E2** (20/22, *init 19*, adjacent to Forge) + **2nd Ghoul D2** (22/22,
+    init 9, adjacent to Forge).
   - **Initiative / turn order:** Ghoul 19 → **Vale 15 (CURRENT)** → Forge 12 → Ghoul 9.
   - **Done — R1:** lead ghoul bit Vale (5); Vale crossbow (hit, 2) + Misty Step E1→K2; Forge
-    greataxe MISS; 2nd ghoul closed C8→D2 + bit Forge (12). **R2:** lead ghoul bit at Forge →
-    **MISS** (4 vs AC 14).
-  - **Enemy-turn executor (first live runs, ISSUE-018 fix): WORKS — no crash, damage +
-    action_log written.** Residual (→ ISSUE-021): resolves the **attack only** — no NPC move
-    into reach, no turn advance. DM drags the token (did C8→D2 for the 2nd ghoul) + clicks
-    **End Turn** each enemy turn.
+    greataxe MISS; 2nd ghoul closed C8→D2 + bit Forge (12). **R2:** lead ghoul bit Forge →
+    **MISS**; Vale (15) **held**; Forge (12) **RAGED**; 2nd ghoul (9) **bit Forge** 8 raw → **4
+    resisted** (20→16). **R3:** lead ghoul (19) **bit Forge** 8 raw → **4 resisted** (16→**12**).
+  - **Enemy-turn executor (ISSUE-018 fix): WORKS.** Combat-log now (a) names the actor
+    (`**Ghoul's Turn**`) and (b) shows post-resistance damage (`4 piercing (resisted — halved
+    from 8)`) — both fixes verified live this session. Residual (→ ISSUE-021): resolves the
+    **attack only** — no NPC move into reach, no turn advance; DM clicks **End Turn** each
+    enemy turn (both ghouls already adjacent to Forge, so no move needed).
+  - **Stale queue:** two `enemy_turn_ready` items (init-9 + lead ghoul) linger in the DM
+    Console pending (executor doesn't auto-resolve them — ISSUE-021); resolve/ignore.
   - **Sheets show live combat HP** (ISSUE-020): portal sheet, `/character`, dashboard Party
     Overview overlay the combatant HP (Vale 19/24, Forge 20/32).
   - **Vale pact slots: 1/2** (spent 1 on Misty Step). Pact-slot write-back gap (combat spend
@@ -106,25 +112,29 @@ players," then add roster rows.
 
 ## Current scene
 
-**Down in the cellar, the brood closes on Forge.** First blood went both ways: the lead
-ghoul bit Vale (bloodied, 19/24); she shot it point-blank and **Misty Stepped** across the
-room to K2, Forge's greataxe whiffed, the **second ghoul lunged from the dark and bit Forge**
-(20/32), and the lead ghoul's follow-up bite **missed**. Both pale things now crowd Forge at
-the foot of the stairs while Vale stands clear and untouched across the cellar. It's
-**Vale's turn** (Round 2). World / lore: [`world.md`](world.md).
+**Down in the cellar, the brood swarms the raging dwarf.** Forge has gone berserk — both
+ghouls sank their teeth into him across R2/R3, but his **Rage** halves every bite (8→4), so
+he's **bloodied but standing at 12/32**, axe up, pinned at the foot of the stairs by both pale
+things (D2/E2). Vale is clear and untouched at **K2** across the cellar, both ghouls' backs
+turned to her, one spent bolt on the stones. It's **Vale's turn** (Round 3). World / lore:
+[`world.md`](world.md).
 
 ## Next action
 
-1. **Vale's turn (CURRENT, init 15, R2).** The player acts — she types her own
+1. **Vale's turn (CURRENT, init 15, R3).** The player acts — she types her own
    `/move`/`/attack`/`/cast` in Discord and **rolls her own dice**; never roll for her.
    Adjudicate vs her reported numbers; keep enemy HP/AC secret (describe state, don't quote
    it). She's bloodied (19/24), at **K2** — clear of both ghouls (they're on Forge at E1),
-   with 1 pact slot + her light crossbow. After her beat, **narrate** + **update docs**.
-2. **Then Forge (12),** player-driven — bitten (20/32), pinned by two ghouls (D2/E2).
+   with 1 pact slot + her light crossbow; both ghouls' backs are to her. After her beat,
+   **narrate** + **update docs**.
+2. **Then Forge (12),** player-driven — **raging**, bloodied (12/32), pinned by two ghouls
+   (D2/E2). Rage halves incoming B/P/S; his next hit also gets Rage damage + (if Reckless)
+   advantage.
 3. **Then the 2nd Ghoul (init 9, D2) — DM enemy turn.** Run via **"⚔ Run Enemy Turn"** →
-   Review → Confirm & Post, then **manually** drag-into-reach (if needed) + **End Turn**
-   (executor is attack-only — ISSUE-021). It's already adjacent to Forge, so likely no move.
+   Review → Confirm & Post, then **manually End Turn** (executor is attack-only — ISSUE-021).
+   Already adjacent to Forge (no move). Log now names the actor + shows resisted damage.
 4. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row
    + sheet → fold in). See [`runbook.md`](runbook.md) + [`big-party.md`](big-party.md).
 5. **Bookkeeping:** Vale's leather armor **equipped (AC 11)**; pact slots **1/2**. Forge's
-   equipped weapon is a **greataxe** (roster previously said "dual handaxes" — corrected).
+   equipped weapon is a **greataxe**; **Rage active** (rage_rounds ≈10, was "unused"). Two
+   stale `enemy_turn_ready` queue items linger (ISSUE-021) — resolve/ignore.

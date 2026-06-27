@@ -465,4 +465,31 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
 - **State now:** **Round 2, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
   Forge E1 (20/32, bitten), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on Forge.
   **Next:** Vale acts (player-driven), then Forge (12), then 2nd Ghoul (9).
-</content>
+
+### R2 tail + R3 open — both ghouls on the raging dwarf (06-27, ~2:00–2:15 PM)
+
+_Resumed; reconciled the live board (DM Console) — mechanics had advanced past the docs._
+
+- **Reconcile on resume:** DM Console showed **R2 already past Vale + Forge**, current = 2nd
+  Ghoul (init 9). Vale's R2 turn left no logged action (held; K2, HP/pos unchanged). **Forge's
+  R2 turn = he RAGED** (`is_raging=t`, rage_rounds≈10) — the un-narrated beat; no attack logged.
+- **2nd Ghoul (init 9, D2) — DM enemy turn (R2).** "⚔ Run Enemy Turn" → Bite vs Forge,
+  **To Hit 21 (vs AC 14 → HIT), 8 raw → 4 after Rage resist** → **Forge 20→16**. End Turn → R3.
+- **Lead Ghoul (init 19, E2) — DM enemy turn (R3).** Bite vs Forge, **To Hit 14 (= AC 14 → HIT),
+  8 raw → 4 resisted** → **Forge 16→12/32**. Honest razor-thin hit, no fudge. End Turn → Vale.
+- **HP reconcile (important):** expected Forge 4/32 from two "8" bites; DM Console + DB showed
+  **12/32**. **Not a bug** — Forge is **raging**, B/P/S resistance halves each 8→4, so
+  20−4−4=12 is correct. Verified via DB (`is_raging=t`). This surfaced **ISSUE-023**.
+- **✅ Two fixes verified LIVE:** (1) **ISSUE-021 name-blank tail (committed b74c849 earlier this
+  session):** both enemy turns posted `**Ghoul's Turn**`, no longer blank `**'s Turn**`.
+  (2) **ISSUE-023 (fixed this session, TDD):** enemy-turn log now shows **post-resistance**
+  damage (`4 piercing (resisted — halved from 8)`); rebuilt + redeployed. The two bites above
+  were posted **before** the redeploy, so they still read "8 piercing" in #combat-log (actual 4).
+- **Narrated** the R2/R3 ghoul assault to #the-story (read-aloud, 9:15 PM) — both bites, Forge's
+  Rage turning the worst aside (bleeding, standing, furious), spotlight handed to Vale. No
+  HP/AC numbers leaked.
+- **Executor still attack-only (ISSUE-021 open):** both ghouls already adjacent to Forge, so no
+  move needed; manual **End Turn** each. Two stale `enemy_turn_ready` queue items now linger.
+- **State now:** **Round 3, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
+  Forge E1 (**12/32, RAGING**), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on
+  Forge. **Next:** Vale acts (player-driven), then Forge (12, raging), then 2nd Ghoul (9).
