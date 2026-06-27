@@ -9,11 +9,13 @@
 > / the `#dm-console` tab) is the *generated* source of truth and this file drifts.
 > See [`README.md`](README.md) "DM Console."
 
-_Last updated: 2026-06-27 — restructured the live-play docs for a 5-6 PC party.
-In-fiction: **post-combat lull.** The upstairs cellar-wretch is dead; the party
-(Vale + Forge) stands over the corpse in the waystation common room. The cellar
-still gapes. **Next beat = the cellar descent** (encounter pre-built). 3-4 more
-players are joining the existing party._
+_Last updated: 2026-06-27 — post-combat lull. Vale + Forge finished their
+introductions in #in-character; Forge asked "is there something interesting in
+the cellar?" **DM nudge posted** to #the-story (3:14:31 PM UTC-ish, `narration_posts`)
+— answered the question in-fiction, leaned on Vale's patron pull, teed up the
+descent decision **without deciding it for them**. **Forge Anvilbearer re-approval
+resolved** (backstory + Goblin language added; queue now empty). **Next beat =
+the party's descent call**, then the cellar fight. 3-4 more players still joining._
 
 ## Ops snapshot
 
@@ -92,12 +94,13 @@ the inside**. The dread points downward. World / lore: [`world.md`](world.md).
 
 ## Next action
 
-1. **Onboard the new players** as they arrive (`/register` → build → DM-approve →
+1. **Await the party's descent call in #in-character.** The cellar nudge is posted;
+   Vale's patron is pulling her down, Forge asked what's below. Let *them* decide to
+   descend / search / rest — **don't act for them** ([`dm-rules.md`](dm-rules.md)).
+   Read #in-character via Chrome to catch their reply (it's Discord-only).
+2. **Onboard the new players** as they arrive (`/register` → build → DM-approve →
    roster row + sheet → fold into the fiction). See [`runbook.md`](runbook.md) +
    [`big-party.md`](big-party.md).
-2. **Await the party's decision in #in-character** — search the body, loot the room,
-   descend, or rest. Narrate what they find; **don't act for them**
-   ([`dm-rules.md`](dm-rules.md)).
 3. **On descent → run the cellar fight.** Open "Cellar — the brood" → **Start
    Combat** (PCs auto-seat at the stairs spawn zone). **Scale the wretch count for
    the bigger party** before starting — see

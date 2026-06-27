@@ -310,4 +310,27 @@ encounter (reserve wretch) if they go down and want a fight. See `game-state.md`
 
 **Next:** players decide in `#in-character`; on descent, open "Cellar — the brood" → Start
 Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `game-state.md`.
+
+---
+
+## 2026-06-27 — post-combat roleplay → DM cellar nudge
+
+- **Rule change first:** dm-rules/runbook/README updated so the DM **reads Discord
+  directly via Chrome** (observation only; mutations still dashboard-only). Reason:
+  `#in-character` roleplay is Discord-only and surfaces in no DB/DM-Console feed —
+  the old "Claude can't see Discord" rule was a blind spot. Committed + pushed
+  (`6a97dc4`).
+- **Read `#in-character`:** Vale + Forge finished post-fight introductions ("Name's
+  Vale, travelling storyteller" / "I'm Forge. Forge Anvilbearer."). Forge closed on
+  a world-question: *"Is there something interesting in the cellar?"* with Vale's
+  attention fixed on the cellar mouth. Clean DM hook — RP thread closed itself.
+- **Resolved Forge's pending approval** (DM Console `next_step`). Reviewed the sheet
+  (Hill-Dwarf Barbarian 3 Berserker; AC 14 = Unarmored Defense; legal build);
+  changes-since-last were backstory + Goblin language only. **Approved** → queue empty.
+- **Posted the DM nudge** to `#the-story` via the Narrate editor (read-aloud block,
+  `narration_posts` 3:14:31 PM): answered Forge in-fiction (the cold up-draught, the
+  door clawed *outward* — shut in, wanting up), leaned on Vale's patron pull, and put
+  the descent choice back to the party **without deciding it for them**.
+- **Next:** await the party's descent call in `#in-character` (read via Chrome); on
+  "we go down," run "Cellar — the brood." 3-4 more PCs still joining.
 </content>
