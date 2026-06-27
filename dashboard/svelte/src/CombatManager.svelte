@@ -1330,6 +1330,26 @@
               </div>
             </div>
 
+            <!-- Mirror the right-click context menu so the DM can act on a
+                 selected token without right-clicking. Damage/Heal/Conditions
+                 are above; these are the two NPC-menu actions that were
+                 previously right-click-only. -->
+            <div class="tracker-actions">
+              {#if selectedCombatant.is_npc}
+                <button
+                  class="plan-turn-btn tracker-action-btn"
+                  data-testid="tracker-plan-turn-btn"
+                  title="Open the Turn Builder to plan and run this enemy's turn"
+                  onclick={() => openTurnBuilder(selectedCombatant)}
+                >Plan Turn</button>
+              {/if}
+              <button
+                class="tracker-remove-btn tracker-action-btn"
+                data-testid="tracker-remove-btn"
+                onclick={() => handleRemoveCombatant(selectedCombatant.id)}
+              >Remove from Encounter</button>
+            </div>
+
             <button class="close-tracker-btn" onclick={() => selectedCombatantId = null}>Close</button>
           </div>
         {/if}
@@ -1760,5 +1780,30 @@
 
   .context-danger:hover {
     background: rgba(239, 68, 68, 0.2);
+  }
+
+  /* Tracker-panel footer mirroring the right-click menu. .tracker-action-btn
+     only carries layout so it never overrides .plan-turn-btn's gold styling. */
+  .tracker-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0.5rem;
+  }
+  .tracker-action-btn {
+    flex: 1;
+    margin: 0;
+  }
+  .tracker-remove-btn {
+    padding: 0.4rem 0.6rem;
+    background: #16213e;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .tracker-remove-btn:hover {
+    background: #ef4444;
+    color: #0f1a2e;
   }
 </style>

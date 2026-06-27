@@ -71,3 +71,33 @@ describe('CombatManager Run Enemy Turn affordance', () => {
     expect(ctx[0]).toContain('openTurnBuilder(comb)');
   });
 });
+
+describe('CombatManager tracker-panel context actions', () => {
+  // The tracker panel mirrors the right-click context menu so the DM can act on
+  // a selected token without hunting for the right-click. Damage/Heal/Conditions
+  // already live in the panel; these assert the two NPC-menu buttons that were
+  // previously right-click-only: Plan Turn (NPC) and Remove from Encounter.
+  it('renders a tracker Plan Turn button gated on the selected NPC', () => {
+    expect(src).toContain('data-testid="tracker-plan-turn-btn"');
+    // NPC-only: a selected PC never sees Plan Turn, matching the context menu.
+    expect(src).toMatch(
+      /\{#if selectedCombatant\.is_npc\}[\s\S]*?tracker-plan-turn-btn/,
+    );
+  });
+
+  it('opens the Turn Builder via the shared openTurnBuilder helper', () => {
+    const block = src.match(
+      /data-testid="tracker-plan-turn-btn"[\s\S]*?<\/button>/,
+    );
+    expect(block).not.toBeNull();
+    expect(block[0]).toContain('openTurnBuilder(selectedCombatant)');
+  });
+
+  it('renders a tracker Remove button reusing handleRemoveCombatant', () => {
+    const block = src.match(
+      /data-testid="tracker-remove-btn"[\s\S]*?<\/button>/,
+    );
+    expect(block).not.toBeNull();
+    expect(block[0]).toContain('handleRemoveCombatant(selectedCombatant.id)');
+  });
+});
