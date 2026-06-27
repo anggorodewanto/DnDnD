@@ -16,6 +16,14 @@ type fakeRefdata struct {
 	arg  refdata.ListPlayerCharactersByStatusParams
 	rows []refdata.ListPlayerCharactersByStatusRow
 	err  error
+
+	// status-edit fakes
+	char      refdata.Character
+	charErr   error
+	combatant refdata.Combatant
+	combErr   error
+	vitalsArg refdata.UpdateCharacterVitalsParams
+	vitalsErr error
 }
 
 func (f *fakeRefdata) ListPlayerCharactersByStatus(ctx context.Context, arg refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
@@ -24,6 +32,23 @@ func (f *fakeRefdata) ListPlayerCharactersByStatus(ctx context.Context, arg refd
 		return nil, f.err
 	}
 	return f.rows, nil
+}
+
+func (f *fakeRefdata) GetCharacter(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+	return f.char, f.charErr
+}
+
+func (f *fakeRefdata) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.NullUUID) (refdata.Combatant, error) {
+	// Default to "not in combat" unless a test configures otherwise.
+	if f.combErr == nil && f.combatant.ID == uuid.Nil {
+		return refdata.Combatant{}, sql.ErrNoRows
+	}
+	return f.combatant, f.combErr
+}
+
+func (f *fakeRefdata) UpdateCharacterVitals(_ context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+	f.vitalsArg = arg
+	return refdata.Character{}, f.vitalsErr
 }
 
 func TestDBStore_ListApprovedPartyCharacters_MapsRows(t *testing.T) {

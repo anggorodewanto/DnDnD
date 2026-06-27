@@ -19,20 +19,22 @@ import (
 
 // mockCharacterQuerier implements portal.CharacterQuerier for unit tests.
 type mockCharacterQuerier struct {
-	character   refdata.Character
-	charErr     error
-	pc          refdata.PlayerCharacter
-	pcErr       error
-	spells      []refdata.Spell
-	spellsErr   error
-	campaign    refdata.Campaign
-	campaignErr error
-	viewerPC    refdata.PlayerCharacter
-	viewerPCErr error
-	weapons     []refdata.Weapon
-	weaponsErr  error
-	armor       []refdata.Armor
-	armorErr    error
+	character    refdata.Character
+	charErr      error
+	pc           refdata.PlayerCharacter
+	pcErr        error
+	spells       []refdata.Spell
+	spellsErr    error
+	campaign     refdata.Campaign
+	campaignErr  error
+	viewerPC     refdata.PlayerCharacter
+	viewerPCErr  error
+	weapons      []refdata.Weapon
+	weaponsErr   error
+	armor        []refdata.Armor
+	armorErr     error
+	combatant    *refdata.Combatant
+	combatantErr error
 }
 
 func (m *mockCharacterQuerier) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -48,6 +50,12 @@ func (m *mockCharacterQuerier) GetSpellsByIDs(_ context.Context, ids []string) (
 }
 
 func (m *mockCharacterQuerier) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.NullUUID) (refdata.Combatant, error) {
+	if m.combatantErr != nil {
+		return refdata.Combatant{}, m.combatantErr
+	}
+	if m.combatant != nil {
+		return *m.combatant, nil
+	}
 	return refdata.Combatant{}, sql.ErrNoRows // default: not in combat
 }
 
@@ -828,4 +836,105 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_NotFound(t *testing.T) 
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, portal.ErrCharacterNotFound)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PersistentConditionsAndExhaustion(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+	charDataJSON, _ := json.Marshal(map[string]any{"exhaustion_level": 2})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Cursed",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+			Conditions:    json.RawMessage(`[{"condition":"poisoned"},{"condition":"prone"}]`),
+		},
+		// no combatant set: character is out of combat
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"poisoned", "prone"}, data.Conditions)
+	assert.Equal(t, 2, data.ExhaustionLevel)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_NoPersistentConditions(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Clean",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			// nil Conditions, no character_data
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Empty(t, data.Conditions)
+	assert.Equal(t, 0, data.ExhaustionLevel)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_InCombatReplacesConditions(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+	charDataJSON, _ := json.Marshal(map[string]any{"exhaustion_level": 1})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Brawler",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+			// Persistent condition carried into combat.
+			Conditions: json.RawMessage(`[{"condition":"poisoned"}]`),
+		},
+		combatant: &refdata.Combatant{
+			// Live combat state: poisoned (carried in) + grappled (new).
+			Conditions:      json.RawMessage(`[{"condition":"poisoned"},{"condition":"grappled"}]`),
+			ExhaustionLevel: 3,
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	// Combatant is the live source of truth: conditions are replaced, not appended.
+	assert.Equal(t, []string{"poisoned", "grappled"}, data.Conditions)
+
+	// "poisoned" exists both persistently and on the combatant; it must appear exactly once.
+	count := 0
+	for _, c := range data.Conditions {
+		if c == "poisoned" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count)
+
+	// Exhaustion is overlaid from the combatant during combat.
+	assert.Equal(t, 3, data.ExhaustionLevel)
 }

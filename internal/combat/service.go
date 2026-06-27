@@ -764,7 +764,7 @@ func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, param
 		HpCurrent:       params.HPCurrent,
 		TempHp:          params.TempHP,
 		Ac:              params.AC,
-		Conditions:      json.RawMessage(`[]`),
+		Conditions:      defaultConditions(params.Conditions),
 		ExhaustionLevel: params.ExhaustionLevel,
 		DeathSaves:      nullRawMessage(params.DeathSaves),
 		IsVisible:       params.IsVisible,

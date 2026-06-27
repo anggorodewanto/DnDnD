@@ -13,6 +13,12 @@ type fakeStore struct {
 	sheets []CharacterSheet
 	err    error
 	called uuid.UUID
+
+	// status-edit fakes
+	statusCtx    CharacterStatusContext
+	statusCtxErr error
+	persisted    *PersistStatusParams
+	persistErr   error
 }
 
 func (f *fakeStore) ListApprovedPartyCharacters(ctx context.Context, campaignID uuid.UUID) ([]CharacterSheet, error) {
@@ -21,6 +27,18 @@ func (f *fakeStore) ListApprovedPartyCharacters(ctx context.Context, campaignID 
 		return nil, f.err
 	}
 	return f.sheets, nil
+}
+
+func (f *fakeStore) GetCharacterStatusContext(_ context.Context, _ uuid.UUID) (CharacterStatusContext, error) {
+	if f.statusCtxErr != nil {
+		return CharacterStatusContext{}, f.statusCtxErr
+	}
+	return f.statusCtx, nil
+}
+
+func (f *fakeStore) UpdateCharacterStatus(_ context.Context, p PersistStatusParams) error {
+	f.persisted = &p
+	return f.persistErr
 }
 
 func TestPartyLanguages_Empty(t *testing.T) {

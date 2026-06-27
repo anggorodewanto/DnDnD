@@ -98,6 +98,7 @@ type Character struct {
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
 	CardMessageID    sql.NullString        `json:"card_message_id"`
+	Conditions       json.RawMessage       `json:"conditions"`
 }
 
 type CharacterDraft struct {

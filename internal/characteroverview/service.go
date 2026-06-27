@@ -18,6 +18,33 @@ import (
 // (e.g. missing campaign ID).
 var ErrInvalidInput = errors.New("invalid character overview input")
 
+// ErrCharacterNotFound is returned when a status edit targets a character that
+// does not exist.
+var ErrCharacterNotFound = errors.New("character not found")
+
+// editableConditions is the set of persistent, non-exhaustion 5e conditions a
+// DM may set on a character out of combat. Exhaustion is edited via its own
+// numeric level, not as a named condition here.
+var editableConditions = map[string]bool{
+	"blinded":       true,
+	"charmed":       true,
+	"deafened":      true,
+	"frightened":    true,
+	"grappled":      true,
+	"incapacitated": true,
+	"invisible":     true,
+	"paralyzed":     true,
+	"petrified":     true,
+	"poisoned":      true,
+	"prone":         true,
+	"restrained":    true,
+	"stunned":       true,
+	"unconscious":   true,
+}
+
+// maxExhaustionLevel is the 5e cap (level 6 = death).
+const maxExhaustionLevel = 6
+
 // CharacterSheet is the read-only view of a single approved player character
 // that the DM dashboard displays in the character overview. Field set mirrors
 // what ListPlayerCharactersByStatus exposes from the joined characters row.
@@ -31,11 +58,55 @@ type CharacterSheet struct {
 	Classes           json.RawMessage `json:"classes"`
 	HPMax             int32           `json:"hp_max"`
 	HPCurrent         int32           `json:"hp_current"`
+	TempHP            int32           `json:"temp_hp"`
 	AC                int32           `json:"ac"`
 	SpeedFt           int32           `json:"speed_ft"`
 	AbilityScores     json.RawMessage `json:"ability_scores"`
 	Languages         []string        `json:"languages"`
 	DDBURL            string          `json:"ddb_url"`
+	// ExhaustionLevel and Conditions are the persistent (out-of-combat) status
+	// the DM can edit from the overview. Conditions is a list of condition names.
+	ExhaustionLevel int32    `json:"exhaustion_level"`
+	Conditions      []string `json:"conditions"`
+}
+
+// CharacterStatus is the persistent live-status of a character returned after a
+// successful out-of-combat DM edit.
+type CharacterStatus struct {
+	HPMax           int32    `json:"hp_max"`
+	HPCurrent       int32    `json:"hp_current"`
+	TempHP          int32    `json:"temp_hp"`
+	ExhaustionLevel int32    `json:"exhaustion_level"`
+	Conditions      []string `json:"conditions"`
+}
+
+// StatusUpdate is the validated input for an out-of-combat status edit.
+type StatusUpdate struct {
+	HPMax           int32
+	HPCurrent       int32
+	TempHP          int32
+	ExhaustionLevel int32
+	Conditions      []string
+	Reason          string
+}
+
+// CharacterStatusContext carries the persistence facts the handler needs to
+// authorize and apply a status edit without re-reading the character row.
+type CharacterStatusContext struct {
+	CampaignID     uuid.UUID
+	CharacterData  []byte // raw character_data JSON (carries exhaustion_level); may be nil
+	InActiveCombat bool
+}
+
+// PersistStatusParams is the fully-resolved row update handed to the Store. The
+// Conditions and CharacterData are already encoded by the service.
+type PersistStatusParams struct {
+	CharacterID   uuid.UUID
+	HPMax         int32
+	HPCurrent     int32
+	TempHP        int32
+	Conditions    json.RawMessage
+	CharacterData []byte
 }
 
 // LanguageCoverage is a single (language -> characters who speak it) row
@@ -48,6 +119,11 @@ type LanguageCoverage struct {
 // Store is the persistence interface for the character overview.
 type Store interface {
 	ListApprovedPartyCharacters(ctx context.Context, campaignID uuid.UUID) ([]CharacterSheet, error)
+	// GetCharacterStatusContext loads the authorization + persistence context for
+	// a status edit. Returns ErrCharacterNotFound when the character is absent.
+	GetCharacterStatusContext(ctx context.Context, characterID uuid.UUID) (CharacterStatusContext, error)
+	// UpdateCharacterStatus persists a resolved status edit.
+	UpdateCharacterStatus(ctx context.Context, params PersistStatusParams) error
 }
 
 // Service exposes character-overview read queries and the party-languages

@@ -75,6 +75,20 @@ UPDATE characters SET character_data = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterVitals :one
+-- Out-of-combat DM edit of a character's live status: HP, temp HP, conditions
+-- (JSONB array of combat.CombatCondition) and character_data (which carries the
+-- exhaustion_level). Used by the dashboard character-overview status editor.
+UPDATE characters SET
+    hp_max = $2,
+    hp_current = $3,
+    temp_hp = $4,
+    conditions = $5,
+    character_data = $6,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: UpdateCharacterEquipment :one
 UPDATE characters SET
     equipped_main_hand = $2,

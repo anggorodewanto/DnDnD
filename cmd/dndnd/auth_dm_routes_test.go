@@ -158,6 +158,7 @@ func dmOnlyRouteTable() []dmOnlyRoute {
 
 		// character overview (line 653).
 		{http.MethodGet, "/api/character-overview?campaign_id=" + campID, ""},
+		{http.MethodPost, "/api/character-overview/" + charID + "/status", `{}`},
 
 		// message-player DM (line 665).
 		{http.MethodPost, "/api/message-player/", `{}`},

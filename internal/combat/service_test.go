@@ -1067,6 +1067,48 @@ func TestService_AddCombatant_StoreError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating combatant")
 }
 
+func TestService_AddCombatant_PersistsConditions(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.CreateCombatantParams
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		captured = arg
+		return refdata.Combatant{ID: uuid.New(), ShortID: arg.ShortID}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.AddCombatant(context.Background(), uuid.New(), CombatantParams{
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HPMax:       45,
+		HPCurrent:   45,
+		AC:          16,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[{"id":"poisoned"}]`),
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"id":"poisoned"}]`, string(captured.Conditions))
+}
+
+func TestService_AddCombatant_DefaultsEmptyConditions(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.CreateCombatantParams
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		captured = arg
+		return refdata.Combatant{ID: uuid.New(), ShortID: arg.ShortID}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.AddCombatant(context.Background(), uuid.New(), CombatantParams{
+		ShortID:     "G1",
+		DisplayName: "Goblin",
+		HPMax:       7,
+		HPCurrent:   7,
+		AC:          15,
+		IsAlive:     true,
+		// Conditions left nil
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `[]`, string(captured.Conditions))
+}
+
 // --- TDD Cycle 14: CreateEncounterFromTemplate ---
 
 func TestService_CreateEncounterFromTemplate_Success(t *testing.T) {

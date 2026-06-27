@@ -29,6 +29,16 @@ type CombatantParams struct {
 	IsVisible       bool
 	DeathSaves      json.RawMessage
 	ExhaustionLevel int32
+	Conditions      json.RawMessage
+}
+
+// defaultConditions returns raw unchanged, or an empty JSON array when raw is
+// nil/empty, so a combatant always starts combat with a valid conditions array.
+func defaultConditions(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("[]")
+	}
+	return raw
 }
 
 // DeathSaves tracks PC death saving throws.
@@ -139,6 +149,7 @@ func CombatantFromCharacter(char refdata.Character, shortID, posCol string, posR
 		IsVisible:       true,
 		DeathSaves:      ds,
 		ExhaustionLevel: int32(exhaustionLevel),
+		Conditions:      defaultConditions(char.Conditions),
 	}
 }
 

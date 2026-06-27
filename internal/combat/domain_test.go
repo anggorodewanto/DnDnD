@@ -112,6 +112,32 @@ func TestCombatantFromCharacter(t *testing.T) {
 	assert.Equal(t, 0, ds.Failures)
 }
 
+// --- CombatantFromCharacter carries persistent conditions into combat ---
+
+func TestCombatantFromCharacter_CopiesConditions(t *testing.T) {
+	char := refdata.Character{
+		ID:         uuid.New(),
+		Name:       "Aragorn",
+		Conditions: json.RawMessage(`[{"id":"poisoned"}]`),
+	}
+
+	params := CombatantFromCharacter(char, "AR", "A", 5)
+
+	assert.JSONEq(t, `[{"id":"poisoned"}]`, string(params.Conditions))
+}
+
+func TestCombatantFromCharacter_EmptyConditionsDefaultsToArray(t *testing.T) {
+	char := refdata.Character{
+		ID:   uuid.New(),
+		Name: "Aragorn",
+		// Conditions left nil
+	}
+
+	params := CombatantFromCharacter(char, "AR", "A", 5)
+
+	assert.JSONEq(t, `[]`, string(params.Conditions))
+}
+
 // --- TDD Cycle 5: ParseTemplateCreatures ---
 
 func TestParseTemplateCreatures(t *testing.T) {

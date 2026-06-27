@@ -9,6 +9,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/rest"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -258,6 +259,12 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 	data.HitDiceRemaining = parseHitDiceRemaining(ch.HitDiceRemaining)
 	data.Spells = extractSpells(ch.CharacterData)
 
+	// Persistent (out-of-combat) condition + exhaustion state from the character
+	// row. hydrateFromCombatant later overrides these from the live combatant.
+	data.Conditions = conditionNamesFromJSON(ch.Conditions)
+	level, _ := rest.ExhaustionLevelFromCharacterData(ch.CharacterData.RawMessage)
+	data.ExhaustionLevel = level
+
 	profile := character.ProfileFromCharacterData(ch.CharacterData.RawMessage)
 	data.Appearance = profile.Appearance
 	data.Backstory = profile.Backstory
@@ -447,16 +454,29 @@ func (a *CharacterSheetStoreAdapter) hydrateFromCombatant(ctx context.Context, c
 		data.ConcentrationOn = cb.ConcentrationSpellName.String
 	}
 
-	// Parse conditions JSON
-	type condEntry struct {
+	// The combatant is the live source of truth during combat: replace the
+	// persistent conditions carried in from the character row, do not append
+	// (combat seeds the combatant from the character at start, so appending
+	// would double any carried-in condition).
+	data.Conditions = conditionNamesFromJSON(cb.Conditions)
+}
+
+// conditionNamesFromJSON parses a JSON array of condition objects — each shaped
+// like {"condition": "<name>", ...} — into a slice of condition names. Empty,
+// nil, or invalid input yields a nil slice.
+func conditionNamesFromJSON(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var entries []struct {
 		Condition string `json:"condition"`
 	}
-	var conds []condEntry
-	if len(cb.Conditions) > 0 {
-		if json.Unmarshal(cb.Conditions, &conds) == nil {
-			for _, c := range conds {
-				data.Conditions = append(data.Conditions, c.Condition)
-			}
-		}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil
 	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Condition)
+	}
+	return names
 }

@@ -72,7 +72,7 @@ func (q *Queries) CreatePlayerCharacter(ctx context.Context, arg CreatePlayerCha
 }
 
 const findCharacterByNameCaseInsensitive = `-- name: FindCharacterByNameCaseInsensitive :one
-SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id FROM characters
+SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions FROM characters
 WHERE campaign_id = $1 AND LOWER(name) = LOWER($2)
 `
 
@@ -118,6 +118,7 @@ func (q *Queries) FindCharacterByNameCaseInsensitive(ctx context.Context, arg Fi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -427,7 +428,8 @@ const listPlayerCharactersByStatus = `-- name: ListPlayerCharactersByStatus :man
 SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
        pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
        c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
-       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url
+       c.hp_current, c.temp_hp, c.ac, c.speed_ft, c.ability_scores,
+       c.languages, c.ddb_url, c.conditions, c.character_data
 FROM player_characters pc
 JOIN characters c ON c.id = pc.character_id
 WHERE pc.campaign_id = $1 AND pc.status = $2
@@ -440,26 +442,29 @@ type ListPlayerCharactersByStatusParams struct {
 }
 
 type ListPlayerCharactersByStatusRow struct {
-	ID            uuid.UUID       `json:"id"`
-	CampaignID    uuid.UUID       `json:"campaign_id"`
-	CharacterID   uuid.UUID       `json:"character_id"`
-	DiscordUserID string          `json:"discord_user_id"`
-	Status        string          `json:"status"`
-	DmFeedback    sql.NullString  `json:"dm_feedback"`
-	CreatedVia    string          `json:"created_via"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	CharacterName string          `json:"character_name"`
-	Race          string          `json:"race"`
-	Level         int32           `json:"level"`
-	Classes       json.RawMessage `json:"classes"`
-	HpMax         int32           `json:"hp_max"`
-	HpCurrent     int32           `json:"hp_current"`
-	Ac            int32           `json:"ac"`
-	SpeedFt       int32           `json:"speed_ft"`
-	AbilityScores json.RawMessage `json:"ability_scores"`
-	Languages     []string        `json:"languages"`
-	DdbUrl        sql.NullString  `json:"ddb_url"`
+	ID            uuid.UUID             `json:"id"`
+	CampaignID    uuid.UUID             `json:"campaign_id"`
+	CharacterID   uuid.UUID             `json:"character_id"`
+	DiscordUserID string                `json:"discord_user_id"`
+	Status        string                `json:"status"`
+	DmFeedback    sql.NullString        `json:"dm_feedback"`
+	CreatedVia    string                `json:"created_via"`
+	CreatedAt     time.Time             `json:"created_at"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	CharacterName string                `json:"character_name"`
+	Race          string                `json:"race"`
+	Level         int32                 `json:"level"`
+	Classes       json.RawMessage       `json:"classes"`
+	HpMax         int32                 `json:"hp_max"`
+	HpCurrent     int32                 `json:"hp_current"`
+	TempHp        int32                 `json:"temp_hp"`
+	Ac            int32                 `json:"ac"`
+	SpeedFt       int32                 `json:"speed_ft"`
+	AbilityScores json.RawMessage       `json:"ability_scores"`
+	Languages     []string              `json:"languages"`
+	DdbUrl        sql.NullString        `json:"ddb_url"`
+	Conditions    json.RawMessage       `json:"conditions"`
+	CharacterData pqtype.NullRawMessage `json:"character_data"`
 }
 
 func (q *Queries) ListPlayerCharactersByStatus(ctx context.Context, arg ListPlayerCharactersByStatusParams) ([]ListPlayerCharactersByStatusRow, error) {
@@ -487,11 +492,14 @@ func (q *Queries) ListPlayerCharactersByStatus(ctx context.Context, arg ListPlay
 			&i.Classes,
 			&i.HpMax,
 			&i.HpCurrent,
+			&i.TempHp,
 			&i.Ac,
 			&i.SpeedFt,
 			&i.AbilityScores,
 			pq.Array(&i.Languages),
 			&i.DdbUrl,
+			&i.Conditions,
+			&i.CharacterData,
 		); err != nil {
 			return nil, err
 		}

@@ -43,6 +43,78 @@ func NewHandler(svc *Service, opts ...HandlerOption) *Handler {
 // RegisterRoutes mounts the character overview routes on the given router.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/character-overview", h.Get)
+	r.Post("/api/character-overview/{characterID}/status", h.UpdateStatus)
+}
+
+// statusRequest is the JSON body for an out-of-combat status edit.
+type statusRequest struct {
+	HPMax           int32    `json:"hp_max"`
+	HPCurrent       int32    `json:"hp_current"`
+	TempHP          int32    `json:"temp_hp"`
+	ExhaustionLevel int32    `json:"exhaustion_level"`
+	Conditions      []string `json:"conditions"`
+	Reason          string   `json:"reason"`
+}
+
+// UpdateStatus applies a DM's out-of-combat edit to a character's HP, temp HP,
+// exhaustion and conditions. Refused (409) while the character is in an active
+// combat; the in-combat override controls own status during combat.
+func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	var req statusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetStatusContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if h.campaignVerifier != nil {
+		userID, _ := auth.DiscordUserIDFromContext(ctx)
+		owns, err := h.campaignVerifier.IsCampaignDM(ctx, userID, sctx.CampaignID.String())
+		if err != nil || !owns {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	if sctx.InActiveCombat {
+		http.Error(w, "character is in an active combat; use the in-combat controls", http.StatusConflict)
+		return
+	}
+
+	status, err := h.svc.ApplyStatus(ctx, characterID, sctx.CharacterData, StatusUpdate{
+		HPMax:           req.HPMax,
+		HPCurrent:       req.HPCurrent,
+		TempHP:          req.TempHP,
+		ExhaustionLevel: req.ExhaustionLevel,
+		Conditions:      req.Conditions,
+		Reason:          req.Reason,
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidInput) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "failed to update status", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, status)
 }
 
 // overviewResponse is the JSON envelope returned by Get.

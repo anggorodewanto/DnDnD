@@ -41,7 +41,7 @@ INSERT INTO characters (
     $16, $17, $18, $19,
     $20, $21, $22, $23, $24,
     $25, $26, $27, $28, $29
-) RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+) RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type CreateCharacterParams struct {
@@ -143,6 +143,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -157,7 +158,7 @@ func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCharacter = `-- name: GetCharacter :one
-SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id FROM characters WHERE id = $1
+SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions FROM characters WHERE id = $1
 `
 
 func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (Character, error) {
@@ -197,12 +198,13 @@ func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (Character, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
 
 const getCharacterByDdbURL = `-- name: GetCharacterByDdbURL :one
-SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id FROM characters WHERE campaign_id = $1 AND ddb_url = $2
+SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions FROM characters WHERE campaign_id = $1 AND ddb_url = $2
 `
 
 type GetCharacterByDdbURLParams struct {
@@ -247,6 +249,7 @@ func (q *Queries) GetCharacterByDdbURL(ctx context.Context, arg GetCharacterByDd
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -316,7 +319,7 @@ func (q *Queries) GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (Get
 }
 
 const listCharactersByCampaign = `-- name: ListCharactersByCampaign :many
-SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id FROM characters WHERE campaign_id = $1 ORDER BY name
+SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions FROM characters WHERE campaign_id = $1 ORDER BY name
 `
 
 func (q *Queries) ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]Character, error) {
@@ -362,6 +365,7 @@ func (q *Queries) ListCharactersByCampaign(ctx context.Context, campaignID uuid.
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CardMessageID,
+			&i.Conditions,
 		); err != nil {
 			return nil, err
 		}
@@ -422,7 +426,7 @@ UPDATE characters SET
     homebrew = $29,
     updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterParams struct {
@@ -524,6 +528,7 @@ func (q *Queries) UpdateCharacter(ctx context.Context, arg UpdateCharacterParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -547,7 +552,7 @@ func (q *Queries) UpdateCharacterAbilityScores(ctx context.Context, arg UpdateCh
 const updateCharacterAttunementAndInventory = `-- name: UpdateCharacterAttunementAndInventory :one
 UPDATE characters SET attunement_slots = $2, inventory = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterAttunementAndInventoryParams struct {
@@ -593,6 +598,7 @@ func (q *Queries) UpdateCharacterAttunementAndInventory(ctx context.Context, arg
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -600,7 +606,7 @@ func (q *Queries) UpdateCharacterAttunementAndInventory(ctx context.Context, arg
 const updateCharacterAttunementSlots = `-- name: UpdateCharacterAttunementSlots :one
 UPDATE characters SET attunement_slots = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterAttunementSlotsParams struct {
@@ -645,6 +651,7 @@ func (q *Queries) UpdateCharacterAttunementSlots(ctx context.Context, arg Update
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -652,7 +659,7 @@ func (q *Queries) UpdateCharacterAttunementSlots(ctx context.Context, arg Update
 const updateCharacterData = `-- name: UpdateCharacterData :one
 UPDATE characters SET character_data = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterDataParams struct {
@@ -697,6 +704,7 @@ func (q *Queries) UpdateCharacterData(ctx context.Context, arg UpdateCharacterDa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -709,7 +717,7 @@ UPDATE characters SET
     ac = $5,
     updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterEquipmentParams struct {
@@ -763,6 +771,7 @@ func (q *Queries) UpdateCharacterEquipment(ctx context.Context, arg UpdateCharac
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -770,7 +779,7 @@ func (q *Queries) UpdateCharacterEquipment(ctx context.Context, arg UpdateCharac
 const updateCharacterFeatureUses = `-- name: UpdateCharacterFeatureUses :one
 UPDATE characters SET feature_uses = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterFeatureUsesParams struct {
@@ -815,6 +824,7 @@ func (q *Queries) UpdateCharacterFeatureUses(ctx context.Context, arg UpdateChar
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -867,7 +877,7 @@ UPDATE characters SET
     homebrew = $29,
     updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterFullParams struct {
@@ -969,6 +979,7 @@ func (q *Queries) UpdateCharacterFull(ctx context.Context, arg UpdateCharacterFu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -976,7 +987,7 @@ func (q *Queries) UpdateCharacterFull(ctx context.Context, arg UpdateCharacterFu
 const updateCharacterGold = `-- name: UpdateCharacterGold :one
 UPDATE characters SET gold = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterGoldParams struct {
@@ -1021,6 +1032,7 @@ func (q *Queries) UpdateCharacterGold(ctx context.Context, arg UpdateCharacterGo
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -1028,7 +1040,7 @@ func (q *Queries) UpdateCharacterGold(ctx context.Context, arg UpdateCharacterGo
 const updateCharacterInventory = `-- name: UpdateCharacterInventory :one
 UPDATE characters SET inventory = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterInventoryParams struct {
@@ -1073,6 +1085,7 @@ func (q *Queries) UpdateCharacterInventory(ctx context.Context, arg UpdateCharac
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -1080,7 +1093,7 @@ func (q *Queries) UpdateCharacterInventory(ctx context.Context, arg UpdateCharac
 const updateCharacterInventoryAndGold = `-- name: UpdateCharacterInventoryAndGold :one
 UPDATE characters SET inventory = $2, gold = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterInventoryAndGoldParams struct {
@@ -1126,6 +1139,7 @@ func (q *Queries) UpdateCharacterInventoryAndGold(ctx context.Context, arg Updat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -1133,7 +1147,7 @@ func (q *Queries) UpdateCharacterInventoryAndGold(ctx context.Context, arg Updat
 const updateCharacterInventoryAndHP = `-- name: UpdateCharacterInventoryAndHP :one
 UPDATE characters SET inventory = $2, hp_current = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterInventoryAndHPParams struct {
@@ -1179,6 +1193,7 @@ func (q *Queries) UpdateCharacterInventoryAndHP(ctx context.Context, arg UpdateC
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -1229,7 +1244,7 @@ func (q *Queries) UpdateCharacterLevelUpStats(ctx context.Context, arg UpdateCha
 const updateCharacterPactMagicSlots = `-- name: UpdateCharacterPactMagicSlots :one
 UPDATE characters SET pact_magic_slots = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterPactMagicSlotsParams struct {
@@ -1274,6 +1289,7 @@ func (q *Queries) UpdateCharacterPactMagicSlots(ctx context.Context, arg UpdateC
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
@@ -1297,7 +1313,7 @@ func (q *Queries) UpdateCharacterProficienciesOnly(ctx context.Context, arg Upda
 const updateCharacterSpellSlots = `-- name: UpdateCharacterSpellSlots :one
 UPDATE characters SET spell_slots = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
 `
 
 type UpdateCharacterSpellSlotsParams struct {
@@ -1342,6 +1358,80 @@ func (q *Queries) UpdateCharacterSpellSlots(ctx context.Context, arg UpdateChara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CardMessageID,
+		&i.Conditions,
+	)
+	return i, err
+}
+
+const updateCharacterVitals = `-- name: UpdateCharacterVitals :one
+UPDATE characters SET
+    hp_max = $2,
+    hp_current = $3,
+    temp_hp = $4,
+    conditions = $5,
+    character_data = $6,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
+`
+
+type UpdateCharacterVitalsParams struct {
+	ID            uuid.UUID             `json:"id"`
+	HpMax         int32                 `json:"hp_max"`
+	HpCurrent     int32                 `json:"hp_current"`
+	TempHp        int32                 `json:"temp_hp"`
+	Conditions    json.RawMessage       `json:"conditions"`
+	CharacterData pqtype.NullRawMessage `json:"character_data"`
+}
+
+// Out-of-combat DM edit of a character's live status: HP, temp HP, conditions
+// (JSONB array of combat.CombatCondition) and character_data (which carries the
+// exhaustion_level). Used by the dashboard character-overview status editor.
+func (q *Queries) UpdateCharacterVitals(ctx context.Context, arg UpdateCharacterVitalsParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, updateCharacterVitals,
+		arg.ID,
+		arg.HpMax,
+		arg.HpCurrent,
+		arg.TempHp,
+		arg.Conditions,
+		arg.CharacterData,
+	)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.Name,
+		&i.Race,
+		&i.Classes,
+		&i.Level,
+		&i.AbilityScores,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.AcFormula,
+		&i.SpeedFt,
+		&i.ProficiencyBonus,
+		&i.EquippedMainHand,
+		&i.EquippedOffHand,
+		&i.EquippedArmor,
+		&i.SpellSlots,
+		&i.PactMagicSlots,
+		&i.HitDiceRemaining,
+		&i.FeatureUses,
+		&i.Features,
+		&i.Proficiencies,
+		&i.Gold,
+		&i.AttunementSlots,
+		pq.Array(&i.Languages),
+		&i.Inventory,
+		&i.CharacterData,
+		&i.DdbUrl,
+		&i.Homebrew,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CardMessageID,
+		&i.Conditions,
 	)
 	return i, err
 }
