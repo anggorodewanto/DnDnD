@@ -220,8 +220,15 @@ func FormatCastLog(result CastResult) string {
 		}
 	}
 
-	// Scaled damage dice
-	if result.ScaledDamageDice != "" {
+	// Damage line. For a spell ATTACK, mirror the weapon path: show the rolled
+	// value on a hit and nothing on a miss (ISSUE-024). For save-based / no-attack
+	// spells the per-target total isn't a single value here, so keep the dice spec.
+	switch {
+	case result.IsAttack:
+		if result.Hit && result.DamageTotal > 0 {
+			fmt.Fprintf(&b, "\U0001f4a5 Damage: %d %s (%s)\n", result.DamageTotal, result.DamageType, result.ScaledDamageDice)
+		}
+	case result.ScaledDamageDice != "":
 		fmt.Fprintf(&b, "\U0001f4a5 Damage: %s %s\n", result.ScaledDamageDice, result.DamageType)
 	}
 

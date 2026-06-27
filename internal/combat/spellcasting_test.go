@@ -1549,6 +1549,49 @@ func TestFormatCastLog_Upcast(t *testing.T) {
 	assert.Contains(t, log, "10d6 fire")
 }
 
+// ISSUE-024: a spell-attack cantrip (Chill Touch) that hits must log the rolled
+// damage VALUE, not just the dice spec. Mirrors the weapon-attack path.
+func TestFormatCastLog_AttackHitShowsRolledDamage(t *testing.T) {
+	result := CastResult{
+		CasterName:       "Vale",
+		SpellName:        "Chill Touch",
+		SpellLevel:       0,
+		TargetName:       "Ghoul",
+		IsAttack:         true,
+		Hit:              true,
+		AttackRoll:       17,
+		AttackTotal:      22,
+		TargetAC:         12,
+		ScaledDamageDice: "1d8",
+		DamageType:       "necrotic",
+		DamageTotal:      7,
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "7 necrotic", "must show the rolled damage value")
+	assert.Contains(t, log, "(1d8)", "keeps the dice spec for context")
+	assert.NotContains(t, log, "1d8 necrotic", "must not show the spec in place of the value")
+}
+
+// ISSUE-024: a spell-attack that MISSES must not print a damage line at all.
+func TestFormatCastLog_AttackMissShowsNoDamage(t *testing.T) {
+	result := CastResult{
+		CasterName:       "Vale",
+		SpellName:        "Chill Touch",
+		SpellLevel:       0,
+		TargetName:       "Ghoul",
+		IsAttack:         true,
+		Hit:              false,
+		AttackRoll:       2,
+		AttackTotal:      7,
+		TargetAC:         12,
+		ScaledDamageDice: "1d8",
+		DamageType:       "necrotic",
+	}
+	log := FormatCastLog(result)
+	assert.NotContains(t, log, "Damage:", "no damage line on a miss")
+	assert.NotContains(t, log, "1d8 necrotic")
+}
+
 // TDD Cycle P60-2: CantripDiceMultiplier scales by character level
 func TestCantripDiceMultiplier(t *testing.T) {
 	tests := []struct {
