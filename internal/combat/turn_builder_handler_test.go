@@ -328,6 +328,83 @@ func TestExecuteEnemyTurn_PopulatesBeforeAndAfterState(t *testing.T) {
 	assert.True(t, turnActionsUpdated, "turn must advance after the enemy action is logged")
 }
 
+// ISSUE-021: the enemy-turn combat log must name the acting NPC. The HTTP
+// handler reconstructs the TurnPlan from the POST body (combatant_id + steps
+// only, no display_name), so the service must backfill plan.DisplayName from
+// the fetched combatant BEFORE formatting the log — otherwise the header
+// renders blank as "**'s Turn**".
+func TestExecuteEnemyTurn_CombatLogNamesActor(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == npcID {
+				return refdata.Combatant{
+					ID:          npcID,
+					EncounterID: encounterID,
+					DisplayName: "Ghoul",
+					PositionCol: "C",
+					PositionRow: 3,
+					IsNpc:       true,
+					IsAlive:     true,
+					HpCurrent:   22,
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          targetID,
+				EncounterID: encounterID,
+				DisplayName: "Forge",
+				IsNpc:       false,
+				IsAlive:     true,
+				HpCurrent:   32,
+				Ac:          14,
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+		},
+	}
+
+	svc := NewService(store)
+	roller := newDeterministicRoller(15, 4, 3)
+
+	// Plan as the HTTP handler builds it: no DisplayName, only the steps.
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Bite",
+					ToHit:      4,
+					DamageDice: "2d6+2",
+					DamageType: "piercing",
+					ReachFt:    5,
+					TargetID:   targetID,
+					TargetName: "Forge",
+				},
+			},
+		},
+	}
+
+	result, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, roller)
+	require.NoError(t, err)
+	assert.Contains(t, result.CombatLog, "**Ghoul's Turn**",
+		"enemy-turn combat log header must name the acting NPC, not render blank")
+}
+
 // --- TDD Cycle 13: indexToColLabel ---
 
 func TestIndexToColLabel(t *testing.T) {

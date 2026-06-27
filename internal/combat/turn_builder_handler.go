@@ -343,8 +343,8 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 	// so capture the actor's combatant state before/after the turn (matching the
 	// DM move/resolve action_log paths). Omitting these violated the constraint
 	// and left combat stuck on the enemy's turn after damage was applied.
-	combatLog := FormatCombatLog(plan)
 	plan.DisplayName = combatant.DisplayName
+	combatLog := FormatCombatLog(plan)
 	// The local `combatant` still holds the pre-turn position/state (the movement
 	// step writes to the DB but never reassigns it), so it is the before-state.
 	beforeState, _ := snapshotCombatantState(combatant)
