@@ -97,6 +97,13 @@
             <a href={c.ddb_url} target="_blank" rel="noopener">D&amp;D Beyond sheet</a>
           {/if}
           <a
+            class="sheet-link"
+            data-testid="character-sheet-{c.character_id}"
+            href={`/portal/character/${c.character_id}`}
+            target="_blank"
+            rel="noopener"
+          >View character sheet</a>
+          <a
             class="edit-link"
             data-testid="character-edit-{c.character_id}"
             href={`/portal/character/${c.character_id}/edit`}
@@ -215,6 +222,21 @@
   }
   .edit-link:hover {
     background: #1a4a8a;
+  }
+  .sheet-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: #e94560;
+    color: #16213e;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-decoration: none;
+  }
+  .sheet-link:hover {
+    background: #ff5c77;
   }
   .msg-toggle {
     margin-top: 0.5rem;

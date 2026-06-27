@@ -1223,6 +1223,19 @@
           <div class="tracker-panel" data-testid="tracker-panel">
             <h3>{selectedCombatant.display_name} ({selectedCombatant.short_id})</h3>
 
+            {#if selectedCombatant.character_id}
+              <!-- PC combatants carry a character_id; NPCs don't, so they get
+                   no sheet link. The DM is a campaign member, so the portal's
+                   CanViewCharacter check lets this open the full sheet. -->
+              <a
+                class="sheet-link"
+                data-testid="combatant-sheet-link"
+                href={`/portal/character/${selectedCombatant.character_id}`}
+                target="_blank"
+                rel="noopener"
+              >View Character Sheet</a>
+            {/if}
+
             <div class="stat-row">
               <span>HP: {selectedCombatant.hp_current} / {selectedCombatant.hp_max}</span>
               {#if selectedCombatant.temp_hp > 0}
@@ -1465,6 +1478,22 @@
   .tracker-panel h3 {
     margin: 0 0 0.5rem 0;
     color: #e94560;
+  }
+
+  .sheet-link {
+    display: inline-block;
+    margin: 0 0 0.6rem 0;
+    padding: 0.35rem 0.6rem;
+    background: #e94560;
+    color: #16213e;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-decoration: none;
+  }
+
+  .sheet-link:hover {
+    background: #ff5c77;
   }
 
   .stat-row {
