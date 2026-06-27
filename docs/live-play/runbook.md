@@ -135,9 +135,22 @@ OAuth) via an **ngrok tunnel bound to a reserved domain** — so the public URL 
   restarts the app). While up, the app is publicly reachable but gated: login by
   OAuth, build by a minted token, dashboard by DM auth.
 
-## 6. Observing game state (Claude can't see Discord)
+## 6. Observing game state (Discord via Chrome · DM Console · Postgres)
 
-Query Postgres directly:
+Three read surfaces, pick by what you need:
+
+- **Discord via Chrome (claude-in-chrome)** — open the Discord web app in the DM's
+  logged-in Chrome and read any channel directly. **Required** for the human/roleplay
+  layer the generated views never capture — above all **#in-character**, which is
+  Discord-only and lands in no DB/Console feed. Also handy to eyeball #combat-log,
+  #dm-queue, #the-story as the players see them. Read-only: never type in Discord
+  (see [`dm-rules.md`](dm-rules.md)). Channel IDs are in
+  [`game-state.md`](game-state.md); navigate to
+  `https://discord.com/channels/<guildID>/<channelID>`.
+- **DM Console** (`GET /api/dm/situation` / the `#dm-console` tab) — the generated
+  source of truth for *mechanical* state (pending worklist, live encounter,
+  combat+narration timeline). Start here for "what do I do / where are we."
+- **Postgres** (raw reads) — when you need a field the above don't surface:
 
 ```sh
 docker exec -e PGPASSWORD=dndnd dndnd-db-1 psql -U dndnd -d dndnd -X -c "SQL"

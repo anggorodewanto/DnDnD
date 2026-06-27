@@ -89,7 +89,7 @@ DM (Claude)                          Players (Users)
 -----------                          ---------------
 narrate a beat  ──gives text──►      pastes into #the-story
                                      decide what to do
-observe result ◄──relays / DB──      type a /command in Discord
+observe result ◄─reads Discord/DB─   type a /command in Discord
                                      (bot responds in channels)
 adjudicate, narrate next beat ──►    ...
 ```
@@ -99,8 +99,9 @@ Concretely each turn:
 2. User pastes it into the right Discord channel (usually #the-story).
 3. A player decides and types a **player** slash command (`/move`, `/attack`, …).
 4. The bot processes it and posts to the combat/turn channels.
-5. Claude observes the outcome (DM Console / DB, or the user relays it) and narrates
-   the consequence — then updates the state docs in lockstep.
+5. Claude observes the outcome — reads Discord directly via Chrome (the only way to
+   see #in-character roleplay), and the DM Console / DB for mechanical state — then
+   narrates the consequence and updates the state docs in lockstep.
 
 The hard constraints that govern every one of these steps are in
 **[`dm-rules.md`](dm-rules.md)** — read it before acting.

@@ -14,9 +14,21 @@ big-party technique is in [`big-party.md`](big-party.md).
 - **Claude cannot invoke player slash commands.** Bot-to-bot slash invocation is
   forbidden by Discord; only the human types `/` commands. Claude *drives the
   dashboard* and *writes narration*, never the player's commands.
-- **Claude cannot see Discord directly.** Observe game state via the dashboard
-  (browser) or by querying Postgres (see [`runbook.md`](runbook.md) §6). The user
-  can also paste bot output back.
+- **Claude reads Discord via Chrome (claude-in-chrome) — observation only.** Open
+  the Discord web app in the DM's already-logged-in Chrome and read any channel
+  directly (#in-character roleplay, #combat-log, #dm-queue, …). This is the *only*
+  way to see player chatter the app never stores — **#in-character roleplay is
+  Discord-only and appears in no dashboard / DB / DM-Console feed.** For
+  *mechanical* state (encounter, HP, queue, turn order) still prefer the dashboard /
+  DM Console / Postgres — that's the generated source of truth (see
+  [`runbook.md`](runbook.md) §6); use Discord for the human/roleplay layer the
+  generated views miss. The user pasting bot output back is now a fallback, not the
+  only path.
+- **Reading is open; typing in Discord is not.** Claude observes any Discord channel
+  through the browser, but **never types in Discord** — no slash commands (Discord
+  forbids bot-to-bot invocation) and no messages. The human types `/` commands;
+  narration reaches #the-story only through the dashboard Narrate editor (a
+  mutation — next section). Read freely, mutate only through the dashboard.
 - **Real OAuth is active.** To drive the dashboard, the user must be logged in at
   `http://localhost:8080` (or the tunnel URL) with Discord; Claude then takes over
   that browser tab.
