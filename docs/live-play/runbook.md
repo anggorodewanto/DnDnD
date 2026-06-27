@@ -85,7 +85,9 @@ fall back to API calls with the session cookie).
 Sample Tiled map for import lives at `docs/testdata/sample.tmj` (10×10). A map is
 **already imported** for this campaign (see `game-state.md`); reuse it.
 
-## 5. Player gets a character
+## 5. Onboarding players (one or many)
+
+Per player:
 
 1. User runs **`/register`** in Discord → taps **🆕 Build New** (runs
    `/create-character`) → bot DMs a one-time link `…/portal/create?token=…`
@@ -96,9 +98,37 @@ Sample Tiled map for import lives at `docs/testdata/sample.tmj` (10×10). A map 
 3. **Claude approves** it from the dashboard approvals view (or
    `POST /dashboard/api/approvals/{id}/approve`).
 4. Bot DMs the player a welcome; `/character`, `/inventory`, etc. now work.
+5. **Record it:** add a row to [`party/roster.md`](party/roster.md) + a
+   `party/<name>.md` sheet, and fold the PC into the fiction ([`world.md`](world.md)).
 
 Alternative paths: **📋 Claim Existing** (DM pre-creates on the dashboard, player
 `/register name:<n>`), **📥 Import from D&D Beyond** (`/import ddb-url:<url>`).
+
+**Big party (5-6 PCs):** approve each player as they finish — don't make an
+onboarded player wait on the others. Remote players reach the portal + OAuth via
+the tunnel (next section). Spotlight / pacing technique: [`big-party.md`](big-party.md).
+
+## 5a. Remote players (cloudflared tunnel)
+
+A player joining from another location reaches the local app (web builder + Discord
+OAuth) via a **cloudflared quick tunnel**.
+
+- **Managed by `make tunnel-up` / `make tunnel-down` / `make tunnel-status`**
+  (`scripts/tunnel.sh`). `tunnel-up` auto-installs cloudflared to `bin/`, opens the
+  tunnel, repoints `.env` (`BASE_URL` + `OAUTH_REDIRECT_URL`), restarts the app, and
+  prints the OAuth callback to register. `tunnel-down` stops it and restores `.env`
+  from `.env.bak.preTunnel`. State lives in `.tunnel/` (gitignored).
+- **The public URL is EPHEMERAL** — it changes every time the tunnel restarts.
+  `make tunnel-up` redoes the `.env` repoint + app restart automatically on change.
+- **Manual step you still owe each time the URL changes:** register
+  `<tunnel-url>/portal/auth/callback` in the Discord Developer Portal → app
+  (`DISCORD_CLIENT_ID` 1507…) → OAuth2 → Redirects. Discord rejects unlisted
+  redirect URIs (`Invalid OAuth2 redirect_uri`), so remote login fails without it.
+- **Record the current URL** in [`game-state.md`](game-state.md) "Ops snapshot" so
+  the next agent knows what's live.
+- **Teardown after the session:** `make tunnel-down` (stops cloudflared, restores
+  `.env`, restarts the app). While up, the app is publicly reachable but gated:
+  login by OAuth, build by a minted token, dashboard by DM auth.
 
 ## 6. Observing game state (Claude can't see Discord)
 
@@ -116,10 +146,17 @@ Useful tables: `campaigns` (settings JSONB has channel IDs), `characters` +
 
 ## 7. Common slash commands (the player types these)
 
-`/register`, `/create-character`, `/character`, `/inventory`, `/move <cell>`,
-`/done` (end turn), `/attack`, `/cast`, `/loot`, `/give`, `/save`, `/recap`.
-The bot replies in `#your-turn` / `#combat-log` / etc. Exact command set is
-whatever the bot registered with the guild (the app's command table).
+`/register`, `/create-character`, `/character`, `/inventory`, `/equip`,
+`/move <cell>`, `/done` (end turn), `/attack`, `/cast`, `/roll <dice> reason:<…>`
+(players roll their own dice — see [`dm-rules.md`](dm-rules.md)), `/map` (re-posts
+the combat board to #combat-map), `/loot`, `/give`, `/save`, `/recap`. The bot
+replies in `#your-turn` / `#combat-log` / etc. Exact command set is whatever the
+bot registered with the guild (the app's command table).
+
+**#combat-map board posting:** since commit `7b6c125`, **StartCombat auto-posts the
+opening board** to #combat-map. The board also (re)lands on the **first `/done`**, on
+a **DM-run enemy turn**, or whenever any player runs **`/map`**. Player-view
+fog-of-war is on (shows what a PC can see, hides the rest).
 
 ## 8. Posting DM narration to #the-story
 
@@ -139,7 +176,7 @@ landed by querying the `narration_posts` table (or by the returned Discord messa
 id) — e.g. the Hold Person beat is `narration_posts` row at 13:51:18 UTC, msg id
 `1519701526946386084`.
 
-> **Standing rule (see README "Hard constraints"):** posting narration — like every
+> **Standing rule (see [`dm-rules.md`](dm-rules.md)):** posting narration — like every
 > DM *mutation* — must go through the dashboard driven by Chrome (claude-in-chrome),
 > never raw SQL / curl. The mutation endpoints are behind `dmAuthMw`; only the
 > logged-in dashboard tab can authenticate. Postgres is for *reads/observation* (§6).

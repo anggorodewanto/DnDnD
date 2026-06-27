@@ -5,6 +5,12 @@ One entry per issue. This is a **DM-side field journal**, distinct from the
 AI-playtest harness's formal bug ledger — log freely here; promoting an issue to a
 fixed + regression-tested item is a separate decision.
 
+**Policy: fix-now TDD.** A bug found in live play gets a red/green TDD fix +
+redeploy and an entry here. With a full table waiting, unblock the player first
+(fast workaround), then run the fix — ideally delegated/backgrounded so the session
+doesn't idle on a red/green cycle. See [`dm-rules.md`](dm-rules.md) +
+[`big-party.md`](big-party.md) "Bugs mid-session."
+
 Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, just a note).
 
 | # | Date | Area | Severity | Status | Summary |

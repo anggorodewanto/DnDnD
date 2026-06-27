@@ -1,8 +1,10 @@
-# Play Log — chronological
+# Session 01 — Ashfall Waystation (2026-06-24 → 2026-06-26)
 
-Append a short entry per beat (setup steps, narration delivered, player commands,
-outcomes, decisions). Newest at the bottom. This is the story-and-mechanics
-history; `game-state.md` is the current snapshot.
+> Per-session play-by-play. Append a short entry per beat (setup, narration
+> delivered, player commands, outcomes, decisions); newest at the bottom. This is
+> the story-and-mechanics *history* — the current snapshot is
+> [`../game-state.md`](../game-state.md), the durable world is
+> [`../world.md`](../world.md). Start a new `session-NN.md` for the next session.
 
 ---
 
@@ -138,6 +140,26 @@ if/when the cellar fight starts.
 - **Set-up for Round 2:** once Vale ends her turn, `/done` advances to Forge first —
   and Forge is within 5 ft of a **paralyzed** target, so his melee attacks get
   **advantage + auto-crit on hit**. Big swing for the party incoming.
+
+**Two map-render bugs found + fixed (2026-06-25)** — surfaced when the combat board
+first tried to render:
+
+1. *PCs had no tokens.* The blank dashboard-built map has **no authored spawn
+   zones**, so combat-start's PC seater bailed and wrote the zero-value position
+   (col `""`, row 0) for Vale + Forge — unparseable, so the renderer skipped them.
+   **Fix:** `seatPCsInSpawnZones` now falls back to open in-bounds tiles (skipping
+   monster tiles) when a map has no spawn zones (`spawnzone.AssignPCsToOpenTiles`).
+   Live data patched to J7/K6.
+2. *Enemy never showed on the player map.* `combatantsToRendererForm` never set
+   `IsVisible`, so every enemy defaulted to hidden and `filterCombatantsForFog`
+   dropped it *before* the line-of-sight check — enemies were excluded from
+   #combat-map regardless of sight. **Fix:** propagate `c.IsVisible`. A visible
+   enemy in a PC's line of sight now shows; genuinely hidden / out-of-sight enemies
+   stay fogged (fog-of-war retained by design).
+
+(The blank cellar map built later *does* have an authored PC spawn zone — see
+[`../encounters/cellar-brood.md`](../encounters/cellar-brood.md) — so the seater
+fallback won't be needed there.)
 
 **ISSUE-014 fix shipped mid-session + Hold Person narration posted (2026-06-25)**
 
