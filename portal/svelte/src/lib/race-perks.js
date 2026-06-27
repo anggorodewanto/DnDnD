@@ -112,6 +112,41 @@ export function applyAbilityBonuses(scores = {}, ...bonusSets) {
 }
 
 /**
+ * Inverse of applyAbilityBonuses: recovers base point-buy scores by subtracting
+ * the given ability-bonus blobs from post-racial scores. Edit-mode prefill needs
+ * this because the saved character stores post-racial scores, but the point-buy
+ * widget edits base scores — seeding it with post-racial values would re-apply
+ * the racials on save (e.g. a Tiefling's CHA 16 → 18 on every edit). Floors at 1
+ * so a malformed/oversized bonus can never produce a negative base.
+ * @param {object} scores - post-racial scores keyed str/dex/con/int/wis/cha
+ * @param {...(object|null|undefined)} bonusSets - ability_bonuses blobs to remove
+ * @returns {{str:number,dex:number,con:number,int:number,wis:number,cha:number}}
+ */
+export function removeAbilityBonuses(scores = {}, ...bonusSets) {
+  const out = {};
+  for (const ability of ABILITY_ORDER) out[ability] = Number(scores?.[ability]) || 0;
+  for (const bonuses of bonusSets) {
+    if (!bonuses || typeof bonuses !== 'object') continue;
+    for (const ability of ABILITY_ORDER) out[ability] -= Number(bonuses[ability]) || 0;
+  }
+  for (const ability of ABILITY_ORDER) out[ability] = Math.max(1, out[ability]);
+  return out;
+}
+
+/**
+ * Returns a race's fixed ability_bonuses map ({} when absent/unparseable),
+ * mirroring the racialBonuses derivation used for display. Lets edit-mode
+ * prefill strip racials without depending on Svelte's reactive race lookup.
+ * @param {object} race - race with `ability_bonuses` (object or JSON string)
+ * @returns {object}
+ */
+export function raceAbilityBonuses(race) {
+  if (!race) return {};
+  const parsed = parseJSONField(race.ability_bonuses);
+  return parsed && typeof parsed === 'object' ? parsed : {};
+}
+
+/**
  * Looks up a subrace within a race and returns its perks.
  * @param {object} race - race with `subraces` (array or JSON string)
  * @param {string} subraceId

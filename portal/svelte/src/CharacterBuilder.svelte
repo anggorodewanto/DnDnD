@@ -5,7 +5,7 @@
   import { skillsForBackground, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { raceBaseLanguages, availableLanguageChoices, assembleLanguages, bonusLanguageCount } from './lib/languages.js';
   import { abilityLabel } from './lib/skills.js';
-  import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks, applyAbilityBonuses } from './lib/race-perks.js';
+  import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks, applyAbilityBonuses, removeAbilityBonuses, raceAbilityBonuses } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
   import { anyCaster, multiclassCantripCap, multiclassLeveledCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
@@ -115,9 +115,16 @@
   // onboarding T37).
   let submitError = $state('');
 
-  // Load reference data on mount
+  // Load reference data on mount. Memoized so edit-mode prefill can await the
+  // same fetch (it needs the race catalog to strip racial bonuses) without
+  // triggering a second round of requests.
+  let refDataPromise = null;
+  function ensureRefData() {
+    if (!refDataPromise) refDataPromise = loadRefData();
+    return refDataPromise;
+  }
   $effect(() => {
-    loadRefData();
+    ensureRefData();
   });
 
   async function loadRefData() {
@@ -296,6 +303,9 @@
   let editLoadError = $state('');
   async function loadEditData() {
     try {
+      // Wait for the race catalog so applyEditData can strip racial bonuses
+      // from the stored (post-racial) ability scores.
+      await ensureRefData();
       const data = await api.editData(editCharacterId);
       campaign = data.campaign_id || '';
       applyEditData(data.character || {});
@@ -329,7 +339,17 @@
     }
     if (ch.ability_scores) {
       const s = ch.ability_scores;
-      scores = { str: s.str ?? 8, dex: s.dex ?? 8, con: s.con ?? 8, int: s.int ?? 8, wis: s.wis ?? 8, cha: s.cha ?? 8 };
+      const postRacial = { str: s.str ?? 8, dex: s.dex ?? 8, con: s.con ?? 8, int: s.int ?? 8, wis: s.wis ?? 8, cha: s.cha ?? 8 };
+      // Stored scores are post-racial, but the point-buy widget edits base
+      // scores and re-adds racials in finalScores(). Seeding base directly from
+      // post-racial would double-count them (e.g. Tiefling CHA 16 → 18) and be
+      // rejected by point-buy on save. Strip race + subrace bonuses to recover
+      // the base. raceData is read from the loaded catalog (ensureRefData has
+      // resolved) rather than the reactive selectedRaceData, which lags here.
+      const raceData = races.find((r) => r.id === ch.race);
+      const rb = raceAbilityBonuses(raceData);
+      const sb = subracePerks(raceData, ch.subrace || '')?.abilityBonuses || {};
+      scores = removeAbilityBonuses(postRacial, rb, sb);
     }
     // The generation method isn't persisted; an edit re-validates as point-buy.
     abilityMethod = 'point_buy';

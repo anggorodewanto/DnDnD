@@ -6,6 +6,8 @@ import {
   formatDarkvision,
   subracePerks,
   applyAbilityBonuses,
+  removeAbilityBonuses,
+  raceAbilityBonuses,
 } from './race-perks.js';
 
 describe('parseJSONField', () => {
@@ -205,5 +207,41 @@ describe('applyAbilityBonuses', () => {
     expect(applyAbilityBonuses({ str: 10 }, { str: 2 })).toEqual({
       str: 12, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
     });
+  });
+});
+
+describe('removeAbilityBonuses', () => {
+  // Inverse of applyAbilityBonuses: recovers base point-buy scores from the
+  // stored post-racial scores so an edit round-trip does not re-apply racials.
+  it('strips race bonuses (Tiefling post-racial INT 15 / CHA 18 → base 14 / 16)', () => {
+    const postRacial = { str: 10, dex: 10, con: 15, int: 15, wis: 10, cha: 18 };
+    expect(removeAbilityBonuses(postRacial, { int: 1, cha: 2 })).toEqual({
+      str: 10, dex: 10, con: 15, int: 14, wis: 10, cha: 16,
+    });
+  });
+
+  it('round-trips with applyAbilityBonuses', () => {
+    const base = { str: 8, dex: 15, con: 13, int: 14, wis: 12, cha: 10 };
+    const race = { dex: 2 };
+    const subrace = { int: 1 };
+    expect(removeAbilityBonuses(applyAbilityBonuses(base, race, subrace), race, subrace)).toEqual(base);
+  });
+
+  it('ignores null/non-object bonus sets and floors at 1 (never negative)', () => {
+    expect(removeAbilityBonuses({ str: 1, dex: 15 }, null, undefined, { str: 2 })).toEqual({
+      str: 1, dex: 15, con: 1, int: 1, wis: 1, cha: 1,
+    });
+  });
+});
+
+describe('raceAbilityBonuses', () => {
+  it('parses a JSON-string ability_bonuses blob', () => {
+    expect(raceAbilityBonuses({ ability_bonuses: '{"int":1,"cha":2}' })).toEqual({ int: 1, cha: 2 });
+  });
+
+  it('returns {} when absent or unparseable', () => {
+    expect(raceAbilityBonuses({})).toEqual({});
+    expect(raceAbilityBonuses(null)).toEqual({});
+    expect(raceAbilityBonuses({ ability_bonuses: 'nonsense' })).toEqual({});
   });
 });
