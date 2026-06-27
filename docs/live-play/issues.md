@@ -35,6 +35,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-017 | 2026-06-26 | refdata / item catalog (SSOT) | major (tech-debt) | FIXED | **Permanent SSOT fix** for the recurring slug/type/quantity drift class (ISSUE-013 background slugs, ISSUE-015 ammo, the builder-ammo follow-up). Delivered on branch `feat/item-catalog-ssot` in 5 phased commits: a canonical seeded **item catalog** (`refdata.ItemCatalog` + `items` table) now backs the builder inventory seeder, combat ammo derivation (via a weapon→ammo `ammunition_id` FK), and `/api/equipment`; the JS classifier is codegen'd from the Go catalog. The 5 fragmented sources + the hand-maintained Go/JS maps are deleted; two contract tests fail CI on re-drift. Full write-up in Details. |
 | ISSUE-018 | 2026-06-27 | combat / enemy turn (action_log) | blocker | FIXED | **Turn Builder crashed executing any enemy turn:** `null value in column "before_state" of relation "action_log" violates not-null constraint`. `ExecuteEnemyTurn` (`turn_builder_handler.go`) omitted `BeforeState`+`AfterState` (both NOT NULL) in its `CreateActionLog` — unlike every other action_log writer. **Partial commit:** damage was applied but the turn never advanced and nothing logged → combat stuck on the enemy's turn. Found live (lead ghoul biting Vale). **Fixed (TDD):** snapshot the actor's combatant state before/after via the existing `snapshotCombatantState` helper, populate both columns. Red/green `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState`; package green; assets/binary rebuilt + redeployed. Workaround used live: manual End Turn + resolve the dangling queue item. |
 | ISSUE-019 | 2026-06-27 | dashboard / combat UX | minor | FIXED | **Turn Builder was undiscoverable** — the only way to run an NPC turn was to **right-click** the enemy token → "Plan Turn". A DM had no visual cue it existed (cost real table time hunting for it). **Fixed:** added a prominent gold **"⚔ Run Enemy Turn — <name>"** button to the combat right panel (above the Turn Queue), shown only when the current-turn combatant is an NPC (`activeTurnCombatant?.is_npc`); reuses the same `openTurnBuilder` handler as the right-click (no duplicate logic). Right-click menu kept. vitest green; Svelte bundle rebuilt + redeployed. |
+| ISSUE-020 | 2026-06-27 | character sheet / HP source | medium | FIXED | **Character sheets showed stale full HP mid-combat.** Two HP stores: `characters.hp_current` (static base sheet) and `combatants.hp_current` (live combat snapshot). Combat carries HP in at start and **never writes back**, so every sheet that reads the `characters` row showed pre-fight HP during a fight (player saw Vale 24/24 while she was 19/24 and bloodied). **NOT a lost-damage bug** — the bite damage was correctly persisted on the combatant; the sheets just read the wrong table. **Fixed (TDD, 3 surfaces):** overlay the live combatant HP (HpCurrent/HpMax/TempHP only) when the character is in an active encounter — portal sheet (`hydrateFromCombatant`, which already overlaid conditions/exhaustion/concentration but forgot HP), Discord `/character` (mirrors the existing `/status` overlay), and the dashboard Character Overview API (`ListApprovedPartyCharacters`). All best-effort read-side; out of combat falls back to the row. The DM out-of-combat status editor's 409-in-combat write path (cf. status-editor feature) is untouched. cover-check green; redeployed; verified live (Party Overview now shows Vale 19/24). #character-cards excluded (static embed — would need a re-post per HP change). |
 
 ---
 
@@ -654,6 +655,47 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   no-map list's "Plan Turn" all use one code path (no duplicate open logic). Right-click menu
   left intact. vitest `CombatManager.test.js` 7/7 (added 4 cases); full suite 647 green; Svelte
   bundle rebuilt (`internal/dashboard/assets/` is git-tracked) + redeployed.
+
+### ISSUE-020 — Character sheets show stale base HP mid-combat (two HP stores, no overlay) (FIXED)
+- **Date:** 2026-06-27
+- **Area:** character sheet / HP source (portal sheet, Discord `/character`, dashboard Character Overview)
+- **Severity:** medium — no data loss, but confusing/wrong: a player checking their own sheet
+  mid-fight saw full HP and no sign of being bloodied.
+- **Status:** FIXED + REDEPLOYED + VERIFIED LIVE.
+- **Repro:** during the live "Cellar" fight Vale took a 5-damage ghoul bite → `combatants.hp_current`
+  = 19/24 (correct). Open Vale's character sheet (portal, `/character`, or the dashboard Party
+  Overview) → it showed **24/24**.
+- **Root cause — two HP stores that don't reconcile:**
+  - `characters.hp_current` — the static base sheet, set at creation / level-up / out-of-combat DM edit.
+  - `combatants.hp_current` — the live per-encounter snapshot. Combat **seeds** a combatant from the
+    character at `StartCombat` (`combat/domain.go` `CombatantFromCharacter`, `HPCurrent: char.HpCurrent`)
+    and **never writes back** (no write-back at end-of-turn, end-of-combat, or on damage — confirmed:
+    `EndCombat` doesn't sync HP; only the out-of-combat editor's `UpdateCharacterVitals` touches the row).
+  - So during a fight the `characters` row is frozen at its pre-combat value, and **every sheet that
+    reads it shows stale HP**. Only Discord `/status` was already correct (it overlays the combatant).
+  - The crash in [ISSUE-018] did **not** lose the damage: `ApplyDamage` and the (then-failing)
+    `CreateActionLog` are not in one transaction, so the HP write committed independently.
+- **FIX (2026-06-27, TDD, read-side overlay on 3 surfaces — HpCurrent/HpMax/TempHP only):**
+  - **Portal sheet** — `internal/portal/character_sheet_store.go` `hydrateFromCombatant`. It already
+    overlaid the combatant's conditions/exhaustion/concentration ("the combatant is the live source of
+    truth during combat") but **forgot HP**; added the three HP lines. Tests:
+    `..._InCombatOverlaysHP`, `..._OutOfCombatKeepsSheetHP`.
+  - **Discord `/character`** — `internal/discord/character_handler.go`: new optional `SetCombatProvider`
+    wiring (the same `StatusEncounterProvider` + `StatusCombatantLookup` `/status` uses, wired in
+    `cmd/dndnd/discord_handlers.go`), `overlayCombatHP` resolves the owner's active encounter and matches
+    the combatant by `CharacterID == ch.ID` before building the embed. Tests:
+    `..._InCombat_OverlaysLiveCombatantHP`, `..._NotInCombat_KeepsCharacterRowHP`.
+  - **Dashboard Character Overview API** — `internal/characteroverview/store_db.go`
+    `ListApprovedPartyCharacters` now calls `overlayLiveCombatHP` per sheet (reuses the already-wired
+    `GetActiveCombatantByCharacterID` the 409 check uses). Tests: `..._OverlaysLiveCombatHP`,
+    `..._NoCombatKeepsRowHP`.
+  - All overlays are **best-effort / read-only**: no active combatant, `uuid.Nil`, or lookup error →
+    fall back to the character row. The DM out-of-combat status editor's **409-in-combat write path is
+    untouched** (its `UpdateStatus`/409 tests still green).
+  - `#character-cards` Discord embed **excluded** — it's a static posted message; live HP there would
+    require re-posting the card on every damage event (future work if wanted).
+  - `make cover-check` green (characteroverview 94.58%, discord 85.93%, portal 89.76%); redeployed;
+    **verified live** — DM Party Overview now reads **Vale 19/24**.
 
 <!-- Append a section per issue:
 

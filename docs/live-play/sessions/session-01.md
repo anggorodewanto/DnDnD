@@ -412,6 +412,21 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
      (`CombatManager.svelte`); reuses the same open handler as the right-click. vitest green.
   See [`issues.md`](issues.md). **Both redeploy via** `docker compose up -d --build app`.
 - **State now:** Round 1, **Vale's turn** (19/24, bloodied), lead ghoul at E2 (22/22), 2nd
-  ghoul still at C8 (22/22), Forge 32/32 at E1. **Do not run the 2nd ghoul via Turn
-  Builder until the fix is deployed** (workaround: right-click Damage + End Turn).
+  ghoul still at C8 (22/22), Forge 32/32 at E1.
+- **ISSUE-018 + ISSUE-019 deployed** (commits `8c6a8df` / `60cda5d`, pushed last session,
+  redeployed): the `before_state` enemy-turn crash is fixed and the **"⚔ Run Enemy Turn"**
+  button is live. The Turn Builder is now the path for the 2nd ghoul (first live test of the
+  fixed executor).
+- **ISSUE-020 — stale sheet HP (found + fixed this session):** the user noticed *"my character
+  sheet says Vale HP at 24"* while she was 19/24 in combat. Diagnosed **two HP stores** —
+  `characters.hp_current` (static base sheet) vs `combatants.hp_current` (live snapshot);
+  combat carries HP in at start and **never writes back**, so every sheet reading the
+  `characters` row showed stale full HP mid-fight. **The ghoul turn DID execute** — the bite
+  damage was correctly persisted on the combatant; only the sheets read the wrong table (the
+  ISSUE-018 crash didn't lose it: `ApplyDamage` and `CreateActionLog` aren't in one tx).
+  **Fixed (TDD, 3 surfaces — read-side HP overlay):** portal sheet (`hydrateFromCombatant`,
+  which already overlaid conditions but forgot HP), Discord `/character` (mirrors `/status`),
+  and the dashboard Party Overview API. Out-of-combat falls back to the row; the DM
+  out-of-combat status editor's 409 write path is untouched. cover-check green; redeployed;
+  **verified live** — Party Overview now reads **Vale 19/24**. See [`issues.md`](issues.md).
 </content>

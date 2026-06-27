@@ -13,13 +13,13 @@ _Last updated: 2026-06-27 — **COMBAT LIVE: "The Cellar," Round 1, VALE'S TURN.
 ghoul (init 19) closed J8→**E2** and **bit Vale for 5** (engine To Hit 15 vs AC 10) →
 Vale **19/24**, bloodied, no paralysis (Bite, not Claws). Bite narrated to #the-story
 (`narration_posts` 5:30:18 PM). Turn advanced to **Vale (init 15)** — her move now.
-**⚠ LIVE BUG:** the Turn-Builder enemy-turn executor **crashed creating the action_log
-row** (`before_state` NOT NULL violation) — damage applied but turn didn't advance &
-nothing logged; I advanced the turn manually (End Turn) and resolved the dangling
-queue item. Fix + a Turn-Builder-discoverability UX fix are **in progress** (see
-[`issues.md`](issues.md)); redeploy pending. **Next beat = Vale's turn**, then Forge
-(12), then 2nd Ghoul (9, at C8) — do NOT run another enemy turn via Turn Builder until
-the `before_state` fix is deployed. 3-4 more players still joining._
+**All three live-play fixes are now DEPLOYED:** ISSUE-018 (`before_state` enemy-turn
+crash), ISSUE-019 (Turn-Builder "⚔ Run Enemy Turn" button), and ISSUE-020 (character
+sheets showed stale full HP mid-combat — sheets now overlay the live combatant HP on
+the portal sheet, `/character`, and the dashboard Party Overview). The **Turn Builder is
+now safe to use** for enemy turns. **Next beat = Vale's turn**, then Forge (12), then
+2nd Ghoul (9, at C8) — run it via the new button (first live test of the fixed executor).
+3-4 more players still joining._
 
 ## Ops snapshot
 
@@ -89,9 +89,12 @@ players," then add roster rows.
     just bit Vale) + Ghoul **C8** (22/22, init 9, still at the back).
   - **Initiative / turn order:** Ghoul 19 → **Vale 15 (CURRENT)** → Forge 12 → Ghoul 9.
   - **Done:** lead ghoul moved J8→E2 + Bite vs Vale (To Hit 15 vs AC 10 → hit, 5 piercing).
-  - **⚠ Don't use the Turn Builder for the next enemy turn** until the `before_state`
-    crash fix is deployed (it applies damage but fails to log/advance — see
-    [`issues.md`](issues.md)). Workaround if forced: right-click Damage + manual End Turn.
+  - **Turn Builder fixed + safe** (ISSUE-018 deployed). The next enemy turn (2nd ghoul) is
+    the first live run of the fixed executor — reach it via the new **"⚔ Run Enemy Turn"**
+    button (ISSUE-019) or right-click → Plan Turn.
+  - **Sheets now show live combat HP** (ISSUE-020): the portal sheet, `/character`, and the
+    dashboard Party Overview overlay the combatant's HP during a fight (Vale reads 19/24,
+    not the stale 24/24 base-sheet value).
   - Prior fight — "Waystation — the cellar wretch" (id
     `6f317490-c43e-44a0-a1d0-b6ed51e58a3e`) — ended 2026-06-26 in victory. Full
     chronology: [`sessions/session-01.md`](sessions/session-01.md).
@@ -112,15 +115,11 @@ lore: [`world.md`](world.md).
    quote it). She's bloodied (19/24) and a ghoul is adjacent at E2. After her beat,
    **narrate** + **update docs** in lockstep.
 2. **Then Forge (12),** same player-driven flow.
-3. **Then the 2nd Ghoul (init 9, C8) — DM enemy turn.** ⚠ **Do not run it via the Turn
-   Builder until the `before_state` crash fix is redeployed** (it applies damage but
-   fails to log/advance). If forced before the fix: right-click the ghoul → **Damage**
-   (apply manually) → **End Turn**. After the fix is live, the Turn Builder is the path
-   (now also reachable via the new **"Run Enemy Turn"** button — pending redeploy).
-4. **Ship the two fixes** (see [`issues.md`](issues.md)): the `before_state` enemy-turn
-   crash (TDD) + the Turn-Builder discoverability button. Rebuild embedded assets +
-   `docker compose up -d --build app`, then verify the next enemy turn runs clean.
-5. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row
+3. **Then the 2nd Ghoul (init 9, C8) — DM enemy turn.** Run it via the new **"⚔ Run Enemy
+   Turn"** button (combat right panel, shown when an NPC is current) or right-click → **Plan
+   Turn**. This is the **first live run of the fixed enemy-turn executor** (ISSUE-018) — watch
+   that damage applies, the action logs, and the turn advances cleanly.
+4. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row
    + sheet → fold in). See [`runbook.md`](runbook.md) + [`big-party.md`](big-party.md).
-6. **Bookkeeping:** Vale's leather armor still unequipped (AC 10;
-   `/equip item:leather armor:true` → AC 11) — she just took a bite for being exposed.
+5. **Bookkeeping:** Vale's leather armor is now **equipped (AC 11)** — confirmed on the
+   Party Overview. (The bite landed while she was still exposed at AC 10.)
