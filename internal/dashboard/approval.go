@@ -2,7 +2,9 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/ab/dndnd/internal/portal"
 	"github.com/google/uuid"
 )
 
@@ -32,6 +34,13 @@ type ApprovalDetail struct {
 	Languages     string   `json:"languages"`
 	DdbURL        string   `json:"ddb_url,omitempty"`
 	Advisories    []string `json:"advisories,omitempty"`
+	// Review is the normalized projection of the CURRENT character state (the
+	// "after"). ReviewBefore is the last-approved baseline captured on an
+	// approved -> pending edit, or null for new submissions / DM self-edits. The
+	// frontend renders the full review and, when ReviewBefore is present, a
+	// before -> after diff. See docs/dm-character-review-diff.md.
+	Review       *portal.ReviewCharacter `json:"review,omitempty"`
+	ReviewBefore json.RawMessage          `json:"review_before,omitempty"`
 }
 
 // ApprovalStore is the interface for approval queue data access.

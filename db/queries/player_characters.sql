@@ -49,12 +49,27 @@ ORDER BY pc.created_at;
 -- name: GetPlayerCharacterWithCharacter :one
 SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
        pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
+       pc.review_before,
        c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
        c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url,
        c.character_data
 FROM player_characters pc
 JOIN characters c ON c.id = pc.character_id
 WHERE pc.id = $1;
+
+-- name: SetPlayerCharacterReviewBefore :exec
+-- Stores the pre-edit DM-review baseline (ReviewCharacter JSON) captured when an
+-- approved character is edited back to pending. See docs/dm-character-review-diff.md.
+UPDATE player_characters
+SET review_before = $2, updated_at = now()
+WHERE id = $1;
+
+-- name: ClearPlayerCharacterReviewBefore :exec
+-- Clears the review baseline on approve: the newly approved state becomes the
+-- implicit baseline for the next edit.
+UPDATE player_characters
+SET review_before = NULL, updated_at = now()
+WHERE id = $1;
 
 -- name: MarkPlayerCharacterRetireRequested :one
 -- Sets created_via='retire' on the row matching (campaign_id, discord_user_id)

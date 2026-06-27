@@ -16,12 +16,25 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const clearPlayerCharacterReviewBefore = `-- name: ClearPlayerCharacterReviewBefore :exec
+UPDATE player_characters
+SET review_before = NULL, updated_at = now()
+WHERE id = $1
+`
+
+// Clears the review baseline on approve: the newly approved state becomes the
+// implicit baseline for the next edit.
+func (q *Queries) ClearPlayerCharacterReviewBefore(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, clearPlayerCharacterReviewBefore, id)
+	return err
+}
+
 const createPlayerCharacter = `-- name: CreatePlayerCharacter :one
 INSERT INTO player_characters (
     campaign_id, character_id, discord_user_id, status, dm_feedback, created_via
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+) RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before
 `
 
 type CreatePlayerCharacterParams struct {
@@ -53,6 +66,7 @@ func (q *Queries) CreatePlayerCharacter(ctx context.Context, arg CreatePlayerCha
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }
@@ -109,7 +123,7 @@ func (q *Queries) FindCharacterByNameCaseInsensitive(ctx context.Context, arg Fi
 }
 
 const getPlayerCharacter = `-- name: GetPlayerCharacter :one
-SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters WHERE id = $1
+SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before FROM player_characters WHERE id = $1
 `
 
 func (q *Queries) GetPlayerCharacter(ctx context.Context, id uuid.UUID) (PlayerCharacter, error) {
@@ -125,12 +139,13 @@ func (q *Queries) GetPlayerCharacter(ctx context.Context, id uuid.UUID) (PlayerC
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }
 
 const getPlayerCharacterByCharacter = `-- name: GetPlayerCharacterByCharacter :one
-SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters
+SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before FROM player_characters
 WHERE campaign_id = $1 AND character_id = $2
 `
 
@@ -152,12 +167,13 @@ func (q *Queries) GetPlayerCharacterByCharacter(ctx context.Context, arg GetPlay
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }
 
 const getPlayerCharacterByDiscordUser = `-- name: GetPlayerCharacterByDiscordUser :one
-SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters
+SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before FROM player_characters
 WHERE campaign_id = $1 AND discord_user_id = $2 AND status != 'retired'
 `
 
@@ -179,6 +195,7 @@ func (q *Queries) GetPlayerCharacterByDiscordUser(ctx context.Context, arg GetPl
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }
@@ -186,6 +203,7 @@ func (q *Queries) GetPlayerCharacterByDiscordUser(ctx context.Context, arg GetPl
 const getPlayerCharacterWithCharacter = `-- name: GetPlayerCharacterWithCharacter :one
 SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
        pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
+       pc.review_before,
        c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
        c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url,
        c.character_data
@@ -204,6 +222,7 @@ type GetPlayerCharacterWithCharacterRow struct {
 	CreatedVia    string                `json:"created_via"`
 	CreatedAt     time.Time             `json:"created_at"`
 	UpdatedAt     time.Time             `json:"updated_at"`
+	ReviewBefore  pqtype.NullRawMessage `json:"review_before"`
 	CharacterName string                `json:"character_name"`
 	Race          string                `json:"race"`
 	Level         int32                 `json:"level"`
@@ -231,6 +250,7 @@ func (q *Queries) GetPlayerCharacterWithCharacter(ctx context.Context, id uuid.U
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 		&i.CharacterName,
 		&i.Race,
 		&i.Level,
@@ -364,7 +384,7 @@ func (q *Queries) ListPlayerCharactersAwaitingApproval(ctx context.Context, camp
 }
 
 const listPlayerCharactersByCampaign = `-- name: ListPlayerCharactersByCampaign :many
-SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters
+SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before FROM player_characters
 WHERE campaign_id = $1
 ORDER BY created_at
 `
@@ -388,6 +408,7 @@ func (q *Queries) ListPlayerCharactersByCampaign(ctx context.Context, campaignID
 			&i.CreatedVia,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReviewBefore,
 		); err != nil {
 			return nil, err
 		}
@@ -489,7 +510,7 @@ const markPlayerCharacterRetireRequested = `-- name: MarkPlayerCharacterRetireRe
 UPDATE player_characters
 SET created_via = 'retire', updated_at = now()
 WHERE campaign_id = $1 AND discord_user_id = $2
-RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before
 `
 
 type MarkPlayerCharacterRetireRequestedParams struct {
@@ -513,6 +534,7 @@ func (q *Queries) MarkPlayerCharacterRetireRequested(ctx context.Context, arg Ma
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }
@@ -521,7 +543,7 @@ const relinkPlayerCharacter = `-- name: RelinkPlayerCharacter :one
 UPDATE player_characters
 SET character_id = $2, status = 'pending', dm_feedback = NULL, created_via = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before
 `
 
 type RelinkPlayerCharacterParams struct {
@@ -548,15 +570,34 @@ func (q *Queries) RelinkPlayerCharacter(ctx context.Context, arg RelinkPlayerCha
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
+}
+
+const setPlayerCharacterReviewBefore = `-- name: SetPlayerCharacterReviewBefore :exec
+UPDATE player_characters
+SET review_before = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetPlayerCharacterReviewBeforeParams struct {
+	ID           uuid.UUID             `json:"id"`
+	ReviewBefore pqtype.NullRawMessage `json:"review_before"`
+}
+
+// Stores the pre-edit DM-review baseline (ReviewCharacter JSON) captured when an
+// approved character is edited back to pending. See docs/dm-character-review-diff.md.
+func (q *Queries) SetPlayerCharacterReviewBefore(ctx context.Context, arg SetPlayerCharacterReviewBeforeParams) error {
+	_, err := q.db.ExecContext(ctx, setPlayerCharacterReviewBefore, arg.ID, arg.ReviewBefore)
+	return err
 }
 
 const updatePlayerCharacterStatus = `-- name: UpdatePlayerCharacterStatus :one
 UPDATE player_characters
 SET status = $2, dm_feedback = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at, review_before
 `
 
 type UpdatePlayerCharacterStatusParams struct {
@@ -578,6 +619,7 @@ func (q *Queries) UpdatePlayerCharacterStatus(ctx context.Context, arg UpdatePla
 		&i.CreatedVia,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewBefore,
 	)
 	return i, err
 }

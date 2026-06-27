@@ -303,6 +303,13 @@ type BuilderStore interface {
 	// SetPlayerCharacterPending flips a player_characters row back to pending
 	// (a player's edit must be re-approved by the DM).
 	SetPlayerCharacterPending(ctx context.Context, playerCharacterID string) error
+	// LoadReviewBaseline returns the DM-reviewable projection (ReviewCharacter
+	// JSON) of the character's CURRENT state, used to snapshot the pre-edit
+	// baseline before an approved character is overwritten by an edit.
+	LoadReviewBaseline(ctx context.Context, characterID string) (json.RawMessage, error)
+	// SetReviewBefore stores the pre-edit review baseline on the
+	// player_characters row so the approval page can show a before -> after diff.
+	SetReviewBefore(ctx context.Context, playerCharacterID string, before json.RawMessage) error
 	// HasActiveEncounter reports whether the character is currently in an
 	// active encounter (edits are blocked while true).
 	HasActiveEncounter(ctx context.Context, characterID string) (bool, error)
@@ -714,12 +721,31 @@ func (svc *BuilderService) UpdateCharacter(ctx context.Context, characterID, req
 		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}
 
+	// When a player re-edits an already-approved character, snapshot the
+	// pre-edit reviewable state so the DM sees a before -> after diff. Only the
+	// approved -> pending transition sets the baseline; a pending -> pending
+	// re-edit (e.g. after changes_requested) keeps the original last-approved
+	// baseline. Captured BEFORE UpdateCharacterRecord overwrites the record.
+	captureBaseline := !isDM && ec.PlayerCharacterID != "" && ec.Status == "approved"
+	var reviewBefore json.RawMessage
+	if captureBaseline {
+		reviewBefore, err = svc.store.LoadReviewBaseline(ctx, characterID)
+		if err != nil {
+			return CreateCharacterResult{}, fmt.Errorf("snapshotting review baseline: %w", err)
+		}
+	}
+
 	if err := svc.store.UpdateCharacterRecord(ctx, characterID, charParams); err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("updating character: %w", err)
 	}
 
 	// A player's edit must be re-approved; a DM's edit stays as-is.
 	if !isDM && ec.PlayerCharacterID != "" {
+		if captureBaseline {
+			if err := svc.store.SetReviewBefore(ctx, ec.PlayerCharacterID, reviewBefore); err != nil {
+				return CreateCharacterResult{}, fmt.Errorf("storing review baseline: %w", err)
+			}
+		}
 		if err := svc.store.SetPlayerCharacterPending(ctx, ec.PlayerCharacterID); err != nil {
 			return CreateCharacterResult{}, fmt.Errorf("resetting approval status: %w", err)
 		}

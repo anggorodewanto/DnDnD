@@ -47,6 +47,8 @@ type captureCharacterCreator struct {
 	updateErr            error
 	capturedStatusUpdate refdata.UpdatePlayerCharacterStatusParams
 	statusUpdateErr      error
+	capturedReviewBefore refdata.SetPlayerCharacterReviewBeforeParams
+	reviewBeforeErr      error
 	activeEncounterID    uuid.UUID
 	activeEncounterErr   error
 }
@@ -71,6 +73,11 @@ func (c *captureCharacterCreator) UpdateCharacter(_ context.Context, arg refdata
 func (c *captureCharacterCreator) UpdatePlayerCharacterStatus(_ context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error) {
 	c.capturedStatusUpdate = arg
 	return refdata.PlayerCharacter{}, c.statusUpdateErr
+}
+
+func (c *captureCharacterCreator) SetPlayerCharacterReviewBefore(_ context.Context, arg refdata.SetPlayerCharacterReviewBeforeParams) error {
+	c.capturedReviewBefore = arg
+	return c.reviewBeforeErr
 }
 
 func (c *captureCharacterCreator) GetActiveEncounterIDByCharacterID(_ context.Context, _ uuid.NullUUID) (uuid.UUID, error) {
@@ -304,6 +311,57 @@ func TestBuilderStoreAdapter_EquipmentToInventory_SkipsPlaceholders(t *testing.T
 	assert.Len(t, items, 2)
 	assert.Equal(t, "longsword", items[0].ItemID)
 	assert.Equal(t, "shield", items[1].ItemID)
+}
+
+func TestBuilderStoreAdapter_LoadReviewBaseline_ProjectsCurrentCharacter(t *testing.T) {
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			Name:          "Thorin",
+			Race:          "dwarf",
+			Classes:       json.RawMessage(`[{"class":"fighter","level":3,"is_primary":true}]`),
+			Level:         3,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":12,"con":15,"int":10,"wis":12,"cha":8}`),
+			Ac:            18,
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	blob, err := adapter.LoadReviewBaseline(context.Background(), uuid.New().String())
+	require.NoError(t, err)
+
+	var rc portal.ReviewCharacter
+	require.NoError(t, json.Unmarshal(blob, &rc))
+	assert.Equal(t, "Thorin", rc.Name)
+	assert.Equal(t, []string{"Fighter 3"}, rc.Classes)
+	assert.Equal(t, int32(18), rc.AC)
+}
+
+func TestBuilderStoreAdapter_LoadReviewBaseline_NotFound(t *testing.T) {
+	creator := &captureCharacterCreator{getCharErr: sql.ErrNoRows}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	_, err := adapter.LoadReviewBaseline(context.Background(), uuid.New().String())
+	assert.ErrorIs(t, err, portal.ErrCharacterNotFound)
+}
+
+func TestBuilderStoreAdapter_SetReviewBefore_PersistsBaseline(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	pcID := uuid.New()
+	before := json.RawMessage(`{"name":"Thorin","ac":18}`)
+	err := adapter.SetReviewBefore(context.Background(), pcID.String(), before)
+	require.NoError(t, err)
+
+	assert.Equal(t, pcID, creator.capturedReviewBefore.ID)
+	assert.True(t, creator.capturedReviewBefore.ReviewBefore.Valid)
+	assert.JSONEq(t, string(before), string(creator.capturedReviewBefore.ReviewBefore.RawMessage))
+}
+
+func TestBuilderStoreAdapter_SetReviewBefore_InvalidID(t *testing.T) {
+	adapter := portal.NewBuilderStoreAdapter(&captureCharacterCreator{}, nil)
+	err := adapter.SetReviewBefore(context.Background(), "not-a-uuid", json.RawMessage(`{}`))
+	assert.Error(t, err)
 }
 
 func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) {

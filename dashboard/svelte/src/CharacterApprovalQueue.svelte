@@ -1,10 +1,19 @@
 <script>
+  import CharacterReviewPanel from './CharacterReviewPanel.svelte';
+
   let entries = $state([]);
   let loading = $state(true);
   let error = $state(null);
   // Surfaced when the player DM could not be delivered (T22) — the status
   // change is still saved, but the DM needs to know the player wasn't pinged.
   let notice = $state(null);
+  // Which entry's review/diff panel is expanded (null = none). Lazy: the panel
+  // only fetches its detail when mounted on expand.
+  let expandedId = $state(null);
+
+  function toggleReview(id) {
+    expandedId = expandedId === id ? null : id;
+  }
 
   $effect(() => {
     loadApprovals();
@@ -87,10 +96,18 @@
           <span class="char-name">{entry.character_name}</span>
           <span class="status">{entry.status}</span>
           <div class="actions">
+            <button
+              class="review-toggle"
+              aria-expanded={expandedId === entry.id}
+              onclick={() => toggleReview(entry.id)}
+            >{expandedId === entry.id ? 'Hide Review' : 'Review'}</button>
             <button onclick={() => approve(entry.id)}>Approve</button>
             <button onclick={() => requestChanges(entry.id)}>Request Changes</button>
             <button onclick={() => reject(entry.id)}>Reject</button>
           </div>
+          {#if expandedId === entry.id}
+            <CharacterReviewPanel id={entry.id} characterId={entry.character_id} />
+          {/if}
         </li>
       {/each}
     </ul>

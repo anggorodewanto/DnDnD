@@ -28,6 +28,7 @@ type CharacterCreator interface {
 	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 	UpdateCharacter(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error)
 	UpdatePlayerCharacterStatus(ctx context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error)
+	SetPlayerCharacterReviewBefore(ctx context.Context, arg refdata.SetPlayerCharacterReviewBeforeParams) error
 	GetActiveEncounterIDByCharacterID(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
 }
 
@@ -429,6 +430,41 @@ func (a *BuilderStoreAdapter) SetPlayerCharacterPending(ctx context.Context, pla
 		Status: "pending",
 	})
 	return err
+}
+
+// LoadReviewBaseline returns the DM-reviewable projection of the character's
+// current state as JSON. It is called on the pre-edit record (before
+// UpdateCharacterRecord overwrites it) to snapshot the last-approved baseline.
+func (a *BuilderStoreAdapter) LoadReviewBaseline(ctx context.Context, characterID string) (json.RawMessage, error) {
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid character_id %q: %w", characterID, err)
+	}
+	ch, err := a.q.GetCharacter(ctx, charID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrCharacterNotFound
+		}
+		return nil, fmt.Errorf("getting character: %w", err)
+	}
+	blob, err := json.Marshal(ProjectReview(ch))
+	if err != nil {
+		return nil, fmt.Errorf("marshalling review baseline: %w", err)
+	}
+	return blob, nil
+}
+
+// SetReviewBefore persists the pre-edit review baseline on the player_characters
+// row so the approval page can render a before -> after diff.
+func (a *BuilderStoreAdapter) SetReviewBefore(ctx context.Context, playerCharacterID string, before json.RawMessage) error {
+	id, err := uuid.Parse(playerCharacterID)
+	if err != nil {
+		return fmt.Errorf("invalid player_character_id %q: %w", playerCharacterID, err)
+	}
+	return a.q.SetPlayerCharacterReviewBefore(ctx, refdata.SetPlayerCharacterReviewBeforeParams{
+		ID:           id,
+		ReviewBefore: pqtype.NullRawMessage{RawMessage: before, Valid: before != nil},
+	})
 }
 
 // LoadEditSubmission reconstructs a builder submission from a saved character

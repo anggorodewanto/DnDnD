@@ -483,15 +483,16 @@ type PendingSafe struct {
 }
 
 type PlayerCharacter struct {
-	ID            uuid.UUID      `json:"id"`
-	CampaignID    uuid.UUID      `json:"campaign_id"`
-	CharacterID   uuid.UUID      `json:"character_id"`
-	DiscordUserID string         `json:"discord_user_id"`
-	Status        string         `json:"status"`
-	DmFeedback    sql.NullString `json:"dm_feedback"`
-	CreatedVia    string         `json:"created_via"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	ID            uuid.UUID             `json:"id"`
+	CampaignID    uuid.UUID             `json:"campaign_id"`
+	CharacterID   uuid.UUID             `json:"character_id"`
+	DiscordUserID string                `json:"discord_user_id"`
+	Status        string                `json:"status"`
+	DmFeedback    sql.NullString        `json:"dm_feedback"`
+	CreatedVia    string                `json:"created_via"`
+	CreatedAt     time.Time             `json:"created_at"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	ReviewBefore  pqtype.NullRawMessage `json:"review_before"`
 }
 
 type PortalToken struct {
