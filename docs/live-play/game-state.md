@@ -23,14 +23,19 @@ players are joining the existing party._
 - **Last deploy:** `main` (see `git log`); combat state has survived every redeploy.
   Rebuild + redeploy after any code fix: `docker compose up -d --build app`
   (see [`runbook.md`](runbook.md) §1). Redeploy *history* lives in the session logs.
-- **Remote-player tunnel:** a cloudflared quick tunnel exposes the local app so
-  remote players reach the builder + OAuth. **URL is EPHEMERAL** (changes every
-  restart). How-to + `make tunnel-*` targets: [`runbook.md`](runbook.md) "Remote players."
-  - **Last recorded URL (2026-06-26, LIKELY STALE):**
-    `https://coupon-affiliates-foto-employees.trycloudflare.com` — re-run
-    `make tunnel-up` to get the live one and update this line.
-  - **Currently owed:** register the live tunnel's `…/portal/auth/callback` in the
-    Discord Developer Portal, or remote login fails (`Invalid OAuth2 redirect_uri`).
+- **Remote-player tunnel:** an **ngrok tunnel on a reserved domain** exposes the
+  local app so remote players reach the builder + OAuth. **URL is STABLE**
+  (`https://unhustling-cushionless-karan.ngrok-free.dev`), so the OAuth callback
+  is registered in Discord **once** and never changes. How-to + `make tunnel-*`
+  targets: [`runbook.md`](runbook.md) "Remote players"; one-time setup +
+  `NGROK_DOMAIN`/`NGROK_AUTHTOKEN` in `.env`: header of
+  [`scripts/tunnel.sh`](../../scripts/tunnel.sh).
+  - **OAuth callback (registered, stable):**
+    `https://unhustling-cushionless-karan.ngrok-free.dev/portal/auth/callback`.
+    No per-restart Discord change. `make tunnel-up` always yields this URL;
+    `make tunnel-down` restores `.env` to `localhost` while keeping the ngrok vars.
+  - Migrated off the old cloudflared quick tunnel (2026-06-27) — that URL was
+    ephemeral and forced a Discord re-register on every restart.
 
 ## Campaign
 

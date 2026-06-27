@@ -49,9 +49,10 @@ local-down:
 local-logs:
 	docker compose logs -f app
 
-# Expose the local app over a public cloudflared tunnel (for a remote player).
-# tunnel-up points .env at the tunnel + restarts the app; tunnel-down restores it.
-# The trycloudflare URL is ephemeral: re-register the OAuth callback each `up`.
+# Expose the local app over a public ngrok tunnel on a reserved domain (for a
+# remote player). tunnel-up points .env at the tunnel + restarts the app;
+# tunnel-down restores it. The reserved domain is STABLE, so the OAuth callback
+# is registered in Discord ONCE. One-time setup: see header of scripts/tunnel.sh.
 tunnel-up:
 	@scripts/tunnel.sh up
 

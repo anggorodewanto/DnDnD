@@ -108,27 +108,32 @@ Alternative paths: **📋 Claim Existing** (DM pre-creates on the dashboard, pla
 onboarded player wait on the others. Remote players reach the portal + OAuth via
 the tunnel (next section). Spotlight / pacing technique: [`big-party.md`](big-party.md).
 
-## 5a. Remote players (cloudflared tunnel)
+## 5a. Remote players (ngrok tunnel, stable domain)
 
 A player joining from another location reaches the local app (web builder + Discord
-OAuth) via a **cloudflared quick tunnel**.
+OAuth) via an **ngrok tunnel bound to a reserved domain** — so the public URL is
+**stable** and the OAuth callback is registered in Discord **once**.
 
+- **One-time setup** (per machine; see the header of
+  [`scripts/tunnel.sh`](../../scripts/tunnel.sh)): create a free ngrok account,
+  claim a free static domain, and put `NGROK_DOMAIN` + `NGROK_AUTHTOKEN` in `.env`
+  (gitignored — the script never prints the token). Then register
+  `https://<NGROK_DOMAIN>/portal/auth/callback` in the Discord Developer Portal →
+  app (`DISCORD_CLIENT_ID` 1507…) → OAuth2 → Redirects. **Done once, never again.**
 - **Managed by `make tunnel-up` / `make tunnel-down` / `make tunnel-status`**
-  (`scripts/tunnel.sh`). `tunnel-up` auto-installs cloudflared to `bin/`, opens the
-  tunnel, repoints `.env` (`BASE_URL` + `OAUTH_REDIRECT_URL`), restarts the app, and
-  prints the OAuth callback to register. `tunnel-down` stops it and restores `.env`
-  from `.env.bak.preTunnel`. State lives in `.tunnel/` (gitignored).
-- **The public URL is EPHEMERAL** — it changes every time the tunnel restarts.
-  `make tunnel-up` redoes the `.env` repoint + app restart automatically on change.
-- **Manual step you still owe each time the URL changes:** register
-  `<tunnel-url>/portal/auth/callback` in the Discord Developer Portal → app
-  (`DISCORD_CLIENT_ID` 1507…) → OAuth2 → Redirects. Discord rejects unlisted
-  redirect URIs (`Invalid OAuth2 redirect_uri`), so remote login fails without it.
-- **Record the current URL** in [`game-state.md`](game-state.md) "Ops snapshot" so
-  the next agent knows what's live.
-- **Teardown after the session:** `make tunnel-down` (stops cloudflared, restores
-  `.env`, restarts the app). While up, the app is publicly reachable but gated:
-  login by OAuth, build by a minted token, dashboard by DM auth.
+  (`scripts/tunnel.sh`). `tunnel-up` auto-installs ngrok to `bin/`, starts the tunnel
+  on the reserved domain, repoints `.env` (`BASE_URL` + `OAUTH_REDIRECT_URL`), and
+  restarts the app. `tunnel-down` stops it and restores `.env` from
+  `.env.bak.preTunnel` (which keeps the `NGROK_*` vars). State lives in `.tunnel/`
+  (gitignored).
+- **The public URL is STABLE** — every `tunnel-up` yields the same reserved domain,
+  so there is **no per-restart Discord step**. (Discord has no API to script
+  `redirect_uris`, which is why the stable URL matters.)
+- **Current stable URL** is recorded in [`game-state.md`](game-state.md) "Ops
+  snapshot."
+- **Teardown after the session:** `make tunnel-down` (stops ngrok, restores `.env`,
+  restarts the app). While up, the app is publicly reachable but gated: login by
+  OAuth, build by a minted token, dashboard by DM auth.
 
 ## 6. Observing game state (Claude can't see Discord)
 
