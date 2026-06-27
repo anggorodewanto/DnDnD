@@ -33,6 +33,8 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-015 | 2026-06-25 | dashboard / conditions | high | FIXED | Condition-shape mismatch between the dashboard and the engine, in two halves. **DISPLAY half FIXED** (`b108bf2`): the Combat Manager rendered a condition object as "[object Object]" because the engine stores conditions as objects (`{condition:"paralyzed",…}`) but the Svelte UI interpolated each entry as a string — new `conditionName()` helper now Title-Cases either an object's `.condition` or a bare string. **WRITE half FIXED (2026-06-26):** the workspace PATCH `/api/combat/{id}/combatants/{cid}/conditions` used to persist a bare string array (`["paralyzed"]`) that `parseConditions` can't unmarshal, so a button-added condition rendered but its mechanical effects (auto-crit, advantage-to-attackers, auto-fail STR/DEX saves) never fired. New server-side `reconcileConditionNames` (`workspace_handler.go`) maps the DM-supplied condition *names* into the canonical `[]CombatCondition` object shape — reusing the combatant's existing condition object when the name is already present (so a spell-applied duration/source/timing survives a re-send) and minting an indefinite `{condition: name}` for new ones, lowercased + de-duped. Frontend now works in lowercase canonical keys (`conditionKey` helper). |
 | ISSUE-016 | 2026-06-25 | combat / spellcasting | medium | FIXED + DEPLOYED | `/done` falsely warned "you still have 1 attack" after a player cast a spell with their ACTION. Casting a spell is the Cast-a-Spell action, not the Attack action, so no weapon attack remains — but `Service.Cast`/`Service.CastAoE` consumed the action while leaving the seeded `attacks_remaining=1`, so the `/done` unused-resource check (and the "Remaining" summary) reported a phantom attack. **Fixed (`b108bf2`):** zero `turn.AttacksRemaining` when a spell consumes the action (cantrip or leveled); bonus-action casts left untouched (they keep the Attack action + its attacks). Found in live play: Vale (Warlock 3, no Extra Attack) cast Hold Person, then `/done` warned of an attack she never had. |
 | ISSUE-017 | 2026-06-26 | refdata / item catalog (SSOT) | major (tech-debt) | FIXED | **Permanent SSOT fix** for the recurring slug/type/quantity drift class (ISSUE-013 background slugs, ISSUE-015 ammo, the builder-ammo follow-up). Delivered on branch `feat/item-catalog-ssot` in 5 phased commits: a canonical seeded **item catalog** (`refdata.ItemCatalog` + `items` table) now backs the builder inventory seeder, combat ammo derivation (via a weapon→ammo `ammunition_id` FK), and `/api/equipment`; the JS classifier is codegen'd from the Go catalog. The 5 fragmented sources + the hand-maintained Go/JS maps are deleted; two contract tests fail CI on re-drift. Full write-up in Details. |
+| ISSUE-018 | 2026-06-27 | combat / enemy turn (action_log) | blocker | FIXED | **Turn Builder crashed executing any enemy turn:** `null value in column "before_state" of relation "action_log" violates not-null constraint`. `ExecuteEnemyTurn` (`turn_builder_handler.go`) omitted `BeforeState`+`AfterState` (both NOT NULL) in its `CreateActionLog` — unlike every other action_log writer. **Partial commit:** damage was applied but the turn never advanced and nothing logged → combat stuck on the enemy's turn. Found live (lead ghoul biting Vale). **Fixed (TDD):** snapshot the actor's combatant state before/after via the existing `snapshotCombatantState` helper, populate both columns. Red/green `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState`; package green; assets/binary rebuilt + redeployed. Workaround used live: manual End Turn + resolve the dangling queue item. |
+| ISSUE-019 | 2026-06-27 | dashboard / combat UX | minor | FIXED | **Turn Builder was undiscoverable** — the only way to run an NPC turn was to **right-click** the enemy token → "Plan Turn". A DM had no visual cue it existed (cost real table time hunting for it). **Fixed:** added a prominent gold **"⚔ Run Enemy Turn — <name>"** button to the combat right panel (above the Turn Queue), shown only when the current-turn combatant is an NPC (`activeTurnCombatant?.is_npc`); reuses the same `openTurnBuilder` handler as the right-click (no duplicate logic). Right-click menu kept. vitest green; Svelte bundle rebuilt + redeployed. |
 
 ---
 
@@ -593,6 +595,65 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Live caveat:** unmerged on a feature branch; a running stack must be rebuilt + restarted (and the
   new migrations applied) to take effect. Existing characters need no data change — the builder reads
   the catalog at create time; combat reads current inventory via the FK + tolerant fallback.
+
+### ISSUE-018 — Enemy-turn execution crashes on action_log NOT NULL (before_state/after_state) (FIXED)
+- **Date:** 2026-06-27
+- **Area:** combat / enemy turn (Turn Builder → `ExecuteEnemyTurn` → `action_log`)
+- **Severity:** blocker — **every** enemy turn run through the Turn Builder crashed; combat
+  could not progress past an NPC's turn. Found in live play (Round 1 of "The Cellar": the
+  lead ghoul's first attack on Vale).
+- **Status:** FIXED (TDD) + REDEPLOYED.
+- **Repro:** Start combat with an NPC; right-click the NPC token → **Plan Turn** → **Review**
+  → **Confirm & Post**. The Turn Builder shows:
+  `creating action log: ERROR: null value in column "before_state" of relation "action_log"
+  violates not-null constraint (SQLSTATE 23502)`.
+- **Expected:** the enemy turn applies movement + attack damage, logs an `action_log` row,
+  and advances initiative to the next combatant.
+- **Actual (partial commit — important):** `ApplyDamage` runs **before** the log insert, so
+  the **target's HP was reduced** (Vale 24→19) but the failing INSERT aborted the rest —
+  `UpdateTurnActions` never ran, so the **turn did not advance** and the `enemy_turn_ready`
+  dm-queue item stayed pending. State looked half-done.
+- **Root cause:** `Service.ExecuteEnemyTurn` (`internal/combat/turn_builder_handler.go`,
+  ~line 339) built `CreateActionLogParams` without `BeforeState`/`AfterState`, leaving them
+  nil `json.RawMessage` → SQL NULL. Both columns are **NOT NULL** (`db/migrations/
+  20260312120002_create_encounters.sql:91-92`). Every other action_log writer populates them
+  (`dm_dashboard_handler.go` resolve/move, `dm_dashboard_undo.go`) — only the enemy path
+  didn't, so only it crashed. Postgres names `before_state` first by column order; `after_state`
+  was equally null, so the fix had to set both.
+- **FIX (2026-06-27, TDD, `internal/combat` only — no `.sql` touched):** before the
+  `CreateActionLog` call, capture the actor's pre-turn state from the local `combatant` (never
+  reassigned, so it still holds the pre-movement position) via the existing
+  `snapshotCombatantState` helper, re-fetch the actor with `GetCombatant` for the after-state,
+  and pass both into `CreateActionLogParams`. Marshal errors ignored (matching the move path)
+  so the turn never fails on snapshotting. Red/green test
+  `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState` (mock store mimics the NOT NULL
+  constraint, asserts no error + both states populated + valid JSON + turn advances);
+  confirmed it failed with the exact live error first. `go test ./internal/combat/...` green.
+  Embedded assets + binary rebuilt and redeployed via `docker compose up -d --build app`.
+- **Workaround applied live (before redeploy):** the damage had already landed correctly, so
+  I advanced the turn with a manual **End Turn** (no re-damage) and resolved the dangling
+  `enemy_turn_ready` queue item with a free-text outcome note. See
+  [`sessions/session-01.md`](sessions/session-01.md).
+
+### ISSUE-019 — Turn Builder undiscoverable (right-click only) (FIXED)
+- **Date:** 2026-06-27
+- **Area:** dashboard / combat UX (Combat Manager)
+- **Severity:** minor — no data/mechanics impact, but cost real table time: the DM could not
+  find how to run an NPC's turn.
+- **Status:** FIXED + REDEPLOYED.
+- **Detail:** The combat workspace's visible controls are token drag-to-move, End Turn, Undo,
+  End Combat, and a read-only Action Log filter — **none** hint at running an enemy turn. The
+  Turn Builder is reached **only** by right-clicking the enemy token → "Plan Turn" (the
+  right-click menu also hosts Damage / Heal / Conditions / Remove). With no affordance, the DM
+  had no way to know it existed.
+- **FIX (2026-06-27, `dashboard/svelte/src/CombatManager.svelte`):** added a prominent gold
+  **"⚔ Run Enemy Turn — <name>"** button at the top of the right panel (above the Turn Queue),
+  rendered only when the current-turn combatant is an NPC (`activeTurnCombatant?.is_npc`,
+  derived from `activeEncounter.active_turn_combatant_id`). Extracted a shared
+  `openTurnBuilder(comb)` helper so the new button, the right-click "Plan Turn" item, and the
+  no-map list's "Plan Turn" all use one code path (no duplicate open logic). Right-click menu
+  left intact. vitest `CombatManager.test.js` 7/7 (added 4 cases); full suite 647 green; Svelte
+  bundle rebuilt (`internal/dashboard/assets/` is git-tracked) + redeployed.
 
 <!-- Append a section per issue:
 

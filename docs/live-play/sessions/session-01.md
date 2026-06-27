@@ -345,4 +345,73 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
 - **Next:** await Forge's follow/hold in `#in-character`; on commit → Start Combat
   (PCs auto-seat at the stairs landing). Hold while Forge is up top; re-check the
   surprise side at Start if Vale's down there alone. 3-4 more PCs still joining.
+
+---
+
+## 2026-06-27 — descent → combat: "The Cellar" begins
+
+- **Forge committed (read `#in-character` via Chrome):** after Vale's trance-walk in
+  (3:17 PM) and Forge's startled *"yo, what possessed you"* (3:22 PM), Forge —
+  *"please wait..."* (3:54 PM) — **followed her down**. Split party rejoined; both PCs
+  descending. The follow/hold question resolved → fight warranted.
+- **Surprise re-checked and flipped OFF for both sides:** the staged build flagged the
+  ghouls *Surprised* (party gets the drop). Reruled to **no surprise either side** —
+  nobody was sneaking (Vale shouted "hello" down the cellar earlier; she trance-walked,
+  not stealthed; Forge called out on the stairs → the brood heard them coming), and the
+  PCs already knew a beast lurked below. Also spared a 2-PC party two free
+  paralysis-claws in a surprise round. Unchecked both G1/G2 *Surprised* in the builder
+  (verified `.checked=false` via JS before Start).
+- **Started combat** — "Cellar — the brood" / display **"The Cellar"** (combat/encounter
+  id `8509d1f6-da9d-451c-bb2e-8571b9402e9e`), map *Ashfall Waystation — cellar*. Both PCs
+  auto-seated at the stairs landing **E1** (stacked, single-file descent); ghouls at the
+  back wall **C8** & **J8**. Round 1, 4 combatants, all full HP, no conditions.
+- **Initiative:** Ghoul **19** (J8) → Vale **15** → Forge **12** → Ghoul **9** (C8). The
+  brood won the jump — the lead ghoul acts before any PC.
+- **Narrated the descent** to `#the-story` (read-aloud, `narration_posts` 4:59:45 PM):
+  Vale trance-walked down first, Forge after; the cellar revealed (butcher-larder stink,
+  shapes hung on the walls, "not all of them still"); two ghouls peel from the dark; **no
+  surprise** called out in-fiction; ended on the lead ghoul **mid-lunge at Vale** (front,
+  hooded) — cut before the strike so the prose doesn't outrun the dice.
+- **Next:** resolve the lead **Ghoul's turn** (NPC, CURRENT). It can move J8→E2 (30 ft =
+  6 sq, ending adjacent to E1) and **Claws** the nearest PC = **Vale** (AC 10 — leather
+  still unequipped). On a hit: 2d4+2 slashing + **DC 10 Con save or paralyzed 1 min**.
+  Then turn passes to Vale (init 15). Drive the move + attack through the combat
+  workspace (engine rolls the NPC dice). Narrate the strike + update docs in lockstep
+  after.
+
+---
+
+## 2026-06-27 — first enemy turn: ghoul bites Vale (+ Turn-Builder bug)
+
+- **How enemy turns actually run (learned the hard way):** the combat workspace has **no**
+  attack-roller in its main panels, and there is **no DM Discord command** for enemy
+  attacks (`/attack` is player-only; `internal/discord/router.go`). The canonical path is
+  the **Turn Builder**: **right-click the enemy token → "Plan Turn"** (or, after this
+  session's UX fix, the new **"Run Enemy Turn"** button). It loads a pre-rolled plan
+  (GET `…/enemy-turn/{id}/plan`), the DM reviews/fudges, and **Confirm & Post** executes
+  (POST `…/enemy-turn`) — applies movement + damage and posts to #combat-log. The
+  right-click token menu (Damage / Heal / Conditions / Plan Turn / Remove) is the hidden
+  DM control surface; the "Action Log" panel is a read-only **filter**, not an entry form.
+- **The ghoul's turn:** drag-moved the lead ghoul J8→**E2** (adjacent to the party at E1),
+  then Turn Builder planned **Bite vs Vale** (+2; 2d6+2 piercing — *not* Claws, so no
+  paralysis rider). Engine rolled **To Hit 15** (vs AC 10 → hit), **Damage 5**. **Vale
+  24→19, bloodied.** Bite narrated to #the-story (read-aloud, `narration_posts`
+  5:30:18 PM); ended on "what she does next" (no player choice narrated).
+- **⚠ LIVE BUG (ISSUE):** Confirm & Post **crashed**: `null value in column "before_state"
+  of relation "action_log" violates not-null constraint`. Partial commit — **damage
+  applied** (Vale 19) but the **turn did not advance** and nothing was logged. Root cause:
+  `ExecuteEnemyTurn` (`internal/combat/turn_builder_handler.go`) omitted `BeforeState` +
+  `AfterState` (both NOT NULL) in its `CreateActionLog`, unlike every other action_log
+  writer. **Workaround applied live:** manual **End Turn** (advanced Ghoul→Vale, no
+  re-damage) + resolved the dangling `enemy_turn_ready` queue item with an outcome note.
+- **Fixes (this session, fix-now TDD — pending rebuild/redeploy):**
+  1. **`before_state` crash** — red/green test `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState`
+     + snapshot before/after state in `ExecuteEnemyTurn`. Package green.
+  2. **Turn-Builder discoverability** — added a gold **"Run Enemy Turn — <name>"** button
+     to the combat right panel, shown only when the current combatant is an NPC
+     (`CombatManager.svelte`); reuses the same open handler as the right-click. vitest green.
+  See [`issues.md`](issues.md). **Both redeploy via** `docker compose up -d --build app`.
+- **State now:** Round 1, **Vale's turn** (19/24, bloodied), lead ghoul at E2 (22/22), 2nd
+  ghoul still at C8 (22/22), Forge 32/32 at E1. **Do not run the 2nd ghoul via Turn
+  Builder until the fix is deployed** (workaround: right-click Damage + End Turn).
 </content>
