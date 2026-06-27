@@ -771,6 +771,57 @@ func TestBuilderService_UpdateCharacter_DMEditAppliesInstantly(t *testing.T) {
 	assert.False(t, notifier.called)
 }
 
+func TestBuilderService_UpdateCharacter_PlayerEditAllowsNonPointBuyScores(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+	}
+	svc := portal.NewBuilderService(store)
+
+	// A character originally rolled (or standard-array + racial) can have a
+	// final score of 18, which is illegal under point-buy. An edit must not
+	// re-impose point-buy: the generation method is not persisted, and a player
+	// edit is gated by DM re-approval, not by the creation-time budget.
+	sub := validSubmission()
+	sub.AbilityScores.STR = 18
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", sub)
+	require.NoError(t, err)
+	assert.True(t, store.updateCalled)
+	// Still routes through the normal player-edit gate (pending re-approval).
+	assert.True(t, store.setPendingCalled)
+}
+
+func TestBuilderService_UpdateCharacter_DMEditAllowsArbitraryScores(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+	}
+	// Wiring a provider makes the old DM point-buy back-fill fire; the fix must
+	// bypass it. A DM builds arbitrary stat blocks and is not bound by point-buy.
+	svc := portal.NewBuilderService(store, portal.WithAbilityMethodProvider(
+		portal.StaticAbilityMethodProvider{portal.AbilityMethodPointBuy}))
+
+	sub := validSubmission()
+	sub.AbilityScores.STR = 20
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "dm-1", sub)
+	require.NoError(t, err)
+	assert.True(t, store.updateCalled)
+	// DM edit still applies instantly (no pending reset).
+	assert.False(t, store.setPendingCalled)
+}
+
 func TestBuilderService_UpdateCharacter_RejectsStranger(t *testing.T) {
 	store := &mockBuilderStore{
 		editContext: &portal.EditContext{

@@ -71,11 +71,23 @@ type CharacterSubmission struct {
 // ModeDM is the dashboard flow: the DM creates the character directly with
 // no token, the player_character row is "approved" with no linked player
 // (a player claims it later via /register), and no DM-queue notification.
+//
+// ModePlayerEdit is a player editing an existing character. Structural and
+// spell-count rules still apply, but ability scores are range-checked only (not
+// re-validated against a generation method): the method is not persisted, and a
+// player edit is gated by DM re-approval rather than by the creation-time
+// point-buy budget. Used by UpdateCharacter, never by the creation core.
+//
+// ModeDMEdit is a DM editing an existing character. Like ModePlayerEdit it
+// range-checks ability scores only — a DM builds arbitrary stat blocks and is
+// never bound by point-buy or the campaign method gate. Used by UpdateCharacter.
 type CreateMode int
 
 const (
 	ModePlayer CreateMode = iota
 	ModeDM
+	ModePlayerEdit
+	ModeDMEdit
 )
 
 // ValidateSubmission returns a list of validation error messages using the
@@ -179,7 +191,10 @@ func validateClassEntries(classes []character.ClassEntry) []string {
 	return errs
 }
 
-// validateAbilityForMode applies the mode-specific ability-score rules.
+// validateAbilityForMode applies the mode-specific ability-score rules. Only
+// ModePlayer (creation) enforces the generation method; ModeDM, ModePlayerEdit,
+// and ModeDMEdit range-check scores (1-30) and validate a method only when one
+// is explicitly supplied.
 func validateAbilityForMode(s CharacterSubmission, mode CreateMode) []string {
 	if mode == ModePlayer {
 		if err := ValidateAbilityScoreGeneration(s); err != nil {
@@ -485,8 +500,12 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 	}
 
 	errs := ValidateSubmissionMode(sub, mode)
-	if err := svc.validateAllowedAbilityMethod(ctx, campaignID, sub.AbilityMethod); err != nil {
-		errs = append(errs, err.Error())
+	// An edit does not pick a generation method (it is not persisted), so the
+	// campaign's allowed-method gate does not apply — only creation chooses one.
+	if mode != ModePlayerEdit && mode != ModeDMEdit {
+		if err := svc.validateAllowedAbilityMethod(ctx, campaignID, sub.AbilityMethod); err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 	// Reject illegal client-submitted skill sets (e.g. a crafted POST claiming
 	// all 18 skills). Race grants come from the feature provider when wired;
@@ -681,11 +700,14 @@ func (svc *BuilderService) UpdateCharacter(ctx context.Context, characterID, req
 		return CreateCharacterResult{}, ErrCharacterInEncounter
 	}
 
-	// A DM may build arbitrary stat blocks (ModeDM rules); a player edit is
-	// held to the same generation rules as creation (ModePlayer).
-	mode := ModePlayer
+	// Edits range-check ability scores but do not re-impose the creation-time
+	// generation method (it is not persisted, so a rolled/standard-array build
+	// with a final 18+ would otherwise be rejected as point-buy). A player edit
+	// (ModePlayerEdit) is gated by DM re-approval; a DM edit (ModeDMEdit) is the
+	// DM's own arbitrary stat block and applies instantly.
+	mode := ModePlayerEdit
 	if isDM {
-		mode = ModeDM
+		mode = ModeDMEdit
 	}
 	charParams, errs := svc.prepareCharParams(ctx, ec.CampaignID, sub, mode)
 	if len(errs) > 0 {
