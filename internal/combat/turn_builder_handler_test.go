@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -226,6 +227,105 @@ func TestExecuteEnemyTurn_Success(t *testing.T) {
 	assert.True(t, hpUpdated, "HP should be updated")
 	assert.True(t, actionLogCreated, "Action log should be created")
 	assert.True(t, turnActionsUpdated, "Turn actions should be updated")
+}
+
+// --- Bug fix: enemy-turn action_log must populate before_state/after_state ---
+//
+// Regression (live play): ExecuteEnemyTurn created the action_log row without
+// before_state or after_state. Because action_log.{before_state,after_state}
+// are NOT NULL, Postgres rejected the INSERT ("null value in column
+// \"before_state\" of relation \"action_log\" violates not-null constraint"),
+// so the turn never advanced and combat got stuck on the enemy's turn even
+// though damage had already been applied. The mock store below mimics the
+// NOT NULL constraint so this unit test reproduces the live failure.
+func TestExecuteEnemyTurn_PopulatesBeforeAndAfterState(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	var loggedBefore, loggedAfter json.RawMessage
+	turnActionsUpdated := false
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == npcID {
+				return refdata.Combatant{
+					ID:          npcID,
+					EncounterID: encounterID,
+					DisplayName: "Goblin",
+					PositionCol: "C",
+					PositionRow: 3,
+					IsNpc:       true,
+					IsAlive:     true,
+					HpCurrent:   10,
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          targetID,
+				EncounterID: encounterID,
+				DisplayName: "Aragorn",
+				IsNpc:       false,
+				IsAlive:     true,
+				HpCurrent:   45,
+				Ac:          16,
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+		},
+		// Mimic the Postgres NOT NULL constraint on action_log.before_state /
+		// after_state so this unit test fails the same way live play did.
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			if len(arg.BeforeState) == 0 {
+				return refdata.ActionLog{}, fmt.Errorf(`null value in column "before_state" of relation "action_log" violates not-null constraint`)
+			}
+			if len(arg.AfterState) == 0 {
+				return refdata.ActionLog{}, fmt.Errorf(`null value in column "after_state" of relation "action_log" violates not-null constraint`)
+			}
+			loggedBefore = arg.BeforeState
+			loggedAfter = arg.AfterState
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			turnActionsUpdated = true
+			return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+		},
+	}
+
+	svc := NewService(store)
+	// Deterministic roller: d20=15 (hit), damage=4+3 (7 total)
+	roller := newDeterministicRoller(15, 4, 3)
+
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Scimitar",
+					ToHit:      4,
+					DamageDice: "1d6+2",
+					DamageType: "slashing",
+					ReachFt:    5,
+					TargetID:   targetID,
+					TargetName: "Aragorn",
+				},
+			},
+		},
+	}
+
+	_, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, roller)
+	require.NoError(t, err, "enemy turn must not fail on the action_log NOT NULL constraint")
+
+	require.NotEmpty(t, loggedBefore, "action_log before_state must be populated")
+	require.NotEmpty(t, loggedAfter, "action_log after_state must be populated")
+	// before_state must be valid JSON the undo path can parse.
+	assert.True(t, json.Valid(loggedBefore), "before_state must be valid JSON")
+	assert.True(t, turnActionsUpdated, "turn must advance after the enemy action is logged")
 }
 
 // --- TDD Cycle 13: indexToColLabel ---

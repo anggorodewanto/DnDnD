@@ -339,15 +339,28 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		damageApplied[hit.targetID] += int32(dmgRes.FinalDamage)
 	}
 
-	// Create action log
+	// Create action log. action_log.{before_state,after_state} are NOT NULL,
+	// so capture the actor's combatant state before/after the turn (matching the
+	// DM move/resolve action_log paths). Omitting these violated the constraint
+	// and left combat stuck on the enemy's turn after damage was applied.
 	combatLog := FormatCombatLog(plan)
 	plan.DisplayName = combatant.DisplayName
+	// The local `combatant` still holds the pre-turn position/state (the movement
+	// step writes to the DB but never reassigns it), so it is the before-state.
+	beforeState, _ := snapshotCombatantState(combatant)
+	afterCombatant := combatant
+	if updated, gerr := s.store.GetCombatant(ctx, combatant.ID); gerr == nil {
+		afterCombatant = updated
+	}
+	afterState, _ := snapshotCombatantState(afterCombatant)
 	if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
 		TurnID:      turn.ID,
 		EncounterID: encounterID,
 		ActionType:  "enemy_turn",
 		ActorID:     combatant.ID,
 		Description: nullString(combatLog),
+		BeforeState: beforeState,
+		AfterState:  afterState,
 	}); err != nil {
 		return nil, fmt.Errorf("creating action log: %w", err)
 	}
