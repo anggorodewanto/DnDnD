@@ -359,6 +359,49 @@ func TestDistanceHandler_TwoTargets(t *testing.T) {
 	}
 }
 
+func TestDistanceHandler_SingleTarget_EmptyTileCoordinate(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupDistanceHandler(sess)
+
+	// Aria (self) at A1 (col=0,row=0). D1 is an empty tile (col=3,row=0) => 15ft.
+	interaction := makeDistanceInteraction("D1")
+	handler.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "15ft") {
+		t.Errorf("expected 15ft to empty tile, got: %s", content)
+	}
+	if !strings.Contains(content, "D1") {
+		t.Errorf("expected coordinate label D1 in message, got: %s", content)
+	}
+}
+
+func TestDistanceHandler_TwoTargets_EmptyTileCoordinate(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupDistanceHandler(sess)
+
+	// Goblin G1 at F1 (col=5,row=0), empty tile K1 (col=10,row=0) => 25ft.
+	interaction := makeDistanceInteraction("G1", "K1")
+	handler.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "25ft") {
+		t.Errorf("expected 25ft between creature and empty tile, got: %s", content)
+	}
+	if !strings.Contains(content, "Goblin #1 (G1)") {
+		t.Errorf("expected creature label, got: %s", content)
+	}
+	if !strings.Contains(content, "K1") {
+		t.Errorf("expected coordinate label K1, got: %s", content)
+	}
+}
+
 func TestDistanceHandler_SingleTarget(t *testing.T) {
 	sess := &mockMoveSession{}
 	handler, _, _, _ := setupDistanceHandler(sess)

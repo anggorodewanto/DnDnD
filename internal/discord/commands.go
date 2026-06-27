@@ -641,13 +641,13 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "target",
-					Description: "First target coordinate or creature ID (e.g. G1)",
+					Description: "First target — creature ID or any map coordinate, even empty (e.g. G1 or F6)",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "target2",
-					Description: "Second target (defaults to your position)",
+					Description: "Second target — creature ID or coordinate (defaults to your position)",
 				},
 			},
 		},
