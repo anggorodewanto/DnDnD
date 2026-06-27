@@ -615,6 +615,12 @@ func attachInventoryAndCharacterHandlers(
 		handlers.give.SetCardUpdater(deps.cardUpdater)
 	}
 	handlers.character = discord.NewCharacterHandler(deps.session, deps.queries, deps.queries, deps.portalBaseURL)
+	// Overlay live combat HP on /character. Reuses the same resolver + combatant
+	// lookup /status uses; nil-safe so out-of-combat views fall back to the
+	// character row.
+	if deps.resolver != nil && combatantLookup != nil {
+		handlers.character.SetCombatProvider(deps.resolver, combatantLookup)
+	}
 
 	if deps.levelUpService != nil {
 		handlers.asi = discord.NewASIHandler(deps.session, newASIServiceAdapter(deps.levelUpService, deps.queries), deps.dmQueueFunc)

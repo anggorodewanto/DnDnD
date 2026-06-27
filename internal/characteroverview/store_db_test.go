@@ -106,6 +106,46 @@ func TestDBStore_ListApprovedPartyCharacters_MapsRows(t *testing.T) {
 	}
 }
 
+func TestDBStore_ListApprovedPartyCharacters_OverlaysLiveCombatHP(t *testing.T) {
+	charID := uuid.New()
+	fake := &fakeRefdata{
+		rows: []refdata.ListPlayerCharactersByStatusRow{
+			{CharacterID: charID, CharacterName: "Aria", HpMax: 24, HpCurrent: 24, TempHp: 0},
+		},
+		// Live combat snapshot: bloodied to 19/24 with 5 temp HP.
+		combatant: refdata.Combatant{ID: uuid.New(), HpMax: 24, HpCurrent: 19, TempHp: 5},
+	}
+	store := NewDBStore(fake)
+
+	got, err := store.ListApprovedPartyCharacters(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if got[0].HPCurrent != 19 || got[0].HPMax != 24 || got[0].TempHP != 5 {
+		t.Fatalf("expected live combat HP 19/24 (+5 temp), got %d/%d (+%d temp)",
+			got[0].HPCurrent, got[0].HPMax, got[0].TempHP)
+	}
+}
+
+func TestDBStore_ListApprovedPartyCharacters_NoCombatKeepsRowHP(t *testing.T) {
+	fake := &fakeRefdata{
+		rows: []refdata.ListPlayerCharactersByStatusRow{
+			{CharacterID: uuid.New(), CharacterName: "Bree", HpMax: 24, HpCurrent: 24, TempHp: 0},
+		},
+		// combatant left zero -> fake returns sql.ErrNoRows -> out of combat.
+	}
+	store := NewDBStore(fake)
+
+	got, err := store.ListApprovedPartyCharacters(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if got[0].HPCurrent != 24 || got[0].HPMax != 24 || got[0].TempHP != 0 {
+		t.Fatalf("expected character-row HP 24/24 (+0 temp), got %d/%d (+%d temp)",
+			got[0].HPCurrent, got[0].HPMax, got[0].TempHP)
+	}
+}
+
 func TestDBStore_ListApprovedPartyCharacters_NullDDBURL(t *testing.T) {
 	fake := &fakeRefdata{rows: []refdata.ListPlayerCharactersByStatusRow{
 		{CharacterName: "Bree", DdbUrl: sql.NullString{Valid: false}},

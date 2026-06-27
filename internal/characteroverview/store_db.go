@@ -47,9 +47,30 @@ func (s *DBStore) ListApprovedPartyCharacters(ctx context.Context, campaignID uu
 	}
 	out := make([]CharacterSheet, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, sheetFromRefdata(r))
+		sheet := sheetFromRefdata(r)
+		s.overlayLiveCombatHP(ctx, &sheet)
+		out = append(out, sheet)
 	}
 	return out, nil
+}
+
+// overlayLiveCombatHP replaces the static character-row HP with the live combat
+// snapshot when the character is in an active encounter. Combat carries HP in at
+// start and never writes it back, so the character row is stale mid-fight; the
+// active combatant is the source of truth. Best-effort and read-only: a missing
+// combatant (out of combat) or any lookup error leaves the character-row HP
+// untouched. HP/temp HP only — conditions/exhaustion overlay is out of scope.
+func (s *DBStore) overlayLiveCombatHP(ctx context.Context, sheet *CharacterSheet) {
+	if sheet.CharacterID == uuid.Nil {
+		return
+	}
+	cb, err := s.q.GetActiveCombatantByCharacterID(ctx, uuid.NullUUID{UUID: sheet.CharacterID, Valid: true})
+	if err != nil {
+		return
+	}
+	sheet.HPMax = cb.HpMax
+	sheet.HPCurrent = cb.HpCurrent
+	sheet.TempHP = cb.TempHp
 }
 
 // GetCharacterStatusContext loads the campaign, character_data and active-combat

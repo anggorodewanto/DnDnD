@@ -938,3 +938,70 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_InCombatReplacesConditi
 	// Exhaustion is overlaid from the combatant during combat.
 	assert.Equal(t, 3, data.ExhaustionLevel)
 }
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_InCombatOverlaysHP(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Bloodied",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			// Static sheet shows full HP; combat snapshot is the live truth.
+			HpCurrent: 24,
+			HpMax:     24,
+			TempHp:    0,
+		},
+		combatant: &refdata.Combatant{
+			HpCurrent: 19,
+			HpMax:     24,
+			TempHp:    2,
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	// Combatant is the live source of truth: HP is overlaid from the combatant.
+	assert.Equal(t, 19, data.HpCurrent)
+	assert.Equal(t, 24, data.HpMax)
+	assert.Equal(t, 2, data.TempHP)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_OutOfCombatKeepsSheetHP(t *testing.T) {
+	charID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Rested",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpCurrent:     24,
+			HpMax:         24,
+			TempHp:        0,
+		},
+		// no combatant set: character is out of combat
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	// Out of combat: HP stays from the character row.
+	assert.Equal(t, 24, data.HpCurrent)
+	assert.Equal(t, 24, data.HpMax)
+	assert.Equal(t, 0, data.TempHP)
+}

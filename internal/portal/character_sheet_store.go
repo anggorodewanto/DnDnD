@@ -440,7 +440,7 @@ func parseHitDiceRemaining(raw json.RawMessage) map[string]int {
 	return v
 }
 
-// hydrateFromCombatant populates live combat state (conditions, exhaustion,
+// hydrateFromCombatant populates live combat state (HP, conditions, exhaustion,
 // concentration) from the character's active combatant row. No-op when the
 // character is not in an active encounter.
 func (a *CharacterSheetStoreAdapter) hydrateFromCombatant(ctx context.Context, charID uuid.UUID, data *CharacterSheetData) {
@@ -448,6 +448,13 @@ func (a *CharacterSheetStoreAdapter) hydrateFromCombatant(ctx context.Context, c
 	if err != nil {
 		return // not in combat or query error — leave defaults
 	}
+
+	// HP is the live combat snapshot: combat seeds the combatant from the
+	// character at start and never writes back, so the character row is stale
+	// mid-fight. Overlay it from the combatant.
+	data.HpCurrent = int(cb.HpCurrent)
+	data.HpMax = int(cb.HpMax)
+	data.TempHP = int(cb.TempHp)
 
 	data.ExhaustionLevel = int(cb.ExhaustionLevel)
 	if cb.ConcentrationSpellName.Valid {

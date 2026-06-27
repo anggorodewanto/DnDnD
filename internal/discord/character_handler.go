@@ -27,6 +27,13 @@ type CharacterHandler struct {
 	campaignProv  CampaignProvider
 	lookup        CharacterLookup
 	portalBaseURL string
+
+	// Optional combat-overlay collaborators. When wired, /character shows the
+	// live combatant HP for a character in an active encounter instead of the
+	// stale base-sheet HP (combat carries HP in at start and never writes back).
+	// Mirrors the /status overlay; nil out of test/partial deploys.
+	encounterProvider StatusEncounterProvider
+	combatantLookup   StatusCombatantLookup
 }
 
 // NewCharacterHandler creates a new CharacterHandler.
@@ -37,6 +44,14 @@ func NewCharacterHandler(session Session, campaignProv CampaignProvider, lookup 
 		lookup:        lookup,
 		portalBaseURL: portalBaseURL,
 	}
+}
+
+// SetCombatProvider wires the active-encounter resolver and combatant lookup so
+// /character overlays live combat HP. Mirrors how /status is wired; optional so
+// handler construction stays safe when these dependencies are absent.
+func (h *CharacterHandler) SetCombatProvider(enc StatusEncounterProvider, comb StatusCombatantLookup) {
+	h.encounterProvider = enc
+	h.combatantLookup = comb
 }
 
 // Handle processes a /character interaction.
@@ -88,6 +103,11 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Could not load your character. Please try again later.")
 		return
 	}
+
+	// Combat carries HP in from the character row at start and never writes
+	// back, so the row is stale mid-fight. Overlay the live combatant HP when
+	// this character is in an active encounter (same overlay /status applies).
+	ch = h.overlayCombatHP(context.Background(), interaction.GuildID, lookupID, ch)
 
 	embed := h.buildCharacterEmbed(ch)
 
@@ -160,6 +180,37 @@ func buildNotApprovedMessage(pc refdata.PlayerCharacter) string {
 		return base
 	}
 	return base + fmt.Sprintf("\n\n**DM feedback:** %s\n\nRun `/create-character` to get a fresh link and resubmit.", pc.DmFeedback.String)
+}
+
+// overlayCombatHP returns ch with its HP fields replaced by the live combatant
+// snapshot when the character is in an active encounter. Out of combat (no
+// providers wired, no active encounter, lookup error, or this character has no
+// combatant) ch is returned unchanged. Only HP/HpMax/TempHp are overlaid.
+func (h *CharacterHandler) overlayCombatHP(ctx context.Context, guildID, userID string, ch refdata.Character) refdata.Character {
+	if h.encounterProvider == nil || h.combatantLookup == nil {
+		return ch
+	}
+
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, guildID, userID)
+	if err != nil {
+		return ch
+	}
+
+	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return ch
+	}
+
+	for _, c := range combatants {
+		if c.CharacterID.Valid && c.CharacterID.UUID == ch.ID {
+			ch.HpCurrent = c.HpCurrent
+			ch.HpMax = c.HpMax
+			ch.TempHp = c.TempHp
+			return ch
+		}
+	}
+
+	return ch
 }
 
 func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.MessageEmbed {

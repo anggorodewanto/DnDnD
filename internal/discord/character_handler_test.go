@@ -124,6 +124,120 @@ func TestCharacterHandler_Success(t *testing.T) {
 	}
 }
 
+func TestCharacterHandler_InCombat_OverlaysLiveCombatantHP(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+	encounterID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 5}})
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Thorn",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			// Stale base-sheet HP: combat carried this in at start and never
+			// wrote back, so the character row reads full even mid-fight.
+			HpMax:     24,
+			HpCurrent: 24,
+			TempHp:    0,
+			Ac:        18,
+			SpeedFt:   30,
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.SetCombatProvider(
+		&mockStatusEncounterProvider{encounterID: encounterID},
+		&mockStatusCombatantLookup{combatants: []refdata.Combatant{
+			{
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				HpCurrent:   19,
+				HpMax:       24,
+				TempHp:      4,
+			},
+		}},
+	)
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+	desc := rc.Embeds[0].Description
+	if !strings.Contains(desc, "HP: 19/24") {
+		t.Errorf("expected live combatant HP 19/24, got: %s", desc)
+	}
+	if !strings.Contains(desc, "(+4 temp)") {
+		t.Errorf("expected live temp HP (+4 temp), got: %s", desc)
+	}
+}
+
+func TestCharacterHandler_NotInCombat_KeepsCharacterRowHP(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+	encounterID := uuid.New()
+	otherCharID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 5}})
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Thorn",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpMax:         42,
+			HpCurrent:     35,
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	// Providers are wired, but this character is not among the encounter's
+	// combatants, so the overlay must leave the base-sheet HP untouched.
+	handler.SetCombatProvider(
+		&mockStatusEncounterProvider{encounterID: encounterID},
+		&mockStatusCombatantLookup{combatants: []refdata.Combatant{
+			{CharacterID: uuid.NullUUID{UUID: otherCharID, Valid: true}, HpCurrent: 1, HpMax: 99},
+		}},
+	)
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+	desc := rc.Embeds[0].Description
+	if !strings.Contains(desc, "HP: 35/42") {
+		t.Errorf("expected unchanged character-row HP 35/42, got: %s", desc)
+	}
+}
+
 func TestCharacterHandler_WithSpells(t *testing.T) {
 	mock := newTestMock()
 	rc := captureFullResponse(mock)
