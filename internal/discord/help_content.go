@@ -275,6 +275,10 @@ Teleport spells:
   For these the target option also accepts the coordinate, so /cast misty-step target:F6 works.
   The move must be in range and to an unoccupied square you can see.
 
+  Thunder Step and Dimension Door can also bring one willing creature near you:
+    /cast spell:dimension-door destination:F6 target:OS companion-destination:F7
+  target names the creature to bring, companion-destination is where it lands.
+
 Metamagic options (Sorcerer only): subtle:true, twin:true, careful:true, heightened:true, distant:true, quickened:true, empowered:true
 Use /help metamagic for full metamagic details.`
 

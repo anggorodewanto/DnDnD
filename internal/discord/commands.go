@@ -150,6 +150,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Description: "Teleport landing square for self-teleport spells, e.g. Misty Step destination:F6",
 				},
 				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "companion-destination",
+					Description: "Landing square for the creature you bring (self+creature, e.g. Dimension Door target:OS)",
+				},
+				{
 					Type:        discordgo.ApplicationCommandOptionInteger,
 					Name:        "level",
 					Description: "Spell slot level to cast at",

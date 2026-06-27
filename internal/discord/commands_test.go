@@ -65,6 +65,9 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		// Stride) need a landing square; the handler forwards it into
 		// CastCommand.TeleportDestCol/Row.
 		{"cast", "destination", discordgo.ApplicationCommandOptionString, false},
+		// E-mistystep-discord: self+creature teleports (Thunder Step, Dimension
+		// Door) bring a willing creature; companion-destination is where it lands.
+		{"cast", "companion-destination", discordgo.ApplicationCommandOptionString, false},
 		{"bonus", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "args", discordgo.ApplicationCommandOptionString, false},

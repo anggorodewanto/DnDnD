@@ -444,10 +444,11 @@ func (h *CastHandler) dispatchSingleTarget(
 		return
 	}
 
-	// E-mistystep-discord: detect a pure self-teleport (Misty Step, Far Step,
-	// Tree Stride). For these the player picks a destination square, not a
-	// creature, so the target/destination option is a coordinate — skip the
-	// creature resolution below and forward the landing square instead.
+	// E-mistystep-discord: detect a caster-repositioning teleport (Misty Step,
+	// Far Step, Tree Stride, Thunder Step, Dimension Door). For these the
+	// target/destination options carry coordinates (and, for self+creature, a
+	// companion creature) rather than an attack target — skip the attack-target
+	// resolution below and forward the landing squares instead.
 	var teleportInfo combat.TeleportInfo
 	hasTeleport := spell.Teleport.Valid && len(spell.Teleport.RawMessage) > 0
 	if hasTeleport {
@@ -455,10 +456,10 @@ func (h *CastHandler) dispatchSingleTarget(
 			teleportInfo = info
 		}
 	}
-	isSelfTeleport := combat.IsSelfTeleport(teleportInfo.Target)
+	isCasterTeleport := hasTeleport && combat.IsCasterTeleport(teleportInfo.Target)
 
 	var targetID uuid.UUID
-	if targetStr != "" && !isSelfTeleport {
+	if targetStr != "" && !isCasterTeleport {
 		target, err := combat.ResolveTarget(targetStr, combatants)
 		if err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
@@ -499,35 +500,21 @@ func (h *CastHandler) dispatchSingleTarget(
 		TwinTargetID:         twinTargetID,
 	}
 
-	if hasTeleport {
-		// E-mistystep-discord: a self-teleport needs the caster's landing
-		// square. Read it from `destination`; for pure self-teleports fall back
-		// to `target` so `/cast misty-step target:F6` works too.
-		if isSelfTeleport {
-			destStr := strings.TrimSpace(optionString(interaction, "destination"))
-			if destStr == "" {
-				destStr = targetStr
-			}
-			if destStr == "" {
-				respondEphemeral(h.session, interaction, fmt.Sprintf("%s teleports you to a square — add a destination, e.g. `/cast spell:%s destination:F6`.", spell.Name, spell.ID))
-				return
-			}
-			destCol, destRow, err := parseGridDestination(destStr)
-			if err != nil {
-				respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid destination %q: %v", destStr, err))
-				return
-			}
-			cmd.TeleportDestCol = destCol
-			cmd.TeleportDestRow = destRow
+	// E-mistystep-discord: wire the caster's landing square (and, for
+	// self+creature spells, the companion) onto the command. Bails out with an
+	// ephemeral error when the player omitted or mistyped a coordinate.
+	if isCasterTeleport {
+		if !h.applyTeleportDestination(interaction, combatants, spell, teleportInfo, targetStr, &cmd) {
+			return
 		}
+	}
 
-		// SR-044: populate Walls and FogOfWar for teleport spells with
-		// requires_sight=true so the combat validator can enforce
-		// line-of-sight in production.
-		if teleportInfo.RequiresSight {
-			cmd.Walls = h.loadWalls(ctx, encounter)
-			cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster)
-		}
+	// SR-044: populate Walls and FogOfWar for teleport spells with
+	// requires_sight=true so the combat validator can enforce line-of-sight in
+	// production.
+	if hasTeleport && teleportInfo.RequiresSight {
+		cmd.Walls = h.loadWalls(ctx, encounter)
+		cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster)
 	}
 
 	// SR-025: empowered metamagic posts an interactive die-picker prompt
@@ -1121,6 +1108,65 @@ func parseGridDestination(s string) (col string, row int32, err error) {
 		return "", 0, err
 	}
 	return indexToCol(c), int32(r + 1), nil
+}
+
+// applyTeleportDestination populates the teleport landing fields on cmd for a
+// caster-repositioning teleport. The caster's landing square comes from the
+// `destination` option (for pure self-teleports it also falls back to `target`,
+// so `/cast misty-step target:F6` works). For self+creature spells (Thunder
+// Step, Dimension Door) the `target` option names the willing creature to bring
+// and `companion-destination` is where it lands. Returns false after responding
+// with an ephemeral error when a coordinate is missing or unparseable, in which
+// case the caller must abort the cast.
+func (h *CastHandler) applyTeleportDestination(
+	interaction *discordgo.Interaction,
+	combatants []refdata.Combatant,
+	spell refdata.Spell,
+	info combat.TeleportInfo,
+	targetStr string,
+	cmd *combat.CastCommand,
+) bool {
+	destStr := strings.TrimSpace(optionString(interaction, "destination"))
+	if destStr == "" && combat.IsSelfTeleport(info.Target) {
+		destStr = targetStr
+	}
+	if destStr == "" {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("%s teleports you to a square — add a destination, e.g. `/cast spell:%s destination:F6`.", spell.Name, spell.ID))
+		return false
+	}
+	destCol, destRow, err := parseGridDestination(destStr)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid destination %q: %v", destStr, err))
+		return false
+	}
+	cmd.TeleportDestCol = destCol
+	cmd.TeleportDestRow = destRow
+
+	// Companion only applies to self+creature spells, and only when the player
+	// named a creature to bring along.
+	if info.Target != combat.TeleportTargetSelfCreature || targetStr == "" {
+		return true
+	}
+
+	companion, err := combat.ResolveTarget(targetStr, combatants)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Companion %q not found.", targetStr))
+		return false
+	}
+	compStr := strings.TrimSpace(optionString(interaction, "companion-destination"))
+	if compStr == "" {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Bringing %s along needs a landing square — add `companion-destination:F7`.", companion.DisplayName))
+		return false
+	}
+	compCol, compRow, err := parseGridDestination(compStr)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid companion-destination %q: %v", compStr, err))
+		return false
+	}
+	cmd.CompanionID = companion.ID
+	cmd.CompanionDestCol = compCol
+	cmd.CompanionDestRow = compRow
+	return true
 }
 
 // dispatchInventorySpell handles the /cast identify and /cast detect-magic

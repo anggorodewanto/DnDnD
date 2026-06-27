@@ -453,6 +453,139 @@ func TestCastHandler_SelfTeleport_InvalidDestination(t *testing.T) {
 	}
 }
 
+// dimensionDoorSpell returns a Dimension Door fixture: a self+creature
+// teleport (the caster lands on a chosen square and may bring one willing
+// creature to another square).
+func dimensionDoorSpell() refdata.Spell {
+	return refdata.Spell{
+		ID: "dimension-door", Name: "Dimension Door", Level: 4,
+		Teleport: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"target":"self+creature","range_ft":500,"requires_sight":false,"companion_range_ft":5}`),
+			Valid:      true,
+		},
+	}
+}
+
+// E-mistystep-discord: a self+creature teleport forwards the caster's landing
+// square plus the companion's id and landing square — and never resolves an
+// attack target.
+func TestCastHandler_SelfCreatureTeleport_ForwardsCompanion(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+	provider.spells["dimension-door"] = dimensionDoorSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":                 "dimension-door",
+		"destination":           "F6",
+		"target":                "OS",
+		"companion-destination": "F7",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.TeleportDestCol != "F" || got.TeleportDestRow != 6 {
+		t.Errorf("caster dest = %s%d, want F6", got.TeleportDestCol, got.TeleportDestRow)
+	}
+	if got.CompanionID != provider.target.ID {
+		t.Errorf("CompanionID = %v, want %v", got.CompanionID, provider.target.ID)
+	}
+	if got.CompanionDestCol != "F" || got.CompanionDestRow != 7 {
+		t.Errorf("companion dest = %s%d, want F7", got.CompanionDestCol, got.CompanionDestRow)
+	}
+	if got.TargetID != uuid.Nil {
+		t.Errorf("teleport must not resolve an attack target, got %v", got.TargetID)
+	}
+}
+
+// E-mistystep-discord: a self+creature teleport with no companion just moves
+// the caster — companion fields stay empty.
+func TestCastHandler_SelfCreatureTeleport_NoCompanion(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+	provider.spells["dimension-door"] = dimensionDoorSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "dimension-door",
+		"destination": "F6",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.TeleportDestCol != "F" || got.TeleportDestRow != 6 {
+		t.Errorf("caster dest = %s%d, want F6", got.TeleportDestCol, got.TeleportDestRow)
+	}
+	if got.CompanionID != uuid.Nil {
+		t.Errorf("expected no companion, got CompanionID %v", got.CompanionID)
+	}
+	if got.CompanionDestCol != "" {
+		t.Errorf("expected empty companion dest, got %q", got.CompanionDestCol)
+	}
+}
+
+// E-mistystep-discord: naming a companion without a companion-destination is
+// rejected before any combat call.
+func TestCastHandler_SelfCreatureTeleport_CompanionNeedsDestination(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+	provider.spells["dimension-door"] = dimensionDoorSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "dimension-door",
+		"destination": "F6",
+		"target":      "OS",
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Fatalf("expected no cast call without a companion landing square, got %d", len(svc.castCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "companion-destination") {
+		t.Errorf("expected a companion-destination prompt, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// E-mistystep-discord: an unknown companion creature is rejected before any
+// combat call.
+func TestCastHandler_SelfCreatureTeleport_UnknownCompanion(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+	provider.spells["dimension-door"] = dimensionDoorSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":                 "dimension-door",
+		"destination":           "F6",
+		"target":                "ZZ",
+		"companion-destination": "F7",
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Fatalf("expected no cast call for an unknown companion, got %d", len(svc.castCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "not found") {
+		t.Errorf("expected a companion-not-found message, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// E-mistystep-discord: an unparseable companion-destination is rejected before
+// any combat call.
+func TestCastHandler_SelfCreatureTeleport_InvalidCompanionDestination(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+	provider.spells["dimension-door"] = dimensionDoorSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":                 "dimension-door",
+		"destination":           "F6",
+		"target":                "OS",
+		"companion-destination": "zzz",
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Fatalf("expected no cast call for an invalid companion-destination, got %d", len(svc.castCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "companion-destination") {
+		t.Errorf("expected an invalid-companion-destination message, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
 func TestCastHandler_NoSpell(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 

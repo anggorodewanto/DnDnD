@@ -59,6 +59,14 @@ func IsSelfTeleport(target string) bool {
 	return target == TeleportTargetSelf
 }
 
+// IsCasterTeleport reports whether the spell repositions the caster to a square
+// the caster chooses: pure self-teleports plus self+creature teleports (Thunder
+// Step, Dimension Door). For these the player supplies the caster's landing
+// coordinate, so the cast carries a destination rather than an attack target.
+func IsCasterTeleport(target string) bool {
+	return target == TeleportTargetSelf || target == TeleportTargetSelfCreature
+}
+
 // TeleportResult holds the outcome of a teleportation spell.
 type TeleportResult struct {
 	CasterMoved       bool
