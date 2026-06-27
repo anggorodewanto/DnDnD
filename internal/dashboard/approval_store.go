@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 )
@@ -17,7 +18,9 @@ type ApprovalQueries interface {
 	ListPlayerCharactersAwaitingApproval(ctx context.Context, campaignID uuid.UUID) ([]refdata.ListPlayerCharactersAwaitingApprovalRow, error)
 	GetPlayerCharacterWithCharacter(ctx context.Context, id uuid.UUID) (refdata.GetPlayerCharacterWithCharacterRow, error)
 	GetPlayerCharacter(ctx context.Context, id uuid.UUID) (refdata.PlayerCharacter, error)
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	UpdatePlayerCharacterStatus(ctx context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error)
+	ClearPlayerCharacterReviewBefore(ctx context.Context, id uuid.UUID) error
 }
 
 // validApprovalTransitions defines which status transitions are allowed per
@@ -81,11 +84,25 @@ func (s *DBApprovalStore) ListPendingApprovals(ctx context.Context, campaignID u
 	return entries, nil
 }
 
-// GetApprovalDetail returns the full character sheet for a pending player character.
+// GetApprovalDetail returns the full character sheet for a pending player
+// character, including the DM-review projection (the current "after" state) and
+// the pre-edit baseline (review_before) when present, so the approval page can
+// render a before -> after diff.
 func (s *DBApprovalStore) GetApprovalDetail(ctx context.Context, id uuid.UUID) (*ApprovalDetail, error) {
 	row, err := s.queries.GetPlayerCharacterWithCharacter(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting approval detail: %w", err)
+	}
+
+	ch, err := s.queries.GetCharacter(ctx, row.CharacterID)
+	if err != nil {
+		return nil, fmt.Errorf("getting character for review: %w", err)
+	}
+	review := portal.ProjectReview(ch)
+
+	var reviewBefore json.RawMessage
+	if row.ReviewBefore.Valid {
+		reviewBefore = row.ReviewBefore.RawMessage
 	}
 
 	return &ApprovalDetail{
@@ -110,6 +127,8 @@ func (s *DBApprovalStore) GetApprovalDetail(ctx context.Context, id uuid.UUID) (
 		Languages:     strings.Join(row.Languages, ", "),
 		DdbURL:        row.DdbUrl.String,
 		Advisories:    deriveDDBAdvisories(row.CharacterData.RawMessage, row.CharacterData.Valid),
+		Review:        &review,
+		ReviewBefore:  reviewBefore,
 	}, nil
 }
 
@@ -146,9 +165,17 @@ func deriveDDBAdvisories(raw []byte, valid bool) []string {
 	return advisories
 }
 
-// ApproveCharacter transitions a player character from pending to approved.
+// ApproveCharacter transitions a player character from pending to approved and
+// clears the review baseline: the newly approved state becomes the implicit
+// baseline, so the next edit re-snapshots from the then-current record.
 func (s *DBApprovalStore) ApproveCharacter(ctx context.Context, id uuid.UUID) error {
-	return s.transitionStatus(ctx, id, "approved", "")
+	if err := s.transitionStatus(ctx, id, "approved", ""); err != nil {
+		return err
+	}
+	if err := s.queries.ClearPlayerCharacterReviewBefore(ctx, id); err != nil {
+		return fmt.Errorf("clearing review baseline: %w", err)
+	}
+	return nil
 }
 
 // RequestChanges transitions a player character from pending to changes_requested.

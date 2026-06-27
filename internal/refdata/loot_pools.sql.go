@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const claimLootPoolItem = `-- name: ClaimLootPoolItem :one
@@ -271,7 +272,7 @@ func (q *Queries) ListLootPoolItems(ctx context.Context, lootPoolID uuid.UUID) (
 }
 
 const listPlayerCharactersByCampaignApproved = `-- name: ListPlayerCharactersByCampaignApproved :many
-SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status, pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at, c.name AS character_name, c.gold
+SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status, pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at, pc.review_before, c.name AS character_name, c.gold
 FROM player_characters pc
 JOIN characters c ON c.id = pc.character_id
 WHERE pc.campaign_id = $1 AND pc.status = 'approved'
@@ -279,17 +280,18 @@ ORDER BY c.name
 `
 
 type ListPlayerCharactersByCampaignApprovedRow struct {
-	ID            uuid.UUID      `json:"id"`
-	CampaignID    uuid.UUID      `json:"campaign_id"`
-	CharacterID   uuid.UUID      `json:"character_id"`
-	DiscordUserID string         `json:"discord_user_id"`
-	Status        string         `json:"status"`
-	DmFeedback    sql.NullString `json:"dm_feedback"`
-	CreatedVia    string         `json:"created_via"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	CharacterName string         `json:"character_name"`
-	Gold          int32          `json:"gold"`
+	ID            uuid.UUID             `json:"id"`
+	CampaignID    uuid.UUID             `json:"campaign_id"`
+	CharacterID   uuid.UUID             `json:"character_id"`
+	DiscordUserID string                `json:"discord_user_id"`
+	Status        string                `json:"status"`
+	DmFeedback    sql.NullString        `json:"dm_feedback"`
+	CreatedVia    string                `json:"created_via"`
+	CreatedAt     time.Time             `json:"created_at"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	ReviewBefore  pqtype.NullRawMessage `json:"review_before"`
+	CharacterName string                `json:"character_name"`
+	Gold          int32                 `json:"gold"`
 }
 
 func (q *Queries) ListPlayerCharactersByCampaignApproved(ctx context.Context, campaignID uuid.UUID) ([]ListPlayerCharactersByCampaignApprovedRow, error) {
@@ -311,6 +313,7 @@ func (q *Queries) ListPlayerCharactersByCampaignApproved(ctx context.Context, ca
 			&i.CreatedVia,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReviewBefore,
 			&i.CharacterName,
 			&i.Gold,
 		); err != nil {

@@ -21,11 +21,17 @@ type fakeQueries struct {
 	pendingErr   error
 	detailRow    refdata.GetPlayerCharacterWithCharacterRow
 	detailErr    error
+	getChar      refdata.Character
+	getCharErr   error
 	getPC        refdata.PlayerCharacter
 	getPCErr     error
 	updatePC     refdata.PlayerCharacter
 	updateErr    error
 	updateParams refdata.UpdatePlayerCharacterStatusParams
+	// review-baseline clear capture (approve path).
+	clearReviewCalled bool
+	clearReviewID     uuid.UUID
+	clearReviewErr    error
 }
 
 func (f *fakeQueries) ListPlayerCharactersAwaitingApproval(_ context.Context, _ uuid.UUID) ([]refdata.ListPlayerCharactersAwaitingApprovalRow, error) {
@@ -36,13 +42,111 @@ func (f *fakeQueries) GetPlayerCharacterWithCharacter(_ context.Context, _ uuid.
 	return f.detailRow, f.detailErr
 }
 
+func (f *fakeQueries) GetCharacter(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+	return f.getChar, f.getCharErr
+}
+
 func (f *fakeQueries) GetPlayerCharacter(_ context.Context, _ uuid.UUID) (refdata.PlayerCharacter, error) {
 	return f.getPC, f.getPCErr
+}
+
+func (f *fakeQueries) ClearPlayerCharacterReviewBefore(_ context.Context, id uuid.UUID) error {
+	f.clearReviewCalled = true
+	f.clearReviewID = id
+	return f.clearReviewErr
 }
 
 func (f *fakeQueries) UpdatePlayerCharacterStatus(_ context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error) {
 	f.updateParams = arg
 	return f.updatePC, f.updateErr
+}
+
+func TestDBApprovalStore_GetApprovalDetail_IncludesReviewAndBaseline(t *testing.T) {
+	id := uuid.New()
+	charID := uuid.New()
+	campaignID := uuid.New()
+	baseline := json.RawMessage(`{"name":"Thorin","ac":16}`)
+
+	fq := &fakeQueries{
+		detailRow: refdata.GetPlayerCharacterWithCharacterRow{
+			ID:            id,
+			CampaignID:    campaignID,
+			CharacterID:   charID,
+			CharacterName: "Thorin",
+			Status:        "pending",
+			ReviewBefore:  pqtype.NullRawMessage{RawMessage: baseline, Valid: true},
+		},
+		getChar: refdata.Character{
+			Name:          "Thorin",
+			Race:          "dwarf",
+			AbilityScores: json.RawMessage(`{"str":16,"dex":12,"con":15,"int":10,"wis":12,"cha":8}`),
+			Ac:            18,
+		},
+	}
+
+	store := NewDBApprovalStore(fq)
+	detail, err := store.GetApprovalDetail(context.Background(), id)
+	require.NoError(t, err)
+	// "after" projection reflects the current character state.
+	require.NotNil(t, detail.Review)
+	assert.Equal(t, "Thorin", detail.Review.Name)
+	assert.Equal(t, int32(18), detail.Review.AC)
+	// "before" baseline is passed through verbatim for the frontend diff.
+	assert.JSONEq(t, string(baseline), string(detail.ReviewBefore))
+}
+
+func TestDBApprovalStore_GetApprovalDetail_NoBaselineForNewSubmission(t *testing.T) {
+	id := uuid.New()
+	fq := &fakeQueries{
+		detailRow: refdata.GetPlayerCharacterWithCharacterRow{
+			ID:            id,
+			CharacterID:   uuid.New(),
+			CharacterName: "Newbie",
+			Status:        "pending",
+			ReviewBefore:  pqtype.NullRawMessage{Valid: false},
+		},
+		getChar: refdata.Character{Name: "Newbie", AbilityScores: json.RawMessage(`{}`)},
+	}
+
+	store := NewDBApprovalStore(fq)
+	detail, err := store.GetApprovalDetail(context.Background(), id)
+	require.NoError(t, err)
+	require.NotNil(t, detail.Review)
+	assert.Nil(t, detail.ReviewBefore)
+}
+
+func TestDBApprovalStore_GetApprovalDetail_CharacterLookupError(t *testing.T) {
+	fq := &fakeQueries{
+		detailRow:  refdata.GetPlayerCharacterWithCharacterRow{CharacterID: uuid.New()},
+		getCharErr: fmt.Errorf("boom"),
+	}
+	store := NewDBApprovalStore(fq)
+	_, err := store.GetApprovalDetail(context.Background(), uuid.New())
+	assert.Error(t, err)
+}
+
+func TestDBApprovalStore_ApproveCharacter_ClearsReviewBaseline(t *testing.T) {
+	id := uuid.New()
+	fq := &fakeQueries{getPC: refdata.PlayerCharacter{ID: id, Status: "pending"}}
+	store := NewDBApprovalStore(fq)
+
+	err := store.ApproveCharacter(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, "approved", fq.updateParams.Status)
+	// Approve resets the baseline so the next edit re-snapshots from the new state.
+	assert.True(t, fq.clearReviewCalled)
+	assert.Equal(t, id, fq.clearReviewID)
+}
+
+func TestDBApprovalStore_RejectCharacter_KeepsReviewBaseline(t *testing.T) {
+	id := uuid.New()
+	fq := &fakeQueries{getPC: refdata.PlayerCharacter{ID: id, Status: "pending"}}
+	store := NewDBApprovalStore(fq)
+
+	err := store.RejectCharacter(context.Background(), id, "no")
+	require.NoError(t, err)
+	// Reject/request-changes must NOT clear the baseline so the diff survives resubmits.
+	assert.False(t, fq.clearReviewCalled)
 }
 
 func TestDBApprovalStore_ListPendingApprovals(t *testing.T) {

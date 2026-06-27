@@ -574,7 +574,15 @@ type mockBuilderStore struct {
 	setPendingErr      error
 	setPendingCalled   bool
 	lastSetPendingPCID string
-	hasActiveEncounter bool
+	// review-baseline capture (DM review/diff snapshot).
+	reviewBaselineBlob    json.RawMessage
+	loadBaselineErr       error
+	loadBaselineCalled    bool
+	setReviewBeforeErr    error
+	setReviewBeforeCalled bool
+	lastReviewBefore      json.RawMessage
+	lastReviewBeforePCID  string
+	hasActiveEncounter    bool
 	hasActiveEncErr    error
 	editSubmission     portal.CharacterSubmission
 	editSubmissionErr  error
@@ -668,6 +676,21 @@ func (m *mockBuilderStore) SetPlayerCharacterPending(_ context.Context, pcID str
 	m.setPendingCalled = true
 	m.lastSetPendingPCID = pcID
 	return m.setPendingErr
+}
+
+func (m *mockBuilderStore) LoadReviewBaseline(_ context.Context, _ string) (json.RawMessage, error) {
+	m.loadBaselineCalled = true
+	if m.loadBaselineErr != nil {
+		return nil, m.loadBaselineErr
+	}
+	return m.reviewBaselineBlob, nil
+}
+
+func (m *mockBuilderStore) SetReviewBefore(_ context.Context, pcID string, before json.RawMessage) error {
+	m.setReviewBeforeCalled = true
+	m.lastReviewBeforePCID = pcID
+	m.lastReviewBefore = before
+	return m.setReviewBeforeErr
 }
 
 func (m *mockBuilderStore) HasActiveEncounter(_ context.Context, _ string) (bool, error) {
@@ -820,6 +843,71 @@ func TestBuilderService_UpdateCharacter_DMEditAllowsArbitraryScores(t *testing.T
 	assert.True(t, store.updateCalled)
 	// DM edit still applies instantly (no pending reset).
 	assert.False(t, store.setPendingCalled)
+}
+
+func TestBuilderService_UpdateCharacter_PlayerEditApprovedCapturesReviewBaseline(t *testing.T) {
+	baseline := json.RawMessage(`{"name":"Thorin","ac":18}`)
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+		reviewBaselineBlob: baseline,
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", validSubmission())
+	require.NoError(t, err)
+	// approved -> pending: snapshot the pre-edit baseline for the DM diff.
+	assert.True(t, store.loadBaselineCalled)
+	assert.True(t, store.setReviewBeforeCalled)
+	assert.Equal(t, "pc-1", store.lastReviewBeforePCID)
+	assert.Equal(t, baseline, store.lastReviewBefore)
+	assert.True(t, store.setPendingCalled)
+}
+
+func TestBuilderService_UpdateCharacter_PlayerReEditPendingSkipsBaseline(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "changes_requested",
+		},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "player-1", validSubmission())
+	require.NoError(t, err)
+	// Not an approved -> pending transition: keep the original last-approved
+	// baseline so the diff still reflects everything changed since approval.
+	assert.False(t, store.loadBaselineCalled)
+	assert.False(t, store.setReviewBeforeCalled)
+	// Still flips back to pending for re-review.
+	assert.True(t, store.setPendingCalled)
+}
+
+func TestBuilderService_UpdateCharacter_DMEditSkipsBaseline(t *testing.T) {
+	store := &mockBuilderStore{
+		editContext: &portal.EditContext{
+			CampaignID:        "camp-1",
+			OwnerID:           "player-1",
+			DMUserID:          "dm-1",
+			PlayerCharacterID: "pc-1",
+			Status:            "approved",
+		},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.UpdateCharacter(context.Background(), "char-1", "dm-1", validSubmission())
+	require.NoError(t, err)
+	// DM self-edit never goes pending and captures no baseline.
+	assert.False(t, store.loadBaselineCalled)
+	assert.False(t, store.setReviewBeforeCalled)
 }
 
 func TestBuilderService_UpdateCharacter_RejectsStranger(t *testing.T) {

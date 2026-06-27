@@ -67,6 +67,14 @@ func (m *dmMockStore) SetPlayerCharacterPending(ctx context.Context, playerChara
 	return nil
 }
 
+func (m *dmMockStore) LoadReviewBaseline(ctx context.Context, characterID string) (json.RawMessage, error) {
+	return nil, nil
+}
+
+func (m *dmMockStore) SetReviewBefore(ctx context.Context, playerCharacterID string, before json.RawMessage) error {
+	return nil
+}
+
 func (m *dmMockStore) HasActiveEncounter(ctx context.Context, characterID string) (bool, error) {
 	return false, nil
 }

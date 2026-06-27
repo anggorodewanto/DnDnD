@@ -30,3 +30,23 @@ describe('CharacterApprovalQueue DM-notify failure surfacing (T22)', () => {
     expect(queueSrc).toContain('class="notice"');
   });
 });
+
+describe('CharacterApprovalQueue review/diff panel', () => {
+  it('imports the review panel component', () => {
+    expect(queueSrc).toContain("import CharacterReviewPanel from './CharacterReviewPanel.svelte'");
+  });
+
+  it('renders a per-entry Review toggle', () => {
+    expect(queueSrc).toContain('toggleReview(entry.id)');
+    expect(queueSrc).toContain('class="review-toggle"');
+  });
+
+  it('lazily mounts the panel only for the expanded entry', () => {
+    expect(queueSrc).toMatch(/\{#if expandedId === entry\.id\}/);
+    expect(queueSrc).toContain('<CharacterReviewPanel id={entry.id} characterId={entry.character_id} />');
+  });
+
+  it('toggles the expanded entry (collapses when re-clicked)', () => {
+    expect(queueSrc).toContain('expandedId = expandedId === id ? null : id;');
+  });
+});
