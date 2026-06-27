@@ -104,3 +104,53 @@ describe('CharacterOverview status editor', () => {
     expect(src).toContain('Conditions:');
   });
 });
+
+/**
+ * DM "Edit slots" affordance (out-of-combat spell + pact slot editing). As with
+ * the status editor, the genuine fetch behaviour (POST URL, 409 in-combat text)
+ * is covered as a mocked-fetch unit test in lib/api.test.js (saveCharacterSlots)
+ * and the pure value-shaping in SlotEditor.test.js. Here we assert the card's
+ * markup + wiring contract against the .svelte source.
+ */
+describe('CharacterOverview slot editor', () => {
+  it('imports the reusable SlotEditor and the saveCharacterSlots helper', () => {
+    expect(src).toContain("import SlotEditor");
+    expect(src).toContain("from './SlotEditor.svelte'");
+    expect(src).toContain('saveCharacterSlots');
+    expect(src).toContain("from './lib/api.js'");
+  });
+
+  it('shows a compact read-only slot + pact summary on each card', () => {
+    expect(src).toContain('formatSpellSummary(c.spell_slots)');
+    expect(src).toContain('formatPactSummary(c.pact_magic_slots)');
+    expect(src).toContain('data-testid="slots-summary-{c.character_id}"');
+    expect(src).toContain('data-testid="pact-summary-{c.character_id}"');
+  });
+
+  it('renders an "Edit slots" toggle that opens SlotEditor seeded from the card', () => {
+    expect(src).toContain('data-testid="character-slots-toggle-{c.character_id}"');
+    expect(src).toContain('Edit slots');
+    expect(src).toContain('openSlotEditor(c)');
+    expect(src).toContain('closeSlotEditor()');
+    const open = src.match(/function openSlotEditor\(c\)\s*\{[\s\S]*?\n  \}/);
+    expect(open).not.toBeNull();
+    expect(open[0]).toContain('c.spell_slots');
+    expect(open[0]).toContain('c.pact_magic_slots');
+  });
+
+  it('wires SlotEditor onSave to saveSlots and re-fetches on success', () => {
+    expect(src).toMatch(/<SlotEditor[\s\S]*?onSave=\{\(payload\) => saveSlots\(c\.character_id, payload\)\}/);
+    expect(src).toMatch(/<SlotEditor[\s\S]*?onCancel=\{closeSlotEditor\}/);
+    const fn = src.match(/async function saveSlots\(characterId, payload\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('await saveCharacterSlots(characterId, payload)');
+    expect(fn[0]).toContain('editingSlotsId = null');
+    expect(fn[0]).toContain('await load()');
+    // On error: surface the message (the 409 in-combat text must reach the DM).
+    expect(fn[0]).toContain('slotsError = e.message');
+    const successIdx = fn[0].indexOf('editingSlotsId = null');
+    const catchIdx = fn[0].indexOf('} catch');
+    expect(successIdx).toBeGreaterThan(-1);
+    expect(successIdx).toBeLessThan(catchIdx);
+  });
+});

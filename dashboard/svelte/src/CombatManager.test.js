@@ -130,3 +130,41 @@ describe('CombatManager stacked-token selection', () => {
     expect(block[0]).toContain('`×${count}`');
   });
 });
+
+describe('CombatManager spell/pact slot override', () => {
+  // The raw-JSON spell-slots textarea was replaced with the reusable
+  // SlotEditor, seeded from a fresh GET and saved through the in-combat
+  // override endpoint. The genuine fetch behaviour is covered in
+  // lib/api.test.js; here we assert the .svelte wiring contract.
+  it('drops the legacy raw-JSON spell-slots control', () => {
+    expect(src).not.toContain('dmOverrideSpellSlotsText');
+    expect(src).not.toContain('overrideCharacterSpellSlots');
+    expect(src).not.toContain('data-testid="override-spell-slots"');
+  });
+
+  it('mounts the reusable SlotEditor for a player combatant', () => {
+    expect(src).toContain("import SlotEditor from './SlotEditor.svelte'");
+    expect(src).toMatch(/\{#if selectedCombatant\.character_id\}[\s\S]*?<SlotEditor/);
+    expect(src).toContain('data-testid="override-slots-open-btn"');
+    expect(src).toMatch(/<SlotEditor[\s\S]*?onSave=\{handleOverrideSlots\}/);
+    expect(src).toMatch(/<SlotEditor[\s\S]*?onCancel=\{closeSlotEditor\}/);
+  });
+
+  it('seeds the editor from a fresh getCharacterSlots read', () => {
+    const fn = src.match(/async function openSlotEditor\(\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('getCharacterSlots(selectedCombatant.character_id)');
+    expect(fn[0]).toContain('slotEditorSpell = data.spell_slots');
+    expect(fn[0]).toContain('slotEditorPact = data.pact_magic_slots');
+  });
+
+  it('saves through overrideCharacterSlots then reloads the workspace', () => {
+    const fn = src.match(/async function handleOverrideSlots\(payload\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('overrideCharacterSlots(activeEncounter.id, selectedCombatant.character_id, payload)');
+    expect(fn[0]).toContain('await loadWorkspace()');
+    // Keeps the existing dmOverrideMessage success/error pattern.
+    expect(fn[0]).toContain('dmOverrideMessage');
+    expect(fn[0]).toContain('slotEditorError = e.message');
+  });
+});

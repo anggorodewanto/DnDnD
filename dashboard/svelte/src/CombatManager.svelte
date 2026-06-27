@@ -10,7 +10,8 @@
     overrideCombatantPosition as dmOverridePosition,
     overrideCombatantConditions as dmOverrideConditions,
     overrideCombatantInitiative,
-    overrideCharacterSpellSlots,
+    overrideCharacterSlots,
+    getCharacterSlots,
     updateEncounterDisplayName,
     endCombat,
     combatMapUrl,
@@ -46,6 +47,7 @@
   import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
   import ActionLogViewer from './ActionLogViewer.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
+  import SlotEditor from './SlotEditor.svelte';
 
   let { campaignId, onopenturnbuilder } = $props();
 
@@ -156,6 +158,13 @@
     }
   });
 
+  // Close the slot editor whenever the selection changes so its seeded values
+  // never go stale against a different combatant.
+  $effect(() => {
+    void selectedCombatantId;
+    slotEditorOpen = false;
+  });
+
   let activeEncounter = $derived(encounters[activeEncounterIndex] || null);
   let selectedCombatant = $derived(
     activeEncounter?.combatants?.find(c => c.id === selectedCombatantId) || null
@@ -179,8 +188,16 @@
   let dmOverrideConditionsText = $state('[]');
   let dmOverrideInitiativeRoll = $state(0);
   let dmOverrideInitiativeOrder = $state(0);
-  let dmOverrideSpellSlotsText = $state('{}');
   let dmUndoReason = $state('');
+
+  // In-combat spell/pact slot override. The DM opens the SlotEditor, which is
+  // seeded from a fresh GET of the character's current slots; saving routes the
+  // built payload through the in-combat override endpoint.
+  let slotEditorOpen = $state(false);
+  let slotEditorSpell = $state(null);
+  let slotEditorPact = $state(null);
+  let slotEditorBusy = $state(false);
+  let slotEditorError = $state('');
 
   // DM edits the player-facing display name for the active encounter.
   // Persists via PATCH /api/combat/{id}/display-name, then patches local
@@ -293,19 +310,42 @@
     }
   }
 
-  async function handleOverrideSpellSlots() {
-    if (!activeEncounter || !selectedCombatant?.character_id) return;
+  // Open the SlotEditor for the selected combatant, seeding it from a fresh
+  // read of the character's current spell + pact slots.
+  async function openSlotEditor() {
+    if (!selectedCombatant?.character_id) return;
+    slotEditorError = '';
     dmOverrideMessage = '';
     try {
-      const parsed = JSON.parse(dmOverrideSpellSlotsText || '{}');
-      await overrideCharacterSpellSlots(activeEncounter.id, selectedCombatant.character_id, {
-        spell_slots: parsed,
-        reason: dmOverrideReason,
-      });
+      const data = await getCharacterSlots(selectedCombatant.character_id);
+      slotEditorSpell = data.spell_slots || null;
+      slotEditorPact = data.pact_magic_slots || null;
+      slotEditorOpen = true;
+    } catch (e) {
+      dmOverrideMessage = 'Failed to load slots: ' + e.message;
+    }
+  }
+
+  function closeSlotEditor() {
+    slotEditorOpen = false;
+    slotEditorError = '';
+  }
+
+  async function handleOverrideSlots(payload) {
+    if (!activeEncounter || !selectedCombatant?.character_id) return;
+    slotEditorBusy = true;
+    slotEditorError = '';
+    dmOverrideMessage = '';
+    try {
+      await overrideCharacterSlots(activeEncounter.id, selectedCombatant.character_id, payload);
       dmOverrideMessage = 'Spell slots override saved.';
+      slotEditorOpen = false;
       await loadWorkspace();
     } catch (e) {
+      slotEditorError = e.message;
       dmOverrideMessage = 'Override failed: ' + e.message;
+    } finally {
+      slotEditorBusy = false;
     }
   }
 
@@ -1266,9 +1306,19 @@
 
                 {#if selectedCombatant.character_id}
                   <fieldset>
-                    <legend>Spell Slots (JSON)</legend>
-                    <textarea bind:value={dmOverrideSpellSlotsText} rows="3" data-testid="override-spell-slots"></textarea>
-                    <button onclick={handleOverrideSpellSlots} data-testid="override-spell-slots-btn">Apply Spell Slots</button>
+                    <legend>Spell / Pact Slots</legend>
+                    {#if !slotEditorOpen}
+                      <button onclick={openSlotEditor} data-testid="override-slots-open-btn">Edit Spell / Pact Slots</button>
+                    {:else}
+                      <SlotEditor
+                        spellSlots={slotEditorSpell}
+                        pactSlots={slotEditorPact}
+                        busy={slotEditorBusy}
+                        errorMessage={slotEditorError}
+                        onSave={handleOverrideSlots}
+                        onCancel={closeSlotEditor}
+                      />
+                    {/if}
                   </fieldset>
                 {/if}
               {/if}

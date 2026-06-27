@@ -10,7 +10,9 @@ import {
   overrideCombatantPosition as overrideCombatantPositionDM,
   overrideCombatantConditions as overrideCombatantConditionsDM,
   overrideCombatantInitiative,
-  overrideCharacterSpellSlots,
+  overrideCharacterSlots,
+  getCharacterSlots,
+  saveCharacterSlots,
   updateEncounterDisplayName,
   getEncounter,
   updateEncounter,
@@ -668,15 +670,84 @@ describe('overrideCombatantInitiative', () => {
   });
 });
 
-describe('overrideCharacterSpellSlots', () => {
+describe('overrideCharacterSlots', () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs spell slot override payload', async () => {
+  it('POSTs the slot override payload to the in-combat slots endpoint', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
-    await overrideCharacterSpellSlots('enc-1', 'char-1', { spell_slots: { '1': { max: 4, used: 1 } }, reason: 'fix' });
+    const payload = {
+      spell_slots: { '1': { current: 1, max: 4 } },
+      pact_magic_slots: { slot_level: 2, current: 0, max: 2 },
+      reason: 'fix',
+    };
+    const result = await overrideCharacterSlots('enc-1', 'char-1', payload);
+    expect(result).toEqual({ status: 'ok' });
     const [url, options] = fetch.mock.calls[0];
-    expect(url).toBe('/api/combat/enc-1/override/character/char-1/spell-slots');
-    expect(JSON.parse(options.body)).toEqual({ spell_slots: { '1': { max: 4, used: 1 } }, reason: 'fix' });
+    expect(url).toBe('/api/combat/enc-1/override/character/char-1/slots');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('throws the server text on a non-2xx (e.g. 404 no active turn)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('no active turn'),
+    });
+    await expect(overrideCharacterSlots('enc-1', 'char-1', {})).rejects.toThrow(/no active turn/);
+  });
+});
+
+describe('getCharacterSlots', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('GETs the per-character slots endpoint and returns parsed JSON', async () => {
+    const body = {
+      spell_slots: { '1': { current: 2, max: 4 } },
+      pact_magic_slots: { slot_level: 2, current: 0, max: 2 },
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+    const result = await getCharacterSlots('char-1');
+    expect(result).toEqual(body);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/character-overview/char-1/slots');
+    // A bare GET (no explicit method/body).
+    expect(options).toBeUndefined();
+  });
+
+  it('throws the server text on a non-2xx', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden'),
+    });
+    await expect(getCharacterSlots('char-1')).rejects.toThrow(/forbidden/);
+  });
+});
+
+describe('saveCharacterSlots', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs the slot payload to the out-of-combat slots endpoint', async () => {
+    const body = { spell_slots: { '1': { current: 1, max: 4 } }, pact_magic_slots: null };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+    const payload = { spell_slots: { '1': { current: 1, max: 4 } }, reason: 'rest' };
+    const result = await saveCharacterSlots('char-1', payload);
+    expect(result).toEqual(body);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/character-overview/char-1/slots');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('throws the server text on a 409 (active combat)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('character is in an active combat; use the in-combat controls'),
+    });
+    await expect(saveCharacterSlots('char-1', {})).rejects.toThrow(/in-combat controls/);
   });
 });
 

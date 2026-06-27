@@ -1072,13 +1072,47 @@ export async function overrideCombatantInitiative(encounterId, combatantId, payl
 }
 
 /**
- * Manually override a character's spell slots.
+ * Read a character's current spell + pact-magic slots (DM prefill). Allowed
+ * both in and out of combat.
+ *   GET /api/character-overview/{characterID}/slots
+ * @param {string} characterId
+ * @returns {Promise<{spell_slots:object, pact_magic_slots:object|null}>}
+ */
+export async function getCharacterSlots(characterId) {
+  const res = await apiFetch(`/api/character-overview/${characterId}/slots`);
+  return res.json();
+}
+
+/**
+ * Save a character's spell / pact-magic slots out of combat.
+ *   POST /api/character-overview/{characterID}/slots
+ * Omit a slot field to leave that store untouched. apiFetch throws
+ * Error(serverText) on any non-2xx so callers can surface the backend's
+ * explanation verbatim (e.g. the 409 "use the in-combat controls" message).
+ * @param {string} characterId
+ * @param {{spell_slots?:object, pact_magic_slots?:object, reason?:string}} payload
+ * @returns {Promise<{spell_slots:object, pact_magic_slots:object|null}>}
+ */
+export async function saveCharacterSlots(characterId, payload) {
+  const res = await apiFetch(`/api/character-overview/${characterId}/slots`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a character's spell / pact-magic slots in combat (requires
+ * an active turn). Same body shape as saveCharacterSlots; apiFetch throws the
+ * server's response text on error.
+ *   POST /api/combat/{encounterID}/override/character/{characterID}/slots
  * @param {string} encounterId
  * @param {string} characterId
- * @param {{spell_slots:object, reason?:string}} payload
+ * @param {{spell_slots?:object, pact_magic_slots?:object, reason?:string}} payload
  */
-export async function overrideCharacterSpellSlots(encounterId, characterId, payload) {
-  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/character/${characterId}/spell-slots`, {
+export async function overrideCharacterSlots(encounterId, characterId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/character/${characterId}/slots`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

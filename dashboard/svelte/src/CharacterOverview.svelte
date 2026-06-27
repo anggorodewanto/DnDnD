@@ -10,11 +10,16 @@
   // leaving the party page.
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
   import InventoryEditorPanel from './InventoryEditorPanel.svelte';
+  import SlotEditor, {
+    formatSpellSummary,
+    formatPactSummary,
+  } from './SlotEditor.svelte';
   import {
     STATUS_CONDITIONS,
     MAX_EXHAUSTION,
     saveCharacterStatus,
   } from './lib/characterStatus.js';
+  import { saveCharacterSlots } from './lib/api.js';
 
   let { campaignId } = $props();
 
@@ -38,6 +43,16 @@
   });
   let statusSaving = $state(false);
   let statusError = $state(null);
+
+  // Out-of-combat spell/pact slot editor state. Like the status editor, only
+  // one card's slot editor is open at a time. The SlotEditor is seeded directly
+  // from the card's `spell_slots` / `pact_magic_slots` fields (now returned by
+  // the party-overview list endpoint), so no prefill fetch is needed.
+  let editingSlotsId = $state(null);
+  let slotsSpell = $state(null);
+  let slotsPact = $state(null);
+  let slotsSaving = $state(false);
+  let slotsError = $state('');
 
   async function load() {
     if (!campaignId) {
@@ -131,6 +146,37 @@
       statusSaving = false;
     }
   }
+
+  // Open the slot editor for a card, seeded from its current slot fields.
+  function openSlotEditor(c) {
+    editingSlotsId = c.character_id;
+    slotsError = '';
+    slotsSaving = false;
+    slotsSpell = c.spell_slots || null;
+    slotsPact = c.pact_magic_slots || null;
+  }
+
+  function closeSlotEditor() {
+    editingSlotsId = null;
+    slotsError = '';
+  }
+
+  async function saveSlots(characterId, payload) {
+    slotsSaving = true;
+    slotsError = '';
+    try {
+      await saveCharacterSlots(characterId, payload);
+      // Success: close the editor and re-fetch so the card shows new values.
+      editingSlotsId = null;
+      await load();
+    } catch (e) {
+      // Keep the editor open and surface the server's explanation. The 409
+      // in-combat text must reach the DM here.
+      slotsError = e.message;
+    } finally {
+      slotsSaving = false;
+    }
+  }
 </script>
 
 <div class="character-overview">
@@ -165,6 +211,12 @@
                 none
               {/if}
             </li>
+            {#if formatSpellSummary(c.spell_slots)}
+              <li data-testid="slots-summary-{c.character_id}">{formatSpellSummary(c.spell_slots)}</li>
+            {/if}
+            {#if formatPactSummary(c.pact_magic_slots)}
+              <li data-testid="pact-summary-{c.character_id}">{formatPactSummary(c.pact_magic_slots)}</li>
+            {/if}
           </ul>
           {#if c.languages && c.languages.length > 0}
             <p class="langs">Languages: {c.languages.join(', ')}</p>
@@ -293,6 +345,25 @@
                   disabled={statusSaving}
                 >Cancel</button>
               </div>
+            </div>
+          {/if}
+          <button
+            class="msg-toggle"
+            data-testid="character-slots-toggle-{c.character_id}"
+            onclick={() => (editingSlotsId === c.character_id ? closeSlotEditor() : openSlotEditor(c))}
+          >
+            {editingSlotsId === c.character_id ? 'Close slot editor' : 'Edit slots'}
+          </button>
+          {#if editingSlotsId === c.character_id}
+            <div data-testid="slot-editor-{c.character_id}">
+              <SlotEditor
+                spellSlots={slotsSpell}
+                pactSlots={slotsPact}
+                busy={slotsSaving}
+                errorMessage={slotsError}
+                onSave={(payload) => saveSlots(c.character_id, payload)}
+                onCancel={closeSlotEditor}
+              />
             </div>
           {/if}
         </div>
