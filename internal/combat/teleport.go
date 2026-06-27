@@ -50,6 +50,15 @@ func IsDMQueueTeleport(target string) bool {
 	return dmQueueTargets[target]
 }
 
+// IsSelfTeleport reports whether the teleport target is a pure self-teleport
+// (Misty Step, Far Step, Tree Stride): the caster picks their own landing
+// square and there is no creature target. Callers use this to treat the
+// coordinate the player supplied as the caster's destination rather than as a
+// creature to resolve.
+func IsSelfTeleport(target string) bool {
+	return target == TeleportTargetSelf
+}
+
 // TeleportResult holds the outcome of a teleportation spell.
 type TeleportResult struct {
 	CasterMoved       bool

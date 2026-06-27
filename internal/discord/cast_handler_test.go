@@ -359,6 +359,100 @@ func TestCastHandler_ForwardsExtendedMetamagic(t *testing.T) {
 	}
 }
 
+// mistyStepSpell returns a Misty Step refdata.Spell fixture: a pure
+// self-teleport (target=="self") with requires_sight, used by the teleport
+// destination tests below.
+func mistyStepSpell() refdata.Spell {
+	return refdata.Spell{
+		ID: "misty-step", Name: "Misty Step", Level: 2,
+		Teleport: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"target":"self","range_ft":30,"requires_sight":true}`),
+			Valid:      true,
+		},
+	}
+}
+
+// E-mistystep-discord: a self-teleport spell cast with an explicit destination
+// coordinate must forward the landing square into CastCommand.TeleportDestCol /
+// TeleportDestRow (letter column + 1-based row) so the combat service actually
+// repositions the caster. No creature target is resolved.
+func TestCastHandler_SelfTeleport_ForwardsDestination(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+	provider.spells["misty-step"] = mistyStepSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "misty-step",
+		"destination": "F6",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.TeleportDestCol != "F" || got.TeleportDestRow != 6 {
+		t.Errorf("TeleportDest = %s%d, want F6", got.TeleportDestCol, got.TeleportDestRow)
+	}
+	if got.TargetID != uuid.Nil {
+		t.Errorf("self-teleport must not resolve a creature target, got %v", got.TargetID)
+	}
+}
+
+// E-mistystep-discord: for pure self-teleports the destination also falls back
+// to the `target` option, so `/cast misty-step target:F6` works the way the
+// `target` hint ("coordinate or creature ID") suggests.
+func TestCastHandler_SelfTeleport_TargetCoordFallback(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+	provider.spells["misty-step"] = mistyStepSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "misty-step",
+		"target": "F6",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.TeleportDestCol != "F" || got.TeleportDestRow != 6 {
+		t.Errorf("TeleportDest = %s%d, want F6", got.TeleportDestCol, got.TeleportDestRow)
+	}
+}
+
+// E-mistystep-discord: a self-teleport with no destination is rejected before
+// any combat call, with a message pointing at the destination option.
+func TestCastHandler_SelfTeleport_RequiresDestination(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+	provider.spells["misty-step"] = mistyStepSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "misty-step"}))
+
+	if len(svc.castCalls) != 0 {
+		t.Fatalf("expected no cast call without a destination, got %d", len(svc.castCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "destination") {
+		t.Errorf("expected a destination prompt, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// E-mistystep-discord: an unparseable destination coordinate is rejected before
+// any combat call.
+func TestCastHandler_SelfTeleport_InvalidDestination(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+	provider.spells["misty-step"] = mistyStepSpell()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "misty-step",
+		"destination": "zzz",
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Fatalf("expected no cast call for an invalid destination, got %d", len(svc.castCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "destination") {
+		t.Errorf("expected an invalid-destination message, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
 func TestCastHandler_NoSpell(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 

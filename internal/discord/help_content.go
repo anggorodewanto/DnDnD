@@ -264,9 +264,16 @@ const helpMetamagic = "\u26A1 Metamagic \u2014 Sorcery Point Options\n" +
 const helpCast = `/cast — Cast a Spell
 
 Usage:
-  /cast [spell] [target]              Cast a spell at a target
+  /cast [spell] [target]              Cast a spell at a target (creature or coordinate)
+  /cast [spell] destination:F6        Self-teleport spells: pick the square you land on
   /cast [spell] level:N               Upcast at a higher spell slot level
   /cast [spell] ritual:true           Ritual cast without expending a slot (out of combat)
+
+Teleport spells:
+  Misty Step, Far Step, and Tree Stride teleport you to a square you choose.
+  Give the landing square as destination:[coord] (e.g. /cast spell:misty-step destination:F6).
+  For these the target option also accepts the coordinate, so /cast misty-step target:F6 works.
+  The move must be in range and to an unoccupied square you can see.
 
 Metamagic options (Sorcerer only): subtle:true, twin:true, careful:true, heightened:true, distant:true, quickened:true, empowered:true
 Use /help metamagic for full metamagic details.`

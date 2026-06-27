@@ -83,6 +83,24 @@ func TestIsDMQueueTeleport(t *testing.T) {
 	}
 }
 
+func TestIsSelfTeleport(t *testing.T) {
+	tests := []struct {
+		target string
+		want   bool
+	}{
+		{"self", true},
+		{"self+creature", false},
+		{"creature", false},
+		{"group", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.target, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsSelfTeleport(tc.target))
+		})
+	}
+}
+
 // TDD Cycle 3: ValidateTeleportDestination rejects occupied destination
 func TestValidateTeleportDestination_OccupiedDestination(t *testing.T) {
 	info := TeleportInfo{Target: "self", RangeFt: 30, RequiresSight: true}

@@ -444,8 +444,21 @@ func (h *CastHandler) dispatchSingleTarget(
 		return
 	}
 
+	// E-mistystep-discord: detect a pure self-teleport (Misty Step, Far Step,
+	// Tree Stride). For these the player picks a destination square, not a
+	// creature, so the target/destination option is a coordinate — skip the
+	// creature resolution below and forward the landing square instead.
+	var teleportInfo combat.TeleportInfo
+	hasTeleport := spell.Teleport.Valid && len(spell.Teleport.RawMessage) > 0
+	if hasTeleport {
+		if info, parseErr := combat.ParseTeleportInfo(spell.Teleport.RawMessage); parseErr == nil {
+			teleportInfo = info
+		}
+	}
+	isSelfTeleport := combat.IsSelfTeleport(teleportInfo.Target)
+
 	var targetID uuid.UUID
-	if targetStr != "" {
+	if targetStr != "" && !isSelfTeleport {
 		target, err := combat.ResolveTarget(targetStr, combatants)
 		if err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
@@ -486,11 +499,32 @@ func (h *CastHandler) dispatchSingleTarget(
 		TwinTargetID:         twinTargetID,
 	}
 
-	// SR-044: populate Walls and FogOfWar for teleport spells with requires_sight=true
-	// so the combat validator can enforce line-of-sight in production.
-	if spell.Teleport.Valid {
-		info, parseErr := combat.ParseTeleportInfo(spell.Teleport.RawMessage)
-		if parseErr == nil && info.RequiresSight {
+	if hasTeleport {
+		// E-mistystep-discord: a self-teleport needs the caster's landing
+		// square. Read it from `destination`; for pure self-teleports fall back
+		// to `target` so `/cast misty-step target:F6` works too.
+		if isSelfTeleport {
+			destStr := strings.TrimSpace(optionString(interaction, "destination"))
+			if destStr == "" {
+				destStr = targetStr
+			}
+			if destStr == "" {
+				respondEphemeral(h.session, interaction, fmt.Sprintf("%s teleports you to a square — add a destination, e.g. `/cast spell:%s destination:F6`.", spell.Name, spell.ID))
+				return
+			}
+			destCol, destRow, err := parseGridDestination(destStr)
+			if err != nil {
+				respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid destination %q: %v", destStr, err))
+				return
+			}
+			cmd.TeleportDestCol = destCol
+			cmd.TeleportDestRow = destRow
+		}
+
+		// SR-044: populate Walls and FogOfWar for teleport spells with
+		// requires_sight=true so the combat validator can enforce
+		// line-of-sight in production.
+		if teleportInfo.RequiresSight {
 			cmd.Walls = h.loadWalls(ctx, encounter)
 			cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster)
 		}
@@ -682,7 +716,7 @@ func (h *CastHandler) dispatchAoE(
 		respondEphemeral(h.session, interaction, "AoE spells require a target coordinate (e.g. `target:G5`).")
 		return
 	}
-	col, row, err := renderer.ParseCoordinate(targetStr)
+	targetCol, targetRow, err := parseGridDestination(targetStr)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid coordinate %q: %v", targetStr, err))
 		return
@@ -693,13 +727,11 @@ func (h *CastHandler) dispatchAoE(
 
 	metamagic := collectMetamagic(interaction)
 	cmd := combat.AoECastCommand{
-		SpellID:     spell.ID,
-		CasterID:    caster.ID,
-		EncounterID: encounterID,
-		TargetCol:   indexToCol(col),
-		// renderer.ParseCoordinate returns 0-based row; AoECastCommand expects
-		// 1-based PositionRow convention so add 1 back.
-		TargetRow:            int32(row + 1),
+		SpellID:              spell.ID,
+		CasterID:             caster.ID,
+		EncounterID:          encounterID,
+		TargetCol:            targetCol,
+		TargetRow:            targetRow,
 		Turn:                 turn,
 		CurrentConcentration: currentConc,
 		Walls:                walls,
@@ -1077,6 +1109,18 @@ func indexToCol(idx int) string {
 		return ""
 	}
 	return string(rune('A' + idx))
+}
+
+// parseGridDestination parses a grid coordinate (e.g. "F6") into the
+// letter-column + 1-based-row convention combat commands use for positions.
+// renderer.ParseCoordinate returns a 0-based row, so the row is shifted back to
+// 1-based. Shared by the AoE target and self-teleport destination paths.
+func parseGridDestination(s string) (col string, row int32, err error) {
+	c, r, err := renderer.ParseCoordinate(s)
+	if err != nil {
+		return "", 0, err
+	}
+	return indexToCol(c), int32(r + 1), nil
 }
 
 // dispatchInventorySpell handles the /cast identify and /cast detect-magic

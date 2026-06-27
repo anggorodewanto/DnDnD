@@ -61,6 +61,10 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		// players can trigger it from Discord (handler already reads
 		// metamagicFlags including "extended").
 		{"cast", "extended", discordgo.ApplicationCommandOptionBoolean, false},
+		// E-mistystep-discord: self-teleport spells (Misty Step, Far Step, Tree
+		// Stride) need a landing square; the handler forwards it into
+		// CastCommand.TeleportDestCol/Row.
+		{"cast", "destination", discordgo.ApplicationCommandOptionString, false},
 		{"bonus", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "args", discordgo.ApplicationCommandOptionString, false},
