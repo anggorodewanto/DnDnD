@@ -9,13 +9,15 @@
 > / the `#dm-console` tab) is the *generated* source of truth and this file drifts.
 > See [`README.md`](README.md) "DM Console."
 
-_Last updated: 2026-06-27 — post-combat lull. Vale + Forge finished their
-introductions in #in-character; Forge asked "is there something interesting in
-the cellar?" **DM nudge posted** to #the-story (3:14:31 PM UTC-ish, `narration_posts`)
-— answered the question in-fiction, leaned on Vale's patron pull, teed up the
-descent decision **without deciding it for them**. **Forge Anvilbearer re-approval
-resolved** (backstory + Goblin language added; queue now empty). **Next beat =
-the party's descent call**, then the cellar fight. 3-4 more players still joining._
+_Last updated: 2026-06-27 — **descent underway.** After the DM nudge, Vale
+**creeped into the cellar in a trance** (patron pull took; #in-character 3:17 PM);
+Forge is **hesitating** ("yo, what possessed you" — not yet following). **2nd DM
+nudge posted** to #the-story (`narration_posts` 3:26:26 PM): Vale onto the stairs,
+the cellar revealed below, Forge framed a follow-or-hold choice — **not decided
+for him**. **Cellar fight is STAGED** (builder open, one click from Start; see
+below). Forge re-approval resolved earlier (queue empty). **Next beat = await
+Forge's follow/hold in #in-character**, then Start Combat. 3-4 more players still
+joining._
 
 ## Ops snapshot
 
@@ -94,10 +96,14 @@ the inside**. The dread points downward. World / lore: [`world.md`](world.md).
 
 ## Next action
 
-1. **Await the party's descent call in #in-character.** The cellar nudge is posted;
-   Vale's patron is pulling her down, Forge asked what's below. Let *them* decide to
-   descend / search / rest — **don't act for them** ([`dm-rules.md`](dm-rules.md)).
-   Read #in-character via Chrome to catch their reply (it's Discord-only).
+1. **Await Forge's follow/hold in #in-character, then Start Combat.** Vale is already
+   descending (trance-walk); Forge hasn't committed. When he follows (or Vale trips
+   the brood alone), open the **STAGED** "Cellar — the brood" builder → **Start
+   Combat** (one click; PCs auto-seat at the top-center stairs landing, ghouls at the
+   back). **Don't Start while Forge is still up top** — it yanks him down. At Start,
+   re-check the **surprise side**: ghouls are flagged *Surprised* (party gets the
+   drop), which may need flipping / seating Vale alone if she's down there solo.
+   Read #in-character via Chrome to catch the beat (it's Discord-only).
 2. **Onboard the new players** as they arrive (`/register` → build → DM-approve →
    roster row + sheet → fold into the fiction). See [`runbook.md`](runbook.md) +
    [`big-party.md`](big-party.md).

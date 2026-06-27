@@ -331,6 +331,18 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
   `narration_posts` 3:14:31 PM): answered Forge in-fiction (the cold up-draught, the
   door clawed *outward* — shut in, wanting up), leaned on Vale's patron pull, and put
   the descent choice back to the party **without deciding it for them**.
-- **Next:** await the party's descent call in `#in-character` (read via Chrome); on
-  "we go down," run "Cellar — the brood." 3-4 more PCs still joining.
+- **Players answered (read `#in-character` via Chrome):** Vale *"there's... just—"*
+  and **creeped into the cellar in a trance** (3:17 PM) — the patron pull landed.
+  Forge: *"yo, what possessed you"* (3:22 PM) — startled, **not yet following**.
+  Descent started; split party forming (Vale ahead, Forge up top).
+- **Posted 2nd DM nudge** to `#the-story` (read-aloud, `narration_posts` 3:26:26 PM):
+  Vale onto the top step / the cellar revealed below (low stone, butcher-pit stink,
+  something shifting in the dark "not toward her, not yet"); framed Forge's
+  follow-or-call-her-back choice **without deciding it**.
+- **Staged the cellar fight** (did NOT Start): opened "Cellar — the brood" builder —
+  map *Ashfall Waystation — cellar* bound, G1 (2,8) + G2 (9,8) both *Surprised*,
+  party 2/2 (Vale + Forge), **Start Combat** one click away. Left parked.
+- **Next:** await Forge's follow/hold in `#in-character`; on commit → Start Combat
+  (PCs auto-seat at the stairs landing). Hold while Forge is up top; re-check the
+  surprise side at Start if Vale's down there alone. 3-4 more PCs still joining.
 </content>
