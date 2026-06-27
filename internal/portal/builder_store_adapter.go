@@ -370,7 +370,7 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		EquippedOffHand:  c.equippedOffHand,
 		EquippedArmor:    c.equippedArmor,
 		SpellSlots:       preserveExpendedSlots(existing.SpellSlots, c.spellSlotsMsg),
-		PactMagicSlots:   c.pactMagicMsg,
+		PactMagicSlots:   preserveExpendedPactSlots(existing.PactMagicSlots, c.pactMagicMsg),
 		HitDiceRemaining: c.hitDiceJSON,
 		FeatureUses:      c.featureUsesMsg,
 		Features:         c.featuresMsg,
@@ -412,6 +412,31 @@ func preserveExpendedSlots(existing, fresh pqtype.NullRawMessage) pqtype.NullRaw
 		newSlots[level] = ns
 	}
 	merged, err := json.Marshal(newSlots)
+	if err != nil {
+		return fresh
+	}
+	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// preserveExpendedPactSlots carries forward Warlock pact-magic slots already
+// spent before an edit. The fresh build supplies {current=max} at the derived
+// slot level; the number expended (oldMax-oldCurrent) is re-applied to the new
+// max so a mid-day edit does not silently refill the warlock. Falls back to the
+// freshly-derived slots when either side is absent or unparseable.
+func preserveExpendedPactSlots(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage {
+	if !fresh.Valid || !existing.Valid {
+		return fresh
+	}
+	var oldPact, newPact character.PactMagicSlots
+	if err := json.Unmarshal(existing.RawMessage, &oldPact); err != nil {
+		return fresh
+	}
+	if err := json.Unmarshal(fresh.RawMessage, &newPact); err != nil {
+		return fresh
+	}
+	expended := max(oldPact.Max-oldPact.Current, 0)
+	newPact.Current = max(newPact.Max-expended, 0)
+	merged, err := json.Marshal(newPact)
 	if err != nil {
 		return fresh
 	}

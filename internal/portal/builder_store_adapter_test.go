@@ -1495,6 +1495,43 @@ func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesLiveState(t *testing
 	assert.Equal(t, character.SlotInfo{Current: 1, Max: 2}, slots["1"])
 }
 
+func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesExpendedPactSlots(t *testing.T) {
+	charID := uuid.New()
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			ID:         charID,
+			CampaignID: uuid.New(),
+			HpCurrent:  19,
+			// Warlock 3 with one of two pact slots already spent (e.g. cast Hold Person).
+			PactMagicSlots: pqtype.NullRawMessage{RawMessage: []byte(`{"slot_level":2,"current":1,"max":2}`), Valid: true},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	// A non-mechanical edit (e.g. adding a description) re-runs the fresh build,
+	// which derives full 2/2 pact slots.
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Vale",
+		Race:          "Tiefling",
+		Class:         "Warlock",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 10, WIS: 12, CHA: 16},
+		HPMax:         24,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Warlock", Level: 3}},
+	}
+	require.NoError(t, adapter.UpdateCharacterRecord(context.Background(), charID.String(), params))
+
+	// The previously-spent pact slot stays spent (current 1, not refilled to 2).
+	require.True(t, creator.capturedUpdate.PactMagicSlots.Valid)
+	var pact character.PactMagicSlots
+	require.NoError(t, json.Unmarshal(creator.capturedUpdate.PactMagicSlots.RawMessage, &pact))
+	assert.Equal(t, character.PactMagicSlots{SlotLevel: 2, Current: 1, Max: 2}, pact,
+		"a character edit must not refill the warlock's expended pact slots")
+}
+
 func TestBuilderStoreAdapter_UpdateCharacterRecord_CapsHPToNewMax(t *testing.T) {
 	charID := uuid.New()
 	creator := &captureCharacterCreator{
