@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/character"
 )
 
 // ErrInvalidInput is returned when a request to the service fails validation
@@ -68,6 +70,11 @@ type CharacterSheet struct {
 	// the DM can edit from the overview. Conditions is a list of condition names.
 	ExhaustionLevel int32    `json:"exhaustion_level"`
 	Conditions      []string `json:"conditions"`
+	// SpellSlots and PactMagicSlots are the persistent caster resources the DM can
+	// edit out of combat. SpellSlots is kept string-keyed ({"1":{...}}) for the
+	// wire; PactMagicSlots is nil when the character has no pact magic.
+	SpellSlots     map[string]character.SlotInfo `json:"spell_slots"`
+	PactMagicSlots *character.PactMagicSlots     `json:"pact_magic_slots"`
 }
 
 // CharacterStatus is the persistent live-status of a character returned after a
@@ -109,6 +116,31 @@ type PersistStatusParams struct {
 	CharacterData []byte
 }
 
+// SlotsContext carries the persistence facts the handler needs to authorize and
+// apply an out-of-combat spell/pact slot edit (and to render the current values).
+type SlotsContext struct {
+	CampaignID     uuid.UUID
+	InActiveCombat bool
+	SpellSlots     map[int]character.SlotInfo
+	PactMagicSlots character.PactMagicSlots
+}
+
+// SlotsUpdate is the validated input for an out-of-combat slot edit. A nil
+// pointer means "leave that store untouched"; only the provided stores are
+// validated and persisted.
+type SlotsUpdate struct {
+	SpellSlots     *map[int]character.SlotInfo
+	PactMagicSlots *character.PactMagicSlots
+}
+
+// PersistSlotsParams is the resolved slot update handed to the Store. Each field
+// is the already-encoded JSON for that store, or nil to leave it untouched.
+type PersistSlotsParams struct {
+	CharacterID    uuid.UUID
+	SpellSlots     json.RawMessage
+	PactMagicSlots json.RawMessage
+}
+
 // LanguageCoverage is a single (language -> characters who speak it) row
 // in the Party Languages summary.
 type LanguageCoverage struct {
@@ -124,6 +156,11 @@ type Store interface {
 	GetCharacterStatusContext(ctx context.Context, characterID uuid.UUID) (CharacterStatusContext, error)
 	// UpdateCharacterStatus persists a resolved status edit.
 	UpdateCharacterStatus(ctx context.Context, params PersistStatusParams) error
+	// GetCharacterSlotsContext loads the authorization + persistence context for a
+	// spell/pact slot edit. Returns ErrCharacterNotFound when the character is absent.
+	GetCharacterSlotsContext(ctx context.Context, characterID uuid.UUID) (SlotsContext, error)
+	// UpdateCharacterSlots persists a resolved slot edit (only the provided stores).
+	UpdateCharacterSlots(ctx context.Context, params PersistSlotsParams) error
 }
 
 // Service exposes character-overview read queries and the party-languages

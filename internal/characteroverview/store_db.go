@@ -3,11 +3,13 @@ package characteroverview
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/rest"
 )
@@ -23,6 +25,8 @@ type RefdataQueries interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
 	UpdateCharacterVitals(ctx context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error)
+	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
+	UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
 }
 
 // DBStore is a Store implementation backed by sqlc-generated refdata queries.
@@ -126,6 +130,106 @@ func (s *DBStore) UpdateCharacterStatus(ctx context.Context, p PersistStatusPara
 	return err
 }
 
+// GetCharacterSlotsContext loads the campaign, current spell/pact slots and the
+// active-combat flag for an out-of-combat slot edit.
+func (s *DBStore) GetCharacterSlotsContext(ctx context.Context, characterID uuid.UUID) (SlotsContext, error) {
+	ch, err := s.q.GetCharacter(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SlotsContext{}, ErrCharacterNotFound
+		}
+		return SlotsContext{}, err
+	}
+
+	inCombat, err := s.characterInActiveCombat(ctx, characterID)
+	if err != nil {
+		return SlotsContext{}, err
+	}
+
+	spell, err := parseSpellSlotsContext(ch.SpellSlots)
+	if err != nil {
+		return SlotsContext{}, err
+	}
+
+	return SlotsContext{
+		CampaignID:     ch.CampaignID,
+		InActiveCombat: inCombat,
+		SpellSlots:     spell,
+		PactMagicSlots: parsePactSlotsValue(ch.PactMagicSlots),
+	}, nil
+}
+
+// UpdateCharacterSlots persists a resolved slot edit, touching only the stores
+// the caller provided (nil RawMessage = leave that store untouched).
+func (s *DBStore) UpdateCharacterSlots(ctx context.Context, p PersistSlotsParams) error {
+	if p.SpellSlots != nil {
+		if _, err := s.q.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
+			ID:         p.CharacterID,
+			SpellSlots: pqtype.NullRawMessage{RawMessage: p.SpellSlots, Valid: true},
+		}); err != nil {
+			return err
+		}
+	}
+	if p.PactMagicSlots != nil {
+		if _, err := s.q.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
+			ID:             p.CharacterID,
+			PactMagicSlots: pqtype.NullRawMessage{RawMessage: p.PactMagicSlots, Valid: true},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parseSpellSlotsContext parses stored spell slots into an int-keyed map. A
+// null/empty column yields an empty (non-nil) map.
+func parseSpellSlotsContext(nrm pqtype.NullRawMessage) (map[int]character.SlotInfo, error) {
+	if !nrm.Valid {
+		return map[int]character.SlotInfo{}, nil
+	}
+	return character.ParseSpellSlotsJSON(nrm.RawMessage)
+}
+
+// parsePactSlotsValue parses stored pact magic into a value. A null/empty/invalid
+// column yields the zero value (no pact magic).
+func parsePactSlotsValue(nrm pqtype.NullRawMessage) character.PactMagicSlots {
+	if !nrm.Valid || len(nrm.RawMessage) == 0 {
+		return character.PactMagicSlots{}
+	}
+	var p character.PactMagicSlots
+	if err := json.Unmarshal(nrm.RawMessage, &p); err != nil {
+		return character.PactMagicSlots{}
+	}
+	return p
+}
+
+// spellSlotsStringKeyed parses stored spell slots for the wire — kept string-keyed
+// ({"1":{...}}). A null/empty/invalid column yields an empty (non-nil) map.
+func spellSlotsStringKeyed(nrm pqtype.NullRawMessage) map[string]character.SlotInfo {
+	out := map[string]character.SlotInfo{}
+	if !nrm.Valid || len(nrm.RawMessage) == 0 {
+		return out
+	}
+	var m map[string]character.SlotInfo
+	if err := json.Unmarshal(nrm.RawMessage, &m); err != nil {
+		return out
+	}
+	return m
+}
+
+// pactSlotsPtr parses stored pact magic into a pointer for the sheet view. A
+// null/empty/invalid column yields nil (no pact magic).
+func pactSlotsPtr(nrm pqtype.NullRawMessage) *character.PactMagicSlots {
+	if !nrm.Valid || len(nrm.RawMessage) == 0 {
+		return nil
+	}
+	var p character.PactMagicSlots
+	if err := json.Unmarshal(nrm.RawMessage, &p); err != nil {
+		return nil
+	}
+	return &p
+}
+
 func sheetFromRefdata(r refdata.ListPlayerCharactersByStatusRow) CharacterSheet {
 	ddbURL := ""
 	if r.DdbUrl.Valid {
@@ -161,5 +265,7 @@ func sheetFromRefdata(r refdata.ListPlayerCharactersByStatusRow) CharacterSheet 
 		DDBURL:            ddbURL,
 		ExhaustionLevel:   int32(exhaustion),
 		Conditions:        conditions,
+		SpellSlots:        spellSlotsStringKeyed(r.SpellSlots),
+		PactMagicSlots:    pactSlotsPtr(r.PactMagicSlots),
 	}
 }

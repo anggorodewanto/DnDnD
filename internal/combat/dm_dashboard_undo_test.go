@@ -537,6 +537,7 @@ func TestOverrideCharacterSpellSlots(t *testing.T) {
 	turnID := uuid.New()
 
 	var got refdata.UpdateCharacterSpellSlotsParams
+	pactCalled := false
 	store := &mockStore{
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID}, nil
@@ -548,6 +549,10 @@ func TestOverrideCharacterSpellSlots(t *testing.T) {
 			got = arg
 			return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
 		},
+		updateCharacterPactMagicSlotsFn: func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+			pactCalled = true
+			return refdata.Character{}, nil
+		},
 		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
 			return refdata.ActionLog{ID: uuid.New()}, nil
 		},
@@ -556,19 +561,21 @@ func TestOverrideCharacterSpellSlots(t *testing.T) {
 	poster := &fakeCombatLogPoster{}
 	r := newDMDashboardRouterWithPoster(store, poster)
 
-	body := `{"spell_slots":{"1":{"max":4,"used":1}},"reason":"slot accounting fix"}`
-	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(body))
+	body := `{"spell_slots":{"1":{"current":1,"max":4}},"reason":"slot accounting fix"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, got.SpellSlots.Valid)
 	assert.Contains(t, string(got.SpellSlots.RawMessage), `"max":4`)
+	assert.Contains(t, string(got.SpellSlots.RawMessage), `"current":1`)
+	assert.False(t, pactCalled, "pact-magic store must be left untouched when only spell_slots is sent")
 
 	calls := poster.Calls()
 	require.Len(t, calls, 1)
 	assert.Contains(t, calls[0].Message, "Gandalf")
-	assert.Contains(t, calls[0].Message, "spell slots")
+	assert.Contains(t, calls[0].Message, "slots adjusted")
 }
 
 // --- TDD Cycle 12: invalid encounter ID, invalid combatant ID, invalid body ---
@@ -604,7 +611,7 @@ func TestOverrideCombatantHP_InvalidBody(t *testing.T) {
 
 func TestOverrideCharacterSpellSlots_InvalidEncounterID(t *testing.T) {
 	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/not-uuid/override/character/"+uuid.New().String()+"/spell-slots", strings.NewReader(`{}`))
+	req := httptest.NewRequest("POST", "/api/combat/not-uuid/override/character/"+uuid.New().String()+"/slots", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -613,7 +620,7 @@ func TestOverrideCharacterSpellSlots_InvalidEncounterID(t *testing.T) {
 func TestOverrideCharacterSpellSlots_InvalidCharacterID(t *testing.T) {
 	encID := uuid.New()
 	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/not-uuid/spell-slots", strings.NewReader(`{}`))
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/not-uuid/slots", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -623,7 +630,7 @@ func TestOverrideCharacterSpellSlots_InvalidBody(t *testing.T) {
 	encID := uuid.New()
 	charID := uuid.New()
 	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/spell-slots", strings.NewReader("not json"))
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/slots", strings.NewReader("not json"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -638,7 +645,7 @@ func TestOverrideCharacterSpellSlots_NoActiveTurn(t *testing.T) {
 		},
 	}
 	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/spell-slots", strings.NewReader(`{}`))
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/slots", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -849,7 +856,7 @@ func TestWithTurnLock_LockAcquireError_SpellSlotsReturns500(t *testing.T) {
 
 	r := newDMDashboardRouterWithDB(store, &fakeCombatLogPoster{}, fakeTxBeginner{})
 	body := `{"spell_slots":{"1":{"max":1,"used":0}},"reason":"x"}`
-	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(body))
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1225,7 +1232,7 @@ func TestOverrideCharacterSpellSlots_GetCharacterError(t *testing.T) {
 	}
 
 	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -1244,7 +1251,7 @@ func TestOverrideCharacterSpellSlots_UpdateError(t *testing.T) {
 	}
 
 	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -1274,10 +1281,205 @@ func TestOverrideCharacterSpellSlots_PreservesPreviousSlotsAsBefore(t *testing.T
 	}
 
 	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
-	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":4,"used":0}}}`))
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(`{"spell_slots":{"1":{"current":0,"max":4}}}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, string(prev), string(loggedBefore))
+	// The before-state now captures BOTH slot stores; pact magic is null here.
+	assert.JSONEq(t, `{"spell_slots":{"1":{"max":2,"used":1}},"pact_magic_slots":null}`, string(loggedBefore))
+}
+
+// --- OverrideCharacterSlots: Warlock pact magic + combined + validation ---
+
+// The warlock case: a pact-magic-only payload must update the pact-magic store
+// (and leave the leveled spell-slot store untouched).
+func TestOverrideCharacterSlots_PactMagicOnly(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+
+	var gotPact refdata.UpdateCharacterPactMagicSlotsParams
+	spellCalled := false
+	var loggedAfter json.RawMessage
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: "Hexblade"}, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		gotPact = arg
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		spellCalled = true
+		return refdata.Character{}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedAfter = arg.AfterState
+		return refdata.ActionLog{}, nil
+	}
+
+	poster := &fakeCombatLogPoster{}
+	r := newDMDashboardRouterWithPoster(store, poster)
+
+	body := `{"pact_magic_slots":{"slot_level":3,"current":1,"max":2},"reason":"warlock slot fix"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, spellCalled, "spell-slot store must be left untouched when only pact_magic_slots is sent")
+	require.True(t, gotPact.PactMagicSlots.Valid)
+	assert.JSONEq(t, `{"slot_level":3,"current":1,"max":2}`, string(gotPact.PactMagicSlots.RawMessage))
+	assert.Contains(t, string(loggedAfter), `"slot_level":3`)
+
+	calls := poster.Calls()
+	require.Len(t, calls, 1)
+	assert.Contains(t, calls[0].Message, "Hexblade")
+	assert.Contains(t, calls[0].Message, "slots adjusted")
+	assert.Contains(t, calls[0].Message, "warlock slot fix")
+}
+
+// Both stores in one request: spell slots AND pact magic update together,
+// with a single action_log row and a single correction post.
+func TestOverrideCharacterSlots_BothStores(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+
+	var gotSpell refdata.UpdateCharacterSpellSlotsParams
+	var gotPact refdata.UpdateCharacterPactMagicSlotsParams
+	logCalls := 0
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: "Multiclass"}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		gotSpell = arg
+		return refdata.Character{}, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		gotPact = arg
+		return refdata.Character{}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		logCalls++
+		return refdata.ActionLog{}, nil
+	}
+
+	poster := &fakeCombatLogPoster{}
+	r := newDMDashboardRouterWithPoster(store, poster)
+
+	body := `{"spell_slots":{"1":{"current":1,"max":4}},"pact_magic_slots":{"slot_level":2,"current":0,"max":2},"reason":"both"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.True(t, gotSpell.SpellSlots.Valid)
+	assert.Contains(t, string(gotSpell.SpellSlots.RawMessage), `"max":4`)
+	require.True(t, gotPact.PactMagicSlots.Valid)
+	assert.JSONEq(t, `{"slot_level":2,"current":0,"max":2}`, string(gotPact.PactMagicSlots.RawMessage))
+	assert.Equal(t, 1, logCalls)
+	require.Len(t, poster.Calls(), 1)
+}
+
+// Invalid spell-slot payload (current > max) must return 400, not 500.
+func TestOverrideCharacterSlots_InvalidSpellSlots_Returns400(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: "x"}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		t.Fatal("store must not be written on invalid input")
+		return refdata.Character{}, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	body := `{"spell_slots":{"1":{"current":5,"max":2}},"reason":"bad"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// Invalid pact-magic payload (current > max) must return 400, not 500.
+func TestOverrideCharacterSlots_InvalidPactSlots_Returns400(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.updateCharacterPactMagicSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		t.Fatal("store must not be written on invalid input")
+		return refdata.Character{}, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	body := `{"pact_magic_slots":{"slot_level":3,"current":5,"max":2},"reason":"bad"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// Malformed spell_slots (non-integer level key) must return 400.
+func TestOverrideCharacterSlots_MalformedSpellSlots_Returns400(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	r := newDMDashboardRouterWithPoster(turnOnlyStore(turnID, encounterID), &fakeCombatLogPoster{})
+	body := `{"spell_slots":{"notalevel":{"current":1,"max":2}}}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// Malformed pact_magic_slots (wrong JSON type) must return 400.
+func TestOverrideCharacterSlots_MalformedPactSlots_Returns400(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	r := newDMDashboardRouterWithPoster(turnOnlyStore(turnID, encounterID), &fakeCombatLogPoster{})
+	body := `{"pact_magic_slots":"not-an-object"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// The before-state must also capture pre-existing pact-magic slots.
+func TestOverrideCharacterSlots_CapturesPactMagicInBeforeState(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	prevPact := json.RawMessage(`{"slot_level":2,"current":1,"max":2}`)
+
+	var loggedBefore json.RawMessage
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: id, Name: "Warlock",
+			PactMagicSlots: pqtype.NullRawMessage{Valid: true, RawMessage: prevPact},
+		}, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedBefore = arg.BeforeState
+		return refdata.ActionLog{}, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	body := `{"pact_magic_slots":{"slot_level":2,"current":2,"max":2}}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"spell_slots":null,"pact_magic_slots":{"slot_level":2,"current":1,"max":2}}`, string(loggedBefore))
 }

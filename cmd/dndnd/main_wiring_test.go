@@ -999,7 +999,7 @@ func TestMountCombatRoutes_RegistersWorkspaceAndDMDashboard(t *testing.T) {
 		{"POST", "/api/combat/{encounterID}/override/combatant/{combatantID}/conditions"},
 		{"POST", "/api/combat/{encounterID}/override/combatant/{combatantID}/exhaustion"},
 		{"POST", "/api/combat/{encounterID}/override/combatant/{combatantID}/initiative"},
-		{"POST", "/api/combat/{encounterID}/override/character/{characterID}/spell-slots"},
+		{"POST", "/api/combat/{encounterID}/override/character/{characterID}/slots"},
 		{"PATCH", "/api/combat/{encounterID}/combatants/{combatantID}/hp"},
 		{"DELETE", "/api/combat/{encounterID}/combatants/{combatantID}"},
 	}

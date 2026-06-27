@@ -24,6 +24,12 @@ type fakeRefdata struct {
 	combErr   error
 	vitalsArg refdata.UpdateCharacterVitalsParams
 	vitalsErr error
+
+	// slot-edit fakes
+	spellSlotsArg refdata.UpdateCharacterSpellSlotsParams
+	spellSlotsErr error
+	pactSlotsArg  refdata.UpdateCharacterPactMagicSlotsParams
+	pactSlotsErr  error
 }
 
 func (f *fakeRefdata) ListPlayerCharactersByStatus(ctx context.Context, arg refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
@@ -49,6 +55,16 @@ func (f *fakeRefdata) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.
 func (f *fakeRefdata) UpdateCharacterVitals(_ context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
 	f.vitalsArg = arg
 	return refdata.Character{}, f.vitalsErr
+}
+
+func (f *fakeRefdata) UpdateCharacterSpellSlots(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+	f.spellSlotsArg = arg
+	return refdata.Character{}, f.spellSlotsErr
+}
+
+func (f *fakeRefdata) UpdateCharacterPactMagicSlots(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+	f.pactSlotsArg = arg
+	return refdata.Character{}, f.pactSlotsErr
 }
 
 func TestDBStore_ListApprovedPartyCharacters_MapsRows(t *testing.T) {

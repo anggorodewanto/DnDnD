@@ -19,6 +19,12 @@ type fakeStore struct {
 	statusCtxErr error
 	persisted    *PersistStatusParams
 	persistErr   error
+
+	// slots-edit fakes
+	slotsCtx        SlotsContext
+	slotsCtxErr     error
+	persistedSlots  *PersistSlotsParams
+	persistSlotsErr error
 }
 
 func (f *fakeStore) ListApprovedPartyCharacters(ctx context.Context, campaignID uuid.UUID) ([]CharacterSheet, error) {
@@ -39,6 +45,18 @@ func (f *fakeStore) GetCharacterStatusContext(_ context.Context, _ uuid.UUID) (C
 func (f *fakeStore) UpdateCharacterStatus(_ context.Context, p PersistStatusParams) error {
 	f.persisted = &p
 	return f.persistErr
+}
+
+func (f *fakeStore) GetCharacterSlotsContext(_ context.Context, _ uuid.UUID) (SlotsContext, error) {
+	if f.slotsCtxErr != nil {
+		return SlotsContext{}, f.slotsCtxErr
+	}
+	return f.slotsCtx, nil
+}
+
+func (f *fakeStore) UpdateCharacterSlots(_ context.Context, p PersistSlotsParams) error {
+	f.persistedSlots = &p
+	return f.persistSlotsErr
 }
 
 func TestPartyLanguages_Empty(t *testing.T) {

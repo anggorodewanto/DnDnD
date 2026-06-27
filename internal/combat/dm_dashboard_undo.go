@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -300,9 +301,14 @@ type overrideInitiativeRequest struct {
 	Reason          string `json:"reason"`
 }
 
-type overrideSpellSlotsRequest struct {
-	SpellSlots json.RawMessage `json:"spell_slots"`
-	Reason     string          `json:"reason"`
+// overrideSlotsRequest is the JSON body for POST .../override/character/{characterID}/slots.
+// A nil SpellSlots or PactMagicSlots pointer means "leave that store untouched";
+// each store is updated independently so a warlock's pact magic can be fixed
+// without touching leveled spell slots (and vice versa).
+type overrideSlotsRequest struct {
+	SpellSlots     *json.RawMessage `json:"spell_slots"`
+	PactMagicSlots *json.RawMessage `json:"pact_magic_slots"`
+	Reason         string           `json:"reason"`
 }
 
 // overrideExhaustionRequest is the JSON body for POST .../exhaustion.
@@ -589,8 +595,14 @@ func snapshotExhaustionState(c refdata.Combatant) (json.RawMessage, error) {
 	return json.Marshal(snapshot)
 }
 
-// OverrideCharacterSpellSlots handles POST .../override/character/{characterID}/spell-slots.
-func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, r *http.Request) {
+// OverrideCharacterSlots handles POST .../override/character/{characterID}/slots.
+// It adjusts a character's leveled spell slots and/or Warlock pact-magic slots
+// mid-combat. Each store is optional: omit a field to leave it untouched.
+//
+// Payloads are parsed and validated BEFORE the turn lock is acquired so that a
+// malformed/invalid request returns HTTP 400 — only real DB failures inside the
+// lock map to 500.
+func (h *DMDashboardHandler) OverrideCharacterSlots(w http.ResponseWriter, r *http.Request) {
 	encounterID, err := parseEncounterID(r)
 	if err != nil {
 		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
@@ -602,9 +614,20 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 		return
 	}
 
-	var req overrideSpellSlotsRequest
+	var req overrideSlotsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	spellSlots, hasSpell, err := parseSpellSlotsOverride(req.SpellSlots)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pactSlots, hasPact, err := parsePactSlotsOverride(req.PactMagicSlots)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -620,19 +643,27 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 			return fmt.Errorf("getting character: %w", err)
 		}
 
-		before := json.RawMessage(`null`)
-		if char.SpellSlots.Valid {
-			before = char.SpellSlots.RawMessage
+		before := snapshotCharacterSlots(char)
+
+		if hasSpell {
+			if _, err := h.svc.store.UpdateCharacterSpellSlots(r.Context(), refdata.UpdateCharacterSpellSlotsParams{
+				ID:         characterID,
+				SpellSlots: pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("updating spell slots: %w", err)
+			}
 		}
 
-		newSlots := pqtype.NullRawMessage{RawMessage: req.SpellSlots, Valid: len(req.SpellSlots) > 0}
-		if _, err := h.svc.store.UpdateCharacterSpellSlots(r.Context(), refdata.UpdateCharacterSpellSlotsParams{
-			ID: characterID, SpellSlots: newSlots,
-		}); err != nil {
-			return fmt.Errorf("updating spell slots: %w", err)
+		if hasPact {
+			if _, err := h.svc.store.UpdateCharacterPactMagicSlots(r.Context(), refdata.UpdateCharacterPactMagicSlotsParams{
+				ID:             characterID,
+				PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactSlots, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("updating pact magic slots: %w", err)
+			}
 		}
 
-		// action_log.actor_id is NOT NULL FK to combatants(id); the spell-slot
+		// action_log.actor_id is NOT NULL FK to combatants(id); the slot
 		// override is a character-level mutation, so we attribute the audit row
 		// to the active turn's combatant.
 		_, _ = h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
@@ -642,10 +673,10 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 			ActorID:     turn.CombatantID,
 			Description: nullString(req.Reason),
 			BeforeState: before,
-			AfterState:  req.SpellSlots,
+			AfterState:  requestSlotsPayload(req),
 		})
 
-		base := fmt.Sprintf("⚠️ **DM Correction:** %s spell slots adjusted", char.Name)
+		base := fmt.Sprintf("⚠️ **DM Correction:** %s slots adjusted", char.Name)
 		h.postCorrection(r.Context(), encounterID, correctionMsg(base, req.Reason))
 		return nil
 	}); err != nil {
@@ -654,4 +685,86 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// parseSpellSlotsOverride parses and validates the optional spell_slots payload,
+// returning the storage-shaped JSON ({"1":{"current":2,"max":4}}) to persist.
+// A nil pointer means "leave the leveled spell-slot store untouched".
+func parseSpellSlotsOverride(raw *json.RawMessage) (out []byte, present bool, err error) {
+	if raw == nil {
+		return nil, false, nil
+	}
+	slots, err := character.ParseSpellSlotsJSON(*raw)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := character.ValidateSpellSlots(slots); err != nil {
+		return nil, false, err
+	}
+	out, err = character.MarshalSpellSlotsJSON(slots)
+	if err != nil {
+		return nil, false, err
+	}
+	return out, true, nil
+}
+
+// parsePactSlotsOverride parses and validates the optional pact_magic_slots
+// payload. A nil pointer means "leave the Warlock pact-magic store untouched".
+func parsePactSlotsOverride(raw *json.RawMessage) (out []byte, present bool, err error) {
+	if raw == nil {
+		return nil, false, nil
+	}
+	var pact character.PactMagicSlots
+	if err := json.Unmarshal(*raw, &pact); err != nil {
+		return nil, false, err
+	}
+	if err := character.ValidatePactSlots(pact); err != nil {
+		return nil, false, err
+	}
+	out, err = json.Marshal(pact)
+	if err != nil {
+		return nil, false, err
+	}
+	return out, true, nil
+}
+
+// characterSlotsSnapshot is the before/after audit shape for a slots override:
+// it carries both slot stores so the diff is symmetric. Either field is the
+// JSON literal null when the corresponding store is empty/omitted.
+type characterSlotsSnapshot struct {
+	SpellSlots     json.RawMessage `json:"spell_slots"`
+	PactMagicSlots json.RawMessage `json:"pact_magic_slots"`
+}
+
+// snapshotCharacterSlots captures both slot stores for the dm_override before-state.
+func snapshotCharacterSlots(c refdata.Character) json.RawMessage {
+	snap := characterSlotsSnapshot{
+		SpellSlots:     json.RawMessage(`null`),
+		PactMagicSlots: json.RawMessage(`null`),
+	}
+	if c.SpellSlots.Valid {
+		snap.SpellSlots = c.SpellSlots.RawMessage
+	}
+	if c.PactMagicSlots.Valid {
+		snap.PactMagicSlots = c.PactMagicSlots.RawMessage
+	}
+	b, _ := json.Marshal(snap)
+	return b
+}
+
+// requestSlotsPayload renders the request's slot fields as the audit after-state,
+// mirroring snapshotCharacterSlots so before/after diffs line up.
+func requestSlotsPayload(req overrideSlotsRequest) json.RawMessage {
+	snap := characterSlotsSnapshot{
+		SpellSlots:     json.RawMessage(`null`),
+		PactMagicSlots: json.RawMessage(`null`),
+	}
+	if req.SpellSlots != nil {
+		snap.SpellSlots = *req.SpellSlots
+	}
+	if req.PactMagicSlots != nil {
+		snap.PactMagicSlots = *req.PactMagicSlots
+	}
+	b, _ := json.Marshal(snap)
+	return b
 }

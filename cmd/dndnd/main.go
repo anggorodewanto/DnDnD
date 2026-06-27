@@ -527,7 +527,7 @@ func mountCombatDashboardRoutes(
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/conditions", dm.OverrideCombatantConditions)
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/exhaustion", dm.OverrideCombatantExhaustion)
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/initiative", dm.OverrideCombatantInitiative)
-	router.Post("/api/combat/{encounterID}/override/character/{characterID}/spell-slots", dm.OverrideCharacterSpellSlots)
+	router.Post("/api/combat/{encounterID}/override/character/{characterID}/slots", dm.OverrideCharacterSlots)
 	// C-35: per-attack DM advantage/disadvantage override.
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/advantage", dm.OverrideCombatantNextAttackAdvantage)
 	router.Post("/api/combat/{encounterID}/combatants/{combatantID}/concentration/drop", dm.DropConcentration)

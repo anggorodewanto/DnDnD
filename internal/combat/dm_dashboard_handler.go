@@ -56,7 +56,7 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/override/combatant/{combatantID}/conditions", h.OverrideCombatantConditions)
 		r.Post("/{encounterID}/override/combatant/{combatantID}/initiative", h.OverrideCombatantInitiative)
 		r.Post("/{encounterID}/override/combatant/{combatantID}/exhaustion", h.OverrideCombatantExhaustion)
-		r.Post("/{encounterID}/override/character/{characterID}/spell-slots", h.OverrideCharacterSpellSlots)
+		r.Post("/{encounterID}/override/character/{characterID}/slots", h.OverrideCharacterSlots)
 		// C-35: per-attack DM advantage/disadvantage override for the
 		// next attack roll of a targeted combatant.
 		r.Post("/{encounterID}/override/combatant/{combatantID}/advantage", h.OverrideCombatantNextAttackAdvantage)

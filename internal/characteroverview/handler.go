@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/auth"
+	"github.com/ab/dndnd/internal/character"
 )
 
 // CampaignVerifier checks whether a user owns a specific campaign.
@@ -44,6 +46,19 @@ func NewHandler(svc *Service, opts ...HandlerOption) *Handler {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/character-overview", h.Get)
 	r.Post("/api/character-overview/{characterID}/status", h.UpdateStatus)
+	r.Get("/api/character-overview/{characterID}/slots", h.GetSlots)
+	r.Post("/api/character-overview/{characterID}/slots", h.UpdateSlots)
+}
+
+// authorizeDM reports whether the request's Discord user owns the given campaign.
+// With no verifier configured (test/dev), all callers are authorized.
+func (h *Handler) authorizeDM(ctx context.Context, campaignID uuid.UUID) bool {
+	if h.campaignVerifier == nil {
+		return true
+	}
+	userID, _ := auth.DiscordUserIDFromContext(ctx)
+	owns, err := h.campaignVerifier.IsCampaignDM(ctx, userID, campaignID.String())
+	return err == nil && owns
 }
 
 // statusRequest is the JSON body for an out-of-combat status edit.
@@ -115,6 +130,135 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, status)
+}
+
+// slotsRequest is the JSON body for an out-of-combat spell/pact slot edit. A nil
+// field means "leave that store untouched".
+type slotsRequest struct {
+	SpellSlots     *json.RawMessage `json:"spell_slots"`
+	PactMagicSlots *json.RawMessage `json:"pact_magic_slots"`
+	Reason         string           `json:"reason"`
+}
+
+// slotsResponse is the JSON envelope returned by GetSlots/UpdateSlots: spell
+// slots string-keyed for the wire, pact magic null when the character has none.
+type slotsResponse struct {
+	SpellSlots     map[string]character.SlotInfo `json:"spell_slots"`
+	PactMagicSlots *character.PactMagicSlots     `json:"pact_magic_slots"`
+}
+
+// slotsResponseFrom renders int-keyed spell slots + a pact value into the wire
+// shape (string-keyed spell map, nil pact when zero-valued).
+func slotsResponseFrom(spell map[int]character.SlotInfo, pact character.PactMagicSlots) slotsResponse {
+	strKeyed := make(map[string]character.SlotInfo, len(spell))
+	for level, info := range spell {
+		strKeyed[strconv.Itoa(level)] = info
+	}
+	var pactPtr *character.PactMagicSlots
+	if pact != (character.PactMagicSlots{}) {
+		p := pact
+		pactPtr = &p
+	}
+	return slotsResponse{SpellSlots: strKeyed, PactMagicSlots: pactPtr}
+}
+
+// GetSlots returns a character's current spell/pact slots. Reads are allowed in
+// or out of combat. DM-authorized via the owning campaign.
+func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetSlotsContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if !h.authorizeDM(ctx, sctx.CampaignID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, slotsResponseFrom(sctx.SpellSlots, sctx.PactMagicSlots))
+}
+
+// UpdateSlots applies a DM's out-of-combat edit to a character's spell and/or
+// pact-magic slots. Refused (409) while the character is in an active combat;
+// the in-combat controls own slot usage during combat.
+func (h *Handler) UpdateSlots(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	var req slotsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetSlotsContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if !h.authorizeDM(ctx, sctx.CampaignID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	if sctx.InActiveCombat {
+		http.Error(w, "character is in an active combat; use the in-combat controls", http.StatusConflict)
+		return
+	}
+
+	update := SlotsUpdate{}
+	spell := sctx.SpellSlots
+	if req.SpellSlots != nil {
+		parsed, err := character.ParseSpellSlotsJSON(*req.SpellSlots)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		update.SpellSlots = &parsed
+		spell = parsed
+	}
+	pact := sctx.PactMagicSlots
+	if req.PactMagicSlots != nil {
+		var p character.PactMagicSlots
+		if err := json.Unmarshal(*req.PactMagicSlots, &p); err != nil {
+			http.Error(w, "invalid pact_magic_slots", http.StatusBadRequest)
+			return
+		}
+		update.PactMagicSlots = &p
+		pact = p
+	}
+
+	if err := h.svc.ApplySlots(ctx, characterID, update); err != nil {
+		if errors.Is(err, ErrInvalidInput) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "failed to update slots", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, slotsResponseFrom(spell, pact))
 }
 
 // overviewResponse is the JSON envelope returned by Get.
