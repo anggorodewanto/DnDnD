@@ -987,8 +987,8 @@ func (s *Service) CreateActionLog(ctx context.Context, input CreateActionLogInpu
 		ActorID:     input.ActorID,
 		TargetID:    input.TargetID,
 		Description: nullString(input.Description),
-		BeforeState: input.BeforeState,
-		AfterState:  input.AfterState,
+		BeforeState: rawMessageOrEmptyObject(input.BeforeState),
+		AfterState:  rawMessageOrEmptyObject(input.AfterState),
 		DiceRolls:   nullRawMessage(input.DiceRolls),
 	})
 }
@@ -1461,4 +1461,18 @@ func nullString(s string) sql.NullString {
 // nullRawMessage converts a json.RawMessage to pqtype.NullRawMessage, treating empty/nil as null.
 func nullRawMessage(raw json.RawMessage) pqtype.NullRawMessage {
 	return pqtype.NullRawMessage{RawMessage: raw, Valid: len(raw) > 0}
+}
+
+// rawMessageOrEmptyObject returns raw, or the JSON empty object {} when raw is
+// nil/empty. action_log.before_state and after_state are NOT NULL, so a writer
+// that has no meaningful state diff (e.g. a best-effort player-action timeline
+// row from recordCombatAction) must still supply valid JSON. Without this guard
+// such a write fails the NOT-NULL constraint and — because recordCombatAction
+// swallows the error — silently drops the row: the ISSUE-014 regression where
+// the DM Console timeline went blind to every player action.
+func rawMessageOrEmptyObject(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("{}")
+	}
+	return raw
 }

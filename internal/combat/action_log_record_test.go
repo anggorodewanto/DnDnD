@@ -72,6 +72,29 @@ func TestRecordCombatAction_WritesWhenParentsPresent(t *testing.T) {
 	assert.Contains(t, got.Description.String, "Hold Person")
 }
 
+// Regression for the ISSUE-014 *silent* failure: action_log.before_state and
+// after_state are NOT NULL, but recordCombatAction never set them, so every
+// player-action insert violated the constraint — and because the write is
+// best-effort (error swallowed), the row was dropped without a trace. The DM
+// Console timeline went blind to every player action for days while the unit
+// suite stayed green, because the mock store happily accepts nil columns the
+// real Postgres rejects. Pin that a recorded action carries valid (non-nil)
+// JSON state so the insert survives the NOT-NULL constraint.
+func TestRecordCombatAction_PopulatesNonNullState(t *testing.T) {
+	ms := defaultMockStore()
+	logged := captureActionLog(ms)
+	svc := NewService(ms)
+
+	svc.recordCombatAction(context.Background(), uuid.New(), uuid.New(), uuid.New(), uuid.NullUUID{}, "cast", "Vale cast Chill Touch on Ghoul")
+
+	require.Len(t, *logged, 1)
+	got := (*logged)[0]
+	require.NotEmpty(t, got.BeforeState, "before_state is NOT NULL in the DB; a nil here is silently dropped in prod")
+	require.NotEmpty(t, got.AfterState, "after_state is NOT NULL in the DB; a nil here is silently dropped in prod")
+	assert.True(t, json.Valid(got.BeforeState), "before_state must be valid JSON")
+	assert.True(t, json.Valid(got.AfterState), "after_state must be valid JSON")
+}
+
 // A missing NOT-NULL parent (turn/encounter/actor) must skip the write rather
 // than attempt an insert that would violate the constraint.
 func TestRecordCombatAction_SkipsWhenParentMissing(t *testing.T) {
