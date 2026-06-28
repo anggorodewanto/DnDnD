@@ -244,7 +244,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 		walls := h.loadWalls(ctx, encounter)
 
 		if offhand {
-			h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls, encounter)
+			h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls, encounter, thrown)
 			return errAlreadyResponded
 		}
 
@@ -307,12 +307,14 @@ func (h *AttackHandler) dispatchOffhand(
 	turn refdata.Turn,
 	walls []renderer.WallSegment,
 	encounter refdata.Encounter,
+	thrown bool,
 ) {
 	cmd := combat.OffhandAttackCommand{
 		Attacker: attacker,
 		Target:   target,
 		Turn:     turn,
 		Walls:    walls,
+		Thrown:   thrown,
 	}
 	result, err := h.combatService.OffhandAttack(ctx, cmd, h.roller)
 	if err != nil {

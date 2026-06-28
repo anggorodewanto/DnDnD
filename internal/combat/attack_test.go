@@ -1409,6 +1409,15 @@ func makeDagger() refdata.Weapon {
 	}
 }
 
+// makeThrownDagger is a dagger with explicit thrown range (20/60ft). The base
+// makeDagger() omits range values, which collapse ThrownMaxRange to melee reach.
+func makeThrownDagger() refdata.Weapon {
+	w := makeDagger()
+	w.RangeNormalFt = sql.NullInt32{Int32: 20, Valid: true}
+	w.RangeLongFt = sql.NullInt32{Int32: 60, Valid: true}
+	return w
+}
+
 func TestServiceOffhandAttack_HappyPath_NoTWFStyle(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()
@@ -1927,6 +1936,98 @@ func TestServiceOffhandAttack_RangedOffHand(t *testing.T) {
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "melee")
+}
+
+// TestServiceOffhandAttack_ThrownAtRange exercises an off-hand two-weapon-fighting
+// bonus attack that THROWS a light thrown weapon (dagger) at a target beyond melee
+// reach. Without thrown wiring the off-hand swing caps at 5ft and is out of range.
+func TestServiceOffhandAttack_ThrownAtRange(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+
+	var offHandCleared bool
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) { return char, nil }
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "dagger":
+			return makeThrownDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	ms.updateCharacterEquipmentFn = func(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error) {
+		if !arg.EquippedOffHand.Valid || arg.EquippedOffHand.String == "" {
+			offHandCleared = true
+		}
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3 // d4 rolls 3
+	})
+
+	// Target at col C, row 1 = 10ft away: beyond 5ft melee reach, within thrown range.
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "C", PositionRow: 1, Ac: 13, IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 0},
+		Thrown:   true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "Dagger", result.WeaponName)
+	assert.True(t, offHandCleared, "thrown off-hand weapon should leave the hand")
+}
+
+// TestServiceOffhandAttack_ThrownWeaponLacksThrownProperty rejects a thrown off-hand
+// swing when the equipped off-hand weapon has no "thrown" property.
+func TestServiceOffhandAttack_ThrownWeaponLacksThrownProperty(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	// Shortsword is light but lacks the "thrown" property.
+	char.EquippedOffHand = sql.NullString{String: "shortsword", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) { return char, nil }
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeShortsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, PositionCol: "B", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 0},
+		Thrown:   true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "thrown")
 }
 
 // --- Phase 37: Weapon Properties Tests ---

@@ -222,6 +222,23 @@ func TestAttackHandler_OffhandRoutesToOffhandService(t *testing.T) {
 	}
 }
 
+func TestAttackHandler_OffhandThrownThreadsThrownFlag(t *testing.T) {
+	h, _, svc, _ := setupAttackHandler()
+
+	h.Handle(makeAttackInteraction(map[string]any{
+		"target":  "OS",
+		"offhand": true,
+		"thrown":  true,
+	}))
+
+	if len(svc.offhandCalls) != 1 {
+		t.Fatalf("expected 1 offhand call, got %d", len(svc.offhandCalls))
+	}
+	if !svc.offhandCalls[0].Thrown {
+		t.Error("expected thrown flag to be threaded into OffhandAttackCommand")
+	}
+}
+
 func TestAttackHandler_TargetNotFound(t *testing.T) {
 	h, sess, svc, _ := setupAttackHandler()
 

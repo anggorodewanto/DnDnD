@@ -504,6 +504,7 @@ type OffhandAttackCommand struct {
 	Attacker            refdata.Combatant
 	Target              refdata.Combatant
 	Turn                refdata.Turn
+	Thrown              bool // Throw a light "thrown" off-hand weapon (e.g. dagger) instead of a melee swing
 	HostileNearAttacker bool
 	AttackerSize        string
 	DMAdvantage         bool
@@ -1467,6 +1468,11 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if IsRangedWeapon(offWeapon) {
 		return AttackResult{}, fmt.Errorf("off-hand weapon %q is ranged; off-hand attack requires melee weapons", offWeapon.Name)
 	}
+	// A thrown off-hand swing requires the weapon to actually have the "thrown"
+	// property (e.g. a dagger). Reject early with a clear, player-facing message.
+	if cmd.Thrown && !HasProperty(offWeapon, "thrown") {
+		return AttackResult{}, fmt.Errorf("off-hand weapon %q cannot be thrown (no thrown property)", offWeapon.Name)
+	}
 
 	// Off-hand attacks: no ability modifier unless TWF fighting style,
 	// but negative modifiers still apply per RAW (PHB p195).
@@ -1520,6 +1526,9 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	s.populateAttackContext(ctx, &input, cmd.Attacker)
 	input.Cover = coverLevel
 	input.WeaponMasteries = offMasteries
+	// Thrown off-hand: expand effective range to the weapon's thrown range and
+	// apply long-range disadvantage, mirroring the main-hand thrown path.
+	input.Thrown = cmd.Thrown
 
 	// Obscurement from encounter zones
 	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd.Attacker.EncounterID, cmd.Attacker, cmd.Target, cmd.AttackerVision, cmd.TargetVision)
@@ -1553,6 +1562,22 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	// ISSUE-014: persist the off-hand attack to action_log for the DM Console.
 	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
 		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+
+	// Phase 37 parity: a thrown off-hand weapon leaves the hand. Clear
+	// EquippedOffHand so the same dagger can't be re-thrown without re-equipping;
+	// inventory retains the item for a future turn. Runs after the swing resolves
+	// so a rejected attack does not drop the weapon.
+	if cmd.Thrown && char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
+		if _, equipErr := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
+			ID:               char.ID,
+			EquippedMainHand: char.EquippedMainHand,
+			EquippedOffHand:  sql.NullString{},
+			EquippedArmor:    char.EquippedArmor,
+			Ac:               char.Ac,
+		}); equipErr != nil {
+			return result, fmt.Errorf("clearing thrown off-hand weapon: %w", equipErr)
+		}
+	}
 
 	return result, nil
 }
