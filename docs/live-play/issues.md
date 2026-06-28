@@ -41,7 +41,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-024 | 2026-06-28 | combat / spellcasting (cast log) | minor | FIXED | Spell-attack cantrip #combat-log showed the damage **dice spec** (`💥 Damage: 1d8 necrotic`) instead of the **rolled value** — `FormatCastLog` (`spellcasting.go`) always printed `ScaledDamageDice`, never `DamageTotal`, and printed it even on a **miss** (no `Hit` guard). **Not a lost-damage bug** — `Cast` rolls the damage and `ApplyDamage` writes the target HP on a separate, correct path (verified live: Vale's Chill Touch took the lead ghoul G2 20→**13/22**, 7 necrotic, DB-confirmed); only the Discord string dropped the number. **Found live** (player asked why the log read "1d8 necrotic" with no value). **Fixed (TDD):** `FormatCastLog` now mirrors the weapon path — for a spell **attack** it prints `Damage: <DamageTotal> <type> (<dice>)` on a hit and **nothing** on a miss; save-based / no-attack spells keep the dice spec (their per-target total isn't a single value). Red/green `TestFormatCastLog_AttackHitShowsRolledDamage` + `_AttackMissShowsNoDamage`; combat + discord packages green, `make cover-check` green, rebuilt + redeployed. NB: any cast logged **before** this fix still reads the spec in #combat-log. |
 | ISSUE-025 | 2026-06-28 | combat / action_log (player actions) | major | FIXED | **DM Console timeline blind to ALL player actions** since 2026-06-25. `recordCombatAction` (the ISSUE-014 writer) called `CreateActionLog` with nil `before_state`/`after_state` — both **NOT NULL** — so every player cast/attack/freeform insert silently violated the constraint and was swallowed (best-effort write). Only enemy-turn rows persisted (they populate state since the ISSUE-018 fix). **Same bug class as ISSUE-018, on the player path** → ISSUE-014 was effectively a no-op in prod. The unit mock accepted the nil columns the real Postgres rejects, so the suite stayed green while prod silently dropped every row. **Found** while syncing live-play state docs (timeline empty of player beats forced manual session-logging). **Fixed (TDD):** coerce nil/empty before/after → `{}` at the `CreateActionLog` choke point (`rawMessageOrEmptyObject`, guards all service-method callers); regression test `TestRecordCombatAction_PopulatesNonNullState` asserts non-null valid JSON state. cover-check green; rebuilt + redeployed. |
 | ISSUE-026 | 2026-06-28 | combat / spell riders (effect model) | medium | OPEN (enhancement) | **Spell riders / ongoing effects aren't first-class timed effects**, so the DM hand-tracks them. Chill Touch's "can't regain HP until the caster's next turn", save-each-turn effects (ongoing poison, etc.), and other timed riders live in ad-hoc cast logic, not as a combatant effect carrying duration/started_round/expires_on/source_spell — so `/api/dm/situation` (which reads only `conditions`) can't surface them. Target: a first-class timed-effect model the engine ticks + the Console reads. Removes the residual hand-track in game-state.md ("Next action" Chill-Touch note). |
-| ISSUE-027 | 2026-06-28 | dm console / NPC statblock in payload | medium | OPEN (enhancement) | **Running an enemy turn still needs the creature's moveset** (attacks, damage dice, reach, recharge abilities, legendary/lair) but `/api/dm/situation` returns combatant *state* only — the DM opens the stat block separately. Target: a per-NPC `creature_summary` in the payload (attacks `{name,dice,reach}`, recharge/legendary availability) so a turn can be run from the Console. Pairs with **ISSUE-021** (executor still attack-only, no auto-move/advance). |
+| ISSUE-027 | 2026-06-28 | dm console / NPC statblock in payload | medium | IMPLEMENTED 2026-06-28 | **DONE:** `/api/dm/situation` now carries a per-NPC `creature_summary` (attacks `{name,to_hit,damage,damage_type,reach_ft,range_ft}` + `recharge_abilities[]` + `has_legendary`/`legendary_budget`/`has_lair`), so an enemy turn can be read straight from the Console without opening the stat block. `combat.BuildCreatureTurnSummary` (reuses the Turn Builder parsers) → adapter maps to `situation.CreatureSummary`; PCs / movesetless NPCs omit the field; per-ref memo avoids refetching shared creatures. Red/green TDD, cover-check green. **ISSUE-021 (executor auto-move/advance) intentionally left OPEN** — DM direction: run NPC turns manually, no auto-advance. |
 | ISSUE-028 | 2026-06-28 | dm console / in-character feed (platform) | major | OPEN (enhancement) | **Player #in-character roleplay is Discord-only** — never written to any DB table, absent from `/api/dm/situation` `timeline[]` (which carries only action_log + DM narration). The DM must read Discord directly (the reason Chrome-reading exists — see [`dm-rules.md`](dm-rules.md)). Largest situational gap. Target: ingest #in-character messages (Discord webhook/poll) into a roleplay timeline the Console surfaces. Large (platform integration). |
 | ISSUE-029 | 2026-06-28 | dm console / out-of-combat state | medium | OPEN (enhancement) | **`/api/dm/situation` returns an empty `state` out of combat** — exploration progress (`encounters.explored_cells`), party scene/location, and prep readiness are invisible, so between fights the DM falls back to game-state.md notes. Target: surface exploration/scene state (and an exploration-mode view) so the Console isn't combat-only. |
 | ISSUE-023 | 2026-06-27 | combat / enemy turn (combat-log damage) | minor | FIXED | Enemy-turn #combat-log reported the **raw rolled damage**, not the amount actually dealt after the target's resistance — a raging Forge took two ghoul bites that each logged "8 piercing damage" while Rage halved each to 4 (20→16→**12/32**), so the log overstated the hit. **Not a lost-damage bug** — HP was correct (resistance applied); only the log text was raw. **Found live** while running both ghoul turns (verified Forge `is_raging=t`, rage_rounds≈10 → 20−4−4=12 is correct). **Fixed (TDD):** `ExecuteEnemyTurn` now threads `ApplyDamage`'s `FinalDamage` back onto each attack step (new `AttackRollResult.FinalDamage`/`DamageResolved`), and `formatAttackLog` (new `attackDamagePhrase` helper) reports the dealt amount with an annotation when R/I/V changed it — `4 piercing damage (resisted — halved from 8)`, `0 … (immune — N negated)`, `N … (vulnerable — doubled from M)`; unchanged + pre-apply (plan preview) read plain as before. Red/green `TestFormatCombatLog_ResistedDamageShowsHalved`/`_ImmuneDamageShowsNegated`/`_ResolvedNoChangeReadsPlain` + `TestExecuteEnemyTurn_LogShowsResistedDamage`; combat package green, rebuilt + redeployed. NB: the two R2/R3 logs posted **before** this fix still read "8 piercing" in #combat-log (actual dealt was 4 each). |
@@ -791,16 +791,33 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Date:** 2026-06-28
 - **Area:** dm console / situation payload (`internal/situation` + adapter)
 - **Severity:** medium (enhancement)
-- **Status:** OPEN — scoped, no code.
+- **Status:** IMPLEMENTED 2026-06-28 (red/green TDD, `make cover-check` green).
 - **Problem:** to run an enemy turn a DM needs the creature's moveset — attacks (name, damage
-  dice, reach), recharge abilities, legendary/lair actions — but the payload returns combatant
-  *state* only, so the DM opens the stat block separately (and the Turn Builder is the only
-  place reach/attacks surface).
-- **Target:** add a per-NPC `creature_summary` to `CombatantView` (attacks `{name,dice,reach}`,
-  recharge/legendary availability) sourced from the creature ref, so an enemy turn can be run
-  entirely from the Console. **Pairs with ISSUE-021** — the executor still resolves the attack
-  only (no auto-move into reach, no turn advance); finishing that closes the manual enemy-turn
-  loop end-to-end.
+  dice, reach), recharge abilities, legendary/lair actions — but the payload returned combatant
+  *state* only, so the DM opened the stat block separately (and the Turn Builder was the only
+  place reach/attacks surfaced).
+- **Fix:** added a per-NPC `creature_summary` to `CombatantView`:
+  - `internal/combat/creature_summary.go` — `BuildCreatureTurnSummary(creature)` reuses the Turn
+    Builder's own parsers (`ParseCreatureAttacksWithSource`, `parseCreatureAbilitiesFromCreature`,
+    `isRechargeAbility`/`parseRechargeMin`, `HasLegendaryActions`/`ParseLegendaryInfo`,
+    `HasLairActions`) → `CreatureTurnSummary{Attacks, RechargeAbilities, HasLegendary,
+    LegendaryBudget, HasLair}`; best-effort (malformed/open5e prose → no structured attacks).
+    `IsEmpty()` lets the adapter omit movesetless creatures.
+  - `internal/situation` — neutral view types `CreatureSummary` / `AttackSummary` /
+    `RechargeSummary` (JSON-tagged, `omitempty`); `CreatureSummary *CreatureSummary` field on
+    both `CombatantRow` (input) and `CombatantView` (output); `buildState` copies it through. The
+    package stays dependency-free (no refdata/combat import).
+  - `cmd/dndnd/situation_adapter.go` (coverage-excluded) — `creatureSummary()` fetches the
+    creature for NPC combatants with a valid `CreatureRefID`, calls the combat builder, maps to
+    the situation view; memoized per ref id so a pack of identical creatures costs one
+    `GetCreature`. PCs / no-ref / GetCreature-miss / empty-moveset all yield nil → field omitted.
+  - Tests: `internal/combat/creature_summary_test.go` (attacks+recharge, legendary+lair, empty,
+    malformed-tolerated, open5e-prose) all 100% covered; `internal/situation` plumbing test
+    `TestBuild_StateSurfacesCreatureSummary` (NPC populated, PC nil).
+- **Deferred by design:** the **ISSUE-021** executor half (auto-move into reach + auto-advance the
+  turn) is intentionally **left OPEN** per DM direction — NPC turns are run manually (Run Enemy
+  Turn → Confirm & Post → manual End Turn); no auto-advance wanted. `creature_summary` gives the
+  DM the moveset to drive that manual turn from the Console.
 
 ### ISSUE-028 — Player in-character roleplay is invisible to the Console (platform gap)
 - **Date:** 2026-06-28

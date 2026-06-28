@@ -143,6 +143,9 @@ func (p *situationProvider) Encounter(ctx context.Context, campaignID string) (*
 		Round:         int(active.RoundNumber),
 		CurrentTurnID: p.currentTurnCombatantID(ctx, *active),
 	}
+	// Memoize parsed creature summaries by ref id so two combatants of the same
+	// creature (e.g. a pack of ghouls) cost one GetCreature, not N.
+	summaryCache := map[string]*situation.CreatureSummary{}
 	for _, c := range combs {
 		out.Combatants = append(out.Combatants, situation.CombatantRow{
 			ID:                  c.ID.String(),
@@ -164,9 +167,64 @@ func (p *situationProvider) Encounter(ctx context.Context, campaignID string) (*
 			Concentration:       nullStringTo(c.ConcentrationSpellName),
 			DeathSaves:          parseDeathSaves(c.DeathSaves),
 			Conditions:          parseConditions(c.Conditions),
+			CreatureSummary:     p.creatureSummary(ctx, c, summaryCache),
 		})
 	}
 	return out, nil
+}
+
+// creatureSummary loads an NPC's moveset (attacks + recharge/legendary/lair
+// availability) so the DM can run its turn from the Console (ISSUE-027). It is
+// best-effort: PCs, NPCs with no creature ref, a GetCreature miss, or a creature
+// with no parsable moveset all yield nil (the field is then omitted). Results
+// are memoized per ref id in cache to avoid refetching shared creatures.
+func (p *situationProvider) creatureSummary(ctx context.Context, c refdata.Combatant, cache map[string]*situation.CreatureSummary) *situation.CreatureSummary {
+	if !c.IsNpc || !c.CreatureRefID.Valid {
+		return nil
+	}
+	ref := c.CreatureRefID.String
+	if cached, ok := cache[ref]; ok {
+		return cached
+	}
+	cache[ref] = nil // memoize the miss/empty case by default
+	creature, err := p.queries.GetCreature(ctx, ref)
+	if err != nil {
+		return nil
+	}
+	summary := combat.BuildCreatureTurnSummary(creature)
+	if summary.IsEmpty() {
+		return nil
+	}
+	view := mapCreatureSummary(summary)
+	cache[ref] = view
+	return view
+}
+
+// mapCreatureSummary converts the combat-domain turn summary into the neutral
+// situation view shape served in the payload.
+func mapCreatureSummary(s combat.CreatureTurnSummary) *situation.CreatureSummary {
+	view := &situation.CreatureSummary{
+		HasLegendary:    s.HasLegendary,
+		LegendaryBudget: s.LegendaryBudget,
+		HasLair:         s.HasLair,
+	}
+	for _, a := range s.Attacks {
+		view.Attacks = append(view.Attacks, situation.AttackSummary{
+			Name:       a.Name,
+			ToHit:      a.ToHit,
+			Damage:     a.Damage,
+			DamageType: a.DamageType,
+			ReachFt:    a.ReachFt,
+			RangeFt:    a.RangeFt,
+		})
+	}
+	for _, r := range s.RechargeAbilities {
+		view.RechargeAbilities = append(view.RechargeAbilities, situation.RechargeSummary{
+			Name:        r.Name,
+			RechargeMin: r.RechargeMin,
+		})
+	}
+	return view
 }
 
 func nullInt32To(v sql.NullInt32) int {

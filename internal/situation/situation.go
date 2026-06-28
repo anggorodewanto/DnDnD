@@ -72,6 +72,40 @@ type CombatantView struct {
 	Concentration       string          `json:"concentration,omitempty"` // spell being concentrated on, "" if none
 	DeathSaves          *DeathSaves     `json:"death_saves,omitempty"`   // non-nil only for a downed combatant rolling saves
 	Conditions          []ConditionInfo `json:"conditions"`
+	// CreatureSummary is an NPC's moveset for running its turn from the Console
+	// (attacks + recharge/legendary/lair availability). Nil for PCs and for
+	// NPCs whose creature has no parsable moveset, so the field is omitted.
+	CreatureSummary *CreatureSummary `json:"creature_summary,omitempty"`
+}
+
+// CreatureSummary is an NPC's read-only moveset, surfaced so a DM can run the
+// enemy's turn straight from the DM Console without opening the stat block
+// (ISSUE-027). It reports *availability* (what the creature can do) — not live
+// per-turn resource state; the executor still resolves the chosen action.
+type CreatureSummary struct {
+	Attacks           []AttackSummary   `json:"attacks,omitempty"`
+	RechargeAbilities []RechargeSummary `json:"recharge_abilities,omitempty"`
+	HasLegendary      bool              `json:"has_legendary,omitempty"`
+	LegendaryBudget   int               `json:"legendary_budget,omitempty"`
+	HasLair           bool              `json:"has_lair,omitempty"`
+}
+
+// AttackSummary is one NPC attack: name, to-hit, damage dice, and reach/range —
+// everything the DM needs to narrate and adjudicate the swing.
+type AttackSummary struct {
+	Name       string `json:"name"`
+	ToHit      int    `json:"to_hit"`
+	Damage     string `json:"damage"`
+	DamageType string `json:"damage_type,omitempty"`
+	ReachFt    int    `json:"reach_ft,omitempty"`
+	RangeFt    int    `json:"range_ft,omitempty"`
+}
+
+// RechargeSummary is one recharge-gated ability and the minimum d6 it recharges
+// on (e.g. "Fire Breath (Recharge 5-6)" → 5).
+type RechargeSummary struct {
+	Name        string `json:"name"`
+	RechargeMin int    `json:"recharge_min,omitempty"`
 }
 
 // DeathSaves is a downed combatant's running death-save tally — the DM needs it

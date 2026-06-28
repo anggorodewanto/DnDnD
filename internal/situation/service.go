@@ -91,6 +91,7 @@ type CombatantRow struct {
 	Concentration       string
 	DeathSaves          *DeathSaves
 	Conditions          []ConditionInfo
+	CreatureSummary     *CreatureSummary // NPC moveset for running the turn; nil for PCs / movesetless NPCs
 }
 
 // TimelineRow is one timeline event in neutral form (the Service stamps Source).
@@ -244,6 +245,7 @@ func buildState(enc *EncounterRow) StateView {
 			Concentration:       c.Concentration,
 			DeathSaves:          c.DeathSaves,
 			Conditions:          c.Conditions,
+			CreatureSummary:     c.CreatureSummary,
 		})
 	}
 	return state

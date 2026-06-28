@@ -244,6 +244,57 @@ func TestBuild_StateExposesTier1Fields(t *testing.T) {
 	}
 }
 
+// ISSUE-027: an NPC's creature_summary (attacks + recharge/legendary/lair
+// availability) flows from the provider's CombatantRow straight through to the
+// CombatantView, so the DM can run the enemy's turn from the Console. PCs (and
+// NPCs with no moveset) carry a nil summary and the field is omitted.
+func TestBuild_StateSurfacesCreatureSummary(t *testing.T) {
+	f := &fakeProvider{
+		encounter: &EncounterRow{
+			ID: "enc-1", Name: "Cellar", Mode: "combat", Status: "active", Round: 1,
+			CurrentTurnID: "cb-ghoul",
+			Combatants: []CombatantRow{
+				{ID: "cb-ghoul", Name: "Ghoul", ShortID: "G1", InitiativeOrder: 1, IsNPC: true, IsAlive: true,
+					CreatureSummary: &CreatureSummary{
+						Attacks:           []AttackSummary{{Name: "Bite", ToHit: 2, Damage: "2d6+2", DamageType: "piercing", ReachFt: 5}},
+						RechargeAbilities: []RechargeSummary{{Name: "Fire Breath (Recharge 5-6)", RechargeMin: 5}},
+						HasLegendary:      true,
+						LegendaryBudget:   3,
+						HasLair:           true,
+					}},
+				{ID: "cb-vale", Name: "Vale", ShortID: "VA", InitiativeOrder: 2, IsNPC: false, IsAlive: true},
+			},
+		},
+	}
+	got, err := NewService(f).Build(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	by := map[string]CombatantView{}
+	for _, c := range got.State.Combatants {
+		by[c.ShortID] = c
+	}
+
+	cs := by["G1"].CreatureSummary
+	if cs == nil {
+		t.Fatal("Ghoul CreatureSummary = nil, want populated")
+	}
+	if len(cs.Attacks) != 1 || cs.Attacks[0].Name != "Bite" || cs.Attacks[0].ReachFt != 5 || cs.Attacks[0].Damage != "2d6+2" {
+		t.Errorf("Ghoul attacks = %+v, want [Bite 2d6+2 reach 5]", cs.Attacks)
+	}
+	if len(cs.RechargeAbilities) != 1 || cs.RechargeAbilities[0].RechargeMin != 5 {
+		t.Errorf("Ghoul recharge = %+v, want [Fire Breath recharge 5]", cs.RechargeAbilities)
+	}
+	if !cs.HasLegendary || cs.LegendaryBudget != 3 || !cs.HasLair {
+		t.Errorf("Ghoul legendary/lair = %v/%d/%v, want true/3/true", cs.HasLegendary, cs.LegendaryBudget, cs.HasLair)
+	}
+
+	if by["VA"].CreatureSummary != nil {
+		t.Errorf("Vale (PC) CreatureSummary = %+v, want nil", by["VA"].CreatureSummary)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
