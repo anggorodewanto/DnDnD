@@ -39,6 +39,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-021 | 2026-06-27 | combat / enemy turn (executor scope) | medium | OPEN | Enemy-turn executor resolves the **attack only** — it does NOT move the NPC into reach or advance the turn. Confirmed across two clean live runs (after the ISSUE-018 fix): the 2nd ghoul "bit" Forge from 35 ft with **no movement emitted**, and every enemy turn stayed `active` after Confirm & Post. DM must **drag the token into reach + click End Turn** manually. Distinct from ISSUE-018 (the `before_state` crash, fixed) — this runs cleanly but under-does the turn. ~~Minor: the "Turn Complete" summary renders the actor name blank (`**'s Turn**`).~~ **Name-blank tail FIXED 2026-06-27 (TDD):** ordering bug in `ExecuteEnemyTurn` (`turn_builder_handler.go`) — the HTTP handler rebuilds the `TurnPlan` from the POST body (`combatant_id`+`steps` only, no `display_name`), and the service called `FormatCombatLog(plan)` **one line before** backfilling `plan.DisplayName = combatant.DisplayName` → header rendered `**'s Turn**`. Swapped the two lines so DisplayName is set first. Red/green `TestExecuteEnemyTurn_CombatLogNamesActor`. Movement/turn-advance scope **still OPEN**. |
 | ISSUE-022 | 2026-06-27 | combat / warlock pact slots (write-back) | medium | FIXED (other agent) | Combat pact-slot expenditure not written back to `characters.pact_magic_slots` — #combat-log showed "1 remaining" after Vale's Misty Step but the base row read `current: 0` (same two-store gap as ISSUE-020's HP). **Fixed by another agent this session**; logged here for the record. |
 | ISSUE-024 | 2026-06-28 | combat / spellcasting (cast log) | minor | FIXED | Spell-attack cantrip #combat-log showed the damage **dice spec** (`💥 Damage: 1d8 necrotic`) instead of the **rolled value** — `FormatCastLog` (`spellcasting.go`) always printed `ScaledDamageDice`, never `DamageTotal`, and printed it even on a **miss** (no `Hit` guard). **Not a lost-damage bug** — `Cast` rolls the damage and `ApplyDamage` writes the target HP on a separate, correct path (verified live: Vale's Chill Touch took the lead ghoul G2 20→**13/22**, 7 necrotic, DB-confirmed); only the Discord string dropped the number. **Found live** (player asked why the log read "1d8 necrotic" with no value). **Fixed (TDD):** `FormatCastLog` now mirrors the weapon path — for a spell **attack** it prints `Damage: <DamageTotal> <type> (<dice>)` on a hit and **nothing** on a miss; save-based / no-attack spells keep the dice spec (their per-target total isn't a single value). Red/green `TestFormatCastLog_AttackHitShowsRolledDamage` + `_AttackMissShowsNoDamage`; combat + discord packages green, `make cover-check` green, rebuilt + redeployed. NB: any cast logged **before** this fix still reads the spec in #combat-log. |
+| ISSUE-025 | 2026-06-28 | combat / action_log (player actions) | major | FIXED | **DM Console timeline blind to ALL player actions** since 2026-06-25. `recordCombatAction` (the ISSUE-014 writer) called `CreateActionLog` with nil `before_state`/`after_state` — both **NOT NULL** — so every player cast/attack/freeform insert silently violated the constraint and was swallowed (best-effort write). Only enemy-turn rows persisted (they populate state since the ISSUE-018 fix). **Same bug class as ISSUE-018, on the player path** → ISSUE-014 was effectively a no-op in prod. The unit mock accepted the nil columns the real Postgres rejects, so the suite stayed green while prod silently dropped every row. **Found** while syncing live-play state docs (timeline empty of player beats forced manual session-logging). **Fixed (TDD):** coerce nil/empty before/after → `{}` at the `CreateActionLog` choke point (`rawMessageOrEmptyObject`, guards all service-method callers); regression test `TestRecordCombatAction_PopulatesNonNullState` asserts non-null valid JSON state. cover-check green; rebuilt + redeployed. |
 | ISSUE-023 | 2026-06-27 | combat / enemy turn (combat-log damage) | minor | FIXED | Enemy-turn #combat-log reported the **raw rolled damage**, not the amount actually dealt after the target's resistance — a raging Forge took two ghoul bites that each logged "8 piercing damage" while Rage halved each to 4 (20→16→**12/32**), so the log overstated the hit. **Not a lost-damage bug** — HP was correct (resistance applied); only the log text was raw. **Found live** while running both ghoul turns (verified Forge `is_raging=t`, rage_rounds≈10 → 20−4−4=12 is correct). **Fixed (TDD):** `ExecuteEnemyTurn` now threads `ApplyDamage`'s `FinalDamage` back onto each attack step (new `AttackRollResult.FinalDamage`/`DamageResolved`), and `formatAttackLog` (new `attackDamagePhrase` helper) reports the dealt amount with an annotation when R/I/V changed it — `4 piercing damage (resisted — halved from 8)`, `0 … (immune — N negated)`, `N … (vulnerable — doubled from M)`; unchanged + pre-apply (plan preview) read plain as before. Red/green `TestFormatCombatLog_ResistedDamageShowsHalved`/`_ImmuneDamageShowsNegated`/`_ResolvedNoChangeReadsPlain` + `TestExecuteEnemyTurn_LogShowsResistedDamage`; combat package green, rebuilt + redeployed. NB: the two R2/R3 logs posted **before** this fix still read "8 piercing" in #combat-log (actual dealt was 4 each). |
 
 ---
@@ -727,6 +728,41 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Fix idea:** in `ExecuteEnemyTurn` / the plan builder (`turn_builder_handler.go`), emit a
   move step toward the chosen target when out of reach (reuse the player `/move` pathing) and
   call the turn-advance path after a successful resolve.
+
+### ISSUE-025 — action_log silently dropped every player action (Console timeline blind)
+- **Date:** 2026-06-28
+- **Area:** combat / `action_log` (player-action observability) vs the DM Console timeline
+- **Severity:** major — DM situational-awareness gap. Combat resolved correctly; the
+  `/api/dm/situation` `timeline[]` was blind to **every** player cast/attack/freeform for
+  ~3 days, which forced manual session-logging to compensate (the very thing the DB should make
+  unnecessary). Surfaced while reconciling the live-play state docs.
+- **Status:** FIXED (TDD, `main`).
+- **Root cause:** `action_log.before_state` and `after_state` are **NOT NULL**.
+  `recordCombatAction` (`internal/combat/action_log_record.go`, added for ISSUE-014) builds a
+  `CreateActionLogInput` **without** those fields, so `CreateActionLog` passed `nil` straight
+  through → every player-action insert violated the constraint. The write is intentionally
+  **best-effort** (error swallowed so a logging failure never aborts a resolved cast/attack), so
+  the violation vanished without a trace. Only `ExecuteEnemyTurn` rows persisted — it populates
+  before/after state since the **ISSUE-018** fix. **This is the same bug class as ISSUE-018, on
+  the player path**, which means ISSUE-014 ("FIXED + DEPLOYED + verified") was effectively a
+  no-op in production.
+- **Why it hid:** the combat unit suite uses a mock store (`captureActionLog`) that happily
+  records the nil columns the real Postgres rejects. Every `*_RecordsActionLog` test was green
+  while prod silently dropped the row — a mock-vs-DB divergence. Empirically confirmed against
+  the live DB: the active encounter's `action_log` held **only** `enemy_turn` rows, none of
+  Vale's crossbow / Misty Step / Chill Touch.
+- **Fix (2026-06-28, TDD, `main`):** coerce a nil/empty `before_state`/`after_state` to the JSON
+  empty object `{}` at the single choke point — new `rawMessageOrEmptyObject`
+  (`internal/combat/service.go`) applied in `CreateActionLog`, so **no** service-method caller
+  can silently fail the NOT-NULL constraint again (the requested regression guard). Direct
+  `store.CreateActionLog` callers (condition/override/undo/legendary/turn-builder) already
+  supply real state and are unaffected. `{}` is safe for player-action rows — they are timeline
+  observability, not undo targets (undo reads `before_state` only for DM-override action types).
+  Red/green `TestRecordCombatAction_PopulatesNonNullState` asserts the recorded params carry
+  non-null valid JSON. `make cover-check` green; rebuilt + redeployed.
+- **Follow-up (candidate, not done):** the mock store could enforce the NOT-NULL columns so a
+  future best-effort writer that forgets state fails the unit suite instead of prod. Logged, not
+  implemented — the choke-point coercion already prevents the recurrence.
 
 <!-- Append a section per issue:
 

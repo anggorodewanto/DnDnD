@@ -75,22 +75,34 @@ big-party technique is in [`big-party.md`](big-party.md).
 
 ## Keep the record straight
 
-- **Keep narration AND the state docs in lockstep with the mechanics — never let
-  them fall behind.** The combat engine advances in Discord on its own whenever a
-  player runs a slash command (`/attack`, `/done`, even a paralyzed enemy's
-  auto-skipped turn) — *without* the DM doing anything. So after **every**
-  mechanical beat, before you stop, you must: **(1) narrate** the beat to #the-story
-  (read-aloud block), and **(2) update** [`game-state.md`](game-state.md) +
-  [`party/roster.md`](party/roster.md) (HP/position/conditions) + the current
-  [`sessions/`](sessions/) log to match the live DB.
+- **The DB / DM Console is the source of truth for mechanical state — never
+  hand-track it.** Round, turn, HP, AC, positions, conditions, slots, the pending
+  queue, and the action timeline are all *generated* and served live by the DM
+  Console (`GET /api/dm/situation`). **Do NOT copy them into
+  [`game-state.md`](game-state.md) or [`party/roster.md`](party/roster.md)** — a
+  hand-kept copy drifts the moment a player runs a slash command, and an agent then
+  acts on a stale board (this folder hit that failure repeatedly — see
+  [`sessions/`](sessions/)). The docs hold only what the DB *can't* derive: rulings,
+  lore, ops, technique, **DM intent** (the "Next action" + scene framing in
+  game-state.md), the narrative session log, durable IDs, and per-PC durable kit.
+  If the Console is missing something a DM needs — as the `action_log`
+  player-action gap was (every player beat invisible in the timeline; fixed
+  2026-06-28, ISSUE-025) — **fix the product**, don't paper over it with a manual doc.
+- **Keep the STORY in lockstep with the mechanics — never let narration fall
+  behind.** The combat engine advances in Discord on its own whenever a player runs
+  a slash command (`/attack`, `/done`, even a paralyzed enemy's auto-skipped turn)
+  — *without* the DM doing anything. So after **every** mechanical beat, before you
+  stop, you must: **(1) narrate** the beat to #the-story (read-aloud block), and
+  **(2) update the non-derivable docs** — the narrative [`sessions/`](sessions/) log
+  + the **Next action** / scene in [`game-state.md`](game-state.md). Pull the
+  numbers you narrate from the Console; don't transcribe them into a state table.
   - The worst failure mode this folder has actually hit is *mechanics racing ahead
     of the story*: a fight resolved over Rounds 2–3 in #combat-log (Forge
     auto-critting a paralyzed wretch to death) while #the-story and the save file
     were both frozen two rounds back at "Round 1, wretch alive."
-  - **On resume, treat the DB + #combat-log as the source of truth** (see the DM
-    Console note in [`README.md`](README.md)): if the DB's round/HP is ahead of the
-    docs, **stop and reconcile** — narrate the un-narrated beats, correct the docs —
-    *before* taking any new action.
+  - **On resume, treat the DB + DM Console + #combat-log as the source of truth**
+    (see [`README.md`](README.md)): if the live board is ahead of the docs, **stop
+    and reconcile** — narrate the un-narrated beats — *before* taking any new action.
 
 ## Bugs found while playing
 

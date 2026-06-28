@@ -26,9 +26,11 @@ folder is for *actually playing*.
 
 1. **`README.md`** (this) — orientation, the play loop, the DM Console map.
 2. **[`dm-rules.md`](dm-rules.md)** — the inviolable constraints. **Read before acting.**
-3. **[`game-state.md`](game-state.md)** — the save file: live IDs, current scene,
-   ops snapshot, **Next action**. *Where we are right now.*
-4. **[`party/roster.md`](party/roster.md)** — the party at a glance (HP/AC/resources).
+3. **[`game-state.md`](game-state.md)** — the save file: durable IDs, ops snapshot,
+   current scene, **Next action** (DM intent). *For the live board — round/turn/HP/
+   positions — read the DM Console, not this file.*
+4. **[`party/roster.md`](party/roster.md)** — the party's durable identity + kit
+   (live HP/positions/conditions via the DM Console).
 5. **[`sessions/`](sessions/)** — skim the **latest** session log for recent beats.
 6. **[`issues.md`](issues.md)** — skim the triage table for known problems.
 
@@ -114,8 +116,8 @@ The hard constraints that govern every one of these steps are in
 | --- | --- | --- |
 | `README.md` | Index, roles, play loop, resume order, DM Console. | Rarely. |
 | [`dm-rules.md`](dm-rules.md) | Inviolable DM constraints. **Always load.** | Rarely. |
-| [`game-state.md`](game-state.md) | Slim save file — IDs, current scene, ops, **Next action**. | **Every advance.** |
-| [`party/roster.md`](party/roster.md) | Party at-a-glance + onboarding slots. | **Every advance.** |
+| [`game-state.md`](game-state.md) | Save file — durable IDs, ops, scene, **Next action** (intent). Live mechanics → DM Console. | On scene / intent change. |
+| [`party/roster.md`](party/roster.md) | Party durable identity + kit + onboarding slots. Live HP/pos → Console. | On level-up / new PC / kit change. |
 | [`party/`](party/)`<name>.md` | Per-PC durable sheets. | On level-up / kit change. |
 | [`world.md`](world.md) | Ashfall lore, NPCs, rulings. | When the world grows. |
 | [`encounters/`](encounters/) | Pre-built encounter specs. | When prepping fights. |

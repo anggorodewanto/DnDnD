@@ -493,3 +493,33 @@ _Resumed; reconciled the live board (DM Console) — mechanics had advanced past
 - **State now:** **Round 3, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
   Forge E1 (**12/32, RAGING**), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on
   Forge. **Next:** Vale acts (player-driven), then Forge (12, raging), then 2nd Ghoul (9).
+
+### R3 — Vale's Chill Touch + ISSUE-024 (06-28)
+
+_Reconciled the live board on resume — the DB was ahead of the docs (Vale's R3 turn had resolved)._
+
+- **Reconcile on resume:** DM Console / DB showed **R3 already past Vale**, current = **Forge**
+  (init 12, turn open, `attacks_remaining=1`, not yet acted). game-state.md + roster.md were
+  still frozen at "Vale's turn (CURRENT)" — the mechanics-racing-ahead failure `dm-rules` warns
+  about. Reconciled all state docs to the DB before anything else.
+- **Vale's turn (init 15, R3):** **Chill Touch** (cantrip, ranged spell attack) at the **lead
+  ghoul (G2, E2)** from K2 — **HIT, 7 necrotic** → ghoul **20→13/22** (DB-confirmed). No pact
+  slot (cantrip) → she stays **1/2**. Rider: the ghoul can't regain HP until the start of Vale's
+  next turn.
+- **⚠ ISSUE-024 (found live, FIXED this session, committed `5599ef4`):** the #combat-log cast
+  line showed the damage **dice spec** (`💥 Damage: 1d8 necrotic`) instead of the rolled value,
+  and printed it even on a miss — `FormatCastLog` always emitted `ScaledDamageDice`, never
+  `DamageTotal`, with no `Hit` guard. **Not a lost-damage bug** (the 7 necrotic landed; HP
+  correct). Player asked why the log read "1d8 necrotic" with no number. Fixed (TDD): spell
+  **attacks** now log `Damage: <total> <type> (<dice>)` on a hit, nothing on a miss; save-based
+  spells keep the spec. Rebuilt + redeployed. NB: Vale's Chill Touch line was posted **before**
+  the redeploy, so it still reads "1d8 necrotic" in #combat-log (actual 7).
+- **action_log gap (observation, not fixed):** `action_log` for this encounter holds **only
+  enemy_turn rows** — no player action (Vale's R1 crossbow / Misty Step, R3 Chill Touch) was
+  recorded, so the DM-Console `timeline[]` misses every player beat. The casts/attacks + their
+  HP effects are all correct (combatant rows); only the timeline writer (ISSUE-014's
+  `recordCombatAction`) isn't producing rows on these paths. Flagged for a later look.
+- **State now:** **Round 3, Forge's turn (init 12, CURRENT).** Forge E1 (**12/32, RAGING**),
+  Vale K2 (19/24, bloodied, 1/2 pact, **done**), lead Ghoul G2 E2 (**13/22**), 2nd Ghoul G1 D2
+  (22/22). Both ghouls on Forge. Two stale `enemy_turn_ready` queue items still pending
+  (ISSUE-021). **Next:** Forge acts (player-driven, raging), then 2nd Ghoul (G1, 9).

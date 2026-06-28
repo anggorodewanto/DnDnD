@@ -4,7 +4,7 @@
 > load this file when you need Forge's full kit. **Current HP / position /
 > conditions track in [`roster.md`](roster.md)** in lockstep with the live DB.
 
-- **Player:** the DM's friend — **remote 2nd player**, in via the cloudflared
+- **Player:** the DM's friend — **remote 2nd player**, in via the ngrok
   tunnel (see [`../runbook.md`](../runbook.md) "Remote players").
 - **Hill-Dwarf Barbarian 3** (Path of the Berserker), guild-artisan background.
 - **APPROVED** 2026-06-25 (after the ISSUE-013 slug-drift fix went live — see

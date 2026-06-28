@@ -14,7 +14,7 @@ agent DMs at a time (sequential handoff — see the resume order in
 Batch the new friends in. Per player: `/register` → build in the portal → **DM
 approves** on the dashboard → add a [`party/roster.md`](party/roster.md) row + a
 `party/<name>.md` sheet → fold into the fiction. Remote players reach the portal +
-OAuth via the cloudflared tunnel. Full steps + the tunnel:
+OAuth via the ngrok tunnel (stable reserved domain). Full steps + the tunnel:
 [`runbook.md`](runbook.md) "Onboarding players" and "Remote players."
 
 - Approve as they come in — don't make an onboarded player wait on the others.

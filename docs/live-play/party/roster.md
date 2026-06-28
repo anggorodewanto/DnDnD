@@ -1,24 +1,26 @@
-# Party Roster — at-a-glance (load this every session)
+# Party Roster — who's at the table (durable identity + kit)
 
-> The whole table in one screen. **Keep HP / position / conditions here in
-> lockstep with the live DB** (the DM Console `state` is the source of truth — see
-> [`../README.md`](../README.md)). Full per-PC sheets are linked in the last column;
-> load those only when you need the detail. Onboarding flow:
-> [`../runbook.md`](../runbook.md) "Onboarding players."
+> **Identity, class, and durable kit only.** Live **HP / position / conditions /
+> current slots** are *generated* — read them from the **DM Console** (`state`, see
+> [`../README.md`](../README.md)) or a PC's sheet/`/character`, never from a
+> hand-kept column here (those drift — see [`../dm-rules.md`](../dm-rules.md) "Keep
+> the record straight"). Full per-PC sheets are in the last column; load on demand.
+> Onboarding flow: [`../runbook.md`](../runbook.md) "Onboarding players."
 
-| PC | Player | Race / Class / Lvl | HP | AC | Key resources | Pos | Status | Sheet |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Vale** | the user | Tiefling Warlock 3 (Fiend) | **19/24** | **11** (leather) | **1/2** pact slots @ L2; DC 13; light crossbow | **K2** | **In combat** ("The Cellar", R3) — **bloodied**; Misty Stepped clear of the ghouls; **her turn** | [vale.md](vale.md) |
-| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian 3 (Berserker) | **12/32** | 14 | **Rage ACTIVE** (≈10 rds, B/P/S resist); **greataxe** | E1 | **In combat** ("The Cellar", R3) — **bloodied & RAGING**; both ghouls adjacent (D2/E2), both bit him (4 each, resisted) | [forge.md](forge.md) |
+| PC | Player | Race / Class / Lvl | AC (base) | Durable kit (max resources / signature) | Sheet |
+| --- | --- | --- | --- | --- | --- |
+| **Vale** | the user | Tiefling Warlock 3 (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; light crossbow + bolts; Misty Step, Chill Touch, Hold Person | [vale.md](vale.md) |
+| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian 3 (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack | [forge.md](forge.md) |
 
-_Add a row + a `party/<name>.md` sheet for each new PC on approval._
+_Add a row + a `party/<name>.md` sheet for each new PC on approval. Keep this table to durable
+facts; for who's bloodied / where they stand right now, open the DM Console._
 
 ## New PCs joining (big party, 5-6 total)
 
 Three to four more friends are joining the existing Ashfall party. For each:
 
 1. **Onboard** — player runs `/register` → builds in the portal (remote players
-   reach it via the cloudflared tunnel) → **DM approves** on the dashboard. Full
+   reach it via the ngrok tunnel) → **DM approves** on the dashboard. Full
    steps: [`../runbook.md`](../runbook.md) "Onboarding players."
 2. **Add to this roster** — a row above + a `party/<name>.md` sheet (copy the shape
    of [vale.md](vale.md) / [forge.md](forge.md)).
