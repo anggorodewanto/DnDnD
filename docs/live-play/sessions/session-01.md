@@ -657,3 +657,43 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   Forward-only (the historical R4 crit row isn't backfilled).
 - **Board unchanged:** still **Round 5, Forge's turn** (player). G1 3/22 (D2), Forge 4/32 raging
   (E1), Vale 19/24 (K2), G2 dead. Awaiting Forge's move.
+
+### R5 closes — Forge swings, ghoul clings on; its bite goes wide; R6 opens on Vale (06-28, ~2:36 PM)
+
+- **Forge's R5 turn (player-driven):** **Greataxe hit G1 for 12** (07:06:32) — brought the flank
+  ghoul to **3/22** but did **not** drop it. No second attack/bonus logged. The ghoul stayed up,
+  jaws on the swaying dwarf.
+- **G1's R5 turn (NPC, DM-run via Turn Builder):** "⚔ Run Enemy Turn — Ghoul" → executor offered a
+  single **Bite vs Forge** (+2, 2d6+2 piercing, reach 5ft). Engine roll: **to-hit total 4 vs AC 14 —
+  Miss**, 0 damage. Confirmed & Posted to #combat-log (no re-roll; engine roll stands). Forge takes
+  no damage — survives at **4/32**. Then manual **End Turn** (ISSUE-030 guard satisfied: enemy turn
+  executed before advance, no silent skip). Logged `enemy_turn Ghoul R5` at 07:33:49.
+- **Round advanced to R6:** dead G2 (init 19) auto-skipped → **Vale CURRENT** (init 15) → Forge (12)
+  → G1 (9). Narration posted to #the-story (read-aloud, 2:36 PM): the kill-bite snaps shut on empty
+  air; both ghoul and dwarf barely upright. No HP/AC numbers leaked.
+- **Board now:** **Round 6, Vale's turn** (player). G1 alive **3/22** (D2, on Forge's flank), Forge
+  **4/32 raging** (E1), Vale 19/24 (K2), G2 dead (E2). Console `pending` empty, `next_step` clear.
+  Awaiting Vale's move — one solid hit from either side likely ends the fight (G1 a breath from death;
+  Forge a bite from death saves, and G1 acts last in R6).
+
+### Engine fix mid-session: two-dagger thrower can now throw the off-hand (ISSUE-035) (06-28, ~3:10 PM)
+
+- **Player report:** Vale (2× dagger) threw her **main-hand** dagger as her R6 Attack action ("hit
+  for 2"), then tried to throw the **off-hand** dagger as the two-weapon-fighting bonus attack
+  (`/attack offhand:true thrown:true`) — bot refused: **"no main hand weapon equipped."**
+- **Real bug (not a rules error):** RAW you can TWF with two light thrown weapons. But a main-hand
+  thrown attack auto-unequips the weapon (`attack.go:1293`, so one dagger can't be re-thrown forever),
+  and `OffhandAttack`'s guard (`attack.go:1443`) then requires a main-hand weapon still equipped → the
+  emptied main hand trips it. The legit two-dagger-throw sequence breaks.
+- **Fix (red/green TDD):** per-turn in-memory marker `mainHandThrownLightEffect` (same lifecycle as the
+  Nick marker) set when a LIGHT melee weapon is thrown from the main hand; `OffhandAttack` treats the
+  TWF main-hand prerequisite as met when the marker is present, even with an empty hand. Empty-main is
+  allowed ONLY with the marker, so an illegal off-hand after a ranged/crossbow attack is still refused.
+  `make cover-check` green; rebuilt + redeployed. Full write-up: issues.md ISSUE-035.
+- **Live bridge (one-time):** the marker is in-memory and the redeploy wiped it for Vale's in-progress
+  R6 turn (her main throw already happened pre-deploy). So for THIS throw, **Vale re-`/equip`s a dagger
+  to her main hand**, then re-runs `/attack <ghoul> offhand:true thrown:true` — it now resolves via the
+  equipped-main path (she rolls her own dice). Future turns need no dance (throw main → throw off-hand
+  works directly within a process).
+- **Board unchanged:** still **Round 6, Vale's turn** (player). G1 3/22 (D2), Forge 4/32 raging (E1),
+  Vale 19/24 (K2), G2 dead. Awaiting Vale's off-hand dagger throw.

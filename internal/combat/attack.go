@@ -1302,6 +1302,13 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 			// /equip will recover. Do not break the combat log.
 			_ = equipErr
 		}
+		// ISSUE-035: a thrown LIGHT melee weapon still satisfies the two-weapon-
+		// fighting prerequisite for an off-hand swing this turn, even though it
+		// has now left the hand. Record it so OffhandAttack doesn't reject on the
+		// emptied main hand (lets a two-dagger thrower throw the off-hand next).
+		if HasProperty(weapon, "light") && !IsRangedWeapon(weapon) {
+			s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, []string{mainHandThrownLightEffect})
+		}
 	}
 
 	// ISSUE-014: persist the attack to action_log for the DM Console timeline.
@@ -1439,19 +1446,26 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	// merged STR/DEX/CON. Failed beast lookup degrades to druid scores.
 	scores := ResolveAttackerScores(ctx, s.store, cmd.Attacker, parsed)
 
-	// Validate main hand weapon exists and is light
-	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
-		return AttackResult{}, fmt.Errorf("no main hand weapon equipped")
-	}
-	mainWeapon, err := s.store.GetWeapon(ctx, char.EquippedMainHand.String)
-	if err != nil {
-		return AttackResult{}, fmt.Errorf("getting main hand weapon: %w", err)
-	}
-	if !HasProperty(mainWeapon, "light") {
-		return AttackResult{}, fmt.Errorf("main hand weapon %q is not light", mainWeapon.Name)
-	}
-	if IsRangedWeapon(mainWeapon) {
-		return AttackResult{}, fmt.Errorf("main hand weapon %q is ranged; off-hand attack requires melee weapons", mainWeapon.Name)
+	// Validate the main hand held a light melee weapon for this two-weapon-
+	// fighting swing. ISSUE-035: a LIGHT melee weapon thrown from the main hand
+	// THIS turn still satisfies the prerequisite even though it has now left the
+	// hand (the throw cleared EquippedMainHand) — otherwise a legitimate two-
+	// dagger thrower can't follow a thrown main-hand dagger with an off-hand throw.
+	used := s.usedEffectsSnapshot(cmd.Attacker.EncounterID, cmd.Attacker.ID)
+	if !used[mainHandThrownLightEffect] {
+		if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
+			return AttackResult{}, fmt.Errorf("off-hand attack needs a light melee weapon in your main hand (two-weapon fighting requires a weapon in each hand)")
+		}
+		mainWeapon, err := s.store.GetWeapon(ctx, char.EquippedMainHand.String)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("getting main hand weapon: %w", err)
+		}
+		if !HasProperty(mainWeapon, "light") {
+			return AttackResult{}, fmt.Errorf("main hand weapon %q is not light", mainWeapon.Name)
+		}
+		if IsRangedWeapon(mainWeapon) {
+			return AttackResult{}, fmt.Errorf("main hand weapon %q is ranged; off-hand attack requires melee weapons", mainWeapon.Name)
+		}
 	}
 
 	// Validate off-hand weapon exists and is light
@@ -1586,6 +1600,16 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 // attack is made free (absorbed into the Attack action). Shares the Sneak
 // Attack tracker so a second Nick off-hand the same turn costs the bonus action.
 const nickUsedEffect = "nick"
+
+// mainHandThrownLightEffect marks that the attacker threw a LIGHT melee weapon
+// from the main hand during the Attack action this turn. A thrown weapon leaves
+// the hand (EquippedMainHand is cleared), so the off-hand two-weapon-fighting
+// follow-up can no longer see the weapon that justified it. This per-turn marker
+// (same lifecycle as Nick — cleared at the combatant's turn start) lets
+// OffhandAttack recognise that the TWF prerequisite was met, so a legitimate
+// two-dagger thrower can throw the off-hand weapon after throwing the main one.
+// ISSUE-035.
+const mainHandThrownLightEffect = "mainhand_light_thrown"
 
 // nickAbsorbsBonusAction reports whether the 2024 Nick mastery makes this
 // off-hand attack free this turn: the off-hand weapon has Nick, the attacker

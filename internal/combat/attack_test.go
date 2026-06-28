@@ -1467,6 +1467,95 @@ func TestServiceOffhandAttack_HappyPath_NoTWFStyle(t *testing.T) {
 	assert.Equal(t, 3, result.DamageTotal)
 }
 
+// ISSUE-035: a two-dagger thrower throws the MAIN-hand dagger as the Attack
+// action — which leaves the hand, clearing EquippedMainHand — then throws the
+// OFF-hand dagger as the two-weapon-fighting bonus attack. The now-empty main
+// hand must NOT block the off-hand swing when a LIGHT melee weapon was thrown
+// from the main hand this turn.
+func TestServiceOffhandAttack_ThrownMainHandLightSatisfiesTWF(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	// Main hand EMPTY (the main-hand dagger was already thrown this turn);
+	// off-hand still holds a thrown-capable dagger.
+	char := nickChar(charID, "", "dagger", "")
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "dagger" {
+			return makeThrownDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	// Simulate the main-hand thrown LIGHT weapon already taken this turn.
+	svc.markUsedEffects(encounterID, attackerID, []string{mainHandThrownLightEffect})
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: nickAttacker(charID, attackerID, encounterID),
+		Target:   nickTarget(targetID, encounterID),
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 0},
+		Thrown:   true,
+	}, roller)
+	require.NoError(t, err, "a thrown main-hand light weapon should satisfy the TWF prerequisite")
+	assert.True(t, result.Hit, "the off-hand thrown dagger resolves")
+}
+
+// Guard the fix isn't over-relaxed: an empty main hand with NO light-melee
+// weapon thrown this turn (e.g. after a ranged/crossbow attack) is still
+// correctly refused.
+func TestServiceOffhandAttack_EmptyMainHandNoThrowRejected(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := nickChar(charID, "", "dagger", "") // main empty, no thrown marker
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "dagger" {
+			return makeThrownDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 15 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: nickAttacker(charID, attackerID, encounterID),
+		Target:   nickTarget(targetID, encounterID),
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 0},
+		Thrown:   true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "main hand")
+}
+
 func TestServiceOffhandAttack_HappyPath_WithTWFStyle(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()
@@ -1569,7 +1658,7 @@ func TestServiceOffhandAttack_NoMainHandWeapon(t *testing.T) {
 		Turn:     refdata.Turn{ID: uuid.New()},
 	}, roller)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no main hand weapon")
+	assert.Contains(t, err.Error(), "main hand")
 }
 
 func TestServiceOffhandAttack_MainHandNotLight(t *testing.T) {
