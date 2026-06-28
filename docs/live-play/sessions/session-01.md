@@ -697,3 +697,56 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   works directly within a process).
 - **Board unchanged:** still **Round 6, Vale's turn** (player). G1 3/22 (D2), Forge 4/32 raging (E1),
   Vale 19/24 (K2), G2 dead. Awaiting Vale's off-hand dagger throw.
+
+### R6 resolves — Forge goes down; R7 opens on Vale alone (06-28, ~3:41 PM)
+
+- **Vale's R6 (player-driven):** main-hand dagger throw **hit G1 for 2** (the ISSUE-035 fix held — the
+  off-hand throw then resolved), off-hand dagger throw **missed**. G1 survived at **1/22**.
+- **Forge's R6 (player-driven):** **Greataxe missed** G1 (08:32) — no second swing logged. G1 clung on.
+- **G1's R6 (NPC, DM-run via Turn Builder):** "⚔ Run Enemy Turn — Ghoul" → executor offered a single
+  **Bite vs Forge** (+2, 2d6+2 piercing, reach 5ft, G1 adjacent at D2/E1 — no move needed). Engine roll:
+  **to-hit 14 vs AC 14 — HIT**, raw 10 piercing → **halved to 5** by Forge's rage resistance. Confirmed
+  & Posted to #combat-log (engine roll stands, no fudge). **Forge 4 → 0 HP:** engine set him
+  **`unconscious` + `prone`** and **dropped Rage** (rage ends on unconscious — correct). Alive (downed,
+  not dead; 5 < max HP so no instant-death). Then manual **End Turn**, logged `enemy_turn Ghoul R6` at
+  08:37:49.
+- **Round advanced to R7:** dead G2 auto-skipped → **Vale CURRENT** (init 15) → Forge (12, **down —
+  death save due on his turn, rolled by his remote player, not the DM**) → G1 (9). Narration posted to
+  #the-story (read-aloud, 3:41 PM): the jaws finally find Forge, he folds; the ghoul hangs over him,
+  one bite from finishing him; Vale alone still standing. No HP/AC numbers leaked.
+- **Board now:** **Round 7, Vale's turn** (player). G1 alive **1/22** (D2) — a single hit ends it; Forge
+  **0/32 unconscious+prone** (E1), Rage gone; Vale 19/24 (G2). Stakes: if Vale (at range) doesn't drop
+  G1 this turn, G1 acts **last** and one more bite likely kills the downed Forge. Awaiting Vale's move
+  (she rolls her own dice — ranged Chill Touch / crossbow finishes a 1-HP target without melee/paralysis
+  risk; her call, not the DM's).
+
+### R7 — G1's bite drops Forge; a turn-flow bug skipped his death save (fixed); G1 lunges at Vale (06-28, ~4:20 PM)
+
+- **R7 opened** with Vale's Chill Touch **missing** G1 (still 1/22). On **G1's turn (R6 close)** it bit
+  Forge — hit (14), 5 piercing after rage resistance — **dropping Forge to 0 (unconscious + prone, Rage
+  ended)**.
+- **BUG caught at R7 (ISSUE-036):** when the turn advanced to the **downed Forge**, the engine **silently
+  skipped his turn as "incapacitated" and never rolled / prompted a death saving throw** — advancing
+  straight to G1. RAW: a creature at 0 HP rolls a death save at the **start of each of its turns**. The
+  death-save machinery existed (`/deathsave`, `RollDeathSave`, the 24h timeout `AutoResolveTurn`) but the
+  normal `AdvanceTurn` path reached none of it.
+- **DM decisions (player-chosen):** (1) **fix the engine first** (red/green TDD + redeploy), then resolve
+  the live save; (2) the mindless ghoul **lunges at Vale**, not the helpless Forge.
+- **Fix (ISSUE-036, shipped + deployed):** "Prompt the player" design. `skipOrActivate` now detects a
+  **dying PC** (`IsDying`) *before* the incapacitated skip and gives them an **active turn** flagged
+  `DeathSavePending`; the #your-turn prompt shows **"You are dying — roll a death saving throw:
+  /deathsave"**; and **`/deathsave` rolled on the dying PC's own current turn advances the turn** (off-turn
+  rolls + Nat-20 wake-ups don't). Dying NPCs still skip (their saves aren't player-rolled). The 24h
+  `AutoResolveTurn` stays as the inactivity fallback. `make cover-check` green; redeployed
+  `docker compose up -d --build app` (combat state survived).
+- **Live G1 turn (R7, DM-run):** moved G1 from D2 → **F2** on the combat map (executor is attack-only,
+  ISSUE-021 — no auto-move), then **"⚔ Run Enemy Turn"** offered **Bite vs Vale** (now in reach). Engine
+  roll: **to-hit 21 vs AC 11 — HIT**, **12 piercing** (Vale, warlock, no resistance) → **Vale 19 → 7/24**.
+  Confirmed & Posted; **manual End Turn** → **Round 8**.
+- **Forge's owed R7 save:** the bug skipped it; his **remote player rolls `/deathsave` once (off-turn)** to
+  make it up (records only — won't advance, since it's not his current turn). From **R8 on**, the fixed
+  engine prompts his death save automatically when his turn activates.
+- **Board now:** **Round 8, Vale's turn** (player). G1 **1/22 (F2, adjacent to Vale)** — a single hit
+  ends it. Forge **0/32, unconscious + prone, dying** (E1). Vale **7/24 (G2)**. R8 order: **Vale (CURRENT)**
+  → **Forge (dying — /deathsave prompt fires when his turn activates)** → **G1** (NPC, last). Narration
+  posted to #the-story (read-aloud, 4:20 PM). No HP/AC numbers leaked.

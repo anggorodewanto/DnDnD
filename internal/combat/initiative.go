@@ -364,6 +364,12 @@ type TurnInfo struct {
 	// combatant whose turn is starting (E-67-zone-triggers). Discord
 	// wiring surfaces these as DM-driven save / damage prompts.
 	ZoneTriggerResults []ZoneTriggerResult
+	// DeathSavePending is true when this active turn belongs to a dying PC
+	// (0 HP, alive, not stabilized). The turn is activated — not skipped as
+	// "incapacitated" — so the player is prompted to roll a death saving
+	// throw (/deathsave) at the correct initiative spot. Without this, the
+	// downed PC's turn advanced silently with no death save (the live bug).
+	DeathSavePending bool
 }
 
 // MarkSurprised adds the surprised condition to a combatant.
@@ -551,6 +557,23 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 // returns the SkippedInfo; otherwise creates an active turn. Returns (info, nil, nil)
 // for an active turn or (zero, skipped, nil) for a skipped turn.
 func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant, conds []CombatCondition, priorSkipped []SkippedInfo) (TurnInfo, *SkippedInfo, error) {
+	// A dying PC (0 HP, alive, not stabilized) carries the "unconscious"
+	// condition, which IsIncapacitated would treat as a silent skip — advancing
+	// past the downed PC with no death saving throw (the live bug). Instead,
+	// give them an ACTIVE turn flagged DeathSavePending so the #your-turn prompt
+	// asks for /deathsave at the correct initiative spot. NPC death saves are
+	// not player-rolled, so this gate is PC-only; dying NPCs fall through to the
+	// normal incapacitated skip below.
+	if !combatant.IsNpc && IsDying(combatant.IsAlive, int(combatant.HpCurrent), mustParseDeathSaves(combatant.DeathSaves)) {
+		info, err := s.createActiveTurn(ctx, encounterID, roundNumber, combatant)
+		if err != nil {
+			return TurnInfo{}, nil, err
+		}
+		info.DeathSavePending = true
+		info.SkippedCombatants = priorSkipped
+		return info, nil, nil
+	}
+
 	if IsIncapacitated(conds) {
 		condName := GetIncapacitatingConditionName(conds)
 		if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, combatant, "incapacitated"); err != nil {

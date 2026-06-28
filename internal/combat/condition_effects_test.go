@@ -634,6 +634,62 @@ func TestAdvanceTurn_ParalyzedCombatantSkipped(t *testing.T) {
 	assert.Equal(t, activeID, info.CombatantID)
 }
 
+// TestAdvanceTurn_DyingPC_ActivatesTurnForDeathSave verifies a dying PC (0 HP,
+// alive, unconscious) is given an ACTIVE turn flagged DeathSavePending — not
+// silently skipped as "incapacitated" — so the player is prompted to roll a
+// death saving throw at the correct initiative spot (the live bug: the turn
+// advanced past the downed PC with no death save).
+func TestAdvanceTurn_DyingPC_ActivatesTurnForDeathSave(t *testing.T) {
+	encounterID := uuid.New()
+	dyingID := uuid.New()
+	enemyID := uuid.New()
+
+	dying := refdata.Combatant{
+		ID: dyingID, DisplayName: "Forge",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "unconscious"}, {Condition: "prone"}}),
+		IsAlive:    true, HpCurrent: 0, InitiativeOrder: 2, IsNpc: false,
+	}
+	enemy := refdata.Combatant{
+		ID: enemyID, DisplayName: "Ghoul",
+		Conditions: json.RawMessage(`[]`),
+		IsAlive:    true, HpCurrent: 5, InitiativeOrder: 1, IsNpc: true,
+	}
+
+	ms := newAdvanceTurnMock([]refdata.Combatant{dying, enemy})
+	svc := NewService(ms)
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+	assert.NoError(t, err)
+	assert.Equal(t, dyingID, info.CombatantID, "dying PC must get an active turn, not be skipped")
+	assert.True(t, info.DeathSavePending, "dying PC's turn must be flagged death-save-pending")
+}
+
+// TestAdvanceTurn_DyingNPC_StillSkipped verifies a dying NPC is NOT given a
+// death-save turn (NPC death saves aren't player-rolled); it falls through to
+// the normal incapacitated skip. Guards against the PC gate over-firing.
+func TestAdvanceTurn_DyingNPC_StillSkipped(t *testing.T) {
+	encounterID := uuid.New()
+	dyingNPCID := uuid.New()
+	activeID := uuid.New()
+
+	dyingNPC := refdata.Combatant{
+		ID: dyingNPCID, DisplayName: "Dying Ghoul",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "unconscious"}}),
+		IsAlive:    true, HpCurrent: 0, InitiativeOrder: 1, IsNpc: true,
+	}
+	active := refdata.Combatant{
+		ID: activeID, DisplayName: "Rogue",
+		Conditions: json.RawMessage(`[]`),
+		IsAlive:    true, HpCurrent: 9, InitiativeOrder: 2, IsNpc: true,
+	}
+
+	ms := newAdvanceTurnMock([]refdata.Combatant{dyingNPC, active})
+	svc := NewService(ms)
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+	assert.NoError(t, err)
+	assert.Equal(t, activeID, info.CombatantID, "dying NPC should be skipped, advancing to the next combatant")
+	assert.False(t, info.DeathSavePending)
+}
+
 func TestSkipCombatantTurn_CreateTurnError(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: uuid.New(), DisplayName: "Stunned Fighter",

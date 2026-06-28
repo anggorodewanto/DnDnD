@@ -54,16 +54,17 @@ func (f *fakeStore) ListDMMessages(ctx context.Context, campaignID, playerCharac
 type fakeLookup struct {
 	discordUserID string
 	campaignID    uuid.UUID
+	rowID         uuid.UUID
 	err           error
 	called        uuid.UUID
 }
 
-func (f *fakeLookup) LookupPlayer(ctx context.Context, playerCharacterID uuid.UUID) (PlayerInfo, error) {
-	f.called = playerCharacterID
+func (f *fakeLookup) LookupPlayer(ctx context.Context, characterID uuid.UUID) (PlayerInfo, error) {
+	f.called = characterID
 	if f.err != nil {
 		return PlayerInfo{}, f.err
 	}
-	return PlayerInfo{DiscordUserID: f.discordUserID, CampaignID: f.campaignID}, nil
+	return PlayerInfo{DiscordUserID: f.discordUserID, CampaignID: f.campaignID, RowID: f.rowID}, nil
 }
 
 type fakeMessenger struct {
@@ -91,15 +92,16 @@ func newSvc(store Store, lookup PlayerLookup, messenger Messenger) *Service {
 
 func TestService_Send_Success(t *testing.T) {
 	campID := uuid.New()
-	pcID := uuid.New()
+	charID := uuid.New() // what the dashboard sends (characters.id)
+	rowID := uuid.New()  // the resolved player_characters PK (FK target)
 	store := &fakeStore{}
-	lookup := &fakeLookup{discordUserID: "user-42", campaignID: campID}
+	lookup := &fakeLookup{discordUserID: "user-42", campaignID: campID, rowID: rowID}
 	messenger := &fakeMessenger{ids: []string{"m1", "m2"}}
 
 	svc := newSvc(store, lookup, messenger)
 	msg, err := svc.SendMessage(context.Background(), SendMessageInput{
 		CampaignID:        campID,
-		PlayerCharacterID: pcID,
+		PlayerCharacterID: charID,
 		AuthorUserID:      "dm-1",
 		Body:              "psst, you notice something",
 	})
@@ -109,12 +111,17 @@ func TestService_Send_Success(t *testing.T) {
 	if len(messenger.calls) != 1 || messenger.calls[0].userID != "user-42" {
 		t.Fatalf("messenger = %+v", messenger.calls)
 	}
+	if lookup.called != charID {
+		t.Fatalf("lookup should receive the character_id %s, got %s", charID, lookup.called)
+	}
 	if len(store.inserted) != 1 {
 		t.Fatalf("expected 1 insert, got %d", len(store.inserted))
 	}
 	ins := store.inserted[0]
-	if ins.CampaignID != campID || ins.PlayerCharacterID != pcID {
-		t.Fatalf("ids mismatch: %+v", ins)
+	// The log row must store the player_characters PK (FK target), not the
+	// character_id the dashboard sent — else the insert violates the FK.
+	if ins.CampaignID != campID || ins.PlayerCharacterID != rowID {
+		t.Fatalf("ids mismatch: %+v (want player_character_id %s)", ins, rowID)
 	}
 	if len(ins.DiscordMessageIDs) != 2 || ins.DiscordMessageIDs[0] != "m1" {
 		t.Fatalf("discord ids = %v", ins.DiscordMessageIDs)
@@ -252,20 +259,39 @@ func TestService_Send_StoreFailurePropagates(t *testing.T) {
 
 func TestService_History_Delegates(t *testing.T) {
 	campID := uuid.New()
-	pcID := uuid.New()
+	charID := uuid.New() // dashboard sends the character_id
+	rowID := uuid.New()  // resolved player_characters PK (how rows are stored)
 	store := &fakeStore{list: []Message{{ID: uuid.New(), Body: "h1"}}}
-	svc := newSvc(store, &fakeLookup{}, &fakeMessenger{})
+	lookup := &fakeLookup{campaignID: campID, rowID: rowID}
+	svc := newSvc(store, lookup, &fakeMessenger{})
 
-	got, err := svc.History(context.Background(), campID, pcID, 10, 5)
+	got, err := svc.History(context.Background(), campID, charID, 10, 5)
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
-	if store.listArg.campaign != campID || store.listArg.player != pcID ||
+	if lookup.called != charID {
+		t.Fatalf("history lookup should receive character_id %s, got %s", charID, lookup.called)
+	}
+	// History must query by the resolved PK, not the character_id.
+	if store.listArg.campaign != campID || store.listArg.player != rowID ||
 		store.listArg.limit != 10 || store.listArg.offset != 5 {
-		t.Fatalf("list args wrong: %+v", store.listArg)
+		t.Fatalf("list args wrong: %+v (want player %s)", store.listArg, rowID)
 	}
 	if len(got) != 1 || got[0].Body != "h1" {
 		t.Fatalf("history = %+v", got)
+	}
+}
+
+func TestService_History_PlayerNotFoundReturnsEmpty(t *testing.T) {
+	store := &fakeStore{}
+	lookup := &fakeLookup{err: ErrPlayerNotFound}
+	svc := newSvc(store, lookup, &fakeMessenger{})
+	got, err := svc.History(context.Background(), uuid.New(), uuid.New(), 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected no history for unknown player, got %+v", got)
 	}
 }
 

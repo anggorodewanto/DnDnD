@@ -60,15 +60,19 @@ type Store interface {
 }
 
 // PlayerInfo is the resolved player character data the service needs to
-// route a DM.
+// route a DM. RowID is the player_characters PK (the FK target stored in
+// dm_player_messages.player_character_id); the dashboard sends a characters.id,
+// so the service must persist/query by this resolved PK, not the incoming id.
 type PlayerInfo struct {
 	DiscordUserID string
 	CampaignID    uuid.UUID
+	RowID         uuid.UUID
 }
 
-// PlayerLookup resolves a player_character_id to the data needed to DM them.
+// PlayerLookup resolves a character_id (what the dashboard sends) to the data
+// needed to DM the player and to persist the log row.
 type PlayerLookup interface {
-	LookupPlayer(ctx context.Context, playerCharacterID uuid.UUID) (PlayerInfo, error)
+	LookupPlayer(ctx context.Context, characterID uuid.UUID) (PlayerInfo, error)
 }
 
 // Messenger sends a DM to a Discord user and returns the resulting message
@@ -128,23 +132,36 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) (Message
 	}
 
 	return s.store.InsertDMMessage(ctx, InsertParams{
-		CampaignID:        in.CampaignID,
-		PlayerCharacterID: in.PlayerCharacterID,
+		CampaignID: in.CampaignID,
+		// Store the resolved player_characters PK (the FK target), not the
+		// character_id the dashboard sent — else the insert violates
+		// dm_player_messages_player_character_id_fkey.
+		PlayerCharacterID: info.RowID,
 		AuthorUserID:      in.AuthorUserID,
 		Body:              in.Body,
 		DiscordMessageIDs: messageIDs,
 	})
 }
 
-// History returns recent messages for a given player, newest-first.
-func (s *Service) History(ctx context.Context, campaignID, playerCharacterID uuid.UUID, limit, offset int) ([]Message, error) {
+// History returns recent messages for a given player, newest-first. The
+// characterID is what the dashboard sends; rows are stored under the
+// player_characters PK, so resolve it the same way SendMessage does before
+// querying. An unknown player yields no history (not an error).
+func (s *Service) History(ctx context.Context, campaignID, characterID uuid.UUID, limit, offset int) ([]Message, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	return s.store.ListDMMessages(ctx, campaignID, playerCharacterID, limit, offset)
+	info, err := s.lookup.LookupPlayer(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrPlayerNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("looking up player character: %w", err)
+	}
+	return s.store.ListDMMessages(ctx, campaignID, info.RowID, limit, offset)
 }
 
 // validateSend enforces required fields on a SendMessage call.

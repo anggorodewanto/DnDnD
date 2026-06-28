@@ -20,6 +20,15 @@ type DeathSaveStore interface {
 	UpdateCombatantHP(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 }
 
+// DeathSaveTurnAdvancer advances the encounter past a dying PC's turn once they
+// roll their death save on their OWN current turn (the death-save-pending turn
+// AdvanceTurn now activates for a downed PC). Implemented by *combat.Service.
+type DeathSaveTurnAdvancer interface {
+	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (combat.TurnInfo, error)
+}
+
 // DeathSaveHandler handles the /deathsave slash command. The command is
 // off-turn (a dying PC rolls when the DM ticks the death-save timer or
 // invokes the slash) so the TurnGate is intentionally NOT consulted —
@@ -34,6 +43,7 @@ type DeathSaveHandler struct {
 	campaignProvider  CheckCampaignProvider
 	characterLookup   CheckCharacterLookup
 	channelIDProvider CampaignSettingsProvider
+	turnAdvancer      DeathSaveTurnAdvancer
 }
 
 // NewDeathSaveHandler constructs a /deathsave handler.
@@ -62,6 +72,14 @@ func NewDeathSaveHandler(
 // nil, the outcome is only sent ephemerally to the invoker.
 func (h *DeathSaveHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
 	h.channelIDProvider = p
+}
+
+// SetTurnAdvancer wires the turn advancer so a death save rolled on the dying
+// PC's own current turn advances the encounter (the "Prompt the player" flow:
+// AdvanceTurn activates the downed PC's turn → player rolls /deathsave →
+// /deathsave advances). When nil, /deathsave only records the result.
+func (h *DeathSaveHandler) SetTurnAdvancer(a DeathSaveTurnAdvancer) {
+	h.turnAdvancer = a
 }
 
 // Handle processes the /deathsave command interaction.
@@ -108,6 +126,32 @@ func (h *DeathSaveHandler) Handle(interaction *discordgo.Interaction) {
 	msg := joinMessages(outcome.Messages)
 	h.postCombatLog(ctx, encounterID, msg)
 	respondPublic(h.session, interaction, msg)
+
+	h.maybeAdvanceTurn(ctx, encounterID, combatant, outcome)
+}
+
+// maybeAdvanceTurn advances the encounter when the death save was rolled on the
+// dying PC's OWN current turn (the death-save-pending turn AdvanceTurn now
+// activates). Off-turn /deathsave (DM-triggered, or rolled when it isn't your
+// turn) only records the result. A Nat-20 wake-up keeps the turn so the now-
+// conscious PC can act. Best-effort: a nil advancer or any lookup/advance error
+// leaves the turn in place — the DM can still End Turn manually.
+func (h *DeathSaveHandler) maybeAdvanceTurn(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant, outcome combat.DeathSaveOutcome) {
+	if h.turnAdvancer == nil {
+		return
+	}
+	if outcome.HPCurrent > 0 {
+		return // Nat 20: regained 1 HP, conscious — keep the turn to act.
+	}
+	enc, err := h.turnAdvancer.GetEncounter(ctx, encounterID)
+	if err != nil || !enc.CurrentTurnID.Valid {
+		return
+	}
+	turn, err := h.turnAdvancer.GetTurn(ctx, enc.CurrentTurnID.UUID)
+	if err != nil || turn.CombatantID != combatant.ID {
+		return // off-turn roll: record only, don't advance
+	}
+	_, _ = h.turnAdvancer.AdvanceTurn(ctx, encounterID)
 }
 
 // persistOutcome applies the death-save outcome to the combatant row.

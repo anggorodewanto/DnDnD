@@ -50,6 +50,11 @@ func FormatTurnStartPromptWithImpact(encounterName string, roundNumber int32, co
 		fmt.Fprintf(&b, "%s\n", impactSummary)
 	}
 
+	if combatantIsDying(combatant) {
+		b.WriteString(dyingDeathSavePromptLine())
+		return b.String()
+	}
+
 	var parts []string
 	if combatant != nil {
 		parts = BuildResourceListWithInspiration(turn, *combatant)

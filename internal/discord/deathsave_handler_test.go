@@ -280,3 +280,80 @@ func TestDeathSaveHandler_NoCharLookup(t *testing.T) {
 		t.Errorf("expected character lookup failure, got %q", sess.lastResponse.Data.Content)
 	}
 }
+
+// --- /deathsave advances the dying PC's own turn (crit-XX "Prompt the player") ---
+
+type mockDeathSaveTurnAdvancer struct {
+	enc          refdata.Encounter
+	turn         refdata.Turn
+	getTurnErr   error
+	advanceCalls int
+}
+
+func (m *mockDeathSaveTurnAdvancer) GetEncounter(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+	return m.enc, nil
+}
+
+func (m *mockDeathSaveTurnAdvancer) GetTurn(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+	return m.turn, m.getTurnErr
+}
+
+func (m *mockDeathSaveTurnAdvancer) AdvanceTurn(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
+	m.advanceCalls++
+	return combat.TurnInfo{}, nil
+}
+
+// Rolling a death save on the dying PC's OWN current turn advances the turn.
+func TestDeathSaveHandler_OnCurrentTurn_AdvancesTurn(t *testing.T) {
+	combatant := dyingCombatantWithSaves(t, 0, 0)
+	h, _, _, encID := setupDeathSaveHandler(t, combatant)
+	turnID := uuid.New()
+	adv := &mockDeathSaveTurnAdvancer{
+		enc:  refdata.Encounter{ID: encID, CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true}},
+		turn: refdata.Turn{ID: turnID, CombatantID: combatant.ID},
+	}
+	h.SetTurnAdvancer(adv)
+
+	h.Handle(makeDeathSaveInteraction())
+
+	if adv.advanceCalls != 1 {
+		t.Errorf("expected 1 AdvanceTurn call on own current turn, got %d", adv.advanceCalls)
+	}
+}
+
+// An off-turn death save (current turn belongs to someone else) records only.
+func TestDeathSaveHandler_OffTurn_DoesNotAdvance(t *testing.T) {
+	combatant := dyingCombatantWithSaves(t, 0, 0)
+	h, _, _, encID := setupDeathSaveHandler(t, combatant)
+	turnID := uuid.New()
+	adv := &mockDeathSaveTurnAdvancer{
+		enc:  refdata.Encounter{ID: encID, CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true}},
+		turn: refdata.Turn{ID: turnID, CombatantID: uuid.New()}, // a different combatant's turn
+	}
+	h.SetTurnAdvancer(adv)
+
+	h.Handle(makeDeathSaveInteraction())
+
+	if adv.advanceCalls != 0 {
+		t.Errorf("expected no AdvanceTurn call for an off-turn death save, got %d", adv.advanceCalls)
+	}
+}
+
+// A Nat-20 wake-up keeps the turn (the now-conscious PC can still act).
+func TestDeathSaveHandler_Nat20_DoesNotAdvance(t *testing.T) {
+	combatant := dyingCombatantWithSaves(t, 0, 0)
+	h, _, _, encID := setupDeathSaveHandler(t, combatant)
+	h.roller = dice.NewRoller(func(_ int) int { return 20 }) // Nat 20 — regain 1 HP
+	turnID := uuid.New()
+	adv := &mockDeathSaveTurnAdvancer{
+		enc:  refdata.Encounter{ID: encID, CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true}},
+		turn: refdata.Turn{ID: turnID, CombatantID: combatant.ID},
+	}
+	h.SetTurnAdvancer(adv)
+
+	h.Handle(makeDeathSaveInteraction())
+
+	if adv.advanceCalls != 0 {
+		t.Errorf("Nat-20 wake-up must not advance the turn, got %d calls", adv.advanceCalls)
+	}
+}

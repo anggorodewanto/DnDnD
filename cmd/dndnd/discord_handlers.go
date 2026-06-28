@@ -698,6 +698,10 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		checkCampProv,
 		characterLookup,
 	)
+	// crit-XX: a death save rolled on the dying PC's own (now-activated) turn
+	// advances the encounter — the "Prompt the player" half of the downed-PC
+	// death-save fix. combat.Service supplies GetEncounter/GetTurn/AdvanceTurn.
+	handlers.deathsave.SetTurnAdvancer(deps.combatService)
 
 	// crit-01b: wire /cast and /prepare. Both share the combatLookup adapter
 	// for the encounter/turn/combatant lookups; /cast also needs spell + map

@@ -183,6 +183,27 @@ func TestFormatTurnStartPromptWithImpact_WithImpact(t *testing.T) {
 	assert.Contains(t, result, "Available:")
 }
 
+func TestFormatTurnStartPromptWithImpact_DyingPC_ShowsDeathSavePrompt(t *testing.T) {
+	turn := refdata.Turn{}
+	// A dying PC (0 HP, alive, no successes) gets a death-save prompt, not the
+	// usual resource/"all actions spent" line.
+	dying := &refdata.Combatant{DisplayName: "Forge", IsAlive: true, HpCurrent: 0}
+	result := FormatTurnStartPromptWithImpact("The Cellar", 7, "Forge", turn, dying, "")
+	assert.Contains(t, result, "/deathsave")
+	assert.Contains(t, result, "dying")
+	assert.NotContains(t, result, "Available:")
+	assert.NotContains(t, result, "All actions spent")
+}
+
+func TestFormatTurnStartPrompt_DyingPC_ShowsDeathSavePrompt(t *testing.T) {
+	turn := refdata.Turn{}
+	dying := &refdata.Combatant{DisplayName: "Forge", IsAlive: true, HpCurrent: 0}
+	result := FormatTurnStartPrompt("The Cellar", 7, "Forge", turn, dying)
+	assert.Contains(t, result, "/deathsave")
+	assert.Contains(t, result, "dying")
+	assert.NotContains(t, result, "Available:")
+}
+
 func TestFormatTurnStartPromptWithImpact_RealMention(t *testing.T) {
 	turn := refdata.Turn{MovementRemainingFt: 30, AttacksRemaining: 2}
 	// A linked player's Discord user ID yields a real <@id> mention.

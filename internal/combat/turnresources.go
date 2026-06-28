@@ -337,6 +337,11 @@ func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantNam
 	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterName, roundNumber)
 	fmt.Fprintf(&b, "\U0001f514 %s \u2014 it's your turn!\n", turnPing(combatantName, discordUserID))
 
+	if combatantIsDying(combatant) {
+		b.WriteString(dyingDeathSavePromptLine())
+		return b.String()
+	}
+
 	var parts []string
 	if combatant != nil {
 		parts = BuildResourceListWithInspiration(turn, *combatant)
@@ -349,6 +354,22 @@ func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantNam
 		b.WriteString("\U0001f4cb All actions spent \u2014 type /done to end your turn.")
 	}
 	return b.String()
+}
+
+// combatantIsDying reports whether the combatant snapshot is a dying creature
+// (0 HP, alive, not yet stabilized). When true the turn-start prompt swaps the
+// action-resource list for a death-save call: at 0 HP they cannot act, only
+// roll a death saving throw.
+func combatantIsDying(combatant *refdata.Combatant) bool {
+	if combatant == nil {
+		return false
+	}
+	return IsDying(combatant.IsAlive, int(combatant.HpCurrent), mustParseDeathSaves(combatant.DeathSaves))
+}
+
+// dyingDeathSavePromptLine is the #your-turn body shown to a dying PC.
+func dyingDeathSavePromptLine() string {
+	return "\U0001f480 You are dying \u2014 roll a death saving throw: /deathsave"
 }
 
 // FormatTurnStartPromptWithExpiry produces the turn start notification with optional
