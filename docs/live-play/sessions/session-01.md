@@ -627,3 +627,17 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   bite is not restored (Forge's lucky break stands in the fiction).
 - **State now:** **Round 5, Vale's turn** — awaiting the human. One ghoul left (G1, D2); Forge
   4/32 raging (E1); Vale 19/24 (K2). Console `pending` empty, `next_step` clear.
+
+### R5 — Vale opens at range; board hands off to Forge (06-28, ~2:01 PM)
+
+- **Vale's R5 turn (player-driven):** kited back to **K2** and worked G1 from distance — cast
+  **Chill Touch** (whiffed; HP delta confirms only the dagger landed) then a **thrown dagger, hit
+  for 3** into G1's flank. G1 still up, now turned full on Forge. Narration posted to #the-story
+  (read-aloud, 2:01 PM) bridging Vale's beat into Forge's turn.
+- **OOC flag (not rewound):** Vale's R5 logged a Chill Touch (action) *and* a thrown dagger in the
+  same turn — reads like two actions. Possible engine permissiveness; left as the player drove it.
+  Watch for a repeat to decide if it's an ISSUE.
+- **Board now:** **Round 5, Forge's turn** (CURRENT, player). G2 dead (E2). G1 alive (D2), on
+  Forge's flank. Forge **4/32, raging** (10 rds left, E1) — bite likely drops him if G1 connects, so
+  ending or peeling G1 on Forge's turn matters; G1's enemy turn comes last in R5. Vale 19/24 (K2).
+  Console `pending` empty, `next_step` clear. Awaiting Forge's move.

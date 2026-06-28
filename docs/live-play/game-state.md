@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 5, Vale's turn — lead ghoul down).
+_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 5, Forge's turn — lead ghoul down, Vale opened at range).
 For the live board (whose turn, HP, positions, conditions, pending queue, recent actions) open the
 **DM Console** — do not read a hand-copied snapshot from this file. Non-derivable intent is under "Next action."_
 
@@ -88,21 +88,23 @@ recent action timeline are **generated** — read them live, never transcribe th
 Round-4 swing Forge — berserk, bleeding out on Rage alone — cleaved the reeling lead ghoul apart
 (the one Vale had twice lashed with grave-cold Chill Touch); it's down. But the **smaller** ghoul,
 the one that opened him in the dark, still crowds his flank, unhurt by its broodmate's end and
-hungry for the blood running hot down his arm. Across the room Vale stands clear and untouched. The
-fight is into **Round 5, Vale's turn** — initiative hands her the opening before the surviving ghoul
-lands its strike. The cellar is cramped, stone, lit by whatever the party brought down. World /
+hungry for the blood running hot down his arm. Vale has pulled back to range (K2) and opened R5 with
+a missed Chill Touch and a thrown dagger that bit G1's flank — not enough to stop it. The fight is
+into **Round 5, Forge's turn**: the ghoul has rounded full on the swaying dwarf, and Forge acts
+before it can. The cellar is cramped, stone, lit by whatever the party brought down. World /
 lore: [`world.md`](world.md). (Live HP/positions: DM Console.)
 
 ## Next action (DM intent — the one thing the Console can't infer)
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Mid-combat, "The Cellar," Round 5 — Vale's turn (CURRENT, player-driven).** Forge closed R4 by
-   cleaving the lead ghoul (G2) dead. One ghoul left (**G1**, the smaller flank one). R5 turn order:
-   **Vale → Forge → G1 ghoul** (NPC, run via Turn Builder). Players drive their own turns
+1. **Mid-combat, "The Cellar," Round 5 — Forge's turn (CURRENT, player-driven).** Forge closed R4 by
+   cleaving the lead ghoul (G2) dead. One ghoul left (**G1**, the smaller flank one). R5 so far:
+   **Vale done** (kited to K2, missed Chill Touch + thrown dagger nicked G1) → **Forge (CURRENT)** →
+   **G1 ghoul** (NPC, run via Turn Builder, last). Players drive their own turns
    (`/move`/`/attack`/`/cast`, **they roll their own dice** — never roll for them). Run the NPC turn
    via **"⚔ Run Enemy Turn"** → Confirm & Post → **manual End Turn** (executor is attack-only, no
-   auto-move/advance — ISSUE-021; G1 already adjacent to Forge, so no move needed). Keep enemy HP/AC
+   auto-move/advance — ISSUE-021; G1 adjacent to Forge at D2↔E1, so no move needed). Keep enemy HP/AC
    secret — describe state, don't quote numbers ([`dm-rules.md`](dm-rules.md)).
    - **Forge is critically low and raging (untouched so far this round)** — G1's turn comes **last**
      in R5; if its bite lands it likely drops him to death saves. Best line for the party: down G1
