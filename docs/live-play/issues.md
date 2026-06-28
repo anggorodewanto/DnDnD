@@ -40,6 +40,10 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-022 | 2026-06-27 | combat / warlock pact slots (write-back) | medium | FIXED (other agent) | Combat pact-slot expenditure not written back to `characters.pact_magic_slots` — #combat-log showed "1 remaining" after Vale's Misty Step but the base row read `current: 0` (same two-store gap as ISSUE-020's HP). **Fixed by another agent this session**; logged here for the record. |
 | ISSUE-024 | 2026-06-28 | combat / spellcasting (cast log) | minor | FIXED | Spell-attack cantrip #combat-log showed the damage **dice spec** (`💥 Damage: 1d8 necrotic`) instead of the **rolled value** — `FormatCastLog` (`spellcasting.go`) always printed `ScaledDamageDice`, never `DamageTotal`, and printed it even on a **miss** (no `Hit` guard). **Not a lost-damage bug** — `Cast` rolls the damage and `ApplyDamage` writes the target HP on a separate, correct path (verified live: Vale's Chill Touch took the lead ghoul G2 20→**13/22**, 7 necrotic, DB-confirmed); only the Discord string dropped the number. **Found live** (player asked why the log read "1d8 necrotic" with no value). **Fixed (TDD):** `FormatCastLog` now mirrors the weapon path — for a spell **attack** it prints `Damage: <DamageTotal> <type> (<dice>)` on a hit and **nothing** on a miss; save-based / no-attack spells keep the dice spec (their per-target total isn't a single value). Red/green `TestFormatCastLog_AttackHitShowsRolledDamage` + `_AttackMissShowsNoDamage`; combat + discord packages green, `make cover-check` green, rebuilt + redeployed. NB: any cast logged **before** this fix still reads the spec in #combat-log. |
 | ISSUE-025 | 2026-06-28 | combat / action_log (player actions) | major | FIXED | **DM Console timeline blind to ALL player actions** since 2026-06-25. `recordCombatAction` (the ISSUE-014 writer) called `CreateActionLog` with nil `before_state`/`after_state` — both **NOT NULL** — so every player cast/attack/freeform insert silently violated the constraint and was swallowed (best-effort write). Only enemy-turn rows persisted (they populate state since the ISSUE-018 fix). **Same bug class as ISSUE-018, on the player path** → ISSUE-014 was effectively a no-op in prod. The unit mock accepted the nil columns the real Postgres rejects, so the suite stayed green while prod silently dropped every row. **Found** while syncing live-play state docs (timeline empty of player beats forced manual session-logging). **Fixed (TDD):** coerce nil/empty before/after → `{}` at the `CreateActionLog` choke point (`rawMessageOrEmptyObject`, guards all service-method callers); regression test `TestRecordCombatAction_PopulatesNonNullState` asserts non-null valid JSON state. cover-check green; rebuilt + redeployed. |
+| ISSUE-026 | 2026-06-28 | combat / spell riders (effect model) | medium | OPEN (enhancement) | **Spell riders / ongoing effects aren't first-class timed effects**, so the DM hand-tracks them. Chill Touch's "can't regain HP until the caster's next turn", save-each-turn effects (ongoing poison, etc.), and other timed riders live in ad-hoc cast logic, not as a combatant effect carrying duration/started_round/expires_on/source_spell — so `/api/dm/situation` (which reads only `conditions`) can't surface them. Target: a first-class timed-effect model the engine ticks + the Console reads. Removes the residual hand-track in game-state.md ("Next action" Chill-Touch note). |
+| ISSUE-027 | 2026-06-28 | dm console / NPC statblock in payload | medium | OPEN (enhancement) | **Running an enemy turn still needs the creature's moveset** (attacks, damage dice, reach, recharge abilities, legendary/lair) but `/api/dm/situation` returns combatant *state* only — the DM opens the stat block separately. Target: a per-NPC `creature_summary` in the payload (attacks `{name,dice,reach}`, recharge/legendary availability) so a turn can be run from the Console. Pairs with **ISSUE-021** (executor still attack-only, no auto-move/advance). |
+| ISSUE-028 | 2026-06-28 | dm console / in-character feed (platform) | major | OPEN (enhancement) | **Player #in-character roleplay is Discord-only** — never written to any DB table, absent from `/api/dm/situation` `timeline[]` (which carries only action_log + DM narration). The DM must read Discord directly (the reason Chrome-reading exists — see [`dm-rules.md`](dm-rules.md)). Largest situational gap. Target: ingest #in-character messages (Discord webhook/poll) into a roleplay timeline the Console surfaces. Large (platform integration). |
+| ISSUE-029 | 2026-06-28 | dm console / out-of-combat state | medium | OPEN (enhancement) | **`/api/dm/situation` returns an empty `state` out of combat** — exploration progress (`encounters.explored_cells`), party scene/location, and prep readiness are invisible, so between fights the DM falls back to game-state.md notes. Target: surface exploration/scene state (and an exploration-mode view) so the Console isn't combat-only. |
 | ISSUE-023 | 2026-06-27 | combat / enemy turn (combat-log damage) | minor | FIXED | Enemy-turn #combat-log reported the **raw rolled damage**, not the amount actually dealt after the target's resistance — a raging Forge took two ghoul bites that each logged "8 piercing damage" while Rage halved each to 4 (20→16→**12/32**), so the log overstated the hit. **Not a lost-damage bug** — HP was correct (resistance applied); only the log text was raw. **Found live** while running both ghoul turns (verified Forge `is_raging=t`, rage_rounds≈10 → 20−4−4=12 is correct). **Fixed (TDD):** `ExecuteEnemyTurn` now threads `ApplyDamage`'s `FinalDamage` back onto each attack step (new `AttackRollResult.FinalDamage`/`DamageResolved`), and `formatAttackLog` (new `attackDamagePhrase` helper) reports the dealt amount with an annotation when R/I/V changed it — `4 piercing damage (resisted — halved from 8)`, `0 … (immune — N negated)`, `N … (vulnerable — doubled from M)`; unchanged + pre-apply (plan preview) read plain as before. Red/green `TestFormatCombatLog_ResistedDamageShowsHalved`/`_ImmuneDamageShowsNegated`/`_ResolvedNoChangeReadsPlain` + `TestExecuteEnemyTurn_LogShowsResistedDamage`; combat package green, rebuilt + redeployed. NB: the two R2/R3 logs posted **before** this fix still read "8 piercing" in #combat-log (actual dealt was 4 each). |
 
 ---
@@ -763,6 +767,67 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Follow-up (candidate, not done):** the mock store could enforce the NOT-NULL columns so a
   future best-effort writer that forgets state fails the unit suite instead of prod. Logged, not
   implemented — the choke-point coercion already prevents the recurrence.
+
+### ISSUE-026 — Spell riders / ongoing effects aren't first-class timed effects
+- **Date:** 2026-06-28
+- **Area:** combat / effect model (cast resolution vs the condition/effect store)
+- **Severity:** medium (enhancement / removes manual DM tracking)
+- **Status:** OPEN — scoped, no code.
+- **Problem:** several effects that *should* be tracked by the engine are not modeled as a
+  combatant effect with a duration, so the DM tracks them by hand:
+  - **Chill Touch** — target can't regain HP until the start of the caster's next turn (and an
+    undead target attacks the caster at disadvantage). Lives in ad-hoc `Cast` logic, no effect row.
+  - **Save-each-turn / ongoing effects** — e.g. ongoing poison or a spell that repeats a save at
+    end of turn; the timing isn't a first-class field.
+  - **Timed riders generally** — there's no `{source_spell, duration_rounds, started_round,
+    expires_on}` effect the engine ticks down and clears.
+- **Why it matters here:** the DM Console (`/api/dm/situation`) only reads `conditions`
+  (now with metadata after the Tier-1 work), so any rider not stored as a condition/effect is
+  invisible — it's the one residual hand-track left in `game-state.md`'s "Next action".
+- **Target:** a first-class timed-effect model the combat engine advances per turn and the
+  situation payload surfaces; migrate the ad-hoc riders onto it. TDD.
+
+### ISSUE-027 — NPC quick-statblock in the DM Console payload
+- **Date:** 2026-06-28
+- **Area:** dm console / situation payload (`internal/situation` + adapter)
+- **Severity:** medium (enhancement)
+- **Status:** OPEN — scoped, no code.
+- **Problem:** to run an enemy turn a DM needs the creature's moveset — attacks (name, damage
+  dice, reach), recharge abilities, legendary/lair actions — but the payload returns combatant
+  *state* only, so the DM opens the stat block separately (and the Turn Builder is the only
+  place reach/attacks surface).
+- **Target:** add a per-NPC `creature_summary` to `CombatantView` (attacks `{name,dice,reach}`,
+  recharge/legendary availability) sourced from the creature ref, so an enemy turn can be run
+  entirely from the Console. **Pairs with ISSUE-021** — the executor still resolves the attack
+  only (no auto-move into reach, no turn advance); finishing that closes the manual enemy-turn
+  loop end-to-end.
+
+### ISSUE-028 — Player in-character roleplay is invisible to the Console (platform gap)
+- **Date:** 2026-06-28
+- **Area:** dm console / in-character feed (Discord ingestion)
+- **Severity:** major (largest situational-awareness gap)
+- **Status:** OPEN — scoped, no code. Large (platform integration).
+- **Problem:** #in-character roleplay exists only as Discord messages — it is never written to
+  any DB table and never appears in `/api/dm/situation` `timeline[]` (which merges only
+  `action_log` + DM `narration_posts`). A DM cannot see what a player said in character without
+  reading Discord directly; this is exactly why the DM-rules mandate Chrome-reading
+  (see [`dm-rules.md`](dm-rules.md)).
+- **Target:** ingest #in-character messages (Discord webhook or poll) into a roleplay timeline
+  the Console surfaces (a `roleplay_timeline[]` or a new source in `timeline[]`). Needs a new
+  table + Discord handler + auth gating. Until then, Chrome-reading #in-character stays required.
+
+### ISSUE-029 — DM Console has no out-of-combat / exploration state
+- **Date:** 2026-06-28
+- **Area:** dm console / situation payload (out-of-combat)
+- **Severity:** medium (enhancement)
+- **Status:** OPEN — scoped, no code.
+- **Problem:** `buildState` returns an empty `StateView` when there's no active encounter, so
+  out of combat the Console shows nothing — exploration progress (`encounters.explored_cells`),
+  party scene/location, and prep readiness are invisible, and the DM falls back to game-state.md
+  notes (a hand-tracked surface).
+- **Target:** surface exploration/scene state in the payload (e.g. an exploration-mode
+  `StateView` with explored cells + party position) so the Console is the live view between
+  fights too, not only mid-combat.
 
 <!-- Append a section per issue:
 
