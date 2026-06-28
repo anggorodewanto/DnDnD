@@ -52,6 +52,32 @@ func TestDescribeHelpers_AllBranches(t *testing.T) {
 	assert.Equal(t, uuid.NullUUID{UUID: id, Valid: true}, nullableCombatantID(id))
 }
 
+// ISSUE-031: a 2024 Cleave-mastery secondary attack is surfaced in the Discord
+// combat log (FormatAttackLog) but was dropped from the action_log description,
+// so the DM Console timeline never recorded the extra attack / its damage. The
+// timeline summary must mirror the public log.
+func TestDescribeAttack_IncludesCleaveSecondaryAttack(t *testing.T) {
+	hit := describeAttack(AttackResult{
+		AttackerName: "Forge Anvilbearer", TargetName: "Ghoul", WeaponName: "Greataxe",
+		Hit: true, CriticalHit: true, DamageTotal: 19,
+		CleaveAttack: &AttackResult{TargetName: "Ghoul", Hit: true, DamageTotal: 4, DamageType: "slashing"},
+	})
+	assert.Contains(t, hit, "CRIT for 19")
+	assert.Contains(t, hit, "Cleave hits Ghoul for 4 slashing")
+
+	miss := describeAttack(AttackResult{
+		AttackerName: "Forge Anvilbearer", TargetName: "Ghoul", WeaponName: "Greataxe",
+		Hit: true, DamageTotal: 12,
+		CleaveAttack: &AttackResult{TargetName: "Ghoul", Hit: false},
+	})
+	assert.Contains(t, miss, "hit for 12")
+	assert.Contains(t, miss, "Cleave misses Ghoul")
+
+	// No cleave → no cleave clause appended.
+	none := describeAttack(AttackResult{AttackerName: "Aria", TargetName: "Goblin", WeaponName: "Longsword", Hit: true, DamageTotal: 9})
+	assert.NotContains(t, none, "Cleave")
+}
+
 func TestRecordCombatAction_WritesWhenParentsPresent(t *testing.T) {
 	ms := defaultMockStore()
 	logged := captureActionLog(ms)

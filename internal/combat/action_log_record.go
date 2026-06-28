@@ -79,7 +79,21 @@ func describeAttack(r AttackResult) string {
 		outcome = "missed"
 	}
 	if r.WeaponName == "" {
-		return fmt.Sprintf("%s attacked %s — %s", r.AttackerName, r.TargetName, outcome)
+		return fmt.Sprintf("%s attacked %s — %s", r.AttackerName, r.TargetName, outcome) + describeCleave(r.CleaveAttack)
 	}
-	return fmt.Sprintf("%s attacked %s with %s — %s", r.AttackerName, r.TargetName, r.WeaponName, outcome)
+	return fmt.Sprintf("%s attacked %s with %s — %s", r.AttackerName, r.TargetName, r.WeaponName, outcome) + describeCleave(r.CleaveAttack)
+}
+
+// describeCleave renders the trailing " — Cleave hits/misses <2nd target>"
+// clause for a 2024 Cleave-mastery secondary attack, or "" when none occurred.
+// ISSUE-031: mirrors the Discord combat log (FormatAttackLog) so the DM Console
+// timeline records the extra attack instead of silently dropping its damage.
+func describeCleave(c *AttackResult) string {
+	if c == nil {
+		return ""
+	}
+	if c.Hit {
+		return fmt.Sprintf(" — Cleave hits %s for %d %s", c.TargetName, c.DamageTotal, c.DamageType)
+	}
+	return fmt.Sprintf(" — Cleave misses %s", c.TargetName)
 }

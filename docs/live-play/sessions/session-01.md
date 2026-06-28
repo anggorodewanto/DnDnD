@@ -641,3 +641,19 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   Forge's flank. Forge **4/32, raging** (10 rds left, E1) — bite likely drops him if G1 connects, so
   ending or peeling G1 on Forge's turn matters; G1's enemy turn comes last in R5. Vale 19/24 (K2).
   Console `pending` empty, `next_step` clear. Awaiting Forge's move.
+
+### Engine fix mid-session: cleave secondary attack now logged to DM timeline (ISSUE-031) (06-28, ~2:30 PM)
+
+- **Player report:** Forge's R4 crit cleave (4 slashing to G1) showed in Discord #combat-log but
+  was **missing from the DM Console timeline**. Confirmed: Discord uses `FormatAttackLog` (appends
+  the cleave line); the action_log/timeline path used `describeAttack`, which only rendered the
+  primary target and dropped the cleave clause.
+- **Display-only** — the cleave's 4 damage *was* applied to live HP (G1 22→18 at R4; reconciles with
+  G1 = 3/22 now: −4 cleave, Vale R5 Chill Touch **miss** + dagger 3 → 15, Forge R5 greataxe 12 → 3).
+  No state correction needed; HP was always right.
+- **Fix (red/green TDD):** new `describeCleave` helper appends ` — Cleave hits/misses <2nd target>`
+  to `describeAttack` (covers all PC attack paths via the shared formatter). Test
+  `TestDescribeAttack_IncludesCleaveSecondaryAttack`. `make cover-check` green. Rebuilt + redeployed.
+  Forward-only (the historical R4 crit row isn't backfilled).
+- **Board unchanged:** still **Round 5, Forge's turn** (player). G1 3/22 (D2), Forge 4/32 raging
+  (E1), Vale 19/24 (K2), G2 dead. Awaiting Forge's move.
