@@ -504,6 +504,14 @@ const characterSheetTemplate = `{{define "weaponStat"}}<dl class="eq-meta">
                 {{with .EquippedArmor.Armor}}{{template "armorStat" .}}{{end}}
                 {{with .EquippedArmor.Weapon}}{{template "weaponStat" .}}{{end}}
             </div>
+            {{if .WeaponMasteries}}
+            <div class="equip-slot mastery-slot">
+                <span class="equip-label">Weapon Masteries:</span>
+                <ul class="mastery-list">
+                    {{range .WeaponMasteries}}<li><span class="mastery-weapon">{{.Weapon}}</span> — <span class="mastery-prop">{{.Mastery}}</span></li>{{end}}
+                </ul>
+            </div>
+            {{end}}
         </div>
 
         <div class="section">

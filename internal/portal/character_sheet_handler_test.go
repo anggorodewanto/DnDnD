@@ -72,6 +72,64 @@ func TestServeCharacterSheet_Success(t *testing.T) {
 	assert.Contains(t, body, "Fighter 5")
 }
 
+func TestServeCharacterSheet_RendersWeaponMasteries(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Thorn",
+			Race:             "Human",
+			Level:            5,
+			ProficiencyBonus: 3,
+			Classes:          []character.ClassEntry{{Class: "Fighter", Level: 5}},
+			AbilityScores:    character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13},
+			AbilityModifiers: map[string]int{"STR": 3, "DEX": 2, "CON": 1, "INT": 0, "WIS": -1, "CHA": 1},
+			WeaponMasteries: []portal.WeaponMasteryDisplay{
+				{Weapon: "Longsword", Mastery: "Sap"},
+				{Weapon: "Shortbow", Mastery: "Vex"},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Weapon Masteries")
+	assert.Contains(t, body, "Longsword")
+	assert.Contains(t, body, "Sap")
+	assert.Contains(t, body, "Shortbow")
+	assert.Contains(t, body, "Vex")
+}
+
+// A character with no chosen masteries must not render the section header.
+func TestServeCharacterSheet_HidesEmptyWeaponMasteries(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Mage",
+			Race:             "Elf",
+			Level:            5,
+			ProficiencyBonus: 3,
+			Classes:          []character.ClassEntry{{Class: "Wizard", Level: 5}},
+			AbilityScores:    character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10},
+			AbilityModifiers: map[string]int{"STR": -1, "DEX": 2, "CON": 1, "INT": 4, "WIS": 1, "CHA": 0},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "Weapon Masteries")
+}
+
 func TestServeCharacterSheet_SpellDetails(t *testing.T) {
 	svc := &fakeCharacterSheetService{
 		data: &portal.CharacterSheetData{

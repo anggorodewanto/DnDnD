@@ -6,8 +6,46 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestExtractWeaponMasteries(t *testing.T) {
+	got := extractWeaponMasteries(pqtype.NullRawMessage{
+		Valid:      true,
+		RawMessage: []byte(`{"weapon_masteries":["longsword","shortbow"]}`),
+	})
+	assert.Equal(t, []string{"longsword", "shortbow"}, got)
+
+	assert.Nil(t, extractWeaponMasteries(pqtype.NullRawMessage{Valid: false}))
+	assert.Nil(t, extractWeaponMasteries(pqtype.NullRawMessage{Valid: true, RawMessage: []byte(`{}`)}))
+	assert.Nil(t, extractWeaponMasteries(pqtype.NullRawMessage{Valid: true, RawMessage: []byte(`not json`)}))
+}
+
+func TestResolveWeaponMasteries(t *testing.T) {
+	weapons := map[string]*WeaponStats{
+		"longsword": {Mastery: "Sap"},
+		"shortbow":  {Mastery: "Vex"},
+		"club":      {Mastery: ""}, // weapon without a mastery property → skipped
+	}
+	catalog := map[string]refdata.ItemCatalogEntry{
+		"longsword": {ID: "longsword", Name: "Longsword"},
+		"shortbow":  {ID: "shortbow", Name: "Shortbow"},
+	}
+
+	got := resolveWeaponMasteries([]string{"longsword", "shortbow", "club", "unknown"}, weapons, catalog)
+	assert.Equal(t, []WeaponMasteryDisplay{
+		{Weapon: "Longsword", Mastery: "Sap"},
+		{Weapon: "Shortbow", Mastery: "Vex"},
+	}, got)
+
+	// id absent from the catalog falls back to the raw id as the display name.
+	got = resolveWeaponMasteries([]string{"longsword"}, weapons, map[string]refdata.ItemCatalogEntry{})
+	assert.Equal(t, []WeaponMasteryDisplay{{Weapon: "longsword", Mastery: "Sap"}}, got)
+
+	assert.Nil(t, resolveWeaponMasteries(nil, weapons, catalog))
+	assert.Nil(t, resolveWeaponMasteries([]string{"club", "unknown"}, weapons, catalog)) // all skipped → nil
+}
 
 func TestFormatArmorAC(t *testing.T) {
 	tests := []struct {

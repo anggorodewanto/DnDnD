@@ -164,6 +164,8 @@ func (a *CharacterSheetStoreAdapter) enrichEquipment(ctx context.Context, data *
 		}
 	}
 
+	data.WeaponMasteries = resolveWeaponMasteries(data.masteryWeaponIDs, weapons, catalog)
+
 	for _, slot := range []*EquippedSlot{&data.EquippedMainHand, &data.EquippedOffHand, &data.EquippedArmor} {
 		if slot.ItemID == "" {
 			continue
@@ -209,6 +211,49 @@ func (a *CharacterSheetStoreAdapter) loadArmorStats(ctx context.Context) map[str
 		out[ar.ID] = armorStatsFrom(ar)
 	}
 	return out
+}
+
+// resolveWeaponMasteries pairs each chosen weapon-mastery id with the weapon's
+// display name (from the item catalog) and mastery property (from the reference
+// weapon stat block). Ids that resolve to no reference weapon, or to a weapon
+// without a mastery property, are skipped — best-effort degradation mirroring
+// enrichEquipment. Returns nil when nothing resolves so the template hides the
+// section.
+func resolveWeaponMasteries(ids []string, weapons map[string]*WeaponStats, catalog map[string]refdata.ItemCatalogEntry) []WeaponMasteryDisplay {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]WeaponMasteryDisplay, 0, len(ids))
+	for _, id := range ids {
+		w, ok := weapons[id]
+		if !ok || w.Mastery == "" {
+			continue
+		}
+		name := id
+		if e, ok := catalog[id]; ok {
+			name = e.Name
+		}
+		out = append(out, WeaponMasteryDisplay{Weapon: name, Mastery: w.Mastery})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// extractWeaponMasteries pulls the chosen weapon-mastery ids from the
+// character_data JSONB bag. Returns nil when absent or malformed.
+func extractWeaponMasteries(charData pqtype.NullRawMessage) []string {
+	if !charData.Valid || len(charData.RawMessage) == 0 {
+		return nil
+	}
+	var cd struct {
+		WeaponMasteries []string `json:"weapon_masteries"`
+	}
+	if err := json.Unmarshal(charData.RawMessage, &cd); err != nil {
+		return nil
+	}
+	return cd.WeaponMasteries
 }
 
 func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
@@ -258,6 +303,7 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 	data.FeatureUses = parseNullJSON[map[string]character.FeatureUse](ch.FeatureUses)
 	data.HitDiceRemaining = parseHitDiceRemaining(ch.HitDiceRemaining)
 	data.Spells = extractSpells(ch.CharacterData)
+	data.masteryWeaponIDs = extractWeaponMasteries(ch.CharacterData)
 
 	// Persistent (out-of-combat) condition + exhaustion state from the character
 	// row. hydrateFromCombatant later overrides these from the live combatant.

@@ -47,9 +47,13 @@ type CharacterSheetData struct {
 	AttunementSlots  []character.AttunementSlot
 	Languages        []string
 	Inventory        []InventoryDisplayItem
-	Conditions       []string // active conditions (poisoned, frightened, etc.)
-	ExhaustionLevel  int
-	ConcentrationOn  string // spell name if concentrating, empty otherwise
+	// WeaponMasteries are the weapon masteries the character has chosen (2024
+	// rules), resolved by enrichEquipment from the weapon ids stored in
+	// character_data. Empty hides the sheet section.
+	WeaponMasteries []WeaponMasteryDisplay
+	Conditions      []string // active conditions (poisoned, frightened, etc.)
+	ExhaustionLevel int
+	ConcentrationOn string // spell name if concentrating, empty otherwise
 
 	// Optional free-form description (display-only flavor). Empty when the
 	// player wrote none; the template hides the section in that case.
@@ -71,6 +75,11 @@ type CharacterSheetData struct {
 	// sheet has no encounter/Turn context. Computed in renderSheet (template
 	// prep) so it is set on every render path.
 	PossibleActions []ActionGroup
+
+	// masteryWeaponIDs carries the chosen weapon-mastery ids from
+	// mapCharacterToSheet to enrichEquipment, which resolves them against
+	// refdata into WeaponMasteries. Not rendered directly.
+	masteryWeaponIDs []string
 }
 
 // ActionGroup is a set of available actions sharing one action-economy slot,

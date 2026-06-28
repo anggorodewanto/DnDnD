@@ -20,6 +20,13 @@ type WeaponStats struct {
 	Properties []string // ["Finesse", "Light"]
 }
 
+// WeaponMasteryDisplay is one weapon mastery the character has chosen (2024
+// rules): the weapon's display name paired with the mastery property it grants.
+type WeaponMasteryDisplay struct {
+	Weapon  string // "Longsword"
+	Mastery string // "Sap"
+}
+
 // ArmorStats is the display armor stat block joined from refdata.armor by item
 // id. Nil on a non-armor inventory item / equipped slot.
 type ArmorStats struct {

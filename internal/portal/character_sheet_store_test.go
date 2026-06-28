@@ -287,6 +287,45 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet(t *testing.T) {
 	assert.Equal(t, 50, data.Gold)
 }
 
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_WeaponMasteries(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+	charData, _ := json.Marshal(map[string]any{
+		"weapon_masteries": []string{"longsword", "shortbow"},
+	})
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Thorn",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charData, Valid: true},
+		},
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee", Mastery: "sap"},
+			{ID: "shortbow", Name: "Shortbow", Damage: "1d6", DamageType: "piercing", WeaponType: "simple_ranged", Mastery: "vex"},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Equal(t, []portal.WeaponMasteryDisplay{
+		{Weapon: "Longsword", Mastery: "Sap"},
+		{Weapon: "Shortbow", Mastery: "Vex"},
+	}, data.WeaponMasteries)
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells(t *testing.T) {
 	charID := uuid.New()
 
