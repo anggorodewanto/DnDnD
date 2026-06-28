@@ -15,6 +15,10 @@ const (
 	actionTypeCast           = "cast"
 	actionTypeFreeformAction = "freeform_action"
 	actionTypeAttack         = "attack"
+	// actionTypeDowned marks a combatant's above-0 → 0 HP transition (a PC
+	// going unconscious / an NPC being defeated) so the DM Console timeline
+	// records the drop alongside the hit that caused it.
+	actionTypeDowned = "downed"
 )
 
 // recordCombatAction best-effort persists a player-driven combat action to

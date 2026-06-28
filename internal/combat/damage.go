@@ -298,6 +298,14 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	// no card updater is wired (e.g. tests, bot offline).
 	s.notifyCardUpdate(ctx, updated)
 
+	// Surface an above-0 → 0 HP transition (PC unconscious / NPC defeated) to
+	// the DM Console timeline and #combat-log. Excludes: DM HP overrides &
+	// undo (Override), wild-shape reverts (the druid is not dying), damage-at-0
+	// ticks (prevHP already 0), and survivals (newHP > 0).
+	if !input.Override && !isWildShaped && target.HpCurrent > 0 && newHP <= 0 {
+		s.notifyDroppedToZero(ctx, input.EncounterID, target, dsRouting.instantDeath)
+	}
+
 	return ApplyDamageResult{
 		Updated:          updated,
 		FinalDamage:      adjusted,
@@ -310,6 +318,24 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		InstantDeath:     dsRouting.instantDeath,
 		DeathSaveOutcome: dsRouting.outcome,
 	}, nil
+}
+
+// notifyDroppedToZero best-effort records a combatant's above-0 → 0 HP
+// transition to the DM Console timeline (action_log) and the encounter's
+// #combat-log channel, so a PC going unconscious / an NPC being defeated is
+// visible in lockstep with the hit that caused it. Pure observability: the
+// action_log parent is the encounter's active turn (skipped when out of
+// combat), and every error is swallowed — a logging miss must never roll back
+// the damage write that already landed.
+func (s *Service) notifyDroppedToZero(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, instantDeath bool) {
+	msg := formatDroppedToZeroLog(target.DisplayName, target.IsNpc, instantDeath)
+	s.postCombatLog(ctx, encounterID, msg)
+
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err != nil || !enc.CurrentTurnID.Valid {
+		return
+	}
+	s.recordCombatAction(ctx, enc.CurrentTurnID.UUID, encounterID, target.ID, uuid.NullUUID{}, actionTypeDowned, msg)
 }
 
 // phase43DeathSaveResult is the internal return of routePhase43DeathSave.

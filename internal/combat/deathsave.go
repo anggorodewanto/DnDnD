@@ -83,6 +83,20 @@ func ProcessDropToZeroHP(name string, overflowDamage, maxHP int) DeathSaveOutcom
 	}
 }
 
+// formatDroppedToZeroLog renders the one-line #combat-log / action_log summary
+// for a combatant dropping to 0 HP. It carries no HP/AC numbers so it is safe
+// to surface publicly. NPCs are defeated outright at 0 HP; PCs go unconscious
+// and dying unless overflow damage killed them instantly (PHB p.197).
+func formatDroppedToZeroLog(name string, isNpc, instantDeath bool) string {
+	if isNpc {
+		return fmt.Sprintf("💀  %s drops to 0 HP — defeated", name)
+	}
+	if instantDeath {
+		return fmt.Sprintf("💀  %s is killed outright by massive damage", name)
+	}
+	return fmt.Sprintf("💔  %s drops to 0 HP — unconscious and dying", name)
+}
+
 // RollDeathSave processes a death saving throw with the given d20 roll value.
 // Applies nat 20 (regain 1 HP), nat 1 (2 failures), and normal success/failure rules.
 func RollDeathSave(name string, ds DeathSaves, roll int) DeathSaveOutcome {
