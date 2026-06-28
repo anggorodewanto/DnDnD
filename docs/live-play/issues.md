@@ -45,6 +45,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-028 | 2026-06-28 | dm console / in-character feed (platform) | major | OPEN (enhancement) | **Player #in-character roleplay is Discord-only** — never written to any DB table, absent from `/api/dm/situation` `timeline[]` (which carries only action_log + DM narration). The DM must read Discord directly (the reason Chrome-reading exists — see [`dm-rules.md`](dm-rules.md)). Largest situational gap. Target: ingest #in-character messages (Discord webhook/poll) into a roleplay timeline the Console surfaces. Large (platform integration). |
 | ISSUE-029 | 2026-06-28 | dm console / out-of-combat state | medium | OPEN (enhancement) | **`/api/dm/situation` returns an empty `state` out of combat** — exploration progress (`encounters.explored_cells`), party scene/location, and prep readiness are invisible, so between fights the DM falls back to game-state.md notes. Target: surface exploration/scene state (and an exploration-mode view) so the Console isn't combat-only. |
 | ISSUE-023 | 2026-06-27 | combat / enemy turn (combat-log damage) | minor | FIXED | Enemy-turn #combat-log reported the **raw rolled damage**, not the amount actually dealt after the target's resistance — a raging Forge took two ghoul bites that each logged "8 piercing damage" while Rage halved each to 4 (20→16→**12/32**), so the log overstated the hit. **Not a lost-damage bug** — HP was correct (resistance applied); only the log text was raw. **Found live** while running both ghoul turns (verified Forge `is_raging=t`, rage_rounds≈10 → 20−4−4=12 is correct). **Fixed (TDD):** `ExecuteEnemyTurn` now threads `ApplyDamage`'s `FinalDamage` back onto each attack step (new `AttackRollResult.FinalDamage`/`DamageResolved`), and `formatAttackLog` (new `attackDamagePhrase` helper) reports the dealt amount with an annotation when R/I/V changed it — `4 piercing damage (resisted — halved from 8)`, `0 … (immune — N negated)`, `N … (vulnerable — doubled from M)`; unchanged + pre-apply (plan preview) read plain as before. Red/green `TestFormatCombatLog_ResistedDamageShowsHalved`/`_ImmuneDamageShowsNegated`/`_ResolvedNoChangeReadsPlain` + `TestExecuteEnemyTurn_LogShowsResistedDamage`; combat package green, rebuilt + redeployed. NB: the two R2/R3 logs posted **before** this fix still read "8 piercing" in #combat-log (actual dealt was 4 each). |
+| ISSUE-030 | 2026-06-28 | combat / turn advance (NPC turn dropped) | major | FIXED | **A live NPC's whole turn was silently dropped and the round skipped it.** `AdvanceTurn` (`internal/combat/initiative.go`) unconditionally `CompleteTurn`s the current turn with **no guard** that an NPC's enemy turn was actually executed. When "End Turn" fired on an NPC whose enemy-turn plan hadn't been run, the engine marked the turn completed with no attack and rolled on — and since that NPC was the last in initiative, the round advanced, looking like "the order skipped a ghoul." **Found live:** after Forge's R4 crit killed ghoul G2, the surviving ghoul G1 (init-last, alive 18/22) was reached (turn row + `enemy_turn_ready` created) but its R4 turn was then completed unrun (`action_used=false`, no `action_log`) and the board jumped to R5/Vale — G1's bite (which would likely have dropped Forge) vanished. **NOT caused by G2's death** — verified by tracing `AdvanceTurn`: with G2 alive the R5 rebuild just returns G2 first; the dropped turn is whichever combatant is current-but-unexecuted when a premature End-Turn fires (death is orthogonal). **Fixed (TDD):** `AdvanceTurn` now refuses (`ErrEnemyTurnNotExecuted` → **409** at the dashboard endpoint) to complete a current turn that is an NPC with `action_used=false` — `ExecuteEnemyTurn` sets `ActionUsed=true` even for a no-op plan, so this reliably means "End Turn before Run Enemy Turn." PCs exempt (they legitimately end with the action unused). The dashboard Turn Queue surfaces the 409 text, so the DM is told to run the enemy turn first instead of silently skipping the creature. Red/green `TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn`/`_AllowsExecutedEnemyTurn` + `TestAdvanceTurn_UnexecutedEnemyTurnReturns409`; `make cover-check` green; rebuilt + redeployed. Live game left as-is per DM call (G1 acts normally on its R5 turn; no rewind). Distinct from ISSUE-021 (executor doesn't auto-move/advance) — this is the inverse: the engine *over*-advanced past an unrun NPC. |
 
 ---
 
@@ -845,6 +846,42 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Target:** surface exploration/scene state in the payload (e.g. an exploration-mode
   `StateView` with explored cells + party position) so the Console is the live view between
   fights too, not only mid-combat.
+
+### ISSUE-030 — AdvanceTurn silently drops an un-executed NPC turn (round skips a live combatant)
+- **Date:** 2026-06-28
+- **Area:** combat / turn advancement (`internal/combat/initiative.go` `AdvanceTurn`)
+- **Severity:** major
+- **Status:** FIXED (TDD) + redeployed.
+- **Repro (live):** R4 order G2(init-1, NPC) → Vale(2, PC) → Forge(3, PC) → G1(4, NPC). Forge's
+  R4 greataxe crit killed G2. Engine advanced Forge→G1 correctly (G1 turn row `status=active`,
+  `enemy_turn_ready` posted). Then a second advance fired (an End-Turn before the enemy executor
+  ran) → G1's R4 turn marked `completed` with `started_at=NULL`, `action_used=false`,
+  `attacks_remaining=1`, **no `action_log` attack**; round rolled to R5/Vale. G1's bite was lost.
+- **Expected:** G1 takes its R4 turn (run the enemy turn, resolve its attack) before the round
+  advances; ending an unrun NPC turn should be refused, not silently completed.
+- **Actual:** `AdvanceTurn` (lines ~399-427) unconditionally `CompleteTurn`s `enc.CurrentTurnID`,
+  then — because G1 now appears in `hadTurn` — finds no R4 candidates, advances the round, and
+  returns the first R5 combatant (Vale). The NPC's whole turn evaporated.
+- **Root cause:** missing guard. No check that an NPC's enemy turn was executed before completing
+  it. The `started_at IS NULL` signal the first investigation suggested is **wrong** — NPC turns
+  always have `started_at=NULL` even when executed (R3 ghoul attacked with NULL `started_at`). The
+  reliable signal is `ExecuteEnemyTurn` setting `turn.ActionUsed=true` (`turn_builder_handler.go:378`,
+  unconditional, even for a no-op plan).
+- **NOT death-related:** simulated `AdvanceTurn` with G2 alive — the R5 candidate rebuild
+  (`initiative.go` ~469-474, filters on `IsAlive` only) returns G2 first; G1's R4 turn is dropped
+  either way. The bug drops whichever combatant is current-but-unexecuted when a premature
+  End-Turn fires; G1 just happened to be last in order, so it read as "the round skipped a ghoul."
+- **Fix:** new sentinel `ErrEnemyTurnNotExecuted`; `AdvanceTurn` returns it (without completing or
+  advancing) when the current turn's combatant `IsNpc && !ActionUsed`. `DMDashboardHandler.AdvanceTurn`
+  maps it to **409** (`errors.Is`), and the dashboard `apiFetch`/`TurnQueue` already surface the
+  body text — so the DM sees "enemy turn must be executed before it can be ended" instead of a
+  silent skip. PCs unaffected (guard is NPC-only). Tests: `TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn`,
+  `_AllowsExecutedEnemyTurn`, `TestAdvanceTurn_UnexecutedEnemyTurnReturns409`. `make cover-check` green.
+- **Live game:** left as-is per DM call — no rewind; G1 acts normally on its R5 turn (the dropped
+  bite is not restored).
+- **Relationship:** inverse of [ISSUE-021] (executor under-does the turn: no auto-move/advance);
+  this was the engine *over*-advancing past an unrun NPC. The dangling `enemy_turn_ready` cleanup
+  is the same ISSUE-021 artifact.
 
 <!-- Append a section per issue:
 

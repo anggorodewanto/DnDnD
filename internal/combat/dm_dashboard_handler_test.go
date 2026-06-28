@@ -526,6 +526,41 @@ func TestAdvanceTurn_ServiceError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+// TestAdvanceTurn_UnexecutedEnemyTurnReturns409 covers the HTTP mapping of the
+// guard: ending an NPC's turn before "Run Enemy Turn" has executed it is a 409,
+// not a 500 — the DM is told to run the enemy turn first instead of silently
+// skipping the creature.
+func TestAdvanceTurn_UnexecutedEnemyTurnReturns409(t *testing.T) {
+	encounterID := uuid.New()
+	activeTurnID := uuid.New()
+	npcID := uuid.New()
+
+	store := &mockStore{
+		getEncounterFn: func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{
+				ID:            id,
+				Status:        "active",
+				RoundNumber:   4,
+				CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+			}, nil
+		},
+		getTurnFn: func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: activeTurnID, CombatantID: npcID, EncounterID: encounterID, ActionUsed: false}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: npcID, IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		},
+	}
+
+	r := newDMDashboardRouter(store)
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/advance-turn", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
 // --- TDD Cycle: ListPendingActions store error ---
 
 func TestListPendingActions_StoreError(t *testing.T) {

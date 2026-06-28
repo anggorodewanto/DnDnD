@@ -10,9 +10,9 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 4, Forge's turn). For the live
-board (whose turn, HP, positions, conditions, pending queue, recent actions) open the **DM Console** —
-do not read a hand-copied snapshot from this file. Non-derivable intent is under "Next action."_
+_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 5, Vale's turn — lead ghoul down).
+For the live board (whose turn, HP, positions, conditions, pending queue, recent actions) open the
+**DM Console** — do not read a hand-copied snapshot from this file. Non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
 
@@ -84,32 +84,35 @@ recent action timeline are **generated** — read them live, never transcribe th
 
 ## Current scene (narrative framing — non-derivable)
 
-**Down in the cellar, the brood has the raging dwarf a breath from going down.** Forge is berserk,
-pinned at the foot of the stairs by both pale ghouls and badly bloodied — a savage crit from the
-smaller ghoul nearly dropped him even through Rage's resistance; the lead ghoul's follow-up snapped
-on empty air. He's still up, furious, but one more solid bite ends him. Across the room Vale stands
-clear and unhurt, having lashed the lead ghoul twice with grave-cold Chill Touch (it's reeling).
-The fight is into Round 4, **Forge's turn** — the bleeding dwarf's swing, two ghouls on him, the
-lead one buckling; the cellar is cramped, stone, lit by whatever the party brought down. World /
+**Down in the cellar, one of the brood is dead and the dwarf is a breath from joining it.** On his
+Round-4 swing Forge — berserk, bleeding out on Rage alone — cleaved the reeling lead ghoul apart
+(the one Vale had twice lashed with grave-cold Chill Touch); it's down. But the **smaller** ghoul,
+the one that opened him in the dark, still crowds his flank, unhurt by its broodmate's end and
+hungry for the blood running hot down his arm. Across the room Vale stands clear and untouched. The
+fight is into **Round 5, Vale's turn** — initiative hands her the opening before the surviving ghoul
+lands its strike. The cellar is cramped, stone, lit by whatever the party brought down. World /
 lore: [`world.md`](world.md). (Live HP/positions: DM Console.)
 
 ## Next action (DM intent — the one thing the Console can't infer)
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Mid-combat, "The Cellar," Round 4 — Forge's turn (CURRENT).** Vale finished R4 (second Chill
-   Touch on the lead ghoul → it's bloodied/reeling, live HP via Console; then moved + `/done`). Now
-   it's **Forge** (raging, a breath from down). Turn order remaining: Forge → G1 ghoul (NPC, run via
-   Turn Builder). Players drive their
-   own turns (`/move`/`/attack`/`/cast`, **they roll their own dice** — never roll for them). Run
-   NPC turns via **"⚔ Run Enemy Turn"** → Confirm & Post → **manual End Turn** (executor is
-   attack-only, no auto-move/advance — ISSUE-021; both ghouls are already adjacent to Forge, so no
-   move needed). Keep enemy HP/AC secret — describe state, don't quote numbers ([`dm-rules.md`](dm-rules.md)).
-   - **Forge is critically low and raging** — if a player downs a ghoul or pulls the heat off him,
-     great; otherwise the next G1 bite likely drops him to death saves. Flag the danger; let the
-     players decide.
-2. **Chill Touch rider — LAPSED.** The lead ghoul's "can't regain HP" rider expired at the start of
-   Vale's Round-4 turn (one round after the cast). Nothing to track now; ghouls don't self-heal anyway.
+1. **Mid-combat, "The Cellar," Round 5 — Vale's turn (CURRENT, player-driven).** Forge closed R4 by
+   cleaving the lead ghoul (G2) dead. One ghoul left (**G1**, the smaller flank one). R5 turn order:
+   **Vale → Forge → G1 ghoul** (NPC, run via Turn Builder). Players drive their own turns
+   (`/move`/`/attack`/`/cast`, **they roll their own dice** — never roll for them). Run the NPC turn
+   via **"⚔ Run Enemy Turn"** → Confirm & Post → **manual End Turn** (executor is attack-only, no
+   auto-move/advance — ISSUE-021; G1 already adjacent to Forge, so no move needed). Keep enemy HP/AC
+   secret — describe state, don't quote numbers ([`dm-rules.md`](dm-rules.md)).
+   - **Forge is critically low and raging (untouched so far this round)** — G1's turn comes **last**
+     in R5; if its bite lands it likely drops him to death saves. Best line for the party: down G1
+     or peel it off Forge on Vale's/Forge's turns before then. Flag the danger; let the players decide.
+2. **G1's R4 turn was dropped by an engine bug — root-caused + FIXED (ISSUE-030).** `AdvanceTurn`
+   silently completed the unrun NPC turn when End-Turn fired before "Run Enemy Turn"; it's now
+   409-guarded (an NPC turn can't be ended until its enemy turn is executed). Forge took no ghoul
+   damage; the dangling `enemy_turn_ready` was cleared. **No rewind** (DM call) — G1 acts normally
+   on its R5 turn. Going forward: always run "⚔ Run Enemy Turn" before End Turn, or the DM gets a
+   409 instead of a silent skip.
 3. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row + sheet →
    fold into the fiction). 3-4 more PCs expected. See [`runbook.md`](runbook.md) "Onboarding
    players" + [`big-party.md`](big-party.md).

@@ -634,6 +634,111 @@ func TestService_AdvanceTurn_CompletesCurrentTurn(t *testing.T) {
 	assert.Equal(t, nextCombatantID, turnInfo.CombatantID)
 }
 
+// TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn locks the fix for the live
+// bug where "End Turn" was invoked on an NPC's turn before its enemy-turn plan
+// was executed: AdvanceTurn used to silently CompleteTurn the un-run NPC turn and
+// roll on, dropping the creature's whole turn (a ghoul's bite vanished, the round
+// skipped it). An NPC current turn whose action was never used (ExecuteEnemyTurn
+// sets ActionUsed=true, even for a no-op plan) must be refused, not completed.
+func TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	activeTurnID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	store := defaultMockStore()
+	completeCalled := false
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   4,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.getTurnFn = func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+		// NPC's enemy turn was never executed → ActionUsed stays false.
+		return refdata.Turn{ID: activeTurnID, CombatantID: npcID, EncounterID: encounterID, ActionUsed: false}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{ID: id, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.completeTurnFn = func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {
+		completeCalled = true
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: pcID, InitiativeOrder: 1, DisplayName: "Vale", Conditions: json.RawMessage(`[]`), IsAlive: true},
+			{ID: npcID, InitiativeOrder: 2, DisplayName: "Ghoul", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true},
+		}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrEnemyTurnNotExecuted), "expected ErrEnemyTurnNotExecuted, got %v", err)
+	assert.False(t, completeCalled, "must not complete an un-executed NPC turn")
+}
+
+// TestService_AdvanceTurn_AllowsExecutedEnemyTurn is the green counterpart: once
+// the enemy turn has been executed (ActionUsed=true), ending it advances normally.
+func TestService_AdvanceTurn_AllowsExecutedEnemyTurn(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	activeTurnID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	store := defaultMockStore()
+	completeCalled := false
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   4,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.getTurnFn = func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+		// Enemy turn executed → ActionUsed=true.
+		return refdata.Turn{ID: activeTurnID, CombatantID: npcID, EncounterID: encounterID, ActionUsed: true}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{ID: id, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.completeTurnFn = func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {
+		completeCalled = true
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: pcID, InitiativeOrder: 1, DisplayName: "Vale", Conditions: json.RawMessage(`[]`), IsAlive: true},
+			{ID: npcID, InitiativeOrder: 2, DisplayName: "Ghoul", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		// NPC already had its turn this round; only the PC remains to act.
+		return []refdata.Turn{{CombatantID: npcID, Status: "completed"}}, nil
+	}
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, Status: arg.Status}, nil
+	}
+
+	svc := NewService(store)
+	turnInfo, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+	assert.True(t, completeCalled, "executed enemy turn should complete")
+	assert.Equal(t, pcID, turnInfo.CombatantID, "should advance to the remaining PC")
+}
+
 func TestService_AdvanceTurn_SkipsDeadCombatants(t *testing.T) {
 	ctx := context.Background()
 	encounterID := uuid.New()

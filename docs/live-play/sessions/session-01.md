@@ -574,3 +574,56 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   Then **I run G1's enemy turn** (Turn Builder → Confirm & Post → manual End Turn) — if its bite
   lands it likely puts Forge into death saves, so clearing G2 or pulling heat off the dwarf first
   matters. Then back to the top of the order (G2 next round).
+
+### R4 closes — Forge crits & kills the lead ghoul; board advances to R5, Vale's turn (06-28, ~12:27 PM)
+
+- **Resumed as DM, re-pulled the Console.** First `/api/dm/situation` fetch came back **stale**
+  (Round 4, G1 current); the authoritative board (Combat Manager + a second fetch) was already at
+  **Round 5, Vale's turn**. Reconciled against the action log (source of truth): newest action was
+  **Forge's R4 greataxe — CRIT for 19** (05:16:40Z), which **killed the lead ghoul (G2)**, the one
+  Vale had twice frozen with Chill Touch. That kill was **un-narrated** (story frozen at the 11:36 AM
+  "it is his swing" beat) — the classic mechanics-ahead-of-story gap.
+- **Narrated Forge's kill** to #the-story (read-aloud, 12:27 PM): the greataxe cleaving the
+  frost-cracked lead ghoul apart along the seam Vale's cold opened; the surviving **smaller** ghoul
+  unmoved by its broodmate's end, poised on the bleeding dwarf. Enemy state described, no numbers;
+  Forge's own near-death his to know.
+- **G1's R4 turn passed without an attack** — Forge is still **untouched this round** (no ghoul
+  attack logged after his crit; HP unchanged), so G1's end-of-R4 turn was **skipped**, not run.
+  Board rolled R4→R5, dead G2 (init 19) auto-skipped, landing on **Vale (init 15)**.
+- **Cleaned the dangling `enemy_turn_ready`** (Ghoul, created 05:23:39Z) via DM Queue → Resolve with
+  an outcome note (ISSUE-021 artifact: the queue item lingered after the turn advanced, making
+  `next_step` falsely point at a ghoul turn during Vale's turn). DM Queue now "No pending items";
+  Console `next_step` reflects Vale's turn.
+- **Synced** `game-state.md` (last-updated, scene, Next-action) from "R4, Forge's turn" → "R5, Vale's
+  turn — lead ghoul down." No HP transcribed into the save file.
+- **State now:** **Round 5, Vale's turn (init 15) — awaiting the human player.** One ghoul left
+  (**G1**, the smaller flank one); Forge **critically low, raging, untouched so far this round** at
+  E1; Vale clear at K2 (live board → Console). **Next (player-driven):** Vale acts (frost/crossbow on
+  G1, or peel it off Forge) → Forge → **then I run G1's R5 enemy turn** (Turn Builder → Confirm &
+  Post → manual End Turn) — G1's bite comes last and likely drops Forge if it lands, so clearing or
+  peeling it before then matters.
+
+### Engine bug found + fixed mid-session: AdvanceTurn dropped G1's R4 turn (ISSUE-030) (06-28, ~12:50 PM)
+
+- **Player question** ("after Forge there should still be a ghoul — was this a bug because one
+  died?") triggered an investigation. Pulled the `turns` + `action_log` + `dm_queue_items` tables
+  for the encounter and traced `internal/combat/initiative.go` `AdvanceTurn`.
+- **Verdict (verified in code + DB):** real bug, **NOT** caused by G2's death. The engine reached
+  G1 correctly after Forge (turn row + `enemy_turn_ready` at 05:23:39), then a second advance — an
+  **End-Turn fired before the enemy executor ran** — hit `AdvanceTurn`'s unconditional
+  `CompleteTurn` (no guard that an NPC's enemy turn was executed), marking G1's R4 turn done with no
+  attack (`action_used=false`, no `action_log`) and rolling to R5/Vale. G1's bite (which would
+  likely have dropped Forge) was lost. Death is orthogonal: with G2 alive the R5 rebuild just
+  returns G2 first; the dropped turn is whichever combatant is current-but-unrun when the premature
+  End-Turn fires (G1 was last in order → looked like "the round skipped a ghoul").
+- **Fix (red/green TDD):** `AdvanceTurn` refuses (`ErrEnemyTurnNotExecuted` → **409**) to end a
+  current turn that is an NPC with `action_used=false` (`ExecuteEnemyTurn` sets `ActionUsed=true`
+  even for a no-op plan — the reliable "executed" signal; NPC turns always have `started_at=NULL`,
+  so that's NOT a usable signal). PCs exempt. Dashboard Turn Queue surfaces the 409 text. Tests:
+  `TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn` / `_AllowsExecutedEnemyTurn` /
+  `TestAdvanceTurn_UnexecutedEnemyTurnReturns409`. `make cover-check` green. Rebuilt + redeployed
+  (`docker compose up -d --build app`); live state survived (R5, Vale's turn).
+- **Live game:** left as-is per DM call — **no rewind**; G1 acts on its R5 turn. The dropped R4
+  bite is not restored (Forge's lucky break stands in the fiction).
+- **State now:** **Round 5, Vale's turn** — awaiting the human. One ghoul left (G1, D2); Forge
+  4/32 raging (E1); Vale 19/24 (K2). Console `pending` empty, `next_step` clear.

@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -142,6 +143,10 @@ func (h *DMDashboardHandler) AdvanceTurn(w http.ResponseWriter, r *http.Request)
 
 	info, err := h.svc.AdvanceTurn(r.Context(), encounterID)
 	if err != nil {
+		if errors.Is(err, ErrEnemyTurnNotExecuted) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

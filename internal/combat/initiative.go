@@ -386,6 +386,12 @@ func (s *Service) MarkSurprised(ctx context.Context, combatantID uuid.UUID) erro
 	return nil
 }
 
+// ErrEnemyTurnNotExecuted is returned by AdvanceTurn when the current turn
+// belongs to an NPC whose enemy-turn plan was never executed. Ending such a turn
+// would silently complete it and skip the creature's whole turn (no attack), so
+// the caller must run "Run Enemy Turn" first. The HTTP layer maps this to 409.
+var ErrEnemyTurnNotExecuted = errors.New("enemy turn must be executed before it can be ended")
+
 // AdvanceTurn completes the current turn (if any), determines the next combatant,
 // creates a new turn (skipping surprised combatants in round 1), and advances the
 // round when all combatants have gone.
@@ -402,6 +408,23 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		if err != nil {
 			return TurnInfo{}, fmt.Errorf("getting current turn: %w", err)
 		}
+
+		// Guard: an NPC's enemy turn must be executed before it can be ended.
+		// ExecuteEnemyTurn marks ActionUsed=true (even for a no-op plan), so an
+		// NPC current turn with ActionUsed=false means "End Turn" was invoked
+		// before "Run Enemy Turn". Completing it here would silently drop the
+		// creature's whole turn and roll the round, skipping it (the live bug
+		// where a ghoul's bite vanished and the round jumped a combatant). Refuse
+		// so the executor runs first. PCs are exempt — they legitimately end with
+		// their action unused (move-only turns, /done).
+		currentCombatant, err := s.store.GetCombatant(ctx, currentTurn.CombatantID)
+		if err != nil {
+			return TurnInfo{}, fmt.Errorf("getting current combatant: %w", err)
+		}
+		if currentCombatant.IsNpc && !currentTurn.ActionUsed {
+			return TurnInfo{}, ErrEnemyTurnNotExecuted
+		}
+
 		if _, err := s.ProcessTurnEndWithLog(ctx, encounterID, currentTurn.CombatantID, enc.RoundNumber, enc.CurrentTurnID.UUID); err != nil {
 			return TurnInfo{}, fmt.Errorf("processing turn end conditions: %w", err)
 		}
