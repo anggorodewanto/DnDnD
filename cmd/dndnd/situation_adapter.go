@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
@@ -143,20 +145,42 @@ func (p *situationProvider) Encounter(ctx context.Context, campaignID string) (*
 	}
 	for _, c := range combs {
 		out.Combatants = append(out.Combatants, situation.CombatantRow{
-			ID:         c.ID.String(),
-			Name:       c.DisplayName,
-			ShortID:    c.ShortID,
-			HPCurrent:  int(c.HpCurrent),
-			HPMax:      int(c.HpMax),
-			AC:         int(c.Ac),
-			Col:        c.PositionCol,
-			Row:        int(c.PositionRow),
-			IsNPC:      c.IsNpc,
-			IsAlive:    c.IsAlive,
-			Conditions: parseConditionNames(c.Conditions),
+			ID:                  c.ID.String(),
+			Name:                c.DisplayName,
+			ShortID:             c.ShortID,
+			InitiativeOrder:     int(c.InitiativeOrder),
+			Initiative:          int(c.InitiativeRoll),
+			HPCurrent:           int(c.HpCurrent),
+			HPMax:               int(c.HpMax),
+			TempHP:              int(c.TempHp),
+			AC:                  int(c.Ac),
+			Col:                 c.PositionCol,
+			Row:                 int(c.PositionRow),
+			IsNPC:               c.IsNpc,
+			IsAlive:             c.IsAlive,
+			Exhaustion:          int(c.ExhaustionLevel),
+			IsRaging:            c.IsRaging,
+			RageRoundsRemaining: nullInt32To(c.RageRoundsRemaining),
+			Concentration:       nullStringTo(c.ConcentrationSpellName),
+			DeathSaves:          parseDeathSaves(c.DeathSaves),
+			Conditions:          parseConditions(c.Conditions),
 		})
 	}
 	return out, nil
+}
+
+func nullInt32To(v sql.NullInt32) int {
+	if !v.Valid {
+		return 0
+	}
+	return int(v.Int32)
+}
+
+func nullStringTo(v sql.NullString) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.String
 }
 
 // currentTurnCombatantID resolves the encounter's current_turn_id (a turns row)
@@ -224,26 +248,58 @@ func (p *situationProvider) ResolutionEvents(_ context.Context, _ string) ([]sit
 	return nil, nil
 }
 
-// parseConditionNames extracts the condition names from a combatant's
-// conditions JSON (an array of {"condition": "..."} objects). A nil/garbage
-// blob yields no conditions rather than an error.
-func parseConditionNames(raw json.RawMessage) []string {
+// parseConditions maps a combatant's conditions JSON (an array of objects keyed
+// by "condition", with optional duration/source/expiry metadata — see
+// combat.CombatCondition) into the situation view's ConditionInfo, so the DM
+// Console shows whether each condition is one-shot or ongoing, who applied it,
+// and when it ends. A nil/garbage blob yields no conditions rather than an error.
+func parseConditions(raw json.RawMessage) []situation.ConditionInfo {
 	if len(raw) == 0 {
 		return nil
 	}
 	var conds []struct {
-		Condition string `json:"condition"`
+		Condition         string `json:"condition"`
+		DurationRounds    int    `json:"duration_rounds"`
+		SourceCombatantID string `json:"source_combatant_id"`
+		ExpiresOn         string `json:"expires_on"`
+		SourceSpell       string `json:"source_spell"`
 	}
 	if err := json.Unmarshal(raw, &conds); err != nil {
 		return nil
 	}
-	names := make([]string, 0, len(conds))
+	out := make([]situation.ConditionInfo, 0, len(conds))
 	for _, c := range conds {
-		if c.Condition != "" {
-			names = append(names, c.Condition)
+		if c.Condition == "" {
+			continue
 		}
+		out = append(out, situation.ConditionInfo{
+			Name:           c.Condition,
+			DurationRounds: c.DurationRounds,
+			SourceSpell:    c.SourceSpell,
+			SourceID:       c.SourceCombatantID,
+			ExpiresOn:      c.ExpiresOn,
+		})
 	}
-	return names
+	return out
+}
+
+// parseDeathSaves maps a combatant's death_saves JSON ({"successes","failures"})
+// into the situation view. It returns nil when the column is null/empty OR an
+// all-zero tally — PCs are seeded with {0,0}, so a zero tally means "not actually
+// rolling death saves"; surfacing it would put a noisy "✓0 ✗0" badge on every
+// healthy combatant. Once a real save lands (or fails) the badge appears.
+func parseDeathSaves(raw pqtype.NullRawMessage) *situation.DeathSaves {
+	if !raw.Valid || len(raw.RawMessage) == 0 {
+		return nil
+	}
+	var ds situation.DeathSaves
+	if err := json.Unmarshal(raw.RawMessage, &ds); err != nil {
+		return nil
+	}
+	if ds.Successes == 0 && ds.Failures == 0 {
+		return nil
+	}
+	return &ds
 }
 
 // truncateSummary trims a body to max runes, appending an ellipsis when cut.

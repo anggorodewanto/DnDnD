@@ -49,19 +49,47 @@ type StateView struct {
 	Combatants   []CombatantView `json:"combatants"`
 }
 
-// CombatantView is one participant in the live encounter, with the fields a DM
-// reads off the initiative tracker plus an IsCurrent flag for "whose turn".
+// CombatantView is one participant in the live encounter, with everything a DM
+// needs to adjudicate its turn without tracking anything by hand: position,
+// HP/temp-HP, initiative, the IsCurrent "whose turn" flag, and the resource
+// state that used to live only in the DB (concentration, rage, exhaustion,
+// death saves) plus condition metadata (duration / source / expiry).
 type CombatantView struct {
-	Name       string   `json:"name"`
-	ShortID    string   `json:"short_id"`
-	HPCurrent  int      `json:"hp_current"`
-	HPMax      int      `json:"hp_max"`
-	AC         int      `json:"ac"`
-	Position   string   `json:"position"` // e.g. "E7"
-	IsNPC      bool     `json:"is_npc"`
-	IsAlive    bool     `json:"is_alive"`
-	IsCurrent  bool     `json:"is_current"`
-	Conditions []string `json:"conditions"`
+	Name                string          `json:"name"`
+	ShortID             string          `json:"short_id"`
+	Initiative          int             `json:"initiative"` // initiative roll (display); combatants are returned in turn order
+	HPCurrent           int             `json:"hp_current"`
+	HPMax               int             `json:"hp_max"`
+	TempHP              int             `json:"temp_hp"`
+	AC                  int             `json:"ac"`
+	Position            string          `json:"position"` // e.g. "E7"
+	IsNPC               bool            `json:"is_npc"`
+	IsAlive             bool            `json:"is_alive"`
+	IsCurrent           bool            `json:"is_current"`
+	Exhaustion          int             `json:"exhaustion"`
+	IsRaging            bool            `json:"is_raging"`
+	RageRoundsRemaining int             `json:"rage_rounds_remaining,omitempty"`
+	Concentration       string          `json:"concentration,omitempty"` // spell being concentrated on, "" if none
+	DeathSaves          *DeathSaves     `json:"death_saves,omitempty"`   // non-nil only for a downed combatant rolling saves
+	Conditions          []ConditionInfo `json:"conditions"`
+}
+
+// DeathSaves is a downed combatant's running death-save tally — the DM needs it
+// to know whether the next failure is fatal.
+type DeathSaves struct {
+	Successes int `json:"successes"`
+	Failures  int `json:"failures"`
+}
+
+// ConditionInfo is one active condition plus the metadata that tells a DM
+// whether it is one-shot or ongoing, who applied it, and when it ends — so a
+// rider like a spell's lingering effect doesn't have to be tracked by hand.
+type ConditionInfo struct {
+	Name           string `json:"name"`
+	DurationRounds int    `json:"duration_rounds,omitempty"` // 0 = indefinite / unknown
+	SourceSpell    string `json:"source_spell,omitempty"`
+	SourceID       string `json:"source_combatant_id,omitempty"`
+	ExpiresOn      string `json:"expires_on,omitempty"` // "start_of_turn" | "end_of_turn" | ""
 }
 
 // TimelineEvent is one entry in the merged "what just happened" feed (combat

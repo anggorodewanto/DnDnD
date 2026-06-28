@@ -5,7 +5,7 @@
   // next step, the unified pending worklist (queue + approvals + level-ups),
   // the live encounter state, and the recent timeline. The server resolves the
   // active campaign from the authenticated session, so no campaign id prop.
-  import { fetchDMSituation } from './lib/dmsituation.js';
+  import { fetchDMSituation, formatConditions, formatDeathSaves } from './lib/dmsituation.js';
 
   let situation = $state(null);
   let loading = $state(true);
@@ -112,31 +112,43 @@
           <table class="combatant-table">
             <thead>
               <tr>
+                <th>Init</th>
                 <th>ID</th>
                 <th>Name</th>
                 <th>HP</th>
                 <th>AC</th>
                 <th>Pos</th>
                 <th>Conditions</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {#each situation.state.combatants as c}
                 <tr class:current={c.is_current} class:dead={!c.is_alive}>
+                  <td class="col-init">{c.initiative}</td>
                   <td class="col-id">{c.short_id}</td>
                   <td class="col-name">
                     {c.name}
                     {#if c.is_npc}<span class="npc-tag">NPC</span>{/if}
                   </td>
-                  <td class="col-hp">{c.hp_current}/{c.hp_max}</td>
+                  <td class="col-hp">
+                    {c.hp_current}/{c.hp_max}{#if c.temp_hp > 0}<span class="temp-hp" title="temporary HP">+{c.temp_hp}</span>{/if}
+                  </td>
                   <td class="col-ac">{c.ac}</td>
                   <td class="col-pos">{c.position}</td>
                   <td class="col-conditions">
                     {#if c.conditions && c.conditions.length > 0}
-                      {c.conditions.join(', ')}
+                      {formatConditions(c.conditions)}
                     {:else}
                       <span class="muted">—</span>
                     {/if}
+                  </td>
+                  <td class="col-status">
+                    {#if c.is_raging}<span class="badge rage" title="raging{c.rage_rounds_remaining ? ` — ${c.rage_rounds_remaining} rounds left` : ''}">🔥 Rage{#if c.rage_rounds_remaining}&nbsp;{c.rage_rounds_remaining}{/if}</span>{/if}
+                    {#if c.concentration}<span class="badge conc" title="concentrating on {c.concentration}">C: {c.concentration}</span>{/if}
+                    {#if c.exhaustion > 0}<span class="badge exh" title="exhaustion level">Exh {c.exhaustion}</span>{/if}
+                    {#if c.death_saves}<span class="badge death" title="death saves (successes / failures)">{formatDeathSaves(c.death_saves)}</span>{/if}
+                    {#if !c.is_raging && !c.concentration && !c.exhaustion && !c.death_saves}<span class="muted">—</span>{/if}
                   </td>
                 </tr>
               {/each}
@@ -410,6 +422,61 @@
   .col-conditions {
     color: #c8c8d8;
     font-size: 0.9rem;
+  }
+
+  .col-init {
+    color: #a0a0c0;
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  .temp-hp {
+    margin-left: 0.2rem;
+    color: #4ec9a0;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  /* Status badges: rage / concentration / exhaustion / death saves */
+  .col-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .badge.rage {
+    background: #3a1414;
+    color: #ff8a5c;
+    border-color: #6e2a1c;
+  }
+
+  .badge.conc {
+    background: #14233a;
+    color: #6cb6ff;
+    border-color: #1c456e;
+  }
+
+  .badge.exh {
+    background: #2e2a14;
+    color: #d8c86c;
+    border-color: #5a4f1c;
+  }
+
+  .badge.death {
+    background: #2a142e;
+    color: #e06cd0;
+    border-color: #5a1c5a;
   }
 
   /* Timeline */

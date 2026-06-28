@@ -28,3 +28,31 @@ export async function fetchDMSituation(fetchImpl = fetch) {
   }
   return res.json();
 }
+
+/**
+ * Format one condition for the DM console. The payload sends each condition as
+ * an object `{name, duration_rounds, source_spell, expires_on}` (so the DM can
+ * see whether it's one-shot or ongoing); a bare string is tolerated for
+ * back-compat. Renders e.g. "poisoned (3r)" or "invisible (greater-invisibility)".
+ */
+export function formatCondition(cond) {
+  if (!cond) return '';
+  if (typeof cond === 'string') return cond;
+  const name = cond.name || '';
+  const bits = [];
+  if (cond.duration_rounds > 0) bits.push(`${cond.duration_rounds}r`);
+  if (cond.source_spell) bits.push(cond.source_spell);
+  return bits.length ? `${name} (${bits.join(', ')})` : name;
+}
+
+/** Join a combatant's conditions into a display string (never "[object Object]"). */
+export function formatConditions(conds) {
+  if (!Array.isArray(conds) || conds.length === 0) return '';
+  return conds.map(formatCondition).filter(Boolean).join(', ');
+}
+
+/** Death-save tally as a compact "✓1 ✗2" string, or "" when not dying. */
+export function formatDeathSaves(ds) {
+  if (!ds) return '';
+  return `✓${ds.successes || 0} ✗${ds.failures || 0}`;
+}

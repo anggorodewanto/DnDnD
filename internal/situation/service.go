@@ -72,17 +72,25 @@ type EncounterRow struct {
 
 // CombatantRow is one participant in neutral form.
 type CombatantRow struct {
-	ID         string
-	Name       string
-	ShortID    string
-	HPCurrent  int
-	HPMax      int
-	AC         int
-	Col        string
-	Row        int
-	IsNPC      bool
-	IsAlive    bool
-	Conditions []string
+	ID                  string
+	Name                string
+	ShortID             string
+	InitiativeOrder     int // turn sequence (ascending = acts first); used for sorting
+	Initiative          int // initiative roll (for display)
+	HPCurrent           int
+	HPMax               int
+	TempHP              int
+	AC                  int
+	Col                 string
+	Row                 int
+	IsNPC               bool
+	IsAlive             bool
+	Exhaustion          int
+	IsRaging            bool
+	RageRoundsRemaining int
+	Concentration       string
+	DeathSaves          *DeathSaves
+	Conditions          []ConditionInfo
 }
 
 // TimelineRow is one timeline event in neutral form (the Service stamps Source).
@@ -205,22 +213,37 @@ func buildState(enc *EncounterRow) StateView {
 		Status:       enc.Status,
 		Round:        enc.Round,
 	}
-	for _, c := range enc.Combatants {
+	// Return combatants in initiative (turn) order so the DM reads the round
+	// sequence at a glance, not just the current turn. Sort a copy — never
+	// mutate the provider's slice.
+	combs := make([]CombatantRow, len(enc.Combatants))
+	copy(combs, enc.Combatants)
+	sort.SliceStable(combs, func(i, j int) bool {
+		return combs[i].InitiativeOrder < combs[j].InitiativeOrder
+	})
+	for _, c := range combs {
 		isCurrent := c.ID != "" && c.ID == enc.CurrentTurnID
 		if isCurrent {
 			state.CurrentTurn = c.Name
 		}
 		state.Combatants = append(state.Combatants, CombatantView{
-			Name:       c.Name,
-			ShortID:    c.ShortID,
-			HPCurrent:  c.HPCurrent,
-			HPMax:      c.HPMax,
-			AC:         c.AC,
-			Position:   formatPosition(c.Col, c.Row),
-			IsNPC:      c.IsNPC,
-			IsAlive:    c.IsAlive,
-			IsCurrent:  isCurrent,
-			Conditions: c.Conditions,
+			Name:                c.Name,
+			ShortID:             c.ShortID,
+			Initiative:          c.Initiative,
+			HPCurrent:           c.HPCurrent,
+			HPMax:               c.HPMax,
+			TempHP:              c.TempHP,
+			AC:                  c.AC,
+			Position:            formatPosition(c.Col, c.Row),
+			IsNPC:               c.IsNPC,
+			IsAlive:             c.IsAlive,
+			IsCurrent:           isCurrent,
+			Exhaustion:          c.Exhaustion,
+			IsRaging:            c.IsRaging,
+			RageRoundsRemaining: c.RageRoundsRemaining,
+			Concentration:       c.Concentration,
+			DeathSaves:          c.DeathSaves,
+			Conditions:          c.Conditions,
 		})
 	}
 	return state

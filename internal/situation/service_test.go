@@ -141,7 +141,7 @@ func TestBuild_StateMarksCurrentTurnAndPosition(t *testing.T) {
 			CurrentTurnID: "cb-forge",
 			Combatants: []CombatantRow{
 				{ID: "cb-forge", Name: "Forge", ShortID: "FO", HPCurrent: 32, HPMax: 32, AC: 14, Col: "E", Row: 7, IsNPC: false, IsAlive: true},
-				{ID: "cb-ghoul", Name: "Ghoul", ShortID: "G1", HPCurrent: 22, HPMax: 22, AC: 12, Col: "C", Row: 7, IsNPC: true, IsAlive: true, Conditions: []string{"prone"}},
+				{ID: "cb-ghoul", Name: "Ghoul", ShortID: "G1", HPCurrent: 22, HPMax: 22, AC: 12, Col: "C", Row: 7, IsNPC: true, IsAlive: true, Conditions: []ConditionInfo{{Name: "prone"}}},
 			},
 		},
 	}
@@ -176,9 +176,84 @@ func TestBuild_StateMarksCurrentTurnAndPosition(t *testing.T) {
 	if forge.Position != "E7" {
 		t.Errorf("Forge Position = %q, want E7", forge.Position)
 	}
-	if len(ghoul.Conditions) != 1 || ghoul.Conditions[0] != "prone" {
+	if len(ghoul.Conditions) != 1 || ghoul.Conditions[0].Name != "prone" {
 		t.Errorf("Ghoul Conditions = %v, want [prone]", ghoul.Conditions)
 	}
+}
+
+// Tier 1 DM-Console fields: a DM must read concentration, temp HP, exhaustion,
+// death saves, rage, initiative order, and condition *metadata* (duration /
+// source / expiry) off the Console instead of tracking them by hand. buildState
+// must surface all of them and return combatants in initiative (turn) order.
+func TestBuild_StateExposesTier1Fields(t *testing.T) {
+	f := &fakeProvider{
+		encounter: &EncounterRow{
+			ID: "enc-1", Name: "Cellar", Mode: "combat", Status: "active", Round: 3,
+			CurrentTurnID: "cb-forge",
+			Combatants: []CombatantRow{
+				// Deliberately NOT in initiative order, to prove buildState sorts.
+				{ID: "cb-ghoul9", Name: "Ghoul", ShortID: "G1", InitiativeOrder: 4, Initiative: 9, HPCurrent: 22, HPMax: 22, AC: 12, IsNPC: true, IsAlive: true},
+				{ID: "cb-ghoul19", Name: "Ghoul", ShortID: "G2", InitiativeOrder: 1, Initiative: 19, HPCurrent: 13, HPMax: 22, AC: 12, IsNPC: true, IsAlive: true,
+					Conditions: []ConditionInfo{{Name: "poisoned", DurationRounds: 3, SourceSpell: "ray of sickness", SourceID: "cb-vale", ExpiresOn: "end_of_turn"}}},
+				{ID: "cb-vale", Name: "Vale", ShortID: "VA", InitiativeOrder: 2, Initiative: 15, HPCurrent: 19, HPMax: 24, TempHP: 5, AC: 11, Concentration: "Hold Person"},
+				{ID: "cb-forge", Name: "Forge", ShortID: "FO", InitiativeOrder: 3, Initiative: 12, HPCurrent: 0, HPMax: 32, AC: 14, Exhaustion: 1, IsRaging: true, RageRoundsRemaining: 9, IsAlive: true,
+					DeathSaves: &DeathSaves{Successes: 1, Failures: 2}},
+			},
+		},
+	}
+	got, err := NewService(f).Build(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Combatants come back in initiative (turn) order, not input order.
+	var order []string
+	by := map[string]CombatantView{}
+	for _, c := range got.State.Combatants {
+		order = append(order, c.ShortID)
+		by[c.ShortID] = c
+	}
+	if want := []string{"G2", "VA", "FO", "G1"}; !equalStrings(order, want) {
+		t.Errorf("turn order = %v, want %v (sorted by initiative_order)", order, want)
+	}
+
+	if by["VA"].TempHP != 5 {
+		t.Errorf("Vale TempHP = %d, want 5", by["VA"].TempHP)
+	}
+	if by["VA"].Concentration != "Hold Person" {
+		t.Errorf("Vale Concentration = %q, want Hold Person", by["VA"].Concentration)
+	}
+	if by["VA"].Initiative != 15 {
+		t.Errorf("Vale Initiative = %d, want 15", by["VA"].Initiative)
+	}
+	if by["VA"].DeathSaves != nil {
+		t.Errorf("Vale DeathSaves = %+v, want nil (not dying)", by["VA"].DeathSaves)
+	}
+	if !by["FO"].IsRaging || by["FO"].RageRoundsRemaining != 9 {
+		t.Errorf("Forge raging=%v rounds=%d, want true/9", by["FO"].IsRaging, by["FO"].RageRoundsRemaining)
+	}
+	if by["FO"].Exhaustion != 1 {
+		t.Errorf("Forge Exhaustion = %d, want 1", by["FO"].Exhaustion)
+	}
+	if ds := by["FO"].DeathSaves; ds == nil || ds.Successes != 1 || ds.Failures != 2 {
+		t.Errorf("Forge DeathSaves = %+v, want {1,2}", ds)
+	}
+	if c := by["G2"].Conditions; len(c) != 1 || c[0].Name != "poisoned" || c[0].DurationRounds != 3 ||
+		c[0].SourceSpell != "ray of sickness" || c[0].ExpiresOn != "end_of_turn" {
+		t.Errorf("G2 condition metadata = %+v, want poisoned/3/ray of sickness/end_of_turn", c)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestBuild_TimelineMergedSortedTruncated(t *testing.T) {
