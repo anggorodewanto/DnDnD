@@ -73,7 +73,7 @@ func TestHelpHandler_AttackTopic_ReturnsAttackHelp(t *testing.T) {
 		t.Errorf("expected ephemeral flag, got %d", flags)
 	}
 
-	for _, want := range []string{"/attack — Attack a Target", "gwm:true", "Extra Attack", "Divine Smite prompt"} {
+	for _, want := range []string{"/attack — Attack a Target", "gwm:true", "Extra Attack", "Divine Smite prompt", "offhand:true thrown:true"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected attack help to contain %q", want)
 		}

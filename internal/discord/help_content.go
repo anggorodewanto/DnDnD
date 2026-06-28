@@ -114,8 +114,10 @@ Extra Attack:
   Retarget freely between swings. Unused attacks are forfeited on /done.
 
 Two-Weapon Fighting:
-  /bonus offhand      Off-hand attack with a light weapon (no ability mod to damage
-                      unless you have the Two-Weapon Fighting fighting style)
+  /bonus offhand                     Off-hand attack with a light weapon (no ability mod to
+                                     damage unless you have the Two-Weapon Fighting style)
+  /attack offhand:true               Same off-hand attack via /attack
+  /attack offhand:true thrown:true   Throw a light thrown off-hand weapon (e.g. dagger)
 
 Improvised Weapons:
   Grab an object from the environment — no inventory needed.

@@ -120,7 +120,7 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "thrown",
-					Description: "Throw a melee weapon with the thrown property",
+					Description: "Throw a weapon with the thrown property (combine with offhand:true to throw off-hand)",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
