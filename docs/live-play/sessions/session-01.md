@@ -214,8 +214,7 @@ concentration intact (CON save on any damage to her, or the paralysis drops).
 - **Redeployed** `docker compose up -d --build app` ~22:50 UTC — clean boot (db connected
   + migrated, no new migration; discord session opened; all checks passed for guild
   `1507910398886543532`; server `:8080`; no error). **Live combat state preserved across
-  the redeploy** (still Round 1, Vale's turn active, wretch paralyzed at D7 15/22, Forge
-  E7 32/32, Vale K6 24/24 concentrating, 1 pact slot left).
+  the redeploy** (still Round 1, Vale's turn active, wretch paralyzed).
 - **Cosmetic caveat:** Vale's *current* turn still carries the pre-fix
   `attacks_remaining=1` (the ISSUE-016 fix only affects casts made on the new binary), so
   `/done` will still warn **once** for this turn — she just confirms past it; her next
@@ -232,21 +231,15 @@ concentration intact.
 > had drifted to a stale "Round 1." **No DM narration was posted for any of this** (last
 > #the-story post is still the R1 Hold Person beat, 2026-06-25 13:51 UTC).
 
-- **R2 Forge — auto-crit, wretch survives.** Forge (adjacent E7↔D7, target paralyzed) hit
-  with dual handaxes, both **auto-crit**: main **10** (2d6+2) + bonus-action off-hand vex
-  **2** (2d6) = **12 dmg**. Wretch **15→3** — it **did not drop** (the light-weapon crits
-  rolled low). **Wretch's R2 turn auto-skipped** (paralyzed, can't act).
-- **R2 Vale — crossbow miss.** Vale fired her **light crossbow** at the paralyzed wretch
-  (advantage) → **roll 10, MISS**. Turn completed (~13:31 UTC). *(This is the R2 turn the
-  player flagged as already done.)*
-- **R3 Forge — the kill.** Forge auto-crit handaxe again: main **12** (2d6+2) — already
-  lethal against 3 HP — off-hand **6** overkill. **Wretch → `0/22`, DEAD** at **13:32 UTC**
-  (`is_alive=f`). Notably Forge was **not raging**; an unraged barbarian's 2d6+2 crits took
-  **two rounds** to finish a 15-HP target. The wretch never landed a hit the entire fight.
-- **R3 Vale — turn currently ACTIVE but moot.** The turn queue advanced to Vale (action
-  unused), but the only enemy is already dead.
-- **State left open:** encounter status is still **`active`** (no End-Combat fired), and
-  Vale is still flagged **concentrating on hold person** against a corpse.
+- **R2-R3 Forge — auto-crits the paralyzed wretch to death.** Adjacent, target paralyzed,
+  Forge's dual handaxes auto-crit every swing — but the light-weapon crits rolled low, so it
+  took **two rounds** to finish (survived R2 bloodied, dropped R3 ~13:32 UTC). **Notably Forge
+  was not raging** — an unraged barbarian's 2d6+2 crits needed two rounds to drop a 15-HP foe;
+  Rage is a real damage lever if a fight runs long. The wretch (paralyzed) never got a turn and
+  never landed a hit the entire fight.
+- **R2 Vale — crossbow miss** at the paralyzed wretch (the R2 turn the player flagged as done).
+- **State left open:** encounter status still **`active`** (no End-Combat fired) and Vale still
+  flagged **concentrating on hold person** against a corpse — reconcile on resume.
 
 **Next:** (1) **narrate the kill** to #the-story (2 rounds behind — wrap in `:::read-aloud:::`;
 never say "paralyzed"); (2) **resolve the encounter** — End Combat for victory, or send the
@@ -411,8 +404,7 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
      to the combat right panel, shown only when the current combatant is an NPC
      (`CombatManager.svelte`); reuses the same open handler as the right-click. vitest green.
   See [`issues.md`](issues.md). **Both redeploy via** `docker compose up -d --build app`.
-- **State now:** Round 1, **Vale's turn** (19/24, bloodied), lead ghoul at E2 (22/22), 2nd
-  ghoul still at C8 (22/22), Forge 32/32 at E1.
+- **State now:** Round 1, **Vale's turn** (live HP/positions in the DM Console).
 - **ISSUE-018 + ISSUE-019 deployed** (commits `8c6a8df` / `60cda5d`, pushed last session,
   redeployed): the `before_state` enemy-turn crash is fixed and the **"⚔ Run Enemy Turn"**
   button is live. The Turn Builder is now the path for the 2nd ghoul (first live test of the
@@ -462,9 +454,9 @@ Combat (PCs auto-seat at the stairs spawn zone; G1/G2 lurk in the back). See `ga
   showed "Used pact slot (1 remaining)" but `characters.pact_magic_slots.current` read 0
   (combat spend not written back to the base row, à la ISSUE-020's HP). Per the user another
   agent fixed it; recorded here, not re-fixed.
-- **State now:** **Round 2, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
-  Forge E1 (20/32, bitten), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on Forge.
-  **Next:** Vale acts (player-driven), then Forge (12), then 2nd Ghoul (9).
+- **State now:** **Round 2, Vale's turn (init 15)** — both ghouls focused on Forge (live
+  HP/positions in the DM Console). **Next:** Vale acts (player-driven), then Forge (12), then
+  2nd Ghoul (9).
 
 ### R2 tail + R3 open — both ghouls on the raging dwarf (06-27, ~2:00–2:15 PM)
 
@@ -490,9 +482,9 @@ _Resumed; reconciled the live board (DM Console) — mechanics had advanced past
   HP/AC numbers leaked.
 - **Executor still attack-only (ISSUE-021 open):** both ghouls already adjacent to Forge, so no
   move needed; manual **End Turn** each. Two stale `enemy_turn_ready` queue items now linger.
-- **State now:** **Round 3, Vale's turn (init 15).** Vale K2 (19/24, bloodied, 1/2 pact),
-  Forge E1 (**12/32, RAGING**), lead Ghoul E2 (20/22), 2nd Ghoul D2 (22/22). Both ghouls on
-  Forge. **Next:** Vale acts (player-driven), then Forge (12, raging), then 2nd Ghoul (9).
+- **State now:** **Round 3, Vale's turn (init 15)** — Forge raging, both ghouls on him (live
+  HP/positions in the DM Console). **Next:** Vale acts (player-driven), then Forge (12, raging),
+  then 2nd Ghoul (9).
 
 ### R3 — Vale's Chill Touch + ISSUE-024 (06-28)
 
@@ -519,7 +511,7 @@ _Reconciled the live board on resume — the DB was ahead of the docs (Vale's R3
   recorded, so the DM-Console `timeline[]` misses every player beat. The casts/attacks + their
   HP effects are all correct (combatant rows); only the timeline writer (ISSUE-014's
   `recordCombatAction`) isn't producing rows on these paths. Flagged for a later look.
-- **State now:** **Round 3, Forge's turn (init 12, CURRENT).** Forge E1 (**12/32, RAGING**),
-  Vale K2 (19/24, bloodied, 1/2 pact, **done**), lead Ghoul G2 E2 (**13/22**), 2nd Ghoul G1 D2
-  (22/22). Both ghouls on Forge. Two stale `enemy_turn_ready` queue items still pending
-  (ISSUE-021). **Next:** Forge acts (player-driven, raging), then 2nd Ghoul (G1, 9).
+- **State now:** **Round 3, Forge's turn (init 12, CURRENT)** — Forge raging, Vale done, both
+  ghouls on Forge (live HP/positions in the DM Console). Two stale `enemy_turn_ready` queue
+  items still pending (ISSUE-021). **Next:** Forge acts (player-driven, raging), then 2nd Ghoul
+  (G1, 9).

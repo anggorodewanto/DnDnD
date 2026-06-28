@@ -2,8 +2,9 @@
 
 > Per-PC detail. The at-a-glance line lives in [`roster.md`](roster.md); only
 > load this file when you need Vale's full kit (a cast, an equip ruling, a save).
-> **Current HP / position / conditions track in [`roster.md`](roster.md)** — keep
-> them there in lockstep with the live DB; this file is the durable sheet.
+> **DURABLE reference only** (build / kit / spells / traits). Live HP / slots /
+> conditions / position come from the **DM Console** (`GET /api/dm/situation`) or
+> `/character` — **not** this file.
 
 - **Player:** the user (DM's primary).
 - **Character id:** `b6ca7f49-c173-4290-8c80-6fb785fbe733`
@@ -42,6 +43,3 @@
 
 - Equip leather armor for AC 11: `/equip item:leather armor:true` (item already in
   inventory). Dagger / light-crossbow likewise equippable.
-- Down to **1 pact slot** after the cellar-wretch fight (no long rest yet) — matters
-  for the cellar descent (can't hold-person-lock two foes). See
-  [`../encounters/cellar-brood.md`](../encounters/cellar-brood.md).
