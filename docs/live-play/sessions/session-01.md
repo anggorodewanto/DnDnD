@@ -515,3 +515,62 @@ _Reconciled the live board on resume — the DB was ahead of the docs (Vale's R3
   ghouls on Forge (live HP/positions in the DM Console). Two stale `enemy_turn_ready` queue
   items still pending (ISSUE-021). **Next:** Forge acts (player-driven, raging), then 2nd Ghoul
   (G1, 9).
+
+### R3 close + R4 open — both ghoul turns; Forge crit to the brink (06-28, ~11:15 AM)
+
+_Resumed; reconciled the live board (DM Console + DB) — mechanics had again raced ahead of the
+docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both un-narrated._
+
+- **Reconcile on resume:** save file said "Forge's turn (R3, CURRENT)"; DM Console showed **R3 past
+  Forge**, current = **G1 ghoul (init 9, D2)**. Timeline's newest action was **Forge's R3 greataxe
+  swing — MISS**, and #the-story's latest post (9:15 PM prior) only set up Vale's R3 move ("Her
+  move."). So **two** un-narrated player beats: Vale's R3 Chill Touch result + Forge's R3 miss.
+- **Caught both up in one read-aloud** (#the-story, 11:15 AM): Vale's grave-cold landing on the lead
+  ghoul (wounds won't close), Forge's axe skating off ribs into the stair. Enemy state described,
+  no HP/AC leaked. Spotlight to the ghoul that's up next.
+- **G1 ghoul (init 9, D2) — DM enemy turn (R3 close).** "⚔ Run Enemy Turn" → Bite vs Forge,
+  **nat 20 → CRITICAL HIT (22 to hit), 17 raw → 8 after Rage resist** → **Forge 12→4/32**. Honest
+  crit, no fudge. #combat-log read `8 piercing (resisted — halved from 17)` and header `**Ghoul's
+  Turn**` — **ISSUE-023 + ISSUE-021 name-fix both verified live**. G1 already adjacent → manual End
+  Turn (no move; ISSUE-021) → **Round 4**.
+- **G2 lead ghoul (init 19, E2) — DM enemy turn (R4 open).** "⚔ Run Enemy Turn" → Bite vs Forge,
+  **4 to hit → MISS**. The brood's luck breaks; Forge clings on at 4/32. Manual End Turn → **Vale
+  (init 15, R4)**.
+- **Narrated** the back-to-back assault to #the-story (read-aloud, 11:23 AM): the smaller ghoul's
+  savage bite nearly dropping Forge, the lead ghoul's follow-up snapping on air (tied to the
+  lingering Chill-Touch cold). Conveyed "one more and the dwarf goes down" without numbers. Handed
+  to Vale.
+- **Chill Touch rider lapsed** at the start of Vale's R4 turn (one round after the R3 cast) — no
+  longer tracked.
+- **Vale's R4 turn (player-driven, while docs were being synced):** Vale cast **Chill Touch again**
+  on the lead ghoul (G2) → **13→7/22 (bloodied)**. **ISSUE-025 fix confirmed live** — this player
+  cast appeared in the DM-Console `timeline[]` ("Vale cast Chill Touch on Ghoul"), the first player
+  action to land in the timeline (every prior player beat was invisible). Cantrip → no slot spent,
+  attacks zeroed (ISSUE-016), turn left **open** (movement + `/done` remaining). Narrated to
+  #the-story (read-aloud, 11:30 AM) — lead ghoul buckling, "only just" on its feet; no numbers.
+- **Queue cleanup:** resolved the **2 stale `enemy_turn_ready`** items (G1 + G2 turns already run;
+  ISSUE-021 leaves them dangling) via DM Queue → Open → Resolve, each with an outcome note. DM Queue
+  now reads "No pending items"; the Console `next_step` no longer falsely points at a ghoul turn.
+- **State now:** **Round 4, Vale's turn (init 15) — open, action spent** (cast Chill Touch). Forge
+  **4/32 raging, a breath from death**; lead ghoul **G2 bloodied (7/22)**, other ghoul **G1 22/22**
+  (live HP/positions in the DM Console). **Next:** Vale finishes (move/`/done`, player-driven) →
+  Forge (raging, near-death) → **G1 ghoul** (run enemy turn — likely drops Forge if it lands).
+
+### R4 advances to Forge — Vale's turn closed; turn-opening beat posted (06-28, ~11:36 AM)
+
+- **Resumed as DM, re-pulled the Console.** Turn had advanced: **Vale's R4 turn is closed** (she
+  moved + `/done` after the cast), `current_turn` is now **Forge Anvilbearer** (init 12, E1). No new
+  un-narrated mechanical beats — Vale's Chill Touch was already narrated (11:30 AM). DM Queue empty.
+- **Synced** `game-state.md` (last-updated, scene, Next-action item 1) from "Vale's turn" → "Forge's
+  turn (current)". No HP transcribed into the save file.
+- **Posted Forge's turn-opening read-aloud** (#the-story, 11:36 AM): the lead ghoul reeling/buckling
+  from the doubled frost (one arm wrong, rime cracking its ribs), the smaller ghoul whole and patient
+  at his flank, Forge bleeding out on rage alone — "and it is his swing." Enemy state described, no
+  HP/AC numbers; Forge's own near-death is his to know.
+- **State now:** **Round 4, Forge's turn (init 12) — open**, awaiting the remote player. Forge
+  **4/32 raging**; G2 **bloodied (7/22)** at E2, G1 **22/22** at D2 (both adjacent to Forge at E1);
+  Vale **19/24** clear at K2 (live board → Console). **Next (player-driven):** Forge acts — lead
+  ghoul is one solid greataxe from dropping; Reckless Attack gives advantage but exposes him at 4 HP.
+  Then **I run G1's enemy turn** (Turn Builder → Confirm & Post → manual End Turn) — if its bite
+  lands it likely puts Forge into death saves, so clearing G2 or pulling heat off the dwarf first
+  matters. Then back to the top of the order (G2 next round).

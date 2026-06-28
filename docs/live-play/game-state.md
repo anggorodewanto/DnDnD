@@ -10,8 +10,8 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 3). For the live board
-(whose turn, HP, positions, conditions, pending queue, recent actions) open the **DM Console** —
+_Last updated: 2026-06-28 — mid-combat in **"The Cellar"** (Round 4, Forge's turn). For the live
+board (whose turn, HP, positions, conditions, pending queue, recent actions) open the **DM Console** —
 do not read a hand-copied snapshot from this file. Non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -84,23 +84,32 @@ recent action timeline are **generated** — read them live, never transcribe th
 
 ## Current scene (narrative framing — non-derivable)
 
-**Down in the cellar, the brood swarms the raging dwarf.** Forge has gone berserk and is pinned
-at the foot of the stairs by both pale ghouls, bloodied but standing — his Rage turning aside the
-worst of their bites. Across the room Vale stands clear, having lashed the lead ghoul with
-grave-cold Chill Touch. The fight is mid-Round-3; the cellar is cramped, stone, lit by whatever
-the party brought down. World / lore: [`world.md`](world.md). (Live HP/positions: DM Console.)
+**Down in the cellar, the brood has the raging dwarf a breath from going down.** Forge is berserk,
+pinned at the foot of the stairs by both pale ghouls and badly bloodied — a savage crit from the
+smaller ghoul nearly dropped him even through Rage's resistance; the lead ghoul's follow-up snapped
+on empty air. He's still up, furious, but one more solid bite ends him. Across the room Vale stands
+clear and unhurt, having lashed the lead ghoul twice with grave-cold Chill Touch (it's reeling).
+The fight is into Round 4, **Forge's turn** — the bleeding dwarf's swing, two ghouls on him, the
+lead one buckling; the cellar is cramped, stone, lit by whatever the party brought down. World /
+lore: [`world.md`](world.md). (Live HP/positions: DM Console.)
 
 ## Next action (DM intent — the one thing the Console can't infer)
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Mid-combat, "The Cellar," Round 3.** Players drive their own turns (`/move`/`/attack`/
-   `/cast`, **they roll their own dice** — never roll for them). Run NPC turns via **"⚔ Run Enemy
-   Turn"** → Confirm & Post → **manual End Turn** (executor is attack-only, no auto-move/advance —
-   ISSUE-021). Keep enemy HP/AC secret — describe state, don't quote numbers ([`dm-rules.md`](dm-rules.md)).
-2. **Ruling in flight:** the lead ghoul is under **Chill Touch** — it **can't regain HP until the
-   start of Vale's next turn** (spell rider, not modeled as a condition, so the Console won't show
-   it — track it here until it lapses).
+1. **Mid-combat, "The Cellar," Round 4 — Forge's turn (CURRENT).** Vale finished R4 (second Chill
+   Touch on the lead ghoul → it's bloodied/reeling, live HP via Console; then moved + `/done`). Now
+   it's **Forge** (raging, a breath from down). Turn order remaining: Forge → G1 ghoul (NPC, run via
+   Turn Builder). Players drive their
+   own turns (`/move`/`/attack`/`/cast`, **they roll their own dice** — never roll for them). Run
+   NPC turns via **"⚔ Run Enemy Turn"** → Confirm & Post → **manual End Turn** (executor is
+   attack-only, no auto-move/advance — ISSUE-021; both ghouls are already adjacent to Forge, so no
+   move needed). Keep enemy HP/AC secret — describe state, don't quote numbers ([`dm-rules.md`](dm-rules.md)).
+   - **Forge is critically low and raging** — if a player downs a ghoul or pulls the heat off him,
+     great; otherwise the next G1 bite likely drops him to death saves. Flag the danger; let the
+     players decide.
+2. **Chill Touch rider — LAPSED.** The lead ghoul's "can't regain HP" rider expired at the start of
+   Vale's Round-4 turn (one round after the cast). Nothing to track now; ghouls don't self-heal anyway.
 3. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row + sheet →
    fold into the fiction). 3-4 more PCs expected. See [`runbook.md`](runbook.md) "Onboarding
    players" + [`big-party.md`](big-party.md).
