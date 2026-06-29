@@ -53,6 +53,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-035 | 2026-06-28 | combat / two-weapon fighting (thrown) | major | FIXED | **A two-dagger thrower can't throw the off-hand dagger after throwing the main one** — `/attack offhand:true thrown:true` rejects with "no main hand weapon equipped". RAW two-weapon fighting with two light thrown weapons is legal: throw the main-hand dagger with the Attack action, then throw the off-hand dagger with the bonus action. But a main-hand **thrown** attack auto-unequips the weapon (`attack.go:1293`, by design so one dagger can't be re-thrown forever), and `OffhandAttack`'s guard (`attack.go:1443`) then requires a main-hand weapon to still be equipped → the now-empty main hand trips it. **Found live:** Vale (2× dagger) threw her main dagger (R6, "hit for 2"), equipped the off-hand dagger, and the bot refused the off-hand throw. **Fixed (TDD):** a per-turn in-memory marker `mainHandThrownLightEffect` (same lifecycle as the Nick marker — set when a LIGHT melee weapon is thrown from the main hand, cleared at the combatant's turn start) lets `OffhandAttack` treat the TWF main-hand prerequisite as satisfied even though the weapon has left the hand. The empty-main-hand path is only allowed when that marker is present, so an illegal off-hand after a ranged/crossbow attack is still refused (regression test `TestServiceOffhandAttack_EmptyMainHandNoThrowRejected`); the no-throw message was also clarified to explain TWF needs a weapon in each hand. Red/green `TestServiceOffhandAttack_ThrownMainHandLightSatisfiesTWF`; `make cover-check` green; rebuilt + redeployed. **Live caveat:** the marker is in-memory, so a mid-turn redeploy (like this fix's own deploy) wipes it — Vale must re-`/equip` a dagger to her main hand once and re-run the off-hand throw; all future turns work directly (throw main → throw off-hand) within a process. |
 | ISSUE-036 | 2026-06-28 | combat / death saves (turn flow) | major | FIXED | **A downed PC's turn was silently skipped with no death saving throw.** When initiative advanced to a PC at 0 HP (alive, `unconscious`+`prone`), `AdvanceTurn`→`skipOrActivate` (`initiative.go:553`) saw the `unconscious` condition, treated it as `IsIncapacitated`, and **skipped the turn** — never rolling/prompting the death save RAW requires at the **start of each of a dying creature's turns**. The death-save machinery existed (`/deathsave`, `RollDeathSave`, the 24h-timeout `AutoResolveTurn` at `timer_resolution.go:147`) but the normal advance path reached none of it. **Found live:** Forge dropped to 0 (R6 ghoul bite); his R7 turn auto-advanced to the ghoul with **0 death saves recorded** (DM Console + `action_log death_save` filter both empty). **Fixed (TDD, "Prompt the player" — player-chosen design):** `skipOrActivate` now detects a dying **PC** (`IsDying`, PC-only — dying NPCs still skip since their saves aren't player-rolled) *before* the incapacitated check and **activates** the turn flagged `TurnInfo.DeathSavePending`; the #your-turn turn-start prompt (`FormatTurnStartPrompt`/`…WithImpact`) swaps the action-resource list for **"You are dying — roll a death saving throw: /deathsave"**; and the `/deathsave` handler, when rolled on the dying PC's **own** current turn, **advances the turn** (off-turn rolls + Nat-20 wake-ups don't — `DeathSaveTurnAdvancer` wired to `combat.Service`). The 24h `AutoResolveTurn` stays as the inactivity fallback. Red/green: `TestAdvanceTurn_DyingPC_ActivatesTurnForDeathSave`, `…_DyingNPC_StillSkipped`, `TestFormatTurnStartPrompt*_DyingPC_ShowsDeathSavePrompt`, `TestDeathSaveHandler_OnCurrentTurn_AdvancesTurn`/`_OffTurn_DoesNotAdvance`/`_Nat20_DoesNotAdvance`. `make cover-check` green; rebuilt + redeployed. **Live caveat:** the fix is from R8 on — Forge's already-skipped R7 save is made up by his remote player rolling `/deathsave` once off-turn (records only). |
 | ISSUE-037 | 2026-06-28 | dashboard / message player (DM whisper) | major | FIXED | **DM "Message Player" whisper failed for every player** with "player character not found", then (after a partial fix) an FK violation. Two stacked id-shape bugs: the picker sends each option's **`character_id`** (`MessagePlayerPanel.svelte` `value={c.character_id}`, from `/api/character-overview`), but (1) the lookup `GetPlayerCharacter` queried `player_characters WHERE id = $1` (the **PK**) → never matched → `ErrPlayerNotFound`; and (2) `dm_player_messages.player_character_id` **FK→`player_characters(id)`**, yet `SendMessage` inserted the raw `character_id` → `SQLSTATE 23503`. **Found live** sending Forge a death-save prompt. **Fixed (TDD, backend, character_id-in / PK-stored):** `PlayerLookupAdapter.LookupPlayer` now resolves character_id → campaign (`GetCharacter`) → row (`GetPlayerCharacterByCharacter`) and returns the player_characters PK as `PlayerInfo.RowID`; `SendMessage` persists `RowID` (FK-valid); `History` translates the incoming character_id → PK before querying (else the log view stays empty). Tests: `TestPlayerLookupAdapter_*` (resolves by character_id, PK in params), `TestService_Send_Success` (stores PK not character_id), `TestService_History_Delegates`/`_PlayerNotFoundReturnsEmpty`. `make cover-check` green; rebuilt + redeployed. **Live caveat:** the Discord DM is sent *before* the log insert, so Forge's death-save whisper **was delivered** on the attempt that hit the FK error (only the dashboard log row was lost) — not re-sent, to avoid double-messaging. |
+| ISSUE-038 | 2026-06-28 | combat / end-combat HP carry-out | medium | OPEN (enhancement) | **Ending combat doesn't carry combat HP/conditions back to the sheets — a downed PC silently reads full HP out of combat.** Same two-store root as ISSUE-020 (`combatants.hp_current` snapshot vs `characters.hp_current` base row; combat never writes back), but at the **End Combat** boundary the read-side overlay is gone, so the Party page / sheets show the *undamaged* stored HP and drop combat-applied conditions. **Found live** (2026-06-28, end of "The Cellar"): Forge ended stabilized at 0/32 unconscious+prone and Vale at 7/24, but post-End-Combat both showed full HP / no conditions; the DM had to reconcile each PC **by hand** via Party → Edit status. Target: **auto carry-out on End Combat** — write each PC combatant's final HP/temp-HP + relevant conditions (esp. 0 HP → unconscious, preserve stabilized/death-save state) to the `characters` row, reusing the out-of-combat status-editor write path ([[project_dm_out_of_combat_status_editor]]). For a **fresh agent** — see Details. |
 
 ---
 
@@ -889,6 +890,44 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Relationship:** inverse of [ISSUE-021] (executor under-does the turn: no auto-move/advance);
   this was the engine *over*-advancing past an unrun NPC. The dangling `enemy_turn_ready` cleanup
   is the same ISSUE-021 artifact.
+
+### ISSUE-038 — End Combat doesn't carry combat HP/conditions back to the sheets (fresh-agent task)
+- **Date:** 2026-06-28
+- **Area:** combat / end-combat state reconciliation (two HP stores)
+- **Severity:** medium — correctness/safety: a downed PC silently reads **full HP** the moment combat
+  ends, erasing the fight's consequences until a DM notices and fixes it by hand.
+- **Status:** OPEN (enhancement) — **scoped for a fresh agent.**
+- **Repro:** Run a combat where a PC takes damage / drops to 0. End the fight (Combat Manager →
+  **End Combat → Confirm End**). Open dashboard **Party** (or the portal sheet / Discord `/character`).
+- **Expected:** out of combat each PC reflects how they **left** the fight — bloodied PCs at their
+  combat HP, a downed-but-stabilized PC at 0 HP / unconscious.
+- **Actual:** every PC shows their **pre-combat stored HP** (full, if they started full) with no
+  combat conditions. Observed live at the end of "The Cellar": Forge ended **0/32, unconscious + prone,
+  stabilized** and Vale **7/24**, but the Party page showed **Forge 32/32** and **Vale 24/24**, no
+  conditions. The DM reconciled both by hand via **Party → Edit status**.
+- **Root cause:** the same two-store split as **ISSUE-020** — combat damage lives only on
+  `combatants.hp_current` (seeded from the character at `StartCombat`, `combat/domain.go`
+  `CombatantFromCharacter`), and the engine **never writes back** to `characters.hp_current`. ISSUE-020
+  fixed the *in-combat* display with a **read-side overlay** (portal `hydrateFromCombatant`, Discord
+  `overlayCombatHP`, dashboard `overlayLiveCombatHP`), but the overlay is keyed on an **active
+  encounter** — so the instant End Combat flips the encounter inactive, the overlay disappears and the
+  base row (untouched all fight) shows through. No carry-out step bridges the gap.
+- **Fix idea (TDD):** on the End-Combat path (the service behind the dashboard "End Combat → Confirm
+  End" that flips the encounter status — **locate it**; likely an `EndCombat`/encounter-status method in
+  `internal/combat` + its dashboard handler), **carry out** each **PC** combatant's final state to the
+  `characters` row before/at deactivation: `hp_current`, `temp_hp`, and combat-applied
+  conditions/exhaustion. **Reuse the out-of-combat status-editor write path** ([[project_dm_out_of_combat_status_editor]])
+  — it already knows how to persist HP+conditions to `characters` — rather than a second writer.
+  Handle the **0-HP cases** explicitly: a PC at 0 HP should carry out **unconscious**, and a
+  stabilized/death-save outcome must be preserved (don't resurrect to full, don't re-enter "dying" out
+  of combat). **NPCs are not carried out** (they're encounter-scoped). 
+- **Design caution:** ISSUE-020 **deliberately** chose read-side overlay over write-back to keep one
+  source of truth mid-fight — so confine this write to the **End Combat boundary only** (not
+  end-of-turn / on-damage), PCs only, and don't clobber a value a DM has already edited. Decide whether
+  pre-existing temp HP / concentration also carry out. Red/green test the carry-out + the 0-HP→
+  unconscious + stabilized-preservation cases; `make cover-check`; rebuild + redeploy.
+- **Workaround (current):** after every End Combat, the DM reconciles each PC's HP/conditions by hand
+  via **Party → Edit status** (audit reason logged). Easy to forget — that's the bug.
 
 <!-- Append a section per issue:
 

@@ -750,3 +750,60 @@ docs. Forge's R3 turn had already resolved and his and Vale's R3 beats were both
   ends it. Forge **0/32, unconscious + prone, dying** (E1). Vale **7/24 (G2)**. R8 order: **Vale (CURRENT)**
   → **Forge (dying — /deathsave prompt fires when his turn activates)** → **G1** (NPC, last). Narration
   posted to #the-story (read-aloud, 4:20 PM). No HP/AC numbers leaked.
+
+### R8 closes — Vale kills the last ghoul; Forge claws a save back; the cellar is won (06-28, ~7:14 PM)
+
+_Resumed as DM on "forge rolled, vale done." DB + #combat-log confirmed the engine had run R8 to its
+end and rolled into **R9, Vale's turn** — both beats un-narrated. Reconciled before acting._
+
+- **Vale's R8 turn (player-driven):** thrown **Dagger — MISS** (to-hit 8), then **Dagger — HIT for 4**
+  (to-hit 14) → dropped **G1 (was 1/22) to 0** — the last ghoul **dead**. Both of the brood down;
+  **the cellar fight is WON.**
+- **Forge's death saves (remote player rolled, NOT the DM):** the owed R7 makeup save came up **7 —
+  Failure (0S/1F)**, then his R8 auto-prompted save came up **14 — Success → 1S/1F**. Forge is **still
+  dying and still unstable** — needs 3 successes to stabilize (or a heal); two failures from death.
+- **ISSUE-036 fix verified live:** Forge's R8 turn **activated and prompted his death save** instead of
+  silently skipping (the R7 bug). Both saves recorded; DB tally now `{"successes":1,"failures":1}`.
+- **Narrated the victory** to #the-story (read-aloud, 7:14 PM): Vale's dagger finishing the lunging
+  ghoul, the cellar falling silent, Forge crumpled and dying on the stone — threat dead, friend dying,
+  the few feet between them suddenly long. No HP/AC numbers; Vale's next move left to the player.
+- **Observation — drop-to-0 logging gap (the feature shipped earlier today, `dfefd8e`):** G1's
+  defeat-by-attack did **NOT** emit a "downed/defeated" row to action_log or #combat-log. The new
+  `notifyDroppedToZero` is gated inside `Service.ApplyDamage`, but the player `/attack` damage path
+  doesn't appear to funnel through `ApplyDamage` — so attack (and likely cast) kills are uncovered.
+  Forward-fix candidate; **logged, not yet fixed** (table not blocked).
+- **Board now:** engine at **Round 9, Vale's turn (active)** — but **no enemies remain** (both ghouls
+  dead). Forge **0/32, unconscious + prone, dying (1S/1F)** (E1); Vale **7/24** (live board → Console).
+  **Next (player-driven):** Vale rushes to Forge and **stabilizes him** (Medicine DC 10, her roll) or
+  heals him → then **End Combat** (victory; no hostiles left). Stabilize **before** ending combat — once
+  combat ends Forge has no turn to prompt further death saves. 3-4 more PCs still joining.
+
+### Forge stabilizes on his own save; combat ended; party out of combat (06-28, ~8:27 PM)
+
+_Resumed as DM on "should we go out of combat?" → "forge rolled save, continue as DM." Pulled the live
+DM Console each step; the `/api/dm/situation` JSON tab is a static load and goes stale — trusted the
+live Combat Manager / Console, not the cached JSON._
+
+- **Vale's stabilize attempt (player-driven) — FAILED.** Vale moved adjacent to Forge (→F1, beside his
+  E1) and rolled a **Medicine check to administer first aid: 6 vs DC 10 → fail.** Resolved the
+  `skill_check_narration` queue item; the outcome line posted back to **#in-character** (the channel she
+  rolled `/check` in — the result echoes to the originating channel, not a fixed one). Failed-stabilize
+  read-aloud posted to #the-story (7:34 PM). Forge **not** stabilized by the aid.
+- **Forge's death saves (remote player rolled, NOT the DM) — STABILIZED.** Between R8 and R10 his player
+  rolled another **success (→ ✓2 ✗1)**; ending Vale's turn activated **Forge's R10 turn cleanly**
+  (ISSUE-036 fix still holding — no silent skip), and his next `/deathsave` came up a **success → ✓3 =
+  stabilized.** No longer dying; unconscious at 0 HP, prone. Engine rolled to R11. Stabilization
+  read-aloud posted to #the-story (8:18 PM) — Vale's hands failed but the dwarf's own toughness held.
+- **Ended combat.** No hostiles, nobody dying → **Combat Manager → End Combat → Confirm End.** "The
+  Cellar" (`8509d1f6-…`) closed in victory at R11; dashboard now shows **no active encounters**.
+- **Manual HP carry-out (combat-end has NO write-back — two HP stores).** Out of combat the Party page
+  showed both PCs at full *stored* HP (Vale 24/24, Forge 32/32, no conditions) — the combat damage only
+  ever lived in the combatant snapshot. Corrected both via **Party → Edit status** (audit reasons
+  logged): **Forge 0/32, conditions unconscious + prone (stabilized); Vale 7/24.** ⚠️ This carry-out is
+  a manual, easy-to-forget step — a downed PC silently reads as full HP after End Combat until the DM
+  sets it. Candidate improvement: auto-carry-out on End Combat (not built).
+- **Out-of-combat transition beat** posted to #the-story (read-aloud, 8:27 PM): the cellar falls silent,
+  the brood dead, Forge alive-but-down, the deeper dark still ahead — choice handed back to the players
+  (tend/heal Forge, short rest, or press deeper). Awaiting their move.
+- **Board now:** **out of combat, no encounter.** Forge **0/32, unconscious + prone, stabilized**; Vale
+  **7/24** (both set by hand, see above). The deeper cellar is **unexplored**. 3-4 more PCs still joining.
