@@ -948,3 +948,23 @@ rolls, no mutations; logged for narrative continuity only._
     Vale's patron) seeding the next breadcrumb.
 - **Not run yet.** Per dm-rules, **wait for the players to actually descend** in #in-character before posting the
   descent narration / turning the key / Starting Combat — don't act for them. State + IDs in `game-state.md`.
+
+### The party descends — at the cold door (06-29, ~7:13–7:15 PM)
+
+- **Player beat (in-fiction, #in-character, 7:13 PM):** dewa — Vale packs her items and readies her daggers,
+  thanks Forge (*"i can't thank you enough, friend… i will tell you amazing stories forgotten by time, in
+  return"*), then **"Vale descents the cellar, and further into darkness below."** With Forge already committed
+  (5:12 PM), **the party has now actually moved** — the trigger to run the pre-built cold-door beat.
+- **DM picture pulled first:** DM Console clean — *"Nothing needs you right now,"* **0 pending, no active
+  encounter**. The #in-character descent is the only live signal; nothing queued.
+- **DM beat — descent read-aloud posted (7:15 PM, confirmed in Narrate Post History):** the staged **block A**
+  from [`encounters/cold-vault.md`](../encounters/cold-vault.md) — the stair into the cold the brood died
+  fleeing, their own dead lying slack and almost-human, the deepening mineral cold, and the passage ending at a
+  **frost-rimed black-iron door** whose lock is the exact shape of Vale's cold iron key. Behind it, faint and
+  patient, *something that is not wind and not water* — and the keeper's torn warning resurfacing: *do not turn
+  it.* **Ends on the door, key in hand** — a clean cliffhanger that hands the players the choice.
+- **No mechanics yet** — pure narration, no HP/condition change, no combat. **Turning the key is the players'
+  call** (the keeper warned against it). Holding here: **do not script the key-turn.** When a player turns it
+  (or otherwise forces the door), post the **block B** vault read-aloud → open **"Cold Vault — the keeper"** →
+  **Start Combat** (adjudicate surprise live; remember *hold person* FAILS on the undead keeper). If they balk
+  and retreat, follow their lead. **Awaiting the players' move at the cold door.**

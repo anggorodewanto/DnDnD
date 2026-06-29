@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-29 — **"The Cellar" WON and CLOSED; party out of combat, rested up, and just read the keeper's journal.** The party long-rested in the cleared common room (**both PCs full — Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**) and Vale then **read the now-dried Water-Rotted Journal**. The clue (read-aloud to #the-story, 1:38 PM): the keeper heard scratching, **unlocked an old vault behind a "cold door" lower than the cellar**, and the wretches **came up fleeing it** — the cellar door was clawed from inside **to escape the cold door, not to reach the keeper**. The **cold iron key on Vale's sheet locks that cold door**; the keeper's last torn line begs *"do not turn it."* The three finds remain on Vale's sheet (Potion of Healing unused, Cold Iron Key, Water-Rotted Journal). **The party has now COMMITTED to descend** (Vale's patron pull + Forge: *"I'm in"*), and the **cold-door boss beat is fully PRE-BUILT**: a new in-app map *Ashfall Waystation — the cold vault* (`2899165e-…`) + encounter **"Cold Vault — the keeper"** (`adc064e7-…`, 1× Wight CR3 reflavored as the vault-keeper, surprise off) + two staged read-alouds in [`encounters/cold-vault.md`](encounters/cold-vault.md). Key twist: the keeper is UNDEAD, so Vale's *hold person* fails. **Not started — awaiting the players to actually descend.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
+_Last updated: 2026-06-29 — **The party DESCENDED — now standing at the cold door, the boss beat one player-choice away.** Both PCs committed (Forge *"I'm in"* 5:12 PM; Vale *"descents the cellar, and further into darkness below"* 7:13 PM), so the pre-built cold-door beat is now LIVE-TRIGGERED. DM Console was clean first (0 pending, no active encounter). Posted the **descent read-aloud (block A)** to #the-story (7:15 PM, Post History confirmed): the stair into the cold the brood fled, the deepening mineral cold, the passage ending at a **frost-rimed black-iron door** whose lock fits **Vale's cold iron key**, something patient behind it, and the keeper's *"do not turn it."* **Ends on the door — a clean cliffhanger.** No mechanics yet (pure narration; both PCs still full — **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**; three finds on Vale's sheet — Potion of Healing unused, Cold Iron Key, Water-Rotted Journal). **Turning the key is the players' call — NOT scripted.** When they turn it: post **block B** (vault) → open **"Cold Vault — the keeper"** (`adc064e7-…`, 1× Wight CR3 on map `2899165e-…`, surprise off, party 2/2) → **Start Combat** (adjudicate surprise live; *hold person* FAILS — the keeper is UNDEAD). Design + staged read-alouds: [`encounters/cold-vault.md`](encounters/cold-vault.md). **Combat NOT started — awaiting the players' move at the cold door.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -126,13 +126,15 @@ to Forge** — go down with her, or not? **Awaiting Forge's (Jonathan's) answer.
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Rested up, journal read — and the party has COMMITTED to the descent.** No active encounter yet. Both PCs
-   at full — **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**; all three finds on Vale's sheet (Potion
-   of Healing **unused**, Cold Iron Key, Water-Rotted Journal). In the morning RP (#in-character, 06-29) Vale
-   committed to going down (patron's pull) and **Forge agreed — *"I'm in, let's find some amusing story… Forge
-   hastily prepare his equip & getting ready."*** So the next beat is the **descent to the cold door**, and it
-   is **fully PRE-BUILT** (map + encounter + staged narration — see below). **Still wait for them to actually
-   move/act in #in-character** before running it — don't narrate the descent for them. The live hooks:
+1. **DESCENDED — the party stands at the cold door; the boss beat is one player-choice away.** No active
+   encounter yet. Both PCs at full — **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**; all three finds
+   on Vale's sheet (Potion of Healing **unused**, Cold Iron Key, Water-Rotted Journal). Both committed and the
+   party **actually moved** (Forge *"I'm in"* 5:12 PM; Vale *"descents the cellar, and further into darkness
+   below"* 7:13 PM), so the **descent read-aloud (block A) is POSTED** (7:15 PM) — they're now at the
+   frost-rimed black-iron door, key in hand, the keeper's *"do not turn it"* ringing. **The next decision is
+   THEIRS: turn the key or not** — do NOT script it. When they turn it (or force the door): post **block B**
+   (vault) → open **"Cold Vault — the keeper"** → **Start Combat** (surprise live; *hold person* FAILS). If they
+   balk/retreat, follow their lead. **Awaiting the players' move at the cold door.** The live hooks:
    - **✓ Journal read (1:38 PM).** It surfaced the **cold door** — an old vault lower than the cellar that the
      keeper unlocked; the wretches **fled up from it**, so the cellar door was clawed from inside to *escape*
      the cold door, not to reach the keeper. The keeper's last line: *"the cold iron key locks the cold door.
