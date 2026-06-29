@@ -75,15 +75,27 @@ fall back to API calls with the session cookie).
 | --- | --- | --- |
 | List campaign / DM home | `/dashboard/app/` | resolves DM's active campaign (`main.go:149-169`) |
 | Pending character approvals | approvals view | `GET /dashboard/api/approvals/`, `POST …/{id}/approve` (`internal/dashboard/approval_handler.go:46-51`) |
-| Import a map (Tiled .tmj) | Maps → New → Import | `POST /api/maps/import` (`internal/gamemap/handler.go:29`) |
+| **Build a map (in-app, preferred)** | Maps → **+ New Map** (set name + W×H squares) → **Map Editor** (paint Terrain / Wall / Spawn Zone, then **Save**) | `POST /api/maps`, save edits `PUT /api/maps/{id}` (`internal/gamemap/handler.go:187,296`) |
+| Import a map (Tiled .tmj) | Maps → + New Map → **Import Tiled (.tmj + images)** | `POST /api/maps/import` (`internal/gamemap/handler.go:29`) |
 | Create encounter + place tokens | Encounters → New | `POST /api/encounters/` (`internal/encounter/handler.go:29`) |
 | Start combat (roll initiative) | encounter → Start Combat | `POST /api/combat/start` (`internal/combat/handler.go:31`) |
 | End combat | encounter → End | `POST /api/combat/{encounterID}/end` |
 | Adjust HP / conditions / position | combat workspace | `PATCH /api/combat/{encID}/combatants/{cID}/{hp,conditions,position}` (`main.go:512-516`) |
 | Advance turn / resolve pending / undo | combat workspace | DM dashboard routes (`main.go:519-532`) |
 
-Sample Tiled map for import lives at `docs/testdata/sample.tmj` (10×10). A map is
-**already imported** for this campaign (see `game-state.md`); reuse it.
+**Make a map with the dashboard map tools (no file needed) — preferred.** Open the
+**Maps** tab → **+ New Map**, set the **Name** and **Width × Height (squares)**, click
+**Create Map**. That opens the in-app **Map Editor**: a grid with paint **Modes** —
+*Terrain* (Open Ground / Difficult Terrain / Water / Lava / Pit), *Lighting*, *Elevation*,
+*Wall* / *Erase Wall*, *Spawn Zone* (Player / Enemy) / *Erase Spawn*, *Select* — plus
+*Undo/Redo*, *Duplicate Map*, and **Save**. Click/drag tiles to paint; **Save** persists
+the map and shows its **ID** in the footer. House convention (matches both existing maps):
+**leave terrain blank and narrate the features** (pillars, the reek, the shaft) — only
+paint a **Spawn Zone** at the PCs' entry edge so encounter token placement has a landing.
+*Import Tiled (.tmj + images)* is the secondary path (button in the create form;
+*Reimport Tiled* in the editor); a sample lives at `docs/testdata/sample.tmj` (10×10).
+Existing maps for this campaign are listed in [`game-state.md`](game-state.md) "Maps" — reuse
+or build alongside them.
 
 ## 5. Onboarding players (one or many)
 

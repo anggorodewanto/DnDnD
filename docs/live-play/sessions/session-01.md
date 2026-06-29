@@ -903,3 +903,48 @@ timeline = only my prior narration). The player had acted in #in-character — D
   (player-driven):** descend the cellar toward the cold door (brood-descent fight pre-built —
   `encounters/cellar-brood.md`; the cold door itself is past it, DM-prep on demand), try the key, drink the
   draught before a fight, or do something else entirely. **Awaiting the players' move** — don't narrate the choice.
+
+### RP interlude — Vale's patron revealed; Forge spotlight nudge (06-29, ~2:15–4:18 PM)
+
+_Pure roleplay in **#in-character** (Discord-only — none of this is in the Console/DB feed). No mechanics, no
+rolls, no mutations; logged for narrative continuity only._
+
+- **The exchange (in-fiction, #in-character):**
+  - **Forge (Jonathan), 1:37 PM:** wakes, *"once again, thanks for the help. that was close call,"* checks his
+    kit, *"Forgot brings potion for such exploration, costs me dearly."*
+  - **Vale (dewa), 1:54 PM:** shows the vial (*"well now we have one"*), shows the journal + key and retells
+    the journal's content, then — *"my patron really wants we to go down there, i will not impose on you to
+    follow me."*
+  - **Forge, 2:15 PM:** *"is there another being among us here? that you mention as patron. I see no one."*
+  - **Vale, 2:49 PM (patron backstory established):** a **travelling storyteller** who collects + spreads
+    forgotten history/lore; while chasing a **forgotten deity** she *"found a being, granting me powers so that
+    i can explore more, in exchange, i collect stories that he wants, and spread them."* Concludes: *"there is
+    something that he wants me to see down there, i have no choice."* (Vale's warlock patron is now durable
+    fiction: a story-hungry entity tied to a forgotten god; the **cold door is what it's steering her toward.**)
+- **DM nudge (spotlight to Forge):** posted a **read-aloud** to **#the-story** (4:18 PM, confirmed in Narrate
+  Post History) framing the morning-after — Vale's confession landing, the vial/key/journal on the table, the
+  cold door below — and **turning the floor to Forge** without scripting his answer: *"She'll go down either
+  way. The only question left … is whether she goes alone."* (Honors dm-rules: narrate the world's reaction +
+  pose the open question; let the player decide and speak.) **Awaiting Forge's (Jonathan's) response.**
+
+### Forge commits to the descent; the cold-door beat pre-built (06-29, ~5:12 PM)
+
+- **Player beat (in-fiction, #in-character, 5:12 PM):** JonathanEka — *"'I'm in, let's find some ammusing
+  story hidden & kept by those beasts.' Forge hastily prepare his equip & getting ready."* **Both PCs are now
+  committed to descending** toward the cold door (Vale by patron-pull, Forge by choice). No mechanics — pure RP.
+- **DM prep (pre-built ahead of the descent — no combat started):** with the party committed and combat behind
+  the cold door near-certain, pre-built the beat through the dashboard so it's one click to run:
+  - **Map (in-app Map Editor, not import):** *Ashfall Waystation — the cold vault*
+    (`2899165e-3d1b-46e9-962f-9065e4e3529a`), 12×10 blank stone, **PC spawn zone bottom-center** (the cold-door
+    threshold). Features narrated, not painted (house convention). *(Runbook §4 updated to document the in-app
+    map tools as the preferred path.)*
+  - **Encounter (Encounter Builder → Save, NOT Start):** **"Cold Vault — the keeper"** / player-facing **"The
+    Cold Vault"** (`adc064e7-2800-4787-8cb8-5deb23d1fc1f`) — **1× Wight (CR 3)** reflavored as the frost-rimed
+    vault-keeper that hollowed the brood, placed top-center **(6,1)**, surprise OFF, party 2/2. DB-verified.
+  - **Design intent + difficulty + staged read-alouds:** [`encounters/cold-vault.md`](../encounters/cold-vault.md).
+    Core design: a single CR3 boss ≈ Hard→Deadly for two L3 PCs (tense, not a TPK; reserve husks added live only
+    if too easy), and a deliberate **escalation — the keeper is genuinely UNDEAD, so Vale's *hold person* (which
+    carried the living-wretch fights) FAILS here**; the vault is a chiselled-out shrine to a forgotten god (ties
+    Vale's patron) seeding the next breadcrumb.
+- **Not run yet.** Per dm-rules, **wait for the players to actually descend** in #in-character before posting the
+  descent narration / turning the key / Starting Combat — don't act for them. State + IDs in `game-state.md`.
