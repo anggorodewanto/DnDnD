@@ -807,3 +807,68 @@ live Combat Manager / Console, not the cached JSON._
   (tend/heal Forge, short rest, or press deeper). Awaiting their move.
 - **Board now:** **out of combat, no encounter.** Forge **0/32, unconscious + prone, stabilized**; Vale
   **7/24** (both set by hand, see above). The deeper cellar is **unexplored**. 3-4 more PCs still joining.
+
+### New session: Vale searches the nest — a healing draught, a key, a journal; choice still stands (06-29, ~12:17 PM)
+
+_Resumed as DM on "continue as DM." Pulled live first: stack up (app redeployed ~7 min prior with the
+ISSUE-038 carry-out fix, `b199c21`); **out of combat, no encounter**; **1 pending** queue item. PC vitals
+**unchanged** from the 06-28 carry-out — Forge **0/32 unconscious+prone (stabilized)**, Vale **7/24**;
+nobody healed or rested in the interval._
+
+- **Player beat (in-fiction, #in-character, 12:06 PM):** dewa — *"Vale looks around the room for anything
+  that can help Forge."* Vale ran `/check investigation` → **rolled 10** (queued as a skill_check_narration).
+- **OOC read (#player-chat):** players were joking about how close the 2-PC fight ran and that they
+  **"didn't bring a potion"** (`nda bawa potion`) — explicitly flagging the party's lack of healing. They
+  loved the stabilization read-aloud (`metal abis`, "Poetic yo").
+- **DM adjudication (Investigation 10 vs ~DC 10 — meets):** the brood's nest is heaped on the **dead** —
+  travelers dragged down and picked over (world.md keeper/loot threads). Vale's intentional search turns up,
+  in a split traveler's pack: **one healing draught (a common Potion of Healing), whole**; plus a **cold iron
+  key** on a thong and a **water-rotted journal** (unreadable in cellar light) — light hooks toward the
+  deeper cellar. A fair, earned find for a met-DC search of a victim-strewn lair; answers the no-potion gap
+  without trivializing a 2-PC party (kept it to **one** common draught). **Found ≠ used** — the players
+  decide whether to administer it to Forge (an action; a Potion of Healing on a stabilized PC heals 2d4+2,
+  takes him above 0 → wakes, drops `unconscious`; `prone` until he stands — *they* roll the 2d4+2).
+- **Resolved** the skill_check_narration via **DM Queue → Open → Send Narration** (outcome echoed to
+  **#in-character**, the channel she rolled in). Posted a **read-aloud** scene beat to **#the-story**
+  (12:17 PM, confirmed in Narrate Post History) framing the find + the standing choice. No numbers/secrets.
+- **Board now:** out of combat, no encounter. Forge **0/32, unconscious + prone, stabilized**; Vale
+  **7/24** (unchanged). Party now has **1 healing draught (uncatalogued — narrative-tracked until used),
+  an iron key, a ruined journal**. **Next (player-driven):** administer the draught to wake Forge, take a
+  **short rest** (Vale's Pact Magic slots recharge on a short rest — strong for her), or press deeper past
+  the lantern into the unexplored cellar.
+
+### The party retreats and takes a long rest — both back to full (06-29, ~1:13 PM)
+
+_Resumed as DM; pulled live first (DM Console: 0 pending, 0 approvals, no active encounter). The player had
+acted in the interval._
+
+- **Player beat (in-fiction, #in-character, 12:58 PM):** dewa — *"Vale takes all items, and with mage hand
+  help drag him up. 'Let's rest and heal'. Vale sets up camp in the common room. (1d4 hour rest to get Forge
+  to 1HP + long rest to full heal)."* The party chose to **bail upstairs and rest**, not drink the draught or
+  press deeper. (OOC #player-chat had nothing new — yesterday's banter only.)
+- **DM adjudication (long rest granted, uninterrupted):** the brood is **dead** and the common room is the
+  **cleared** upstairs (world.md) — barring the splintered cellar door and resting by a relit hearth is
+  plausible. No wandering-monster interruption: rewarding the smart retreat, not punishing it. Mechanically a
+  **long rest** → both PCs to **full HP**, Forge **wakes** (a stabilized creature at >0 HP is conscious) and
+  **stands** (prone cleared), and **Vale's Pact Magic slots recharge**. The "mage hand drag" is narrative
+  flavor (Vale physically hauls Forge up the stairs); not worth a ruling stop.
+- **Mechanics applied (dashboard only — Party → Edit status / Edit slots, audit reasons logged):**
+  - **Forge:** HP 0→**32/32**; conditions **unconscious + prone cleared** (now `none`). Reason: "Long rest in
+    the common room — full heal, wakes and stands."
+  - **Vale:** HP 7→**24/24**. Reason: "Long rest in the common room — full heal."
+  - **Vale:** Pact (Level 2) **0→2/2**. Reason: "Long rest — Pact Magic slots recharge."
+- **Narrated** a 4-paragraph **read-aloud** to **#the-story** (1:13 PM, confirmed rendered as a boxed block
+  in Discord + Narrate Post History): the haul up the stairs, barring the cellar door, the relit hearth, the
+  long quiet night, Forge waking with a curse — and **two seeded hooks**: the **journal has dried enough to
+  read** (a patient eye can coax the ink back), and **something below the barred door is "not entirely
+  silent"** (world.md "what the brood fears" thread; the descent still beckons). No numbers/secrets.
+- **Board now:** out of combat, no encounter. **Vale 24/24 (Pact L2 2/2), Forge 32/32 — both full, no
+  conditions.** Party holds **1 healing draught (unused, narrative-tracked), the iron key, the now-readable
+  journal**. **Next (player-driven):** read the journal (a clue beat), unlock something with the iron key, or
+  descend into the unexplored deeper cellar (the brood-descent fight is pre-built — `encounters/cellar-brood.md`).
+- **Items formalized into Vale's inventory (~1:30 PM)** — moved the three finds off "narrative-tracked" and
+  onto Vale's character sheet via **Party → Manage inventory**: **Potion of Healing** (catalog magic_item,
+  "regain 2d4+2 hit points") + two **custom** items, **Cold Iron Key** and **Water-Rotted Journal** (each with
+  flavor text, qty 1, value 0). "Added 3 items" confirmed; all three verified present on the sheet. (Catalog
+  search has *Potion of Healing* 2d4+2 vs *Greater* 4d4+4 vs *Superior* — picked the common 2d4+2 to match the
+  adjudicated find.)

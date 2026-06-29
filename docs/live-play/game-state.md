@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-28 — **"The Cellar" is WON and CLOSED.** Both ghouls dead; combat **ended** at R11; the party is **out of combat**. **Forge stabilized** on his own death save (reached **✓3 successes**) — now **0/32, unconscious + prone** (alive, needs tending). **Vale 7/24.** Combat-end has **no HP write-back** (two HP stores), so both PCs' out-of-combat HP/conditions were **set by hand** via the Party status editor. **No active encounter.**
+_Last updated: 2026-06-29 — **"The Cellar" WON and CLOSED; party out of combat and rested up.** The party retreated upstairs and took a **long rest** in the cleared common room: **both PCs back to full — Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** (Forge woke + stood; all applied via Party → Edit status / Edit slots). The three finds are now **on Vale's sheet** (Manage inventory): an unused **Potion of Healing**, a **Cold Iron Key**, and a now-readable **Water-Rotted Journal**. A 4-paragraph read-aloud closed the rest in #the-story (1:13 PM) and seeded two hooks — the **journal has dried enough to read** and **something below the barred cellar door is "not entirely silent."** **No active encounter.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -92,34 +92,48 @@ but in R6 it tore out Forge's throat and **he fell** (0 HP, unconscious + prone,
 (**Medicine 6 vs DC 10 — failed**), but Forge held on by his own toughness — his death saves climbed to
 **✓3 and he stabilized** (still unconscious at 0 HP, not dying). With no hostiles left, **combat was
 ended** (R11). Out of combat now: **Forge 0/32, unconscious + prone (stabilized, needs tending); Vale
-7/24** — both set by hand in the Party status editor, since combat-end does **not** write HP back to the
-sheets. The brood lie dead; the deeper cellar past the party's light is **unexplored**. Cramped stone,
-lit by whatever they carried down. World / lore: [`world.md`](world.md).
+7/24**.
+
+**06-29 — Vale searches the nest, then the party rests.** With Forge down and no healing on hand, Vale searched
+the brood's nest (Investigation **10**) and found, in a split traveler's pack: **one healing draught (a common
+Potion of Healing), whole**; a **cold iron key** on a leather thong; and a **water-rotted journal**. Rather than
+drink the draught or press on, the party **retreated upstairs** — Vale hauled the unconscious Forge up the
+splintered stairs, **barred the cellar door**, relit the dead hearth in the common room, and the party took a
+**long rest**. Both came back whole: **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** — Forge woke and
+stands. The three finds are now **on Vale's character sheet** (Manage inventory): the **Potion of Healing**
+(2d4+2, unused), the **Cold Iron Key**, and the **Water-Rotted Journal** — the journal has now **dried enough
+to read** (a clue, if a patient eye works at it). The brood lie dead behind the barred door, but the deeper
+cellar past it is **unexplored** — and in the quiet, the dark down there was **"not entirely silent."**
+World / lore: [`world.md`](world.md).
 
 ## Next action (DM intent — the one thing the Console can't infer)
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Fight WON and CLOSED — party is out of combat (post-fight lull, player-driven).** No active
-   encounter, no initiative, no hostiles. Both ghouls dead; **Forge stabilized on his own death save
-   (✓3 — no longer dying)** after Vale's first-aid attempt failed (**Medicine 6 vs DC 10**); combat was
-   **ended** (R11). Reconciled post-combat state (set by hand): **Forge 0/32, unconscious + prone,
-   stabilized; Vale 7/24.** A transition beat is posted to #the-story handing the choice back to the
-   players — **tend/heal Forge, take a short rest, or press deeper into the cellar.** Let them decide.
-   - **If they heal Forge** (potion / spell): apply via **Party → Edit status** — set HP above 0 and
-     **uncheck `unconscious`** (a stabilized creature at >0 HP wakes; leave `prone` until he stands).
-     If they only rest, a stabilized PC regains 1 HP after 1d4 hours (and wakes); else he stays
-     unconscious-but-stable until healed. Vale can be topped up on a rest via the same editor.
-   - **Combat-end carry-out is a manual footgun:** ending combat does **not** write combat HP back to the
-     sheets — out of combat the Party page shows the *undamaged* stored HP. Both PCs were corrected by
-     hand this time (audit reasons logged). **Reconcile every PC's HP/conditions after every End Combat**
-     before narrating on. Filed for a fresh agent as **ISSUE-038** (auto-carry-out on End Combat).
-   - **If a new fight starts** (deeper cellar, etc.): prep + run the encounter through the combat tools as
-     before; keep enemy HP/AC secret ([`dm-rules.md`](dm-rules.md)); players roll their own dice.
-   - **Drop-to-0 logging gap (follow-up, non-blocking):** the feature shipped earlier today (`dfefd8e`)
-     did **not** log G1's defeat — the player `/attack` damage path doesn't funnel through
-     `Service.ApplyDamage` where `notifyDroppedToZero` is gated. Forward-fix candidate; logged in the
-     session log + issues, table not blocked.
+1. **Out of combat, rested up — the choice is with the players (player-driven lull).** No active encounter,
+   no initiative, no hostiles. The party **long-rested in the cleared common room**; **both PCs are at full —
+   Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** (Forge awake + standing; all applied via the
+   dashboard). The draught is **unused**, the iron key pocketed, and the **journal is now readable**. A
+   read-aloud closed the rest in #the-story (1:13 PM). **All three finds are now on Vale's sheet** (Manage
+   inventory: Potion of Healing, Cold Iron Key, Water-Rotted Journal). **Awaiting the players' next move** —
+   let them decide; don't narrate the choice. The seeded options:
+   - **Read the journal** (a clue beat — world.md keeper/brood threads). If a player has Vale (or whoever)
+     work at it, adjudicate as a read/Investigation/Intelligence beat and narrate what the dried pages give
+     up; this is the cleanest hook toward *why* the cellar went wrong and what's deeper.
+   - **The iron key** — now on the sheet; it opens *something* (a locked door/chest below, DM's call per
+     world.md). It surfaces when they actually try it on a lock.
+   - **Descend into the deeper cellar** — past the barred door the dark was **"not entirely silent."** The
+     brood-descent fight is **pre-built**: [`encounters/cellar-brood.md`](encounters/cellar-brood.md). If they
+     press on, prep + run it through the combat tools; keep enemy HP/AC secret ([`dm-rules.md`](dm-rules.md));
+     players roll their own dice. (Living-wretch ruling still applies — *hold person* etc. are valid; see
+     [`world.md`](world.md).)
+   - **The healing draught (on the sheet, unused):** if a PC drinks it later it restores **2d4+2** — **the
+     players roll it** ([`dm-rules.md`](dm-rules.md)). Apply via **Party → Edit status** (add to current HP,
+     capped at max) and decrement the potion in Manage inventory. At full HP now it's a saved resource for the
+     next fight.
+   - **Drop-to-0 logging gap (follow-up, non-blocking):** the feature shipped 06-28 (`dfefd8e`) did **not**
+     log G1's defeat — the player `/attack` damage path doesn't funnel through `Service.ApplyDamage` where
+     `notifyDroppedToZero` is gated. Forward-fix candidate; logged in session log + issues, table not blocked.
 2. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row + sheet →
    fold into the fiction). 3-4 more PCs expected. See [`runbook.md`](runbook.md) "Onboarding
    players" + [`big-party.md`](big-party.md).
