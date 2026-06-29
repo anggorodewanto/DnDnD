@@ -15,6 +15,7 @@ import (
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/rest"
 )
 
 // mockStore implements Store for unit tests.
@@ -65,6 +66,7 @@ type mockStore struct {
 	listSpellsByClassFn                func(ctx context.Context, class string) ([]refdata.Spell, error)
 	updateCharacterEquipmentFn         func(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error)
 	updateCharacterDataFn              func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
+	updateCharacterVitalsFn            func(ctx context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error)
 
 	// Encounter Zones
 	createEncounterZoneFn                   func(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error)
@@ -431,6 +433,12 @@ func (m *mockStore) UpdateCharacterData(ctx context.Context, arg refdata.UpdateC
 		return m.updateCharacterDataFn(ctx, arg)
 	}
 	return refdata.Character{ID: arg.ID, CharacterData: arg.CharacterData}, nil
+}
+func (m *mockStore) UpdateCharacterVitals(ctx context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+	if m.updateCharacterVitalsFn != nil {
+		return m.updateCharacterVitalsFn(ctx, arg)
+	}
+	return refdata.Character{ID: arg.ID, HpMax: arg.HpMax, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, Conditions: arg.Conditions, CharacterData: arg.CharacterData}, nil
 }
 func (m *mockStore) CreateEncounterZone(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error) {
 	if m.createEncounterZoneFn != nil {
@@ -2552,6 +2560,177 @@ func TestEndCombat_Success(t *testing.T) {
 	assert.Contains(t, result.Summary, "2 casualties")
 	assert.True(t, conditionsCleared[combatantIDs[0]], "goblin 1 conditions should be cleared")
 	assert.True(t, conditionsCleared[combatantIDs[2]], "aragorn conditions should be cleared")
+}
+
+// --- ISSUE-038: EndCombat carries PC combat HP/conditions back to the characters row ---
+
+func TestEndCombat_CarriesOutPCStatusToCharacterRow(t *testing.T) {
+	encounterID := uuid.New()
+	charID := uuid.New()
+	pcCombatantID := uuid.New()
+	npcCombatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 4}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 4}, nil
+	}
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+	// Forge: a downed-but-stabilized PC at 0 HP, unconscious + prone. NPC: a dead goblin.
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:              pcCombatantID,
+				CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+				IsNpc:           false,
+				IsAlive:         true,
+				HpMax:           32,
+				HpCurrent:       0,
+				TempHp:          0,
+				ExhaustionLevel: 1,
+				DisplayName:     "Forge",
+				Conditions:      json.RawMessage(`[{"condition":"unconscious","duration_rounds":0,"started_round":3},{"condition":"prone","duration_rounds":0,"started_round":3}]`),
+			},
+			{
+				ID:          npcCombatantID,
+				IsNpc:       true,
+				IsAlive:     false,
+				HpCurrent:   0,
+				DisplayName: "Goblin",
+				Conditions:  json.RawMessage(`[]`),
+			},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:            id,
+			HpMax:         32,
+			HpCurrent:     32, // stale base row — full HP, the bug
+			CharacterData: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"foo":"bar"}`), Valid: true},
+		}, nil
+	}
+
+	var carried []refdata.UpdateCharacterVitalsParams
+	store.updateCharacterVitalsFn = func(_ context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+		carried = append(carried, arg)
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+
+	require.Len(t, carried, 1, "exactly one PC carried out; NPCs are encounter-scoped")
+	got := carried[0]
+	assert.Equal(t, charID, got.ID)
+	assert.Equal(t, int32(0), got.HpCurrent, "downed PC carries out 0 HP, not the stale full base row")
+	assert.Equal(t, int32(32), got.HpMax)
+	assert.Equal(t, int32(0), got.TempHp)
+
+	// unconscious is preserved out of combat; prone is a combat-only condition and is dropped.
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(got.Conditions, &conds))
+	names := map[string]bool{}
+	for _, c := range conds {
+		names[c.Condition] = true
+	}
+	assert.True(t, names["unconscious"], "0-HP PC carries out unconscious")
+	assert.False(t, names["prone"], "prone (combat-only) is cleared on carry-out")
+
+	// exhaustion is merged into character_data without clobbering existing keys.
+	require.True(t, got.CharacterData.Valid)
+	level, ok := rest.ExhaustionLevelFromCharacterData(got.CharacterData.RawMessage)
+	assert.True(t, ok)
+	assert.Equal(t, 1, level)
+	var cd map[string]any
+	require.NoError(t, json.Unmarshal(got.CharacterData.RawMessage, &cd))
+	assert.Equal(t, "bar", cd["foo"], "existing character_data keys are preserved")
+}
+
+func TestEndCombat_CarryOut_GetCharacterError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, IsNpc: false, DisplayName: "Vale", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("db down")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status carry-out")
+}
+
+func TestEndCombat_CarryOut_UpdateVitalsError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, IsNpc: false, HpMax: 24, HpCurrent: 7, DisplayName: "Vale", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, HpMax: 24}, nil
+	}
+	store.updateCharacterVitalsFn = func(_ context.Context, _ refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("write failed")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "carrying out status")
+}
+
+// A combatant snapshot HP above the sheet max (e.g. a lingering buff) is capped
+// to the character's true max on carry-out; an empty conditions array is written
+// as "[]" rather than null.
+func TestEndCombat_CarryOut_ClampsHPAndDefaultsConditions(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, IsNpc: false, HpMax: 24, HpCurrent: 99, TempHp: 3, DisplayName: "Vale", Conditions: nil},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, HpMax: 24}, nil
+	}
+	var got refdata.UpdateCharacterVitalsParams
+	store.updateCharacterVitalsFn = func(_ context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+		got = arg
+		return refdata.Character{ID: arg.ID}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Equal(t, int32(24), got.HpCurrent, "HP capped at sheet max")
+	assert.Equal(t, int32(3), got.TempHp)
+	assert.Equal(t, "[]", string(got.Conditions))
 }
 
 // --- TDD Cycle 53: EndCombat rejects non-active encounter ---

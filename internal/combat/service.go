@@ -18,6 +18,7 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/rest"
 	"github.com/ab/dndnd/internal/spawnzone"
 )
 
@@ -118,6 +119,11 @@ type Store interface {
 
 	// Character data
 	UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
+
+	// Character vitals — the shared out-of-combat status write path (HP / temp
+	// HP / conditions / character_data). EndCombat reuses it to carry each PC's
+	// final combat state back to the characters row (ISSUE-038).
+	UpdateCharacterVitals(ctx context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error)
 
 	// Encounter Zones
 	CreateEncounterZone(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error)
@@ -1318,6 +1324,18 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		} else {
 			cleaned[i] = c
 		}
+
+		// ISSUE-038 — carry this PC's final combat state back to the characters
+		// row now that combat-only conditions are cleared. Combat keeps HP only
+		// on the combatant snapshot and never writes back, so the moment the
+		// encounter flips to "completed" the read-side overlay disappears and
+		// the untouched base row (full HP, no conditions) shows through.
+		// Reconcile at this one boundary, from the original combatant row (it
+		// still carries CharacterID/HP/exhaustion), with the just-cleared
+		// conditions, so a downed PC reads 0 HP / unconscious out of combat.
+		if err := s.carryOutPCStatus(ctx, c, newConds); err != nil {
+			return EndCombatResult{}, err
+		}
 	}
 
 	roundsElapsed := enc.RoundNumber
@@ -1359,6 +1377,42 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		RoundsElapsed:     roundsElapsed,
 		InitiativeTracker: completedTracker,
 	}, nil
+}
+
+// carryOutPCStatus writes one PC combatant's final combat state — HP, temp HP,
+// conditions and exhaustion — back to its characters row at the End-Combat
+// boundary (ISSUE-038). It reuses UpdateCharacterVitals, the same write path the
+// out-of-combat status editor uses, so there is one writer for the characters
+// row. NPCs are encounter-scoped and are skipped; combatants without a backing
+// character (CharacterID unset) are skipped too. conditions is the
+// post-clear set, so a downed PC carries out "unconscious" but not the
+// combat-only "prone". A write failure bubbles up so the DM sees the
+// reconciliation hiccup rather than silently reading a stale full-HP sheet.
+func (s *Service) carryOutPCStatus(ctx context.Context, c refdata.Combatant, conditions json.RawMessage) error {
+	if c.IsNpc || !c.CharacterID.Valid {
+		return nil
+	}
+
+	char, err := s.store.GetCharacter(ctx, c.CharacterID.UUID)
+	if err != nil {
+		return fmt.Errorf("loading character %s for status carry-out: %w", c.DisplayName, err)
+	}
+
+	hpCurrent := max(min(c.HpCurrent, char.HpMax), 0)
+	conditions = defaultConditions(conditions)
+	mergedData := rest.CharacterDataWithExhaustion(char.CharacterData.RawMessage, int(c.ExhaustionLevel))
+
+	if _, err := s.store.UpdateCharacterVitals(ctx, refdata.UpdateCharacterVitalsParams{
+		ID:            char.ID,
+		HpMax:         char.HpMax, // combat never raises a PC's max; keep the sheet value
+		HpCurrent:     hpCurrent,
+		TempHp:        c.TempHp,
+		Conditions:    conditions,
+		CharacterData: pqtype.NullRawMessage{RawMessage: mergedData, Valid: len(mergedData) > 0},
+	}); err != nil {
+		return fmt.Errorf("carrying out status for %s: %w", c.DisplayName, err)
+	}
+	return nil
 }
 
 // FormatCombatEndedAnnouncement renders the bot's "combat ended" message
