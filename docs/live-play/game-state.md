@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-29 — **"The Cellar" WON and CLOSED; party out of combat and rested up.** The party retreated upstairs and took a **long rest** in the cleared common room: **both PCs back to full — Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** (Forge woke + stood; all applied via Party → Edit status / Edit slots). The three finds are now **on Vale's sheet** (Manage inventory): an unused **Potion of Healing**, a **Cold Iron Key**, and a now-readable **Water-Rotted Journal**. A 4-paragraph read-aloud closed the rest in #the-story (1:13 PM) and seeded two hooks — the **journal has dried enough to read** and **something below the barred cellar door is "not entirely silent."** **No active encounter.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
+_Last updated: 2026-06-29 — **"The Cellar" WON and CLOSED; party out of combat, rested up, and just read the keeper's journal.** The party long-rested in the cleared common room (**both PCs full — Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**) and Vale then **read the now-dried Water-Rotted Journal**. The clue (read-aloud to #the-story, 1:38 PM): the keeper heard scratching, **unlocked an old vault behind a "cold door" lower than the cellar**, and the wretches **came up fleeing it** — the cellar door was clawed from inside **to escape the cold door, not to reach the keeper**. The **cold iron key on Vale's sheet locks that cold door**; the keeper's last torn line begs *"do not turn it."* The three finds remain on Vale's sheet (Potion of Healing unused, Cold Iron Key, Water-Rotted Journal). **No active encounter.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -101,32 +101,39 @@ drink the draught or press on, the party **retreated upstairs** — Vale hauled 
 splintered stairs, **barred the cellar door**, relit the dead hearth in the common room, and the party took a
 **long rest**. Both came back whole: **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** — Forge woke and
 stands. The three finds are now **on Vale's character sheet** (Manage inventory): the **Potion of Healing**
-(2d4+2, unused), the **Cold Iron Key**, and the **Water-Rotted Journal** — the journal has now **dried enough
-to read** (a clue, if a patient eye works at it). The brood lie dead behind the barred door, but the deeper
-cellar past it is **unexplored** — and in the quiet, the dark down there was **"not entirely silent."**
+(2d4+2, unused), the **Cold Iron Key**, and the **Water-Rotted Journal**. Vale then **read the journal**
+(06-29, 1:38 PM): the keeper's account, mostly pulped, the innermost quarter legible. It reveals an **old vault
+behind a "cold door" lower than the cellar** that the keeper unlocked; the **wretches came up fleeing whatever
+is behind it** (the Harrow couple, buried in autumn, "wearing their own faces") — so the cellar door was clawed
+from inside **to escape the cold door, not to reach the keeper**. The **cold iron key locks that cold door**,
+and the keeper's last torn line begs *"do not turn it. Whatever else you do, do not turn it."* The brood lie
+dead behind the barred door, but the deeper cellar — and the cold door past it — is **unexplored**.
 World / lore: [`world.md`](world.md).
 
 ## Next action (DM intent — the one thing the Console can't infer)
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **Out of combat, rested up — the choice is with the players (player-driven lull).** No active encounter,
-   no initiative, no hostiles. The party **long-rested in the cleared common room**; **both PCs are at full —
-   Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** (Forge awake + standing; all applied via the
-   dashboard). The draught is **unused**, the iron key pocketed, and the **journal is now readable**. A
-   read-aloud closed the rest in #the-story (1:13 PM). **All three finds are now on Vale's sheet** (Manage
-   inventory: Potion of Healing, Cold Iron Key, Water-Rotted Journal). **Awaiting the players' next move** —
-   let them decide; don't narrate the choice. The seeded options:
-   - **Read the journal** (a clue beat — world.md keeper/brood threads). If a player has Vale (or whoever)
-     work at it, adjudicate as a read/Investigation/Intelligence beat and narrate what the dried pages give
-     up; this is the cleanest hook toward *why* the cellar went wrong and what's deeper.
-   - **The iron key** — now on the sheet; it opens *something* (a locked door/chest below, DM's call per
-     world.md). It surfaces when they actually try it on a lock.
-   - **Descend into the deeper cellar** — past the barred door the dark was **"not entirely silent."** The
-     brood-descent fight is **pre-built**: [`encounters/cellar-brood.md`](encounters/cellar-brood.md). If they
-     press on, prep + run it through the combat tools; keep enemy HP/AC secret ([`dm-rules.md`](dm-rules.md));
-     players roll their own dice. (Living-wretch ruling still applies — *hold person* etc. are valid; see
-     [`world.md`](world.md).)
+1. **Out of combat, rested up, journal read — the choice is with the players (player-driven lull).** No active
+   encounter, no initiative, no hostiles. The party **long-rested in the cleared common room**; **both PCs are
+   at full — Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions** (Forge awake + standing; all applied via
+   the dashboard). All three finds are on Vale's sheet (Manage inventory: Potion of Healing **unused**, Cold
+   Iron Key, Water-Rotted Journal). Vale **read the journal** (1:38 PM read-aloud) — the cold-door clue is now
+   in the players' hands. **Awaiting the players' next move** — let them decide; don't narrate the choice. The
+   live hooks:
+   - **✓ Journal read (1:38 PM).** It surfaced the **cold door** — an old vault lower than the cellar that the
+     keeper unlocked; the wretches **fled up from it**, so the cellar door was clawed from inside to *escape*
+     the cold door, not to reach the keeper. The keeper's last line: *"the cold iron key locks the cold door.
+     Do not turn it."* This is now the campaign's central pull downward. (Beat logged in `sessions/session-01.md`.)
+   - **The cold iron key** — now has a **known destination**: it locks/unlocks the **cold door** at the bottom
+     of the deeper cellar (per the journal). Surfaces when they reach that door and choose to turn it (the
+     keeper warned against it — player's call). The cold door itself is **un-prepped**: design what's behind it
+     on demand if/when they turn the key.
+   - **Descend into the deeper cellar (toward the cold door)** — the brood-descent fight is **pre-built**:
+     [`encounters/cellar-brood.md`](encounters/cellar-brood.md). The **cold door is past it** (DM-prep on
+     demand). If they press on, prep + run the descent through the combat tools; keep enemy HP/AC secret
+     ([`dm-rules.md`](dm-rules.md)); players roll their own dice. (Living-wretch ruling still applies — *hold
+     person* etc. are valid; see [`world.md`](world.md).)
    - **The healing draught (on the sheet, unused):** if a PC drinks it later it restores **2d4+2** — **the
      players roll it** ([`dm-rules.md`](dm-rules.md)). Apply via **Party → Edit status** (add to current HP,
      capped at max) and decrement the potion in Manage inventory. At full HP now it's a saved resource for the

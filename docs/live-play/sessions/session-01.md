@@ -872,3 +872,34 @@ acted in the interval._
   flavor text, qty 1, value 0). "Added 3 items" confirmed; all three verified present on the sheet. (Catalog
   search has *Potion of Healing* 2d4+2 vs *Greater* 4d4+4 vs *Superior* — picked the common 2d4+2 to match the
   adjudicated find.)
+
+### Vale reads the keeper's journal — the "cold door" clue (06-29, ~1:38 PM)
+
+_Resumed as DM; pulled live first (DM Console: "Nothing needs you right now," 0 pending, no active encounter;
+timeline = only my prior narration). The player had acted in #in-character — Discord-only, never in the Console feed._
+
+- **Player beat (in-fiction, #in-character, 1:33 PM):** dewa — *"Vale wakes up early, pouring all attention to
+  read the journal. When she realized Forge is up, she mutters, 'thank you for chasing me downstairs… And,
+  sorry.' (For DM: what do we get from the journal?)"* The party chose the **read-the-journal** hook; direct DM
+  prompt for the content.
+- **DM adjudication (no roll — already readable):** the journal was established last beat as **dried enough to
+  read** by the hearth, so this is a straight read, not a check — Vale's focused effort gets the legible
+  remnant outright (no dice owed). Pure narrative beat: **no HP/condition/inventory mutation** (the journal
+  stays on Vale's sheet).
+- **Narrated** a **read-aloud** to **#the-story** (1:38 PM, confirmed rendered as a boxed block in Discord +
+  Narrate Post History) — the keeper's hand, most of it pulped, the innermost quarter legible. The clue it
+  gives up (grounded in world.md keeper/brood threads):
+  - The keeper heard scratching under the floor, **went down**, and **unlocked an old vault behind a "cold
+    door" lower than the cellar** — "the key turned so easily." (Hard-links the **cold iron key** on Vale's
+    sheet to a known destination: it locks/unlocks the **cold door** at the bottom.)
+  - The **wretches came up after** — named the **Harrow couple**, buried in autumn — wearing their own faces,
+    not eating, *waiting*. They are **afraid of the dark below**.
+  - Recontextualizes the **door scored from inside**: the brood clawed the cellar door **not to reach the
+    keeper but to flee the cold door** — "they would sooner be up here … than down there with it."
+  - Final torn line: ***"the cold iron key locks the cold door. Do not turn it. Whatever else you do, do not
+    turn it."*** + the keeper's initials. (A warning, not a wall — player's call.)
+- **Board now:** out of combat, no encounter. **Vale 24/24 (Pact L2 2/2), Forge 32/32 — both full, no
+  conditions.** Inventory unchanged (Potion of Healing, Cold Iron Key, Water-Rotted Journal). **Next
+  (player-driven):** descend the cellar toward the cold door (brood-descent fight pre-built —
+  `encounters/cellar-brood.md`; the cold door itself is past it, DM-prep on demand), try the key, drink the
+  draught before a fight, or do something else entirely. **Awaiting the players' move** — don't narrate the choice.
