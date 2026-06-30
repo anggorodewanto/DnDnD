@@ -173,6 +173,26 @@ export function indexToCol(idx) {
 }
 
 /**
+ * Convert a 1-based grid row (the API/DB `position_row`, matching the Go
+ * renderer's ParseCoordinate where "D4" -> 0-based row 3) to the 0-based row
+ * the canvas math uses. Row-axis counterpart of colToIndex. Clamps invalid or
+ * missing rows to 0 so a token never lands on a negative tile.
+ */
+export function rowToIndex(row) {
+  const n = Number(row);
+  if (!n || n < 1) return 0;
+  return n - 1;
+}
+
+/**
+ * Convert a 0-based grid row back to the 1-based `position_row` the API expects.
+ * Reverse of rowToIndex; row-axis counterpart of indexToCol.
+ */
+export function indexToRow(idx) {
+  return idx + 1;
+}
+
+/**
  * Return all tiles within Chebyshev distance (range in tiles) of a center tile,
  * excluding the center itself. Clips to map bounds.
  * @param {number} centerCol - 0-based column.
@@ -375,7 +395,7 @@ export function collectSurprisedShortIDs(creatures, surprisedByIndex) {
 export function combatantsAtTile(combatants, col, row) {
   if (!combatants) return [];
   return combatants.filter(
-    (c) => colToIndex(c.position_col) === col && c.position_row === row,
+    (c) => colToIndex(c.position_col) === col && rowToIndex(c.position_row) === row,
   );
 }
 
@@ -404,7 +424,7 @@ export function stackedTileCounts(combatants) {
   const counts = new Map();
   if (!combatants) return counts;
   for (const c of combatants) {
-    const key = `${colToIndex(c.position_col)},${c.position_row}`;
+    const key = `${colToIndex(c.position_col)},${rowToIndex(c.position_row)}`;
     counts.set(key, (counts.get(key) || 0) + 1);
   }
   for (const [key, n] of counts) {

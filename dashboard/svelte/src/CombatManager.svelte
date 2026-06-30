@@ -29,6 +29,8 @@
     conditionKey,
     colToIndex,
     indexToCol,
+    rowToIndex,
+    indexToRow,
     tokenOpacity,
     gridDistance,
     tilesInRange,
@@ -554,7 +556,7 @@
       ctx.globalAlpha = opacity;
 
       const col = colToIndex(comb.position_col);
-      const row = comb.position_row;
+      const row = rowToIndex(comb.position_row);
       const cx = col * tileSize + tileSize / 2;
       const cy = row * tileSize + tileSize / 2;
       const radius = tileSize * 0.4;
@@ -654,7 +656,7 @@
     const speedFt = comb.speed_ft || 30;
     const rangeTiles = Math.floor(speedFt / 5);
     const col = colToIndex(comb.position_col);
-    const row = comb.position_row;
+    const row = rowToIndex(comb.position_row);
 
     const tiles = tilesInRange(col, row, rangeTiles, tiledMap.width, tiledMap.height);
     ctx.globalAlpha = 0.15;
@@ -865,7 +867,7 @@
         await updateCombatantPosition(
           activeEncounter.id,
           combId,
-          { position_col: indexToCol(dragCol), position_row: dragRow },
+          { position_col: indexToCol(dragCol), position_row: indexToRow(dragRow) },
         );
         await loadWorkspace();
       } catch (err) {

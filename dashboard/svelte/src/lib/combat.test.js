@@ -10,6 +10,8 @@ import {
   conditionKey,
   colToIndex,
   indexToCol,
+  rowToIndex,
+  indexToRow,
   tokenOpacity,
   gridDistance,
   tilesInRange,
@@ -254,6 +256,39 @@ describe('gridDistance', () => {
   });
 });
 
+// Combatant rows are 1-based in the API/DB (PositionRow), matching the Go
+// renderer's ParseCoordinate ("D4" -> 0-based row 3). rowToIndex/indexToRow are
+// the row-axis counterparts of colToIndex/indexToCol so canvas math (0-based)
+// stays in lockstep with the Discord render. Forgetting this conversion put the
+// dashboard tokens one row too low (ISSUE: combat-manager token row off-by-one).
+describe('rowToIndex', () => {
+  it('maps a 1-based row to a 0-based index', () => {
+    expect(rowToIndex(1)).toBe(0);
+    expect(rowToIndex(3)).toBe(2);
+    expect(rowToIndex(8)).toBe(7);
+  });
+
+  it('clamps invalid/missing rows to 0 (never negative)', () => {
+    expect(rowToIndex(0)).toBe(0);
+    expect(rowToIndex(null)).toBe(0);
+    expect(rowToIndex(undefined)).toBe(0);
+    expect(rowToIndex(-5)).toBe(0);
+  });
+});
+
+describe('indexToRow', () => {
+  it('maps a 0-based index back to a 1-based row', () => {
+    expect(indexToRow(0)).toBe(1);
+    expect(indexToRow(2)).toBe(3);
+  });
+
+  it('roundtrips with rowToIndex', () => {
+    for (const row of [1, 2, 3, 8, 15]) {
+      expect(indexToRow(rowToIndex(row))).toBe(row);
+    }
+  });
+});
+
 // TDD Cycle 9: indexToCol (reverse of colToIndex)
 describe('indexToCol', () => {
   it('converts 0 to A', () => {
@@ -465,6 +500,8 @@ describe('collectSurprisedShortIDs', () => {
 // same square). Clicks must reach each one, so selection cycles through the
 // co-located stack on repeated clicks.
 describe('combatantsAtTile', () => {
+  // position_row is 1-based; the (col,row) query args are 0-based grid indices
+  // (from getCanvasTile), so E1 lives at grid (4, 0) and C8 at grid (2, 7).
   const combs = [
     { id: 'vale', position_col: 'E', position_row: 1 },
     { id: 'forge', position_col: 'E', position_row: 1 },
@@ -472,11 +509,16 @@ describe('combatantsAtTile', () => {
   ];
 
   it('returns every combatant on the tile in array order', () => {
-    expect(combatantsAtTile(combs, 4, 1).map(c => c.id)).toEqual(['vale', 'forge']);
+    expect(combatantsAtTile(combs, 4, 0).map(c => c.id)).toEqual(['vale', 'forge']);
+  });
+
+  it('maps a 1-based position_row to the 0-based grid row (not one too low)', () => {
+    // Regression guard: a token on API row 1 is the TOP grid row (0), never row 1.
+    expect(combatantsAtTile(combs, 4, 1)).toEqual([]);
   });
 
   it('returns a single combatant when the tile is not stacked', () => {
-    expect(combatantsAtTile(combs, 2, 8).map(c => c.id)).toEqual(['ghoul']);
+    expect(combatantsAtTile(combs, 2, 7).map(c => c.id)).toEqual(['ghoul']);
   });
 
   it('returns an empty array for an empty tile', () => {
@@ -522,8 +564,9 @@ describe('stackedTileCounts', () => {
       { position_col: 'C', position_row: 8 },
     ];
     const counts = stackedTileCounts(combs);
-    expect(counts.get('4,1')).toBe(2);
-    expect(counts.has('2,8')).toBe(false);
+    // Keys are 0-based "col,row": E1 -> "4,0", C8 -> "2,7".
+    expect(counts.get('4,0')).toBe(2);
+    expect(counts.has('2,7')).toBe(false);
   });
 
   it('returns an empty map when nothing is stacked', () => {
