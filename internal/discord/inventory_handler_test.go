@@ -18,6 +18,7 @@ import (
 // mockInventorySession captures the ephemeral response.
 type mockInventorySession struct {
 	lastResponse   string
+	lastFlags      discordgo.MessageFlags
 	sentChannelID  string
 	sentChannelMsg string
 }
@@ -51,6 +52,7 @@ func (m *mockInventorySession) GuildChannelCreateComplex(guildID string, data di
 func (m *mockInventorySession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
 	if resp.Data != nil {
 		m.lastResponse = resp.Data.Content
+		m.lastFlags = resp.Data.Flags
 	}
 	return nil
 }

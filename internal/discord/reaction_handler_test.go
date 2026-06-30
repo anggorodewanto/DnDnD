@@ -203,7 +203,8 @@ func TestReactionHandler_Declare_PostsToDMQueue(t *testing.T) {
 		"SR-002: /reaction dm-queue post must carry CampaignID")
 	assert.Equal(t, declID.String(), ev.ExtraMetadata["reaction_declaration_id"])
 
-	// Player gets an ephemeral confirmation.
+	// The whole channel sees the confirmation (a declared reaction is public
+	// table information, like a readied action — see RespondsPublicly below).
 	assert.Contains(t, sess.lastResponse, "Shield if I get hit")
 
 	// Service received the trimmed description and proper IDs.
@@ -213,6 +214,45 @@ func TestReactionHandler_Declare_PostsToDMQueue(t *testing.T) {
 
 	// Handler recorded the item ID keyed by declaration ID for later cancel.
 	assert.Equal(t, "item-xyz", h.ItemIDForDeclaration(declID))
+}
+
+// A declared reaction is public table information: the rest of the party (and
+// the DM) should see "Vale readied hellish rebuke" live in the channel, the
+// same way /action ready announces a readied action. Only the SUCCESS response
+// goes public; validation/error replies stay ephemeral (router convention).
+func TestReactionHandler_Declare_RespondsPublicly(t *testing.T) {
+	enc := uuid.New()
+	combatantID := uuid.New()
+
+	svc := &fakeReactionService{
+		canDeclare:    true,
+		declareResult: refdata.ReactionDeclaration{ID: uuid.New(), Description: "hellish rebuke if attacked", Status: "active"},
+	}
+	h, sess, _ := newTestReactionHandler(svc, enc, combatantID)
+	h.SetNotifier(&cancelRecordingNotifier{nextItemID: "item-xyz"})
+
+	interaction := makeReactionInteraction("guild1", "user1", "declare", "hellish rebuke if attacked")
+	h.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "hellish rebuke if attacked")
+	assert.Zero(t, sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"a declared reaction must be announced publicly, not ephemerally")
+}
+
+// Guard the other half of the convention: a validation failure on /reaction
+// declare must NOT leak into the public channel — it stays ephemeral.
+func TestReactionHandler_Declare_ErrorStaysEphemeral(t *testing.T) {
+	enc := uuid.New()
+	combatantID := uuid.New()
+	h, sess, _ := newTestReactionHandler(nil, enc, combatantID)
+	h.SetNotifier(&cancelRecordingNotifier{})
+
+	interaction := makeReactionInteraction("guild1", "user1", "declare", "   ")
+	h.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "description")
+	assert.NotZero(t, sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"validation errors on /reaction declare must stay ephemeral")
 }
 
 func TestReactionHandler_Declare_EmptyDescription(t *testing.T) {

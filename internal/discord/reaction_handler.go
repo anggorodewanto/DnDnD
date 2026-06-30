@@ -179,7 +179,10 @@ func (h *ReactionHandler) handleDeclare(interaction *discordgo.Interaction, sub 
 
 	h.postReactionDeclaration(ctx, decl, combatantID, displayName, interaction.GuildID)
 
-	respondEphemeral(h.session, interaction, fmt.Sprintf("⚡ Reaction declared: %s", decl.Description))
+	// A declared reaction is public table information — the party and the DM
+	// should see "<player> readied <reaction>" live, mirroring how /action ready
+	// announces a readied action. Errors/validation above stay ephemeral.
+	respondPublic(h.session, interaction, fmt.Sprintf("⚡ %s readied a reaction: %s", displayName, decl.Description))
 }
 
 // postReactionDeclaration posts the dm-queue event for a freshly-persisted
