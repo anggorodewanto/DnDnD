@@ -985,6 +985,115 @@ func TestRestHandler_HitDiceComponent_DoneButton(t *testing.T) {
 	}
 }
 
+// --- /rest result should be public so the whole table sees it ---
+
+// TestRestHandler_ShortRest_FinalResultIsPublic asserts the short-rest result
+// is broadcast to the channel via a non-ephemeral followup (the interactive
+// hit-dice prompt stays ephemeral; only the final outcome goes public).
+func TestRestHandler_ShortRest_FinalResultIsPublic(t *testing.T) {
+	var followupData *discordgo.WebhookParams
+	followupCount := 0
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, _ *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		return &discordgo.Message{}, nil
+	}
+	sess.FollowupMessageCreateFunc = func(_ *discordgo.Interaction, _ bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+		followupCount++
+		followupData = data
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 5})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{})
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Thorin",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+		ProficiencyBonus: 3,
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + charID.String() + ":d10:2",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	if followupCount != 1 {
+		t.Fatalf("expected exactly 1 public followup with the rest result, got %d", followupCount)
+	}
+	if followupData.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("rest result followup must be public (no ephemeral flag), got flags %d", followupData.Flags)
+	}
+	if !strings.Contains(followupData.Content, "Short Rest") {
+		t.Errorf("expected rest result in public followup, got: %s", followupData.Content)
+	}
+}
+
+// TestRestHandler_LongRest_ResultIsPublic asserts the long-rest result is a
+// public (non-ephemeral) interaction response.
+func TestRestHandler_LongRest_ResultIsPublic(t *testing.T) {
+	var responded *discordgo.InteractionResponse
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp
+		return nil
+	}
+
+	h := setupRestHandler(sess)
+	h.Handle(makeRestInteraction("long"))
+
+	if responded == nil {
+		t.Fatal("expected a response")
+	}
+	if responded.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("long rest result must be public (no ephemeral flag), got flags %d", responded.Data.Flags)
+	}
+	if !strings.Contains(responded.Data.Content, "HP") {
+		t.Errorf("expected rest result content, got: %s", responded.Data.Content)
+	}
+}
+
 // --- TDD Cycle 27: Long rest restores HP and features ---
 
 func TestRestHandler_LongRest_FullRestore(t *testing.T) {

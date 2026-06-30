@@ -363,6 +363,12 @@ func (h *RestHandler) finalizeShortRest(ctx context.Context, interaction *discor
 	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	msg := rest.FormatShortRestResult(char.Name, result)
+	// Broadcast the result publicly so the whole table sees the rest outcome,
+	// then keep the player's detailed copy on their ephemeral prompt (this also
+	// clears the now-dead hit-dice buttons). The selection prompt stays
+	// ephemeral on purpose: a public prompt would let another player click and
+	// clobber the resting player's buttons via the wrong-character edit guard.
+	h.postPublicResult(interaction, msg)
 	h.editInteraction(interaction, msg)
 
 	h.logRestToHistory(char.Name, "Short Rest")
@@ -419,6 +425,16 @@ func (h *RestHandler) finalizeShortRestPartial(ctx context.Context, interaction 
 	_, _ = h.session.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{
 		Content:    &content,
 		Components: &components,
+	})
+}
+
+// postPublicResult broadcasts a rest result to the channel via a non-ephemeral
+// followup message, so the whole table sees the outcome. Used for the
+// short-rest result where the interaction's original response (the hit-dice
+// prompt) is ephemeral and cannot itself be made public.
+func (h *RestHandler) postPublicResult(interaction *discordgo.Interaction, content string) {
+	_, _ = h.session.FollowupMessageCreate(interaction, false, &discordgo.WebhookParams{
+		Content: content,
 	})
 }
 
@@ -648,7 +664,10 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 		msg = msg + "\n" + reminder
 	}
 
-	respondEphemeral(h.session, interaction, msg)
+	// SR / live-play: rest results are public so the whole table sees them
+	// (mirrors respondPublic's combat-result doctrine). Errors and the gated
+	// "waiting for DM" status above stay ephemeral.
+	respondPublic(h.session, interaction, msg)
 
 	h.logRestToHistory(char.Name, "Long Rest")
 }
