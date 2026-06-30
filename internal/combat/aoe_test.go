@@ -419,6 +419,30 @@ func TestFormatAoECastLog(t *testing.T) {
 		assert.Contains(t, log, "Concentrating")
 		assert.Contains(t, log, "Entangle")
 	})
+
+	// A warlock casting an AoE spell (e.g. Shatter) spends a PACT slot, not a
+	// leveled spell slot. The log must report the pact-slot remaining count, not
+	// the untouched leveled-slot field (which stays 0 for a warlock and made the
+	// bot wrongly announce "0 remaining" after a Warlock 3's first L2 cast).
+	t.Run("warlock pact slot", func(t *testing.T) {
+		result := AoECastResult{
+			CasterName:         "Vale",
+			SpellName:          "Shatter",
+			SpellLevel:         2,
+			SaveDC:             13,
+			SaveAbility:        "con",
+			AffectedNames:      []string{"Wight"},
+			SlotUsed:           2,
+			SlotsRemaining:     0, // leveled-slot field untouched for a warlock
+			UsedPactSlot:       true,
+			PactSlotsRemaining: 1,
+		}
+		log := FormatAoECastLog(result)
+		assert.Contains(t, log, "pact slot")
+		assert.Contains(t, log, "1 remaining")
+		assert.NotContains(t, log, "2nd-level slot")
+		assert.NotContains(t, log, "0 remaining")
+	})
 }
 
 // TDD Cycle 11: CastAoE service method - fireball on multiple targets

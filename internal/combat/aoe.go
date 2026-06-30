@@ -315,9 +315,14 @@ func FormatAoECastLog(result AoECastResult) string {
 	}
 	b.WriteString("\n")
 
-	// Slot usage
+	// Slot usage. Warlocks spend a pact slot, not a leveled slot — report the
+	// pact-slot remaining count, mirroring FormatCastLog (single-target path).
 	if result.SpellLevel > 0 {
-		fmt.Fprintf(&b, "\U0001f4a0 Used %s-level slot (%d remaining)\n", ordinal(result.SlotUsed), result.SlotsRemaining)
+		if result.UsedPactSlot {
+			fmt.Fprintf(&b, "\U0001f4a0 Used pact slot (%d remaining)\n", result.PactSlotsRemaining)
+		} else {
+			fmt.Fprintf(&b, "\U0001f4a0 Used %s-level slot (%d remaining)\n", ordinal(result.SlotUsed), result.SlotsRemaining)
+		}
 	}
 
 	// Save DC
