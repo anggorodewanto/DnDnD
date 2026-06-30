@@ -56,6 +56,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-038 | 2026-06-28 | combat / end-combat HP carry-out | medium | FIXED | **Ending combat doesn't carry combat HP/conditions back to the sheets — a downed PC silently reads full HP out of combat.** Same two-store root as ISSUE-020 (`combatants.hp_current` snapshot vs `characters.hp_current` base row; combat never writes back), but at the **End Combat** boundary the read-side overlay is gone, so the Party page / sheets show the *undamaged* stored HP and drop combat-applied conditions. **Found live** (2026-06-28, end of "The Cellar"): Forge ended stabilized at 0/32 unconscious+prone and Vale at 7/24, but post-End-Combat both showed full HP / no conditions; the DM had to reconcile each PC **by hand** via Party → Edit status. **Fixed (TDD, 2026-06-29):** `EndCombat` now carries each **PC** combatant's final HP/temp-HP + post-clear conditions + exhaustion back to its `characters` row via `carryOutPCStatus` (`combat/service.go`), reusing the shared `UpdateCharacterVitals` write path the out-of-combat status editor uses ([[project_dm_out_of_combat_status_editor]]) — one writer, no duplication. A downed PC carries out **0 HP / unconscious** (combat-only `prone` is dropped by `ClearCombatConditions`, `unconscious` is preserved; no out-of-combat "dying" state); NPCs are encounter-scoped and skipped; HP is clamped to the sheet max. Red/green `TestEndCombat_CarriesOutPCStatusToCharacterRow` + carry-out error/clamp tests; `make cover-check` green. See Details. |
 | ISSUE-039 | 2026-06-29 | dashboard / combat resources (feature uses) | medium | FIXED | **No DM editor for limited-use resources (Barbarian rage, ki, channel divinity, …) — a manually-set character could be stuck with the wrong remaining-uses count mid-fight.** `characters.feature_uses` (JSONB) was unexposed: only a party long rest touched it, and that resets *every* resource to max and 409s during combat. **Found live:** the AI DM had hand-set Forge's values during setup, leaving rage `{current:1, max:3}` — should have been **2** after one rage — with no in-app way to correct it. **Fixed (TDD, 2026-06-29):** audited mid-combat override `POST /api/combat/{enc}/override/character/{id}/feature-uses` `{feature,current,reason}` reusing `Service.SetFeaturePool` (preserves Max+Recharge), logged as `dm_override` + `#combat-log`; read-only `GET /api/character-overview/{id}/feature-uses` for prefill; `FeatureUsesEditor.svelte` in the Combat workspace **Manual Override** panel (PCs only). Rest command audited en route = **correct** (long rest → rage `current=max`, short rest untouched). `make cover-check` green; rebuilt + redeployed; used live to set Forge rage **1→2**. Out-of-combat editing still missing → **ISSUE-040**. See Details. |
 | ISSUE-040 | 2026-06-30 | dashboard / character overview (feature uses) | minor | FIXED | **No out-of-combat editor for feature uses (rage / ki / channel divinity / …).** The ISSUE-039 override only mounts in the Combat workspace (gated on an active turn); the **Character Overview / Party** page has HP/conditions + spell/pact-slot editors but **no feature-uses editor**, so a DM can't correct or top up a character's limited-use pool between fights without starting combat or forcing a full long rest (which resets everything). **Fixed (TDD, 2026-06-30):** added `POST /api/character-overview/{id}/feature-uses` mirroring `UpdateSlots` — DM-authorized, **409 during active combat** (defers to the ISSUE-039 in-combat override), validates feature-present + `current ∈ [0,max]` (unlimited when `max<0`), persists via the existing `UpdateCharacterFeatureUses` write path; mounted the already-built `FeatureUsesEditor.svelte` on `CharacterOverview.svelte` (fetch-on-open via the existing read GET, parent picks in/out-of-combat exactly like `SlotEditor`). `make cover-check` green; bundle rebuilt + redeployed. See Details. |
+| ISSUE-041 | 2026-06-30 | combat / rage (silent expiry) | medium | FIXED | **Rage lapses silently — the engine drops `is_raging` at end of turn (RAW: raged but didn't attack/take damage) with no #combat-log notice and no DM-timeline row, so the player thinks they're still raging (and resisting at half).** **Found live (Cold Vault R1):** Forge advanced + raged but ended his turn without attacking (keeper out of reach), so by RAW his rage ended at turn's end (`is_raging=f`). The bot posted **only** "enters a Rage!" — nothing when it dropped — and the keeper's next-turn longsword then landed **7 slashing in full** (would have been **3** halved had rage held / been visible). The drop was invisible to player and DM alike. **Fixed (TDD, 2026-06-30):** `maybeEndRageOnTurnEnd` now calls `notifyRageExpired`, mirroring the drop-to-0 (`notifyDroppedToZero`) dual-surface pattern — posts `FormatRageEnd(name, "no attack or damage this round")` to **#combat-log** and writes a **`rage_expired` action_log row** (DM Console timeline), parented to the rager's own (still-current) turn. Best-effort: nil notifier / lookup errors are swallowed so turn flow never blocks. `make cover-check` green; redeployed. See Details. |
 
 ---
 
@@ -1018,6 +1019,40 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Notes:** the editor component + the read endpoint already existed from ISSUE-039, so this was mostly a
   second handler + a parent mount. The level-up rage-**Max** re-derive gap noted under ISSUE-039 is still
   unfiled and unaffected by this change.
+
+### ISSUE-041 — Rage lapses silently (no #combat-log / no DM timeline) (FIXED)
+- **Date:** 2026-06-30
+- **Area:** combat / rage end-of-turn auto-expiry (`internal/combat/rage.go`)
+- **Severity:** medium — not a state bug (the drop is correct RAW), but an **observability** hole that
+  misleads play: a player keeps acting as if raging (resistance + advantage) when the engine no longer
+  treats them as raging, and the DM has no timeline signal it happened.
+- **Status:** FIXED (TDD, 2026-06-30).
+- **Found live (Cold Vault, Round 1):** Forge moved up and **raged** (bonus action) but ended his turn
+  **without attacking** (the keeper was still out of reach) and took no damage. By RAW rage ends if, by the
+  end of your turn, you haven't attacked a hostile or taken damage — so the engine's `maybeEndRageOnTurnEnd`
+  correctly cleared `is_raging` (the schema even tracks `rage_attacked_this_round` / `rage_took_damage_this_round`
+  for exactly this). **But the only rage line ever posted was "🔥 Forge enters a Rage!" — nothing when it
+  dropped.** Next turn the keeper's longsword hit for **7 slashing, applied in full** (Forge 32→25); had rage
+  held it would have been halved to **3**. The 4-HP swing — and the fact that Forge was no longer raging at
+  all — was invisible to both player and DM.
+- **Root cause:** `maybeEndRageOnTurnEnd` (rage.go) cleared + persisted rage state but emitted nothing. The two
+  observability surfaces that exist for other combat events — Discord **#combat-log** (`CombatLogNotifier`) and
+  the **action_log** DM-Console timeline — were never touched on expiry. (Rage *entry* posts to #combat-log via
+  the Discord bonus handler; rage *exit* had no equivalent.)
+- **Fix (TDD, 2026-06-30):** added `Service.notifyRageExpired`, called from `maybeEndRageOnTurnEnd` right after
+  the rage clear, **mirroring `notifyDroppedToZero`** (the drop-to-0 dual-surface precedent): it posts
+  `FormatRageEnd(name, "no attack or damage this round")` to #combat-log via `postCombatLog`, then writes a
+  **`rage_expired`** action_log row (new `actionTypeRageExpired` const) parented to the encounter's current
+  turn — which, at the `AdvanceTurn` end-hook (`initiative.go:442`, before `CompleteTurn`), is still the
+  rager's own turn, so the timeline row sits under the turn that ended it. Pure observability + best-effort:
+  nil notifier / `GetEncounter` failure / missing turn are all swallowed so turn-advance never blocks. Reused
+  the existing `FormatRageEnd` formatter (no new message function). Red/green
+  `TestMaybeEndRageOnTurnEnd_Lapsed_LogsRageExpired` (asserts the #combat-log post + the `rage_expired` row's
+  turn/encounter/actor) + `..._AttackedThisRound_NoLog` (rage holds → no clear, no logs); full `internal/combat`
+  suite + `make cover-check` green; redeployed.
+- **Not addressed (separate, still open/unfiled):** rage **Max** isn't re-derived on level-up (noted under
+  ISSUE-039); and rage end on **unconsciousness** (`maybeEndRageOnUnconscious`) is already implied by the
+  drop-to-0 line so it was left as-is.
 
 <!-- Append a section per issue:
 

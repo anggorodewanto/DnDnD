@@ -993,3 +993,33 @@ rolls, no mutations; logged for narrative continuity only._
   for him.** When initiative reaches the **Wight**, its turn is run from the combat workspace (its HP/AC kept
   secret; players roll their own saves). **Watch for Vale's *hold person* — it FAILS on the undead keeper**
   (telegraph the first attempt). Reserve husks held off-board unless the fight proves too easy.
+
+### Round 1 plays out — Forge advances + rages, keeper draws first blood (06-30)
+
+- **Forge's turn (R1, ~8:11 PM 06-29):** moved up to **F4** (closing the gap toward the keeper) and **entered a
+  Rage** (bonus action) — but **did not attack** (the keeper was still out of melee reach) and took no damage.
+  By RAW his rage therefore **lapsed at the end of his turn** (rage ends if, by turn's end, you haven't attacked
+  a hostile or taken damage); the engine cleared `is_raging` accordingly. ⚠️ **The bot posted no "rage ended"
+  notice**, so the player isn't told his rage dropped (and the keeper's next hit then landed in full, not
+  halved). **Fixed live → ISSUE-041 (FIXED):** `notifyRageExpired` now posts the lapse to #combat-log + writes
+  a `rage_expired` action_log row (mirrors the drop-to-0 dual-surface pattern; best-effort, parented to the
+  rager's own turn). Separately, his **rage-uses pool** had been hand-set too low at setup and was corrected
+  **1 → 2 remaining** (DM Correction, logged) — that fix **persisted across the redeploy** (`{max:3, current:2}`).
+- **Keeper's turn (R1, run 06-30 from the workspace Turn Builder):** `Run Enemy Turn — Wight` → the engine
+  pre-targeted the **nearest** PC (Forge, F4) with its **Longsword** (single attack, +4, 1d10+2 slashing,
+  reach 5ft; no movement step — the engine abstracts the close). **Review → To Hit 20 (vs Forge's AC 14) = HIT,
+  7 slashing → Confirm & Post.** Damage applied (**Forge 32 → 25/32**, taken in full — not raging), auto-logged
+  to #combat-log (`enemy_turn Wight R1`). Forge is **hurt, up, no conditions.** The keeper's HP/AC stay secret
+  (it took no damage). *(My own manual NPC roll was discarded in favour of the engine's — a first `$RANDOM`
+  attempt mis-fired with correlated subshell seeds, re-rolled clean on `/dev/urandom`, then superseded entirely
+  by the Turn Builder's roll.)*
+- **DM beat — narrated to #the-story (read-aloud, 8:18 AM 06-30):** Forge coming off the threshold into the
+  grave-cold, the keeper crossing the dark without seeming to walk and laying its rimed blade across his
+  side — *the cold drives in like deep winter and where the edge lands the warmth just leaves* (telegraphing
+  the necrotic theme without a numeric leak) — *he's hurt and standing;* then the spotlight handed to **Vale.**
+  Story is back in **lockstep** with the board.
+- **Turn advanced → Vale (R1).** It is now **Vale's turn (PC)** — the bot has prompted her in #your-turn;
+  **awaiting her slash command; not rolling/acting for her.** Reminder still standing: her ***hold person*
+  FAILS** on the undead keeper (telegraph the first attempt); her tools that bite are *shatter / hellish rebuke
+  / chill touch* (DC 13). Keeper's token left at its dais on the map (cosmetic — the adjacent-move was descoped
+  after a coordinate misclick; reposition on its next turn).

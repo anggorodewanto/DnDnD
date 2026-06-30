@@ -19,6 +19,10 @@ const (
 	// going unconscious / an NPC being defeated) so the DM Console timeline
 	// records the drop alongside the hit that caused it.
 	actionTypeDowned = "downed"
+	// actionTypeRageExpired marks a Barbarian's end-of-turn rage lapse (raged
+	// but neither attacked nor took damage this round, so 5e ends it) so the
+	// silent drop is visible on the DM Console timeline, not just in the DB.
+	actionTypeRageExpired = "rage_expired"
 )
 
 // recordCombatAction best-effort persists a player-driven combat action to

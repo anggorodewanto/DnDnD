@@ -344,6 +344,30 @@ func (s *Service) maybeEndRageOnTurnEnd(ctx context.Context, combatantID uuid.UU
 	}
 	cleared := ClearRageFromCombatant(c)
 	_, _ = s.persistRageState(ctx, cleared)
+	s.notifyRageExpired(ctx, c)
+}
+
+// rageEndReasonNoActivity is the reason shown when a rage lapses at end of turn
+// because the barbarian neither attacked a hostile nor took damage this round.
+const rageEndReasonNoActivity = "no attack or damage this round"
+
+// notifyRageExpired best-effort records an end-of-turn rage lapse (ISSUE-041) to
+// both the encounter's #combat-log channel and the DM Console timeline
+// (action_log), so a silently dropped rage is visible in lockstep with the turn
+// that ended it — players were never told their rage fell off. Pure
+// observability, mirroring notifyDroppedToZero: the action_log parent is the
+// encounter's active turn (the rager's own turn, still current at the
+// AdvanceTurn end-hook), and every error is swallowed so a logging miss never
+// blocks turn flow.
+func (s *Service) notifyRageExpired(ctx context.Context, c refdata.Combatant) {
+	msg := FormatRageEnd(c.DisplayName, rageEndReasonNoActivity)
+	s.postCombatLog(ctx, c.EncounterID, msg)
+
+	enc, err := s.store.GetEncounter(ctx, c.EncounterID)
+	if err != nil || !enc.CurrentTurnID.Valid {
+		return
+	}
+	s.recordCombatAction(ctx, enc.CurrentTurnID.UUID, c.EncounterID, c.ID, uuid.NullUUID{}, actionTypeRageExpired, msg)
 }
 
 // EndRage handles the /bonus end-rage command.
