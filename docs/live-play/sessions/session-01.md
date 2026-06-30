@@ -1023,3 +1023,23 @@ rolls, no mutations; logged for narrative continuity only._
   FAILS** on the undead keeper (telegraph the first attempt); her tools that bite are *shatter / hellish rebuke
   / chill touch* (DC 13). Keeper's token left at its dais on the map (cosmetic — the adjacent-move was descoped
   after a coordinate misclick; reposition on its next turn).
+
+### DM ruling — Forge's wasted rage refunded (06-30)
+
+- **Player undo request (dm-queue `f364b61d`, 01:43 UTC 06-30):** Forge's player asked to *"undo rage since i
+  just realize my movement doesn't reach the wight."* His R1 move to **F4** left him **15 ft** from the keeper
+  at **G1** (Chebyshev 3 = melee out of reach), so the rage he spent **lapsed instantly with zero benefit** and
+  he ate the keeper's **7 in full** (not halved). An honest grid-reach misjudgment — easy to miss on a text map.
+- **Ruling: GRANTED — refund the rage charge only** (confirmed with the human DM). Minimal-disruption fix: he
+  keeps his **F4** position and the keeper's hit **stands**; just the wasted charge comes back. No turn rewind
+  (the keeper's turn + Vale's turn-start are left intact).
+- **Executed via the dashboard combat workspace** (not raw SQL): select Forge → **Manual Override → Feature Uses
+  → Edit Feature Uses** → rage `current` **2 → 3**, with a reason. This is the **in-combat** feature-uses
+  override (`POST /api/combat/{enc}/override/character/{char}/feature-uses`) — the inverse of the 409-guarded
+  out-of-combat overview editor (ISSUE-040). It **audited** a `dm_override` action_log row and **auto-posted a
+  #combat-log correction** (*"⚠️ DM Correction: Forge Anvilbearer rage uses set to 3 …"*, player-👍'd). DB
+  confirms `{max:3, current:3}`.
+- **Queue cleaned:** the undo notification **resolved** with a player-facing outcome (*"Granted — rage charge
+  refunded (3/3) … you're still at F4 and the blow you took stands; rage next round once you're adjacent"*);
+  the **stale `enemy_turn_ready` (Wight)** — the turn already run above — was also cleared. **DM Queue now
+  empty.** No #the-story narration (a rules correction, not a fiction beat). **Still Vale's turn.**
