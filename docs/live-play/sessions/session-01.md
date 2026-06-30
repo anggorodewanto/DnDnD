@@ -1066,3 +1066,28 @@ rolls, no mutations; logged for narrative continuity only._
 - **Narrated to #the-story** (read-aloud, ~11:25 AM, Post History confirmed): the thunderclap rocks the keeper —
   rime blasts off its armor, it slams the wall to stay upright but **does not fall**, and turns its glare back on the
   party. **Still Vale's turn** (action spent on Shatter; bonus action + move + reaction remain) — await her next call.
+
+### Round 2 — the keeper whiffs, a reaction-prep bug, and a reaction-execution gap (06-30)
+
+- **Combat advanced to Round 2.** By the time it came back around: Forge's **Greataxe hit the keeper (16)** and Vale
+  landed a **dagger (1)**, dropping the keeper to **badly wounded** (HP secret; live total → DM Console). Then it was
+  the **keeper's R2 turn**.
+- **Vale readied a reaction — and found a bug.** Before her R2 turn she ran `/reaction declare hellish rebuke if
+  attacked`. The bot confirmed it **only to her (ephemeral)** — the rest of the table + the DM never saw it. **ISSUE-045
+  FIXED:** a declared reaction is public table info (like `/action ready`), so `/reaction declare`'s **success** now
+  posts publicly (`⚡ <name> readied a reaction: <desc>`); errors/validation stay ephemeral. TDD (mock now captures
+  `Flags`); commit `cd6d360`, pushed + redeployed. The bot fix is live for the *next* declaration (the already-declared
+  one stays as it was posted).
+- **Keeper's R2 turn run from the Turn Builder.** The builder surfaced Vale's readied reaction as a **Pending Reactions**
+  heads-up, then planned the only legal action: **Longsword vs Forge** (the keeper at G1 is adjacent to Forge at F1; Vale
+  at G5 is 20 ft away, outside its 5 ft reach — and fleeing Forge to chase her would eat a raging-greataxe OA at low HP).
+  Rolled **11 to hit vs AC 14 → MISS** (posted to #combat-log). Because it struck **Forge, not Vale**, her "if attacked"
+  reaction **did not trigger** (still active). **Ended the turn → now Vale's turn (R2).** Narrated the whiff to
+  #the-story (read-aloud, 1:33 PM, Post History confirmed): the sword screeches off Forge's guard, and the keeper's gaze
+  fixes on Vale.
+- **The readied reaction exposed a real gap — ISSUE-046 OPEN.** Investigated whether the dashboard can actually
+  *execute* hellish rebuke if it fires: it can't, as one flow. The declaration is opaque free text; the "Resolve" button
+  is pure bookkeeping (`reaction_used=true`, no damage/save/slot); `/cast` is turn-gated so Vale can't cast it on the
+  attacker's turn; and the one-click damage control (`override/hp`) would leak the keeper's secret HP. The spell *is*
+  modelled (2d10 fire, DEX save half). Today the DM hand-assembles it; proposed fix = an "execute reaction spell"
+  resolver mirroring the monster-save resolver (ISSUE-043). Logged for a future build — **does not block play**.
