@@ -1043,3 +1043,26 @@ rolls, no mutations; logged for narrative continuity only._
   refunded (3/3) … you're still at F4 and the blow you took stands; rage next round once you're adjacent"*);
   the **stale `enemy_turn_ready` (Wight)** — the turn already run above — was also cleared. **DM Queue now
   empty.** No #the-story narration (a rules correction, not a fiction beat). **Still Vale's turn.**
+
+### Vale's Shatter on the keeper + two bugs found & fixed live (06-30)
+
+- **Vale cast Shatter (L2, pact slot) at the keeper** (`/cast`, ~10:04 AM). The in-character bot line wrongly read
+  *"Used 2nd-level slot (0 remaining)"* — her sheet correctly showed **1** pact slot left. **ISSUE-042 FIXED:**
+  `FormatAoECastLog` read the leveled-slot field instead of the pact field (single-target `FormatCastLog` already
+  branched correctly); display-only, no state harmed. The wrong line is frozen in Discord history (pre-fix cast).
+- **The save needed resolving (the keeper is a monster) and there was no DM path for it.** Built one — **ISSUE-043
+  FIXED:** `ResolveMonsterPendingSave` + `GET/POST /api/combat/{enc}/pending-saves[/{id}/resolve]`, surfaced in the
+  DM Console `pending[]` and a dashboard resolver (in + out of combat). Engine rolls `d20 + creature save mod` vs DC,
+  applies half-on-save, audits + posts #combat-log without leaking HP. (Route-drift sub-bug: new routes added to
+  `RegisterRoutes` but not the production mount → 404; fixed + added a parity guard test.)
+- **Resolving it exposed a CRITICAL pre-existing bug — ISSUE-044 FIXED:** AoE save-for-half damage *never applied in
+  production* (the apply gate listed `pending`-only saves, so the last-resolved save released nothing). Affected the
+  player `/save` path too; masked by a unit-test mock. Fixed the gate (list all rows) + added an `applied` lifecycle
+  (idempotent, recoverable). DB-backed regression test added.
+- **Resolution (fair + by the book):** the keeper rolled its CON save **in the open** — **nat 1 +3 = 4 vs DC 13 →
+  FAIL** (posted to #combat-log before the apply bug was fixed, so the failure is public and **stands — no re-roll**).
+  After the fix, the stuck `rolled` save was **recovered** (re-driven, no re-roll): engine rolled **3d8 = 16 thunder**,
+  applied in full (failed save, no thunder resist). **Keeper took 16** (HP secret; live total → DM Console).
+- **Narrated to #the-story** (read-aloud, ~11:25 AM, Post History confirmed): the thunderclap rocks the keeper —
+  rime blasts off its armor, it slams the wall to stay upright but **does not fall**, and turns its glare back on the
+  party. **Still Vale's turn** (action spent on Shatter; bonus action + move + reaction remain) — await her next call.

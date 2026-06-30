@@ -82,6 +82,7 @@ fall back to API calls with the session cookie).
 | End combat | encounter → End | `POST /api/combat/{encounterID}/end` |
 | Adjust HP / conditions / position | combat workspace | `PATCH /api/combat/{encID}/combatants/{cID}/{hp,conditions,position}` (`main.go:512-516`) |
 | Advance turn / resolve pending / undo | combat workspace | DM dashboard routes (`main.go:519-532`) |
+| **Resolve a monster's AoE save** (Shatter/Fireball/etc.) | combat workspace "Pending monster saves" → **Resolve save**, or DM Console `pending[]` → **Resolve** | `GET /api/combat/{encID}/pending-saves`, `POST …/pending-saves/{saveID}/resolve` (`main.go` mount; `internal/combat/pending_save_handler.go`) |
 
 **Make a map with the dashboard map tools (no file needed) — preferred.** Open the
 **Maps** tab → **+ New Map**, set the **Name** and **Width × Height (squares)**, click
@@ -96,6 +97,40 @@ paint a **Spawn Zone** at the PCs' entry edge so encounter token placement has a
 *Reimport Tiled* in the editor); a sample lives at `docs/testdata/sample.tmj` (10×10).
 Existing maps for this campaign are listed in [`game-state.md`](game-state.md) "Maps" — reuse
 or build alongside them.
+
+### Resolving a monster's saving throw (AoE save spells)
+
+When a PC casts an **AoE save-for-half** spell (Shatter, Fireball, Thunderwave…)
+the app records one `pending_saves` row per creature in the area and **holds the
+damage** until every target's save is resolved. Two resolution paths, by who owns
+the target:
+
+- **Player targets roll their own** save in Discord with **`/save`** (never roll
+  for them — see [`dm-rules.md`](dm-rules.md)).
+- **Monsters / NPCs are resolved by the DM** through the dashboard. The DM does
+  **not** hand-roll the d20 — the engine rolls `d20 + the creature's save
+  modifier` (from its stat block `saving_throws`, else the ability mod) vs the
+  spell DC, then applies the AoE damage (half on a success).
+
+**How:** open the **Combat** workspace's *Pending monster saves* section (in
+combat) or the **DM Console** `pending[]` list (works out of combat too), and
+click **Resolve** on each monster save. Endpoints, if you need to verify/drive by
+API with the session cookie: `GET /api/combat/{encID}/pending-saves` lists the
+unresolved monster saves; `POST /api/combat/{encID}/pending-saves/{saveID}/resolve`
+(empty `{}` body) rolls + applies and returns `{natural_roll, save_bonus, total,
+success, damage}`. It posts the result to `#combat-log` as the roll vs DC + damage
+dealt — **never the monster's HP** (enemy HP/AC stay secret).
+
+**Gotchas worth knowing (so you don't re-derive them):**
+
+- **Damage lands only after the *last* target's save.** One unresolved monster
+  save blocks the whole blast (the apply gate waits for all). If a spell "did no
+  damage," check for an unresolved save and resolve it.
+- **Idempotent + recoverable.** Re-POSTing resolve on an already-rolled save does
+  **not** re-roll — it just (re)applies the stored result, then locks the row
+  (`applied`). A second resolve after that returns `409`.
+- Player-owned saves return `409` from this endpoint on purpose — they belong in
+  Discord `/save`.
 
 ## 5. Onboarding players (one or many)
 
