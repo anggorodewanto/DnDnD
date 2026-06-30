@@ -441,6 +441,7 @@ func TestDBStore_GetCharacterSlotsContext_ParsesSlots(t *testing.T) {
 		CampaignID:     camp,
 		SpellSlots:     pqtype.NullRawMessage{RawMessage: []byte(`{"1":{"current":2,"max":4}}`), Valid: true},
 		PactMagicSlots: pqtype.NullRawMessage{RawMessage: []byte(`{"slot_level":3,"current":1,"max":2}`), Valid: true},
+		FeatureUses:    pqtype.NullRawMessage{RawMessage: []byte(`{"rage":{"current":1,"max":3,"recharge":"long"}}`), Valid: true},
 	}}
 	store := NewDBStore(fake)
 	got, err := store.GetCharacterSlotsContext(context.Background(), uuid.New())
@@ -455,6 +456,10 @@ func TestDBStore_GetCharacterSlotsContext_ParsesSlots(t *testing.T) {
 	}
 	if got.PactMagicSlots.SlotLevel != 3 || got.PactMagicSlots.Current != 1 {
 		t.Fatalf("pact = %+v", got.PactMagicSlots)
+	}
+	// featureUsesValue passes the raw feature_uses JSON straight through.
+	if !strings.Contains(string(got.FeatureUses), `"rage"`) {
+		t.Fatalf("feature_uses = %s", got.FeatureUses)
 	}
 }
 

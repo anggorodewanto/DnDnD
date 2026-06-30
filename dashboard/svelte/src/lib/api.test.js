@@ -12,6 +12,8 @@ import {
   overrideCombatantInitiative,
   overrideCharacterSlots,
   getCharacterSlots,
+  getCharacterFeatureUses,
+  overrideCharacterFeatureUses,
   saveCharacterSlots,
   updateEncounterDisplayName,
   getEncounter,
@@ -695,6 +697,58 @@ describe('overrideCharacterSlots', () => {
       text: () => Promise.resolve('no active turn'),
     });
     await expect(overrideCharacterSlots('enc-1', 'char-1', {})).rejects.toThrow(/no active turn/);
+  });
+});
+
+describe('getCharacterFeatureUses', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('GETs the per-character feature-uses endpoint and returns parsed JSON', async () => {
+    const body = {
+      feature_uses: { rage: { current: 1, max: 3, recharge: 'long' } },
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+    const result = await getCharacterFeatureUses('char-1');
+    expect(result).toEqual(body);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/character-overview/char-1/feature-uses');
+    // A bare GET (no explicit method/body).
+    expect(options).toBeUndefined();
+  });
+
+  it('throws the server text on a non-2xx', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden'),
+    });
+    await expect(getCharacterFeatureUses('char-1')).rejects.toThrow(/forbidden/);
+  });
+});
+
+describe('overrideCharacterFeatureUses', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs the single-feature override body to the in-combat feature-uses endpoint', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    const payload = { feature: 'rage', current: 2, reason: 'spent' };
+    const result = await overrideCharacterFeatureUses('enc-1', 'char-1', payload);
+    expect(result).toEqual({ status: 'ok' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/character/char-1/feature-uses');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('throws the server text on a non-2xx (e.g. 404 no active turn)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('no active turn'),
+    });
+    await expect(
+      overrideCharacterFeatureUses('enc-1', 'char-1', { feature: 'rage', current: 2 }),
+    ).rejects.toThrow(/no active turn/);
   });
 });
 

@@ -12,6 +12,8 @@
     overrideCombatantInitiative,
     overrideCharacterSlots,
     getCharacterSlots,
+    getCharacterFeatureUses,
+    overrideCharacterFeatureUses,
     updateEncounterDisplayName,
     endCombat,
     combatMapUrl,
@@ -48,6 +50,7 @@
   import ActionLogViewer from './ActionLogViewer.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
   import SlotEditor from './SlotEditor.svelte';
+  import FeatureUsesEditor from './FeatureUsesEditor.svelte';
 
   let { campaignId, onopenturnbuilder } = $props();
 
@@ -199,6 +202,15 @@
   let slotEditorBusy = $state(false);
   let slotEditorError = $state('');
 
+  // In-combat feature-uses override (e.g. Barbarian rage uses). The DM opens
+  // the FeatureUsesEditor, seeded from a fresh GET of the character's current
+  // feature uses; each changed feature is saved through the single-feature
+  // in-combat override endpoint.
+  let featureUsesEditorOpen = $state(false);
+  let featureUsesEditorSeed = $state(null);
+  let featureUsesEditorBusy = $state(false);
+  let featureUsesEditorError = $state('');
+
   // DM edits the player-facing display name for the active encounter.
   // Persists via PATCH /api/combat/{id}/display-name, then patches local
   // state so the header, tabs and overview refresh immediately without a
@@ -346,6 +358,50 @@
       dmOverrideMessage = 'Override failed: ' + e.message;
     } finally {
       slotEditorBusy = false;
+    }
+  }
+
+  // Open the FeatureUsesEditor for the selected combatant, seeding it from a
+  // fresh read of the character's current limited-use feature resources.
+  async function openFeatureUsesEditor() {
+    if (!selectedCombatant?.character_id) return;
+    featureUsesEditorError = '';
+    dmOverrideMessage = '';
+    try {
+      const data = await getCharacterFeatureUses(selectedCombatant.character_id);
+      featureUsesEditorSeed = data.feature_uses || null;
+      featureUsesEditorOpen = true;
+    } catch (e) {
+      dmOverrideMessage = 'Failed to load feature uses: ' + e.message;
+    }
+  }
+
+  function closeFeatureUsesEditor() {
+    featureUsesEditorOpen = false;
+    featureUsesEditorError = '';
+  }
+
+  async function handleOverrideFeatureUses(payload) {
+    if (!activeEncounter || !selectedCombatant?.character_id) return;
+    featureUsesEditorBusy = true;
+    featureUsesEditorError = '';
+    dmOverrideMessage = '';
+    try {
+      for (const change of payload.changes) {
+        await overrideCharacterFeatureUses(activeEncounter.id, selectedCombatant.character_id, {
+          feature: change.feature,
+          current: change.current,
+          reason: payload.reason,
+        });
+      }
+      dmOverrideMessage = 'Feature uses override saved.';
+      featureUsesEditorOpen = false;
+      await loadWorkspace();
+    } catch (e) {
+      featureUsesEditorError = e.message;
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    } finally {
+      featureUsesEditorBusy = false;
     }
   }
 
@@ -1317,6 +1373,21 @@
                         errorMessage={slotEditorError}
                         onSave={handleOverrideSlots}
                         onCancel={closeSlotEditor}
+                      />
+                    {/if}
+                  </fieldset>
+
+                  <fieldset>
+                    <legend>Feature Uses</legend>
+                    {#if !featureUsesEditorOpen}
+                      <button onclick={openFeatureUsesEditor} data-testid="override-feature-uses-open-btn">Edit Feature Uses</button>
+                    {:else}
+                      <FeatureUsesEditor
+                        featureUses={featureUsesEditorSeed}
+                        busy={featureUsesEditorBusy}
+                        errorMessage={featureUsesEditorError}
+                        onSave={handleOverrideFeatureUses}
+                        onCancel={closeFeatureUsesEditor}
                       />
                     {/if}
                   </fieldset>

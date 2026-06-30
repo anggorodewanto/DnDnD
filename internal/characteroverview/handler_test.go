@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/auth"
+	"github.com/ab/dndnd/internal/character"
 )
 
 func newTestHandler(store Store) *Handler {
@@ -152,6 +154,110 @@ type fakeCampaignVerifier struct {
 
 func (f *fakeCampaignVerifier) IsCampaignDM(_ context.Context, _, campaignID string) (bool, error) {
 	return f.ownedCampaign == campaignID, nil
+}
+
+// --- GetFeatureUses: read-only feature_uses for editor prefill (ISSUE-039) ---
+
+func TestGetFeatureUses_HappyPath(t *testing.T) {
+	raw := json.RawMessage(`{"rage":{"current":1,"max":3,"recharge":"long"}}`)
+	h := newTestHandler(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New(), FeatureUses: raw}})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/"+uuid.New().String()+"/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		FeatureUses map[string]character.FeatureUse `json:"feature_uses"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	rage, ok := resp.FeatureUses["rage"]
+	if !ok || rage.Current != 1 || rage.Max != 3 || rage.Recharge != "long" {
+		t.Fatalf("rage = %+v (ok=%v)", rage, ok)
+	}
+}
+
+func TestGetFeatureUses_EmptyWhenNoFeatures(t *testing.T) {
+	// A character with no limited-use features (nil feature_uses) must render
+	// an empty object, not null, so the editor seeds cleanly.
+	h := newTestHandler(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New()}})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/"+uuid.New().String()+"/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `"feature_uses":{}`) {
+		t.Fatalf("expected empty feature_uses object, got %s", body)
+	}
+}
+
+func TestGetFeatureUses_InvalidCharacterID(t *testing.T) {
+	h := newTestHandler(&fakeStore{})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/not-uuid/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestGetFeatureUses_NotFound(t *testing.T) {
+	h := newTestHandler(&fakeStore{slotsCtxErr: ErrCharacterNotFound})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/"+uuid.New().String()+"/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestGetFeatureUses_LoadError(t *testing.T) {
+	h := newTestHandler(&fakeStore{slotsCtxErr: errors.New("db down")})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/"+uuid.New().String()+"/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestGetFeatureUses_Forbidden(t *testing.T) {
+	// Verifier owns a different campaign than the character's -> 403.
+	verifier := &fakeCampaignVerifier{ownedCampaign: uuid.New().String()}
+	h := NewHandler(NewService(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New()}}), WithCampaignVerifier(verifier))
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview/"+uuid.New().String()+"/feature-uses", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d", rr.Code)
+	}
 }
 
 // silence unused import

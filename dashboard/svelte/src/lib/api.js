@@ -1120,6 +1120,37 @@ export async function overrideCharacterSlots(encounterId, characterId, payload) 
   return res.json();
 }
 
+/**
+ * Read a character's limited-use feature resources (DM prefill), e.g. Barbarian
+ * rage uses. Allowed both in and out of combat; the returned map may be empty.
+ *   GET /api/character-overview/{characterID}/feature-uses
+ * @param {string} characterId
+ * @returns {Promise<{feature_uses:Object<string,{current:number,max:number,recharge:string}>}>}
+ */
+export async function getCharacterFeatureUses(characterId) {
+  const res = await apiFetch(`/api/character-overview/${characterId}/feature-uses`);
+  return res.json();
+}
+
+/**
+ * Manually override a single character feature's remaining uses in combat
+ * (requires an active turn). One feature per request; apiFetch throws the
+ * server's response text on error (e.g. 400 unknown feature / current>max,
+ * 404 no active turn).
+ *   POST /api/combat/{encounterID}/override/character/{characterID}/feature-uses
+ * @param {string} encounterId
+ * @param {string} characterId
+ * @param {{feature:string, current:number, reason?:string}} payload
+ */
+export async function overrideCharacterFeatureUses(encounterId, characterId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/character/${characterId}/feature-uses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 // --- Narration API (Phase 100a) ---
 
 const NARRATION_BASE = '/api/narration';

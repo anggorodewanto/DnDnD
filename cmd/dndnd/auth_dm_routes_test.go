@@ -177,6 +177,7 @@ func dmOnlyRouteTable() []dmOnlyRoute {
 		{http.MethodPost, "/api/combat/" + encID + "/override/combatant/" + combID + "/conditions", `{}`},
 		{http.MethodPost, "/api/combat/" + encID + "/override/combatant/" + combID + "/exhaustion", `{}`},
 		{http.MethodPost, "/api/combat/" + encID + "/override/character/" + charID + "/slots", `{}`},
+		{http.MethodPost, "/api/combat/" + encID + "/override/character/" + charID + "/feature-uses", `{}`},
 		{http.MethodPost, "/api/combat/" + encID + "/combatants/" + combID + "/concentration/drop", `{}`},
 		{http.MethodPatch, "/api/combat/" + encID + "/combatants/" + combID + "/hp", `{}`},
 		{http.MethodDelete, "/api/combat/" + encID + "/combatants/" + combID, ""},

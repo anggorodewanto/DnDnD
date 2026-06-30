@@ -156,7 +156,17 @@ func (s *DBStore) GetCharacterSlotsContext(ctx context.Context, characterID uuid
 		InActiveCombat: inCombat,
 		SpellSlots:     spell,
 		PactMagicSlots: parsePactSlotsValue(ch.PactMagicSlots),
+		FeatureUses:    featureUsesValue(ch.FeatureUses),
 	}, nil
+}
+
+// featureUsesValue returns the raw feature_uses JSON, or nil when the column is
+// NULL/empty. Passed straight through to the GetFeatureUses response.
+func featureUsesValue(fu pqtype.NullRawMessage) json.RawMessage {
+	if !fu.Valid || len(fu.RawMessage) == 0 {
+		return nil
+	}
+	return fu.RawMessage
 }
 
 // UpdateCharacterSlots persists a resolved slot edit, touching only the stores

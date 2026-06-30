@@ -48,6 +48,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/character-overview/{characterID}/status", h.UpdateStatus)
 	r.Get("/api/character-overview/{characterID}/slots", h.GetSlots)
 	r.Post("/api/character-overview/{characterID}/slots", h.UpdateSlots)
+	r.Get("/api/character-overview/{characterID}/feature-uses", h.GetFeatureUses)
 }
 
 // authorizeDM reports whether the request's Discord user owns the given campaign.
@@ -188,6 +189,49 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, slotsResponseFrom(sctx.SpellSlots, sctx.PactMagicSlots))
+}
+
+// featureUsesResponse is the read-only payload for GetFeatureUses.
+type featureUsesResponse struct {
+	FeatureUses map[string]character.FeatureUse `json:"feature_uses"`
+}
+
+// GetFeatureUses returns a character's limited-use feature pools (e.g. Barbarian
+// rage), keyed by feature name. Reads are allowed in or out of combat; it backs
+// the in-combat feature-use override editor's prefill. DM-authorized via the
+// owning campaign. A character with no such features yields an empty object.
+func (h *Handler) GetFeatureUses(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetSlotsContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if !h.authorizeDM(ctx, sctx.CampaignID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	uses := map[string]character.FeatureUse{}
+	if len(sctx.FeatureUses) > 0 {
+		if err := json.Unmarshal(sctx.FeatureUses, &uses); err != nil {
+			http.Error(w, "failed to parse feature_uses", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, featureUsesResponse{FeatureUses: uses})
 }
 
 // UpdateSlots applies a DM's out-of-combat edit to a character's spell and/or

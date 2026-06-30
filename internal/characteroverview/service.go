@@ -118,11 +118,17 @@ type PersistStatusParams struct {
 
 // SlotsContext carries the persistence facts the handler needs to authorize and
 // apply an out-of-combat spell/pact slot edit (and to render the current values).
+//
+// FeatureUses carries the raw feature_uses JSON ({"rage":{"current":1,"max":3,
+// "recharge":"long"}}); it backs the read-only GetFeatureUses endpoint that
+// prefills the in-combat feature-use override editor. May be nil when the
+// character has no limited-use features.
 type SlotsContext struct {
 	CampaignID     uuid.UUID
 	InActiveCombat bool
 	SpellSlots     map[int]character.SlotInfo
 	PactMagicSlots character.PactMagicSlots
+	FeatureUses    json.RawMessage
 }
 
 // SlotsUpdate is the validated input for an out-of-combat slot edit. A nil

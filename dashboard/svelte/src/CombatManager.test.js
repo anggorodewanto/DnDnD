@@ -168,3 +168,37 @@ describe('CombatManager spell/pact slot override', () => {
     expect(fn[0]).toContain('slotEditorError = e.message');
   });
 });
+
+describe('CombatManager feature-uses override', () => {
+  // Mirrors the spell/pact slot override: a reusable FeatureUsesEditor seeded
+  // from a fresh GET and saved one feature at a time through the in-combat
+  // override endpoint. The fetch behaviour is covered in lib/api.test.js;
+  // here we assert the .svelte wiring contract.
+  it('mounts the reusable FeatureUsesEditor for a player combatant', () => {
+    expect(src).toContain("import FeatureUsesEditor from './FeatureUsesEditor.svelte'");
+    expect(src).toMatch(/\{#if selectedCombatant\.character_id\}[\s\S]*?<FeatureUsesEditor/);
+    expect(src).toContain('data-testid="override-feature-uses-open-btn"');
+    expect(src).toMatch(/<FeatureUsesEditor[\s\S]*?onSave=\{handleOverrideFeatureUses\}/);
+    expect(src).toMatch(/<FeatureUsesEditor[\s\S]*?onCancel=\{closeFeatureUsesEditor\}/);
+  });
+
+  it('seeds the editor from a fresh getCharacterFeatureUses read', () => {
+    const fn = src.match(/async function openFeatureUsesEditor\(\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('getCharacterFeatureUses(selectedCombatant.character_id)');
+    expect(fn[0]).toContain('featureUsesEditorSeed = data.feature_uses');
+  });
+
+  it('saves each change through overrideCharacterFeatureUses then reloads the workspace', () => {
+    const fn = src.match(/async function handleOverrideFeatureUses\(payload\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('for (const change of payload.changes)');
+    expect(fn[0]).toContain('overrideCharacterFeatureUses(activeEncounter.id, selectedCombatant.character_id,');
+    expect(fn[0]).toContain('feature: change.feature');
+    expect(fn[0]).toContain('current: change.current');
+    expect(fn[0]).toContain('reason: payload.reason');
+    expect(fn[0]).toContain("dmOverrideMessage = 'Feature uses override saved.'");
+    expect(fn[0]).toContain('await loadWorkspace()');
+    expect(fn[0]).toContain('featureUsesEditorError = e.message');
+  });
+});

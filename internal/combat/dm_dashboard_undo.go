@@ -768,3 +768,127 @@ func requestSlotsPayload(req overrideSlotsRequest) json.RawMessage {
 	b, _ := json.Marshal(snap)
 	return b
 }
+
+// overrideFeatureUsesRequest is the JSON body for
+// POST .../override/character/{characterID}/feature-uses. Feature names a
+// limited-use class resource in the character's feature_uses map (e.g. "rage");
+// Current is the new remaining-uses value. Current is a pointer so an omitted
+// field (nil) is rejected while an explicit 0 (no uses left) is honoured. The
+// stored Max + Recharge metadata on the row is preserved.
+type overrideFeatureUsesRequest struct {
+	Feature string `json:"feature"`
+	Current *int   `json:"current"`
+	Reason  string `json:"reason"`
+}
+
+// characterFeatureUseSnapshot is the before/after audit shape for a feature-use
+// override: the feature key plus its remaining uses and the (preserved) max.
+type characterFeatureUseSnapshot struct {
+	Feature string `json:"feature"`
+	Current int    `json:"current"`
+	Max     int    `json:"max"`
+}
+
+// snapshotFeatureUse renders a feature-use audit snapshot as JSON.
+func snapshotFeatureUse(feature string, current, max int) json.RawMessage {
+	b, _ := json.Marshal(characterFeatureUseSnapshot{Feature: feature, Current: current, Max: max})
+	return b
+}
+
+// errInvalidFeatureOverride marks a feature-use override that is well-formed
+// JSON but semantically invalid for the target character — the feature is not
+// present in its feature_uses map, or Current exceeds the feature's Max. Mapped
+// to HTTP 400 (the request itself is bad, not a server fault).
+var errInvalidFeatureOverride = errors.New("invalid feature-use override")
+
+// OverrideCharacterFeatureUses handles
+// POST .../override/character/{characterID}/feature-uses. It sets a character's
+// remaining uses of a limited-use feature (e.g. Barbarian rage) mid-combat,
+// preserving the stored Max/Recharge metadata via Service.SetFeaturePool, and
+// audits the change as a dm_override (action_log + #combat-log).
+//
+// Body shape is validated BEFORE the turn lock so malformed/invalid requests
+// return 400. Inside the lock the character is read once: an unknown feature or
+// an out-of-range Current also map to 400 (via errInvalidFeatureOverride); only
+// real DB failures map to 500.
+func (h *DMDashboardHandler) OverrideCharacterFeatureUses(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := parseEncounterID(r)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character ID", http.StatusBadRequest)
+		return
+	}
+
+	var req overrideFeatureUsesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if req.Feature == "" {
+		http.Error(w, "feature is required", http.StatusBadRequest)
+		return
+	}
+	if req.Current == nil {
+		http.Error(w, "current is required", http.StatusBadRequest)
+		return
+	}
+	if *req.Current < 0 {
+		http.Error(w, "current must not be negative", http.StatusBadRequest)
+		return
+	}
+
+	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, "no active turn", http.StatusNotFound)
+		return
+	}
+
+	if err := h.withTurnLock(r.Context(), turn.ID, func() error {
+		char, err := h.svc.store.GetCharacter(r.Context(), characterID)
+		if err != nil {
+			return fmt.Errorf("getting character: %w", err)
+		}
+
+		featureUses, oldCurrent, err := ParseFeatureUses(char, req.Feature)
+		if err != nil {
+			return fmt.Errorf("parsing feature_uses: %w", err)
+		}
+		fu, ok := featureUses[req.Feature]
+		if !ok {
+			return fmt.Errorf("%w: %s has no %q feature", errInvalidFeatureOverride, char.Name, req.Feature)
+		}
+		// Max < 0 means an unlimited pool (e.g. a level-20 barbarian's rage):
+		// skip the upper-bound check in that case.
+		if fu.Max >= 0 && *req.Current > fu.Max {
+			return fmt.Errorf("%w: current %d exceeds %s max of %d", errInvalidFeatureOverride, *req.Current, req.Feature, fu.Max)
+		}
+
+		before := snapshotFeatureUse(req.Feature, oldCurrent, fu.Max)
+		if _, err := h.svc.SetFeaturePool(r.Context(), char, req.Feature, featureUses, *req.Current); err != nil {
+			return fmt.Errorf("setting feature pool: %w", err)
+		}
+		after := snapshotFeatureUse(req.Feature, *req.Current, fu.Max)
+
+		// action_log.actor_id is NOT NULL FK to combatants(id); this is a
+		// character-level mutation, so attribute the audit row to the active
+		// turn's combatant (mirrors OverrideCharacterSlots).
+		h.logOverride(r.Context(), turn.ID, encounterID, turn.CombatantID, req.Reason, before, after)
+
+		base := fmt.Sprintf("⚠️ **DM Correction:** %s %s uses set to %d", char.Name, req.Feature, *req.Current)
+		h.postCorrection(r.Context(), encounterID, correctionMsg(base, req.Reason))
+		return nil
+	}); err != nil {
+		if errors.Is(err, errInvalidFeatureOverride) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

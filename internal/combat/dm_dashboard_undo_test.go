@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1482,4 +1483,213 @@ func TestOverrideCharacterSlots_CapturesPactMagicInBeforeState(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.JSONEq(t, `{"spell_slots":null,"pact_magic_slots":{"slot_level":2,"current":1,"max":2}}`, string(loggedBefore))
+}
+
+// --- OverrideCharacterFeatureUses: limited-use resource correction (ISSUE-039) ---
+//
+// Set a character's remaining uses of a limited-use feature (e.g. Barbarian
+// rage) mid-combat, preserving the stored Max/Recharge metadata. Mirrors the
+// slots override: validate body shape -> 400; no active turn -> 404; feature
+// unknown for this character or current>max -> 400; DB failures -> 500.
+
+// charWithRage builds a character whose feature_uses carries a rage row.
+func charWithRage(id uuid.UUID, current, max int) refdata.Character {
+	raw := fmt.Sprintf(`{"rage":{"current":%d,"max":%d,"recharge":"long"}}`, current, max)
+	return refdata.Character{
+		ID:          id,
+		Name:        "Forge Anvilbearer",
+		FeatureUses: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(raw)},
+	}
+}
+
+func TestOverrideCharacterFeatureUses_HappyPath(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+
+	var got refdata.UpdateCharacterFeatureUsesParams
+	var loggedBefore, loggedAfter json.RawMessage
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return charWithRage(id, 1, 3), nil
+	}
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		got = arg
+		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedBefore, loggedAfter = arg.BeforeState, arg.AfterState
+		assert.Equal(t, "dm_override", arg.ActionType)
+		return refdata.ActionLog{}, nil
+	}
+
+	poster := &fakeCombatLogPoster{}
+	r := newDMDashboardRouterWithPoster(store, poster)
+
+	body := `{"feature":"rage","current":2,"reason":"DM correcting under-set rage uses"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.True(t, got.FeatureUses.Valid)
+	// New current persisted; Max + Recharge metadata preserved.
+	assert.Contains(t, string(got.FeatureUses.RawMessage), `"current":2`)
+	assert.Contains(t, string(got.FeatureUses.RawMessage), `"max":3`)
+	assert.Contains(t, string(got.FeatureUses.RawMessage), `"recharge":"long"`)
+	// Audit before/after diff.
+	assert.JSONEq(t, `{"feature":"rage","current":1,"max":3}`, string(loggedBefore))
+	assert.JSONEq(t, `{"feature":"rage","current":2,"max":3}`, string(loggedAfter))
+
+	calls := poster.Calls()
+	require.Len(t, calls, 1)
+	assert.Contains(t, calls[0].Message, "Forge Anvilbearer")
+	assert.Contains(t, calls[0].Message, "rage")
+	assert.Contains(t, calls[0].Message, "DM correcting under-set rage uses")
+}
+
+func TestOverrideCharacterFeatureUses_InvalidEncounterID(t *testing.T) {
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/not-uuid/override/character/"+uuid.New().String()+"/feature-uses", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_InvalidCharacterID(t *testing.T) {
+	encID := uuid.New()
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/not-uuid/feature-uses", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_InvalidBody(t *testing.T) {
+	encID, charID := uuid.New(), uuid.New()
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/feature-uses", strings.NewReader("not json"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_MissingFeature(t *testing.T) {
+	encID, charID := uuid.New(), uuid.New()
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/feature-uses", strings.NewReader(`{"current":2}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_MissingCurrent(t *testing.T) {
+	encID, charID := uuid.New(), uuid.New()
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_NegativeCurrent(t *testing.T) {
+	encID, charID := uuid.New(), uuid.New()
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":-1}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_UnknownFeatureForCharacter(t *testing.T) {
+	encounterID, characterID, turnID := uuid.New(), uuid.New(), uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return charWithRage(id, 1, 3), nil // has rage, not ki
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(`{"feature":"ki","current":1}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_CurrentExceedsMax(t *testing.T) {
+	encounterID, characterID, turnID := uuid.New(), uuid.New(), uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return charWithRage(id, 1, 3), nil
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":5}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_NoActiveTurn(t *testing.T) {
+	encID, charID := uuid.New(), uuid.New()
+	store := &mockStore{
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, errNoActiveTurn{}
+		},
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encID.String()+"/override/character/"+charID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":2}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_GetCharacterError(t *testing.T) {
+	encounterID, characterID, turnID := uuid.New(), uuid.New(), uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("db down")
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":2}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCharacterFeatureUses_UpdateError(t *testing.T) {
+	encounterID, characterID, turnID := uuid.New(), uuid.New(), uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return charWithRage(id, 1, 3), nil
+	}
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("update failed")
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":2}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// An unlimited pool (Max < 0, e.g. a level-20 barbarian's rage) skips the
+// current<=max upper-bound check, so any non-negative current is accepted.
+func TestOverrideCharacterFeatureUses_UnlimitedPool(t *testing.T) {
+	encounterID, characterID, turnID := uuid.New(), uuid.New(), uuid.New()
+	var got refdata.UpdateCharacterFeatureUsesParams
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return charWithRage(id, 1, -1), nil // unlimited
+	}
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		got = arg
+		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		return refdata.ActionLog{}, nil
+	}
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/feature-uses", strings.NewReader(`{"feature":"rage","current":99}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, string(got.FeatureUses.RawMessage), `"current":99`)
 }
