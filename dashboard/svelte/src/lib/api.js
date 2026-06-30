@@ -991,6 +991,26 @@ export async function cancelMonsterSave(encounterId, saveId) {
 }
 
 /**
+ * Restore (give back) the action the active combatant spent this turn — the
+ * missing step when a DM grants a player's undo of a misplayed action (e.g. an
+ * AoE cast whose pending saves were voided). Clears action_used / the
+ * leveled-spell flag and reseeds the turn's attack(s); leaves movement alone.
+ * apiFetch throws Error(serverText) on non-2xx (409 not-active-turn /
+ * already-available, 400 bad ids).
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - The active combatant UUID.
+ * @returns {Promise<{combatant_id:string, combatant_name:string, restored:boolean}>}
+ */
+export async function restoreCombatantAction(encounterId, combatantId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/restore-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+/**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

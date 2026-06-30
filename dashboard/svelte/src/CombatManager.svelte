@@ -17,6 +17,7 @@
     updateEncounterDisplayName,
     endCombat,
     combatMapUrl,
+    restoreCombatantAction,
   } from './lib/api.js';
   import {
     applyDamage,
@@ -239,6 +240,23 @@
       await loadWorkspace();
     } catch (e) {
       dmOverrideMessage = 'Undo failed: ' + e.message;
+    }
+  }
+
+  // ISSUE-049: hand the active combatant back the action they spent this turn —
+  // the step undo-last-action leaves out (it restores HP/position/conditions
+  // only). Used when granting a player's undo of a misplayed action so they can
+  // act again. Targets whoever is currently acting; the endpoint 409s if the
+  // action was not actually spent.
+  async function handleRestoreAction() {
+    if (!activeEncounter || !activeTurnCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      const res = await restoreCombatantAction(activeEncounter.id, activeTurnCombatant.id);
+      dmOverrideMessage = `Action restored for ${res.combatant_name || activeTurnCombatant.display_name}.`;
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Restore action failed: ' + e.message;
     }
   }
 
@@ -1318,6 +1336,14 @@
             />
             <button onclick={handleUndoLastAction} data-testid="undo-last-action-btn">
               Undo Last Action
+            </button>
+            <button
+              onclick={handleRestoreAction}
+              disabled={!activeTurnCombatant}
+              title="Give the active combatant back the action they spent this turn (e.g. to grant an undo of a misplayed cast)"
+              data-testid="restore-action-btn"
+            >
+              Restore Action{activeTurnCombatant ? ` — ${activeTurnCombatant.display_name}` : ''}
             </button>
           </div>
           <button

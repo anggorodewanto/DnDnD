@@ -71,6 +71,8 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/pending-saves/{saveID}/resolve", h.ResolveMonsterPendingSave)
 		// ISSUE-048: void a mid-flight AoE cast's pending saves (DM undo grant).
 		r.Post("/{encounterID}/pending-saves/{saveID}/cancel", h.CancelAoEPendingSave)
+		// ISSUE-049: DM hands the active combatant back their spent action (undo grant).
+		r.Post("/{encounterID}/combatants/{combatantID}/restore-action", h.RestoreTurnAction)
 	})
 }
 

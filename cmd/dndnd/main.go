@@ -537,6 +537,8 @@ func mountCombatDashboardRoutes(
 	router.Post("/api/combat/{encounterID}/pending-saves/{saveID}/resolve", dm.ResolveMonsterPendingSave)
 	// ISSUE-048: DM voids a mid-flight AoE cast's pending saves (undo grant).
 	router.Post("/api/combat/{encounterID}/pending-saves/{saveID}/cancel", dm.CancelAoEPendingSave)
+	// ISSUE-049: DM hands the active combatant back their spent action (undo grant).
+	router.Post("/api/combat/{encounterID}/combatants/{combatantID}/restore-action", dm.RestoreTurnAction)
 	return combatDashboardWiring{handler: dm, poster: poster}
 }
 

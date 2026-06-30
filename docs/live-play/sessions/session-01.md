@@ -1113,3 +1113,25 @@ rolls, no mutations; logged for narrative continuity only._
   Forge), **no damage** (Forge still 25/32, keeper HP unmoved). Refunded Vale's **pact slot 0→1** (slot override, audited)
   and **resolved the `undo_request`** with a player-safe whisper ("your Shatter is recalled and your pact slot refunded —
   recast further right, clear of Forge"). **Now awaiting Vale's recast** — never roll/act for her.
+
+### Round 2 — the undo still blocked the recast; ISSUE-049 (Restore Action) built live (06-30)
+
+- **Vale: *"i cannot recast because my action is not undid."*** The ISSUE-048 grant voided the saves + refunded the slot,
+  but casting Shatter had spent her **turn's action** — the DB confirmed her active R2 turn at `action_used=t`,
+  `action_spell_cast=t`, `attacks_remaining=0`. So the cast was undone but the **action economy** wasn't, and the cast
+  handler's `ValidateResource(action)` gate blocked a recast.
+- **Another product gap.** `undo-last-action` restores HP/position/conditions only; the `undo_request` resolver only
+  acknowledges; `RefundResource` (`turnresources.go:100`) existed but was reachable only from freeform-action cancel +
+  Action Surge — neither a DM control nor applicable to a real spell cast. **No DM path gave an action back mid-turn.**
+- **Fix-now — ISSUE-049 FIXED (red/green TDD).** `Service.RestoreTurnAction(enc, combatantID)` targets the **active**
+  turn (409 `ErrNotActiveCombatant` / `ErrNoActionToRestore`), clears `action_used` + `action_spell_cast`, **reseeds** the
+  per-turn attack count via `ResolveTurnResources` (so she may attack instead), and **leaves movement alone**.
+  `POST …/combatants/{id}/restore-action` (both the handler RegisterRoutes **and** the `main.go` mount — ISSUE-043 trap), a
+  `dm_restore_action` audit + #combat-log correction (never HP), `restoreCombatantAction` api, and a
+  **"Restore Action — `<name>`"** button beside "Undo Last Action" in `CombatManager.svelte` (targets the active combatant).
+  3 Go + 1 vitest; `make cover-check` + 749 vitest green; rebuilt + redeployed.
+- **Executed on the live board.** Clicked **"Restore Action — Vale"** → her R2 turn went to `action_used=f`,
+  `action_spell_cast=f`, `attacks_remaining=1` (movement still 30), `dm_restore_action` audit row written, no HP leaked.
+  **Vale's action + pact slot are both back and the blast is voided — she can now recast.** ISSUE-048 + 049 together are
+  the full "grant an AoE undo," still 3 clicks (Cancel → refund slot → Restore Action); a one-click bundle is a future
+  enhancement. Still awaiting her recast — never roll/act for her.
