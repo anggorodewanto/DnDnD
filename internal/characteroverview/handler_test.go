@@ -260,5 +260,125 @@ func TestGetFeatureUses_Forbidden(t *testing.T) {
 	}
 }
 
+// --- UpdateFeatureUses: out-of-combat feature_uses editor (ISSUE-040) ---
+
+func postFeatureUses(t *testing.T, h *Handler, charID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	req := httptest.NewRequest(http.MethodPost, "/api/character-overview/"+charID+"/feature-uses", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	return rr
+}
+
+func TestUpdateFeatureUses_HappyPath(t *testing.T) {
+	raw := json.RawMessage(`{"rage":{"current":1,"max":3,"recharge":"long"}}`)
+	store := &fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New(), FeatureUses: raw}}
+	h := newTestHandler(store)
+
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}],"reason":"used one rage"}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		FeatureUses map[string]character.FeatureUse `json:"feature_uses"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if rage := resp.FeatureUses["rage"]; rage.Current != 2 || rage.Max != 3 {
+		t.Fatalf("rage = %+v", rage)
+	}
+	if store.persistedFeatureUses == nil {
+		t.Fatal("expected persistence")
+	}
+}
+
+func TestUpdateFeatureUses_InvalidCharacterID(t *testing.T) {
+	rr := postFeatureUses(t, newTestHandler(&fakeStore{}), "not-uuid", `{"changes":[]}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_InvalidBody(t *testing.T) {
+	rr := postFeatureUses(t, newTestHandler(&fakeStore{}), uuid.New().String(), `{not json`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_MissingFeatureInChange(t *testing.T) {
+	rr := postFeatureUses(t, newTestHandler(&fakeStore{}), uuid.New().String(), `{"changes":[{"current":2}]}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_MissingCurrentInChange(t *testing.T) {
+	rr := postFeatureUses(t, newTestHandler(&fakeStore{}), uuid.New().String(), `{"changes":[{"feature":"rage"}]}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_NotFound(t *testing.T) {
+	h := newTestHandler(&fakeStore{slotsCtxErr: ErrCharacterNotFound})
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}]}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_LoadError(t *testing.T) {
+	h := newTestHandler(&fakeStore{slotsCtxErr: errors.New("db down")})
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}]}`)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_Forbidden(t *testing.T) {
+	verifier := &fakeCampaignVerifier{ownedCampaign: uuid.New().String()}
+	h := NewHandler(NewService(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New()}}), WithCampaignVerifier(verifier))
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}]}`)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
+func TestUpdateFeatureUses_ConflictWhenInCombat(t *testing.T) {
+	raw := json.RawMessage(`{"rage":{"current":1,"max":3,"recharge":"long"}}`)
+	h := newTestHandler(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New(), FeatureUses: raw, InActiveCombat: true}})
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}]}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateFeatureUses_ValidationError400(t *testing.T) {
+	// Unknown feature -> service returns ErrInvalidInput -> 400.
+	raw := json.RawMessage(`{"rage":{"current":1,"max":3,"recharge":"long"}}`)
+	h := newTestHandler(&fakeStore{slotsCtx: SlotsContext{CampaignID: uuid.New(), FeatureUses: raw}})
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"ki","current":1}]}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateFeatureUses_PersistError500(t *testing.T) {
+	raw := json.RawMessage(`{"rage":{"current":1,"max":3,"recharge":"long"}}`)
+	h := newTestHandler(&fakeStore{
+		slotsCtx:              SlotsContext{CampaignID: uuid.New(), FeatureUses: raw},
+		persistFeatureUsesErr: errors.New("db down"),
+	})
+	rr := postFeatureUses(t, h, uuid.New().String(), `{"changes":[{"feature":"rage","current":2}]}`)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
 // silence unused import
 var _ = context.Background

@@ -147,6 +147,21 @@ type PersistSlotsParams struct {
 	PactMagicSlots json.RawMessage
 }
 
+// FeatureUseChange sets a single named feature's remaining uses (Current) in an
+// out-of-combat edit. The feature's Max + Recharge are preserved from the
+// stored row; only the Current count is changed.
+type FeatureUseChange struct {
+	Feature string
+	Current int
+}
+
+// PersistFeatureUsesParams is the resolved feature_uses update handed to the
+// Store: the already-encoded JSON for the whole feature_uses map.
+type PersistFeatureUsesParams struct {
+	CharacterID uuid.UUID
+	FeatureUses json.RawMessage
+}
+
 // LanguageCoverage is a single (language -> characters who speak it) row
 // in the Party Languages summary.
 type LanguageCoverage struct {
@@ -167,6 +182,9 @@ type Store interface {
 	GetCharacterSlotsContext(ctx context.Context, characterID uuid.UUID) (SlotsContext, error)
 	// UpdateCharacterSlots persists a resolved slot edit (only the provided stores).
 	UpdateCharacterSlots(ctx context.Context, params PersistSlotsParams) error
+	// UpdateCharacterFeatureUses persists a resolved feature_uses edit (the whole
+	// feature_uses map, already encoded).
+	UpdateCharacterFeatureUses(ctx context.Context, params PersistFeatureUsesParams) error
 }
 
 // Service exposes character-overview read queries and the party-languages

@@ -49,6 +49,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/character-overview/{characterID}/slots", h.GetSlots)
 	r.Post("/api/character-overview/{characterID}/slots", h.UpdateSlots)
 	r.Get("/api/character-overview/{characterID}/feature-uses", h.GetFeatureUses)
+	r.Post("/api/character-overview/{characterID}/feature-uses", h.UpdateFeatureUses)
 }
 
 // authorizeDM reports whether the request's Discord user owns the given campaign.
@@ -303,6 +304,82 @@ func (h *Handler) UpdateSlots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, slotsResponseFrom(spell, pact))
+}
+
+// featureUsesUpdateRequest is the JSON body for an out-of-combat feature-uses
+// edit: a batch of per-feature Current changes plus an optional audit reason.
+// A nil Current marks a malformed change (the field was absent) and is rejected.
+type featureUsesUpdateRequest struct {
+	Changes []featureUseChangeRequest `json:"changes"`
+	Reason  string                    `json:"reason"`
+}
+
+type featureUseChangeRequest struct {
+	Feature string `json:"feature"`
+	Current *int   `json:"current"`
+}
+
+// UpdateFeatureUses applies a DM's out-of-combat edit to a character's
+// limited-use feature pools (Barbarian rage, ki, channel divinity, …). Each
+// change sets one feature's remaining uses, preserving its Max + Recharge.
+// Refused (409) while the character is in an active combat; the in-combat
+// override owns feature uses during combat.
+func (h *Handler) UpdateFeatureUses(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	var req featureUsesUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetSlotsContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if !h.authorizeDM(ctx, sctx.CampaignID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	if sctx.InActiveCombat {
+		http.Error(w, "character is in an active combat; use the in-combat controls", http.StatusConflict)
+		return
+	}
+
+	// Validate body content after auth + combat checks, mirroring UpdateSlots —
+	// an unauthorized caller gets 403, not a body-shape 400.
+	changes := make([]FeatureUseChange, 0, len(req.Changes))
+	for _, c := range req.Changes {
+		if c.Feature == "" || c.Current == nil {
+			http.Error(w, "each change requires a feature and current", http.StatusBadRequest)
+			return
+		}
+		changes = append(changes, FeatureUseChange{Feature: c.Feature, Current: *c.Current})
+	}
+
+	uses, err := h.svc.ApplyFeatureUses(ctx, characterID, sctx.FeatureUses, changes)
+	if err != nil {
+		if errors.Is(err, ErrInvalidInput) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "failed to update feature uses", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, featureUsesResponse{FeatureUses: uses})
 }
 
 // overviewResponse is the JSON envelope returned by Get.

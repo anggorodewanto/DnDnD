@@ -14,6 +14,7 @@ import {
   getCharacterSlots,
   getCharacterFeatureUses,
   overrideCharacterFeatureUses,
+  saveCharacterFeatureUses,
   saveCharacterSlots,
   updateEncounterDisplayName,
   getEncounter,
@@ -749,6 +750,34 @@ describe('overrideCharacterFeatureUses', () => {
     await expect(
       overrideCharacterFeatureUses('enc-1', 'char-1', { feature: 'rage', current: 2 }),
     ).rejects.toThrow(/no active turn/);
+  });
+});
+
+describe('saveCharacterFeatureUses', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs the change batch to the out-of-combat feature-uses endpoint', async () => {
+    const body = { feature_uses: { rage: { current: 2, max: 3, recharge: 'long' } } };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+    const payload = { changes: [{ feature: 'rage', current: 2 }], reason: 'top up' };
+    const result = await saveCharacterFeatureUses('char-1', payload);
+    expect(result).toEqual(body);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/character-overview/char-1/feature-uses');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('throws the server text on a 409 (active combat)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('character is in an active combat; use the in-combat controls'),
+    });
+    await expect(
+      saveCharacterFeatureUses('char-1', { changes: [{ feature: 'rage', current: 2 }] }),
+    ).rejects.toThrow(/in-combat controls/);
   });
 });
 

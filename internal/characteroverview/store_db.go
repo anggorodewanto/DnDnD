@@ -27,6 +27,7 @@ type RefdataQueries interface {
 	UpdateCharacterVitals(ctx context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error)
 	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
 	UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
+	UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 }
 
 // DBStore is a Store implementation backed by sqlc-generated refdata queries.
@@ -189,6 +190,16 @@ func (s *DBStore) UpdateCharacterSlots(ctx context.Context, p PersistSlotsParams
 		}
 	}
 	return nil
+}
+
+// UpdateCharacterFeatureUses persists a resolved feature_uses edit: the whole
+// feature_uses map, already encoded. An empty payload writes SQL NULL.
+func (s *DBStore) UpdateCharacterFeatureUses(ctx context.Context, p PersistFeatureUsesParams) error {
+	_, err := s.q.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
+		ID:          p.CharacterID,
+		FeatureUses: pqtype.NullRawMessage{RawMessage: p.FeatureUses, Valid: len(p.FeatureUses) > 0},
+	})
+	return err
 }
 
 // parseSpellSlotsContext parses stored spell slots into an int-keyed map. A

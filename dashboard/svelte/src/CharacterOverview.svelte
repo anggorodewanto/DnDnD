@@ -14,12 +14,17 @@
     formatSpellSummary,
     formatPactSummary,
   } from './SlotEditor.svelte';
+  import FeatureUsesEditor from './FeatureUsesEditor.svelte';
   import {
     STATUS_CONDITIONS,
     MAX_EXHAUSTION,
     saveCharacterStatus,
   } from './lib/characterStatus.js';
-  import { saveCharacterSlots } from './lib/api.js';
+  import {
+    saveCharacterSlots,
+    getCharacterFeatureUses,
+    saveCharacterFeatureUses,
+  } from './lib/api.js';
 
   let { campaignId } = $props();
 
@@ -53,6 +58,16 @@
   let slotsPact = $state(null);
   let slotsSaving = $state(false);
   let slotsError = $state('');
+
+  // Out-of-combat feature-uses editor state (rage / ki / channel divinity, …).
+  // Unlike slots, feature_uses is not on the party-list payload, so the editor
+  // fetches the current pools on open via getCharacterFeatureUses. Only one
+  // card's editor is open at a time. Refused (409) during active combat — the
+  // in-combat override owns feature uses then (ISSUE-040).
+  let editingFeaturesId = $state(null);
+  let featuresData = $state(null);
+  let featuresSaving = $state(false);
+  let featuresError = $state('');
 
   async function load() {
     if (!campaignId) {
@@ -175,6 +190,46 @@
       slotsError = e.message;
     } finally {
       slotsSaving = false;
+    }
+  }
+
+  // Open the feature-uses editor for a card, fetching the character's current
+  // pools (feature_uses is not on the party-list payload). On a fetch failure
+  // the editor still opens with an empty set plus the error so the DM sees why.
+  async function openFeatureEditor(c) {
+    editingFeaturesId = c.character_id;
+    featuresError = '';
+    featuresSaving = false;
+    featuresData = null;
+    try {
+      const res = await getCharacterFeatureUses(c.character_id);
+      featuresData = res.feature_uses || {};
+    } catch (e) {
+      featuresData = {};
+      featuresError = e.message;
+    }
+  }
+
+  function closeFeatureEditor() {
+    editingFeaturesId = null;
+    featuresError = '';
+  }
+
+  async function saveFeatures(characterId, payload) {
+    featuresSaving = true;
+    featuresError = '';
+    try {
+      await saveCharacterFeatureUses(characterId, payload);
+      // Success: close the editor and re-fetch (mirrors the slot/status editors).
+      // Feature uses aren't shown on the card, so this only keeps party data fresh.
+      editingFeaturesId = null;
+      await load();
+    } catch (e) {
+      // Keep the editor open and surface the server's explanation (e.g. the 409
+      // "use the in-combat controls" message during active combat).
+      featuresError = e.message;
+    } finally {
+      featuresSaving = false;
     }
   }
 </script>
@@ -363,6 +418,24 @@
                 errorMessage={slotsError}
                 onSave={(payload) => saveSlots(c.character_id, payload)}
                 onCancel={closeSlotEditor}
+              />
+            </div>
+          {/if}
+          <button
+            class="msg-toggle"
+            data-testid="character-features-toggle-{c.character_id}"
+            onclick={() => (editingFeaturesId === c.character_id ? closeFeatureEditor() : openFeatureEditor(c))}
+          >
+            {editingFeaturesId === c.character_id ? 'Close feature uses' : 'Edit feature uses'}
+          </button>
+          {#if editingFeaturesId === c.character_id}
+            <div data-testid="feature-uses-editor-{c.character_id}">
+              <FeatureUsesEditor
+                featureUses={featuresData}
+                busy={featuresSaving}
+                errorMessage={featuresError}
+                onSave={(payload) => saveFeatures(c.character_id, payload)}
+                onCancel={closeFeatureEditor}
               />
             </div>
           {/if}

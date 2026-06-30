@@ -54,6 +54,8 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 | ISSUE-036 | 2026-06-28 | combat / death saves (turn flow) | major | FIXED | **A downed PC's turn was silently skipped with no death saving throw.** When initiative advanced to a PC at 0 HP (alive, `unconscious`+`prone`), `AdvanceTurn`→`skipOrActivate` (`initiative.go:553`) saw the `unconscious` condition, treated it as `IsIncapacitated`, and **skipped the turn** — never rolling/prompting the death save RAW requires at the **start of each of a dying creature's turns**. The death-save machinery existed (`/deathsave`, `RollDeathSave`, the 24h-timeout `AutoResolveTurn` at `timer_resolution.go:147`) but the normal advance path reached none of it. **Found live:** Forge dropped to 0 (R6 ghoul bite); his R7 turn auto-advanced to the ghoul with **0 death saves recorded** (DM Console + `action_log death_save` filter both empty). **Fixed (TDD, "Prompt the player" — player-chosen design):** `skipOrActivate` now detects a dying **PC** (`IsDying`, PC-only — dying NPCs still skip since their saves aren't player-rolled) *before* the incapacitated check and **activates** the turn flagged `TurnInfo.DeathSavePending`; the #your-turn turn-start prompt (`FormatTurnStartPrompt`/`…WithImpact`) swaps the action-resource list for **"You are dying — roll a death saving throw: /deathsave"**; and the `/deathsave` handler, when rolled on the dying PC's **own** current turn, **advances the turn** (off-turn rolls + Nat-20 wake-ups don't — `DeathSaveTurnAdvancer` wired to `combat.Service`). The 24h `AutoResolveTurn` stays as the inactivity fallback. Red/green: `TestAdvanceTurn_DyingPC_ActivatesTurnForDeathSave`, `…_DyingNPC_StillSkipped`, `TestFormatTurnStartPrompt*_DyingPC_ShowsDeathSavePrompt`, `TestDeathSaveHandler_OnCurrentTurn_AdvancesTurn`/`_OffTurn_DoesNotAdvance`/`_Nat20_DoesNotAdvance`. `make cover-check` green; rebuilt + redeployed. **Live caveat:** the fix is from R8 on — Forge's already-skipped R7 save is made up by his remote player rolling `/deathsave` once off-turn (records only). |
 | ISSUE-037 | 2026-06-28 | dashboard / message player (DM whisper) | major | FIXED | **DM "Message Player" whisper failed for every player** with "player character not found", then (after a partial fix) an FK violation. Two stacked id-shape bugs: the picker sends each option's **`character_id`** (`MessagePlayerPanel.svelte` `value={c.character_id}`, from `/api/character-overview`), but (1) the lookup `GetPlayerCharacter` queried `player_characters WHERE id = $1` (the **PK**) → never matched → `ErrPlayerNotFound`; and (2) `dm_player_messages.player_character_id` **FK→`player_characters(id)`**, yet `SendMessage` inserted the raw `character_id` → `SQLSTATE 23503`. **Found live** sending Forge a death-save prompt. **Fixed (TDD, backend, character_id-in / PK-stored):** `PlayerLookupAdapter.LookupPlayer` now resolves character_id → campaign (`GetCharacter`) → row (`GetPlayerCharacterByCharacter`) and returns the player_characters PK as `PlayerInfo.RowID`; `SendMessage` persists `RowID` (FK-valid); `History` translates the incoming character_id → PK before querying (else the log view stays empty). Tests: `TestPlayerLookupAdapter_*` (resolves by character_id, PK in params), `TestService_Send_Success` (stores PK not character_id), `TestService_History_Delegates`/`_PlayerNotFoundReturnsEmpty`. `make cover-check` green; rebuilt + redeployed. **Live caveat:** the Discord DM is sent *before* the log insert, so Forge's death-save whisper **was delivered** on the attempt that hit the FK error (only the dashboard log row was lost) — not re-sent, to avoid double-messaging. |
 | ISSUE-038 | 2026-06-28 | combat / end-combat HP carry-out | medium | FIXED | **Ending combat doesn't carry combat HP/conditions back to the sheets — a downed PC silently reads full HP out of combat.** Same two-store root as ISSUE-020 (`combatants.hp_current` snapshot vs `characters.hp_current` base row; combat never writes back), but at the **End Combat** boundary the read-side overlay is gone, so the Party page / sheets show the *undamaged* stored HP and drop combat-applied conditions. **Found live** (2026-06-28, end of "The Cellar"): Forge ended stabilized at 0/32 unconscious+prone and Vale at 7/24, but post-End-Combat both showed full HP / no conditions; the DM had to reconcile each PC **by hand** via Party → Edit status. **Fixed (TDD, 2026-06-29):** `EndCombat` now carries each **PC** combatant's final HP/temp-HP + post-clear conditions + exhaustion back to its `characters` row via `carryOutPCStatus` (`combat/service.go`), reusing the shared `UpdateCharacterVitals` write path the out-of-combat status editor uses ([[project_dm_out_of_combat_status_editor]]) — one writer, no duplication. A downed PC carries out **0 HP / unconscious** (combat-only `prone` is dropped by `ClearCombatConditions`, `unconscious` is preserved; no out-of-combat "dying" state); NPCs are encounter-scoped and skipped; HP is clamped to the sheet max. Red/green `TestEndCombat_CarriesOutPCStatusToCharacterRow` + carry-out error/clamp tests; `make cover-check` green. See Details. |
+| ISSUE-039 | 2026-06-29 | dashboard / combat resources (feature uses) | medium | FIXED | **No DM editor for limited-use resources (Barbarian rage, ki, channel divinity, …) — a manually-set character could be stuck with the wrong remaining-uses count mid-fight.** `characters.feature_uses` (JSONB) was unexposed: only a party long rest touched it, and that resets *every* resource to max and 409s during combat. **Found live:** the AI DM had hand-set Forge's values during setup, leaving rage `{current:1, max:3}` — should have been **2** after one rage — with no in-app way to correct it. **Fixed (TDD, 2026-06-29):** audited mid-combat override `POST /api/combat/{enc}/override/character/{id}/feature-uses` `{feature,current,reason}` reusing `Service.SetFeaturePool` (preserves Max+Recharge), logged as `dm_override` + `#combat-log`; read-only `GET /api/character-overview/{id}/feature-uses` for prefill; `FeatureUsesEditor.svelte` in the Combat workspace **Manual Override** panel (PCs only). Rest command audited en route = **correct** (long rest → rage `current=max`, short rest untouched). `make cover-check` green; rebuilt + redeployed; used live to set Forge rage **1→2**. Out-of-combat editing still missing → **ISSUE-040**. See Details. |
+| ISSUE-040 | 2026-06-30 | dashboard / character overview (feature uses) | minor | FIXED | **No out-of-combat editor for feature uses (rage / ki / channel divinity / …).** The ISSUE-039 override only mounts in the Combat workspace (gated on an active turn); the **Character Overview / Party** page has HP/conditions + spell/pact-slot editors but **no feature-uses editor**, so a DM can't correct or top up a character's limited-use pool between fights without starting combat or forcing a full long rest (which resets everything). **Fixed (TDD, 2026-06-30):** added `POST /api/character-overview/{id}/feature-uses` mirroring `UpdateSlots` — DM-authorized, **409 during active combat** (defers to the ISSUE-039 in-combat override), validates feature-present + `current ∈ [0,max]` (unlimited when `max<0`), persists via the existing `UpdateCharacterFeatureUses` write path; mounted the already-built `FeatureUsesEditor.svelte` on `CharacterOverview.svelte` (fetch-on-open via the existing read GET, parent picks in/out-of-combat exactly like `SlotEditor`). `make cover-check` green; bundle rebuilt + redeployed. See Details. |
 
 ---
 
@@ -940,6 +942,82 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   unconscious + stabilized-preservation cases; `make cover-check`; rebuild + redeploy.
 - **Workaround (current):** after every End Combat, the DM reconciles each PC's HP/conditions by hand
   via **Party → Edit status** (audit reason logged). Easy to forget — that's the bug.
+
+### ISSUE-039 — No DM editor for limited-use resources / rage (FIXED)
+- **Date:** 2026-06-29
+- **Area:** dashboard / combat resources (`characters.feature_uses` JSONB)
+- **Severity:** medium — a character whose rage (or ki / channel divinity / sorcery points / …) `current`
+  was set wrong had **no** in-app correction mid-fight; the only lever (party long rest) resets *every*
+  resource to max and 409s during active combat.
+- **Status:** FIXED (2026-06-29).
+  - **Backend (override):** `POST /api/combat/{encounterID}/override/character/{characterID}/feature-uses`
+    `{feature, current, reason}` → `DMDashboardHandler.OverrideCharacterFeatureUses`
+    (`internal/combat/dm_dashboard_undo.go`), reusing `Service.SetFeaturePool` (preserves the row's
+    **Max + Recharge**) and the slots-override audit path (`logOverride` → `dm_override` row +
+    `#combat-log` ⚠️ DM Correction). Body validated pre-lock (400); unknown feature / `current>max` →
+    400 via `errInvalidFeatureOverride`; **unlimited pools** (`Max<0`, e.g. a level-20 rage) skip the
+    cap. Routes in `RegisterRoutes` + `main.go`; auth + wiring route-lists updated so the new DM
+    mutation is verified behind `dmAuthMw`.
+  - **Backend (read/prefill):** `GET /api/character-overview/{id}/feature-uses` → `Handler.GetFeatureUses`
+    (`internal/characteroverview/handler.go`); `SlotsContext` now also carries the raw `feature_uses`
+    (works in **and** out of combat — it's a read). Empty/NULL renders `{}`, not `null`.
+  - **Frontend:** `FeatureUsesEditor.svelte` mounted in the Combat workspace **Manual Override** panel
+    (Feature Uses fieldset, **PCs only** — gated on `character_id`, NPCs have none); api helpers
+    `getCharacterFeatureUses` / `overrideCharacterFeatureUses`; CombatManager wiring; bundle rebuilt.
+- **Found live:** the AI DM manually set Forge's character values during setup, leaving rage
+  `{current:1, max:3}` — should have been **2** after one rage this fight. No dashboard path to bump it.
+- **Rest command (audited en route):** **correct** — long rest sets every `recharge ∈ {short,long,dawn,daily}`
+  feature `current=max` so rage (recharge `"long"`) restores to max (`internal/rest/rest.go`); short rest
+  matches only `recharge=="short"`, so rage is untouched (RAW). L3 rage-max formula = 3. The bug was the
+  **missing editor**, not the rest logic.
+- **Tests:** 15 combat handler cases (`TestOverrideCharacterFeatureUses_*`, incl. the unlimited-pool
+  branch) + 7 character-overview GET cases (`TestGetFeatureUses_*`) + a `featureUsesValue` round-trip; 724
+  svelte tests pass; `make cover-check` green.
+- **Used live:** set Forge rage **1→2** through the new editor (Combat → select FO token → Manual Override
+  → Feature Uses → Edit Feature Uses); DB + the `dm_override` before/after audit row both confirm.
+- **Known gaps:** (1) out-of-combat editing → **fixed in ISSUE-040** (2026-06-30). (2) rage **Max** is seeded only
+  at character creation (`InitFeatureUses`, `internal/portal/init_feature_uses.go`), **not** re-derived on
+  level-up — a barbarian leveling into a new rage tier (L3/L6/…) could carry a stale Max; didn't affect
+  Forge (his Max was already 3). Unfiled — flag if it bites.
+
+### ISSUE-040 — No out-of-combat editor for feature uses (FIXED)
+- **Date:** 2026-06-30
+- **Area:** dashboard / character overview (`characters.feature_uses`)
+- **Severity:** minor — workaround existed (edit during combat via ISSUE-039, or run a long rest); only
+  bit **between** fights.
+- **Status:** FIXED (TDD, 2026-06-30).
+- **Repro:** out of combat, open dashboard **Party → Character Overview** for a Barbarian (or any
+  limited-use class — Monk ki, Cleric/Paladin channel divinity, Sorcerer points, …). HP/conditions +
+  spell/pact-slot editors are present; there is **no** feature-uses editor.
+- **Expected:** a DM can view + set a character's rage/ki/channel-divinity/… remaining uses **between
+  fights** (award a short-rest-recovered resource, or correct a bad value) without starting combat or
+  forcing a full long rest.
+- **Actual:** the only feature-uses editor (ISSUE-039) is the **in-combat** override in the Combat
+  workspace, gated on an active turn. Out of combat the sole lever is a party long rest, which resets
+  *all* resources to max.
+- **Fix idea (TDD):** add `POST /api/character-overview/{characterID}/feature-uses` mirroring
+  `Handler.UpdateSlots` (`internal/characteroverview/handler.go`) — DM-authorized, **409 during active
+  combat** (defer to the in-combat override, same split as the slots/HP editors), validate
+  feature-present + `current ∈ [0, max]` (unlimited when `max<0`), persist via the
+  `characters.feature_uses` write path. **Reuse** the existing read `GET .../feature-uses` and the
+  already-built `FeatureUsesEditor.svelte` — mount it on `CharacterOverview.svelte`, wiring `onSave` to
+  the new overview endpoint (the parent picks in- vs out-of-combat, exactly like `SlotEditor`). Red/green
+  + `make cover-check` + rebuild.
+- **Fix (TDD, 2026-06-30):** new `Service.ApplyFeatureUses` + `Store.UpdateCharacterFeatureUses`
+  (`internal/characteroverview/feature_uses.go`, `store_db.go`) reusing the already-generated
+  `refdata.UpdateCharacterFeatureUses` query — no schema/sqlc change. `Handler.UpdateFeatureUses`
+  (`handler.go`) parses id → decodes body → loads `GetSlotsContext` (404/500) → `authorizeDM` (403) →
+  **409 if `InActiveCombat`** → `ApplyFeatureUses` (per-feature `current ∈ [0,max]`, `max<0` =
+  unlimited, only features already on the row are editable; `ErrInvalidInput` → 400). Auto-mounts via
+  `RegisterRoutes` (already inside `dmAuthMw`). Frontend: `saveCharacterFeatureUses` in `lib/api.js`;
+  `CharacterOverview.svelte` mounts `FeatureUsesEditor` with `openFeatureEditor` (fetch-on-open via the
+  read GET) / `saveFeatures` / `closeFeatureEditor`, mirroring the slot editor. Body is the editor's
+  `{changes:[{feature,current}], reason}` shape (batch, applied atomically). Tests: service
+  (`feature_uses_test.go`), handler + store (`handler_test.go`, `store_db_test.go`), api
+  (`api.test.js`); `make cover-check` green, 726 vitest green.
+- **Notes:** the editor component + the read endpoint already existed from ISSUE-039, so this was mostly a
+  second handler + a parent mount. The level-up rage-**Max** re-derive gap noted under ISSUE-039 is still
+  unfiled and unaffected by this change.
 
 <!-- Append a section per issue:
 

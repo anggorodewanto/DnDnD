@@ -30,6 +30,10 @@ type fakeRefdata struct {
 	spellSlotsErr error
 	pactSlotsArg  refdata.UpdateCharacterPactMagicSlotsParams
 	pactSlotsErr  error
+
+	// feature-uses-edit fakes
+	featureUsesArg refdata.UpdateCharacterFeatureUsesParams
+	featureUsesErr error
 }
 
 func (f *fakeRefdata) ListPlayerCharactersByStatus(ctx context.Context, arg refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
@@ -65,6 +69,11 @@ func (f *fakeRefdata) UpdateCharacterSpellSlots(_ context.Context, arg refdata.U
 func (f *fakeRefdata) UpdateCharacterPactMagicSlots(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
 	f.pactSlotsArg = arg
 	return refdata.Character{}, f.pactSlotsErr
+}
+
+func (f *fakeRefdata) UpdateCharacterFeatureUses(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+	f.featureUsesArg = arg
+	return refdata.Character{}, f.featureUsesErr
 }
 
 func TestDBStore_ListApprovedPartyCharacters_MapsRows(t *testing.T) {
@@ -180,6 +189,54 @@ func TestDBStore_ListApprovedPartyCharacters_ErrorPropagates(t *testing.T) {
 	fake := &fakeRefdata{err: errors.New("boom")}
 	store := NewDBStore(fake)
 	_, err := store.ListApprovedPartyCharacters(context.Background(), uuid.New())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestDBStore_UpdateCharacterFeatureUses_Persists(t *testing.T) {
+	fake := &fakeRefdata{}
+	store := NewDBStore(fake)
+	charID := uuid.New()
+	raw := json.RawMessage(`{"rage":{"current":2,"max":3,"recharge":"long"}}`)
+
+	if err := store.UpdateCharacterFeatureUses(context.Background(), PersistFeatureUsesParams{
+		CharacterID: charID,
+		FeatureUses: raw,
+	}); err != nil {
+		t.Fatalf("UpdateCharacterFeatureUses: %v", err)
+	}
+	if fake.featureUsesArg.ID != charID {
+		t.Fatalf("ID = %s, want %s", fake.featureUsesArg.ID, charID)
+	}
+	if !fake.featureUsesArg.FeatureUses.Valid {
+		t.Fatal("expected a non-null feature_uses payload")
+	}
+	if string(fake.featureUsesArg.FeatureUses.RawMessage) != string(raw) {
+		t.Fatalf("payload = %s", fake.featureUsesArg.FeatureUses.RawMessage)
+	}
+}
+
+func TestDBStore_UpdateCharacterFeatureUses_EmptyWritesNull(t *testing.T) {
+	fake := &fakeRefdata{}
+	store := NewDBStore(fake)
+	if err := store.UpdateCharacterFeatureUses(context.Background(), PersistFeatureUsesParams{
+		CharacterID: uuid.New(),
+	}); err != nil {
+		t.Fatalf("UpdateCharacterFeatureUses: %v", err)
+	}
+	if fake.featureUsesArg.FeatureUses.Valid {
+		t.Fatal("empty payload must write SQL NULL (Valid=false)")
+	}
+}
+
+func TestDBStore_UpdateCharacterFeatureUses_ErrorPropagates(t *testing.T) {
+	fake := &fakeRefdata{featureUsesErr: errors.New("boom")}
+	store := NewDBStore(fake)
+	err := store.UpdateCharacterFeatureUses(context.Background(), PersistFeatureUsesParams{
+		CharacterID: uuid.New(),
+		FeatureUses: json.RawMessage(`{"rage":{"current":2,"max":3,"recharge":"long"}}`),
+	})
 	if err == nil {
 		t.Fatal("expected error")
 	}

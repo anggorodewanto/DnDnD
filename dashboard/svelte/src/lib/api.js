@@ -1133,6 +1133,26 @@ export async function getCharacterFeatureUses(characterId) {
 }
 
 /**
+ * Save a character's limited-use feature pools out of combat (e.g. rage / ki).
+ *   POST /api/character-overview/{characterID}/feature-uses
+ * Body is the FeatureUsesEditor shape: a batch of per-feature Current changes
+ * plus an optional reason. apiFetch throws Error(serverText) on any non-2xx so
+ * callers can surface the backend's explanation verbatim (e.g. the 409
+ * "use the in-combat controls" message during active combat).
+ * @param {string} characterId
+ * @param {{changes:{feature:string,current:number}[], reason?:string}} payload
+ * @returns {Promise<{feature_uses:Object<string,{current:number,max:number,recharge:string}>}>}
+ */
+export async function saveCharacterFeatureUses(characterId, payload) {
+  const res = await apiFetch(`/api/character-overview/${characterId}/feature-uses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
  * Manually override a single character feature's remaining uses in combat
  * (requires an active turn). One feature per request; apiFetch throws the
  * server's response text on error (e.g. 400 unknown feature / current>max,
