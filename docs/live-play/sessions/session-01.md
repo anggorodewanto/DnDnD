@@ -1135,3 +1135,34 @@ rolls, no mutations; logged for narrative continuity only._
   **Vale's action + pact slot are both back and the blast is voided — she can now recast.** ISSUE-048 + 049 together are
   the full "grant an AoE undo," still 3 clicks (Cancel → refund slot → Restore Action); a one-click bundle is a future
   enhancement. Still awaiting her recast — never roll/act for her.
+
+### Round 2 — Vale's recast lands; the keeper reels at death's door (06-30)
+
+- **Vale recast Shatter (pact slot, 0 remaining) — this time placed clear of Forge** (#combat-log 6:34 PM:
+  *"Affected: Wight"* only; Forge spared). One pending CON save (the keeper), DC 13.
+- **Keeper's save resolved from the workspace** ("Resolve save" → `dm_resolve_save`): **5 vs DC 13 — Failure**, full
+  **11 thunder** applied. The blast left the keeper *a breath from collapse* — clinging to the gouged-out shrine, not
+  yet down (HP secret; live total → DM Console). Forge untouched, Vale unhurt.
+- **Narrated to #the-story** (read-aloud, 6:40 PM): the second Shatter blooming clear of Forge, the keeper folding
+  around the note, grave-cloth splitting, swaying but still upright.
+- **Still Vale's turn (R2)** — her **action is spent** on the recast (movement/bonus/reaction remain; her
+  *hellish rebuke* reaction stays readied). Awaiting her next command (`/move`, `/done`, …) — never roll/act for her.
+  When her turn ends, Round 3 opens with **Forge**, who will almost certainly finish the reeling keeper.
+
+### Round 3 — Forge destroys the keeper; the Cold Vault is won (06-30)
+
+- **Vale closed R2** by throwing her dagger at the keeper — **missed** (9 vs AC). Turn ended; Round 3 opened with Forge.
+- **Forge finished it.** Two thrown **handaxes**: the first **hit (8 slashing) — *"💀 Wight drops to 0 HP — defeated"*** (the
+  drop-to-0 log fired correctly this time, through the `/attack` path); the second came in on **vex advantage as a NAT 20
+  crit** (8 more) — overkill into the falling husk. The keeper came apart on the vault floor.
+- **Narrated the kill to #the-story** (read-aloud, 9:25 PM): Vale's dagger skating off bone, Forge's handaxes folding the
+  keeper off the shrine, the grey light guttering out, grave-cloth and rime collapsing — the shrine left hollowed and
+  empty, the cold door open, the dark beyond *only dark*.
+- **Combat ended** via the workspace **End Combat** (Confirm End) — encounter `446dce33-…` now `status=completed`,
+  *"Combat ended — The Cold Vault"* posted to #combat-log. **ISSUE-038 auto carry-out worked:** final HP/conditions wrote
+  back to the sheets with no manual reconcile — **Forge 25/32, Vale 24/24, no conditions.** No casualties on the party
+  side; the keeper was the lone hostile (no reserve husks were needed — the fight wasn't a walkover).
+- **Out of combat now — the Cold Vault is cleared and theirs.** The shrine stands gouged/empty (something was chiselled
+  out of it); the cold door is open; what lies deeper is unexplored. Spotlight handed to the players — they decide what to
+  search/do next. Standing campaign pull: the journal's warning (the Harrow couple "wearing their own faces"), the
+  hollowed shrine, and Vale's patron steering her downward. Await player action — never narrate their choices.

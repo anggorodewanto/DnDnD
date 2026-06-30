@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-30 — **COMBAT LIVE — the Cold Vault boss fight is ON (Round 2).** The players turned the key (Forge *"follows to descend below"* 7:17 PM; Vale *"inserts the key… nodded to Forge and turns the key"* 7:54 PM), so the beat ran end-to-end: posted **block B** (the vault read-aloud — the door opening on grave-cold air, the chiselled-out shrine, the keeper rising in its frost-grey clothes; 7:55 PM, Post History confirmed) → opened **"Cold Vault — the keeper"** → **Start Combat** (~7:56 PM). **Live encounter `446dce33-e221-4d1f-a88b-4e81534b3399`.** Surprise adjudicated live = **none** (keeper dormant, PCs deliberately opened — standard initiative). **Round 1 order (from the Console): Forge (14) → Wight keeper (14, tie→Forge first) → Vale (4).** PCs entered bottom-center (the cold door); keeper top-center — ~40 ft gap to close. **R1 so far (06-30):** Forge advanced to F4 and **raged** — but ended his turn without attacking/taking damage, so by RAW the **rage lapsed at end of turn** (`is_raging=f`). The silent drop (no #combat-log / no DM-timeline notice) was **fixed live — ISSUE-041 FIXED**: rage expiry now posts to #combat-log + writes a `rage_expired` action_log row. The **keeper's turn was run from the workspace Turn Builder**: Longsword **hit Forge — 7 slashing** (Forge 25/32), posted to #combat-log + narrated to #the-story (read-aloud). **It is now Vale's turn (PC) — awaiting her slash command; do NOT act/roll for her.** **DM ruling applied (06-30):** Forge's player asked to undo his wasted R1 rage (his F4 move left him 15ft short, rage lapsed for nothing); **granted — rage charge refunded 2→3** via the in-combat Manual Override → Feature Uses (audited `dm_override` + auto #combat-log correction, player-👍'd). He keeps F4 + the hit stands; **DM Queue now empty.** Keep the keeper's HP/AC SECRET. Live board → DM Console. **Escalation in play: the keeper is UNDEAD → Vale's *hold person* will FAIL** (telegraph it the first time she tries). Live round/turn/HP/positions → **DM Console** (`#dm-console`), not this file. ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone). **Latest beat: Vale's Shatter hit the keeper — it failed its CON save (nat 1+3=4 vs DC 13), took 3d8=16 thunder, narrated to #the-story; still Vale's turn.** That cast surfaced + fixed ISSUE-042 (pact-slot cast-log), ISSUE-043 (DM monster-save resolver — new Combat/DM-Console "Resolve save" UI; see [`runbook.md`](runbook.md) §4), and the CRITICAL ISSUE-044 (AoE save-for-half damage never applied in prod — now fixed + idempotent). **R2 (06-30):** Round 2 is live — Forge's Greataxe (16) + Vale's dagger (1) left the keeper badly wounded; the keeper's **R2 Longsword MISSED Forge (11 vs AC 14)** and was narrated; **now Vale's turn (R2)**. Vale readied `hellish rebuke` via `/reaction` (still active — the miss didn't trigger it). ISSUE-045 fixed (`/reaction declare` now announces publicly, was ephemeral); ISSUE-046 logged OPEN (no path executes a reaction *spell* — "Resolve" is bookkeeping, `/cast` is turn-gated — so the DM hand-assembles it; proposed resolver mirrors ISSUE-043). **Undo grant (06-30):** Vale's R2 Shatter blast caught ally Forge; her `/undo` was **GRANTED** — the cast was **voided** (new **ISSUE-048** dashboard *Cancel* on the pending save → both `s2c3` saves forfeited, **no damage**, Forge unhurt 25/32), her **pact slot refunded 0→1**, and the `undo_request` queue item resolved. **Follow-up (06-30):** Vale reported she still couldn't recast — the cast had spent her turn's **action** and nothing restored it; surfaced + fixed **ISSUE-049** (new dashboard **"Restore Action"** button → her turn's `action_used`/`action_spell_cast` cleared, `attacks_remaining` reseeded to 1, movement untouched, audited, no HP leaked). **Now fully clear: Vale's action + pact slot are back and the blast is voided — awaiting her recast** (Shatter, further right, clear of Forge) — do NOT roll/act for her.
+_Last updated: 2026-06-30 — **COMBAT WON — the Cold Vault keeper is DESTROYED; the party is OUT OF COMBAT.** (History of the fight below, newest at the end.)**COMBAT LIVE — the Cold Vault boss fight is ON (Round 2).** The players turned the key (Forge *"follows to descend below"* 7:17 PM; Vale *"inserts the key… nodded to Forge and turns the key"* 7:54 PM), so the beat ran end-to-end: posted **block B** (the vault read-aloud — the door opening on grave-cold air, the chiselled-out shrine, the keeper rising in its frost-grey clothes; 7:55 PM, Post History confirmed) → opened **"Cold Vault — the keeper"** → **Start Combat** (~7:56 PM). **Live encounter `446dce33-e221-4d1f-a88b-4e81534b3399`.** Surprise adjudicated live = **none** (keeper dormant, PCs deliberately opened — standard initiative). **Round 1 order (from the Console): Forge (14) → Wight keeper (14, tie→Forge first) → Vale (4).** PCs entered bottom-center (the cold door); keeper top-center — ~40 ft gap to close. **R1 so far (06-30):** Forge advanced to F4 and **raged** — but ended his turn without attacking/taking damage, so by RAW the **rage lapsed at end of turn** (`is_raging=f`). The silent drop (no #combat-log / no DM-timeline notice) was **fixed live — ISSUE-041 FIXED**: rage expiry now posts to #combat-log + writes a `rage_expired` action_log row. The **keeper's turn was run from the workspace Turn Builder**: Longsword **hit Forge — 7 slashing** (Forge 25/32), posted to #combat-log + narrated to #the-story (read-aloud). **It is now Vale's turn (PC) — awaiting her slash command; do NOT act/roll for her.** **DM ruling applied (06-30):** Forge's player asked to undo his wasted R1 rage (his F4 move left him 15ft short, rage lapsed for nothing); **granted — rage charge refunded 2→3** via the in-combat Manual Override → Feature Uses (audited `dm_override` + auto #combat-log correction, player-👍'd). He keeps F4 + the hit stands; **DM Queue now empty.** Keep the keeper's HP/AC SECRET. Live board → DM Console. **Escalation in play: the keeper is UNDEAD → Vale's *hold person* will FAIL** (telegraph it the first time she tries). Live round/turn/HP/positions → **DM Console** (`#dm-console`), not this file. ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone). **Latest beat: Vale's Shatter hit the keeper — it failed its CON save (nat 1+3=4 vs DC 13), took 3d8=16 thunder, narrated to #the-story; still Vale's turn.** That cast surfaced + fixed ISSUE-042 (pact-slot cast-log), ISSUE-043 (DM monster-save resolver — new Combat/DM-Console "Resolve save" UI; see [`runbook.md`](runbook.md) §4), and the CRITICAL ISSUE-044 (AoE save-for-half damage never applied in prod — now fixed + idempotent). **R2 (06-30):** Round 2 is live — Forge's Greataxe (16) + Vale's dagger (1) left the keeper badly wounded; the keeper's **R2 Longsword MISSED Forge (11 vs AC 14)** and was narrated; **now Vale's turn (R2)**. Vale readied `hellish rebuke` via `/reaction` (still active — the miss didn't trigger it). ISSUE-045 fixed (`/reaction declare` now announces publicly, was ephemeral); ISSUE-046 logged OPEN (no path executes a reaction *spell* — "Resolve" is bookkeeping, `/cast` is turn-gated — so the DM hand-assembles it; proposed resolver mirrors ISSUE-043). **Undo grant (06-30):** Vale's R2 Shatter blast caught ally Forge; her `/undo` was **GRANTED** — the cast was **voided** (new **ISSUE-048** dashboard *Cancel* on the pending save → both `s2c3` saves forfeited, **no damage**, Forge unhurt 25/32), her **pact slot refunded 0→1**, and the `undo_request` queue item resolved. **Follow-up (06-30):** Vale reported she still couldn't recast — the cast had spent her turn's **action** and nothing restored it; surfaced + fixed **ISSUE-049** (new dashboard **"Restore Action"** button → her turn's `action_used`/`action_spell_cast` cleared, `attacks_remaining` reseeded to 1, movement untouched, audited, no HP leaked). **Now fully clear: Vale's action + pact slot are back and the blast is voided — awaiting her recast** (Shatter, further right, clear of Forge) — do NOT roll/act for her. **RECAST RESOLVED (06-30):** Vale recast Shatter clear of Forge (#combat-log *"Affected: Wight"* only); the keeper's CON save was resolved from the workspace (**5 vs DC 13 — Failure, 11 thunder**) and the blast left it **a breath from collapse — reeling, still upright** (HP secret → Console; Forge + Vale unhurt). Narrated to #the-story (read-aloud, 6:40 PM). **Still Vale's turn (R2), her ACTION now spent on the recast** (movement/bonus/reaction remain; *hellish rebuke* still readied) — **await her next command (`/move`/`/done`/…); never roll/act for her.** When she ends her turn, Round 3 opens with **Forge**, who will almost certainly finish the reeling keeper. **VICTORY (06-30, R3):** Vale's closing dagger throw **missed**; Round 3 opened with Forge, who **destroyed the keeper** with two thrown handaxes — first **hit (8) → "💀 Wight drops to 0 HP — defeated"**, second a **NAT 20 vex-advantage crit** (overkill). Narrated the kill to #the-story (read-aloud, 9:25 PM). **Combat ENDED** via End Combat → encounter `446dce33-…` `status=completed`, *"Combat ended — The Cold Vault"* in #combat-log. **ISSUE-038 auto carry-out worked** — sheets now **Forge 25/32, Vale 24/24, no conditions** (no manual reconcile). **No active encounter.** The Cold Vault is **cleared and theirs**: the shrine stands hollowed/empty, the cold door open, the deeper dark unexplored. **Spotlight to the players — await their next action; never narrate their choices.**
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -76,15 +76,14 @@ recent action timeline are **generated** — read them live, never transcribe th
 
 ## Active encounter (durable refs — live state via the Console)
 
-- **LIVE — "The Cold Vault"** (internal **"Cold Vault — the keeper"**), **live encounter id
-  `446dce33-e221-4d1f-a88b-4e81534b3399`** (template `adc064e7-…`), map *Ashfall Waystation — the cold vault*
-  (`2899165e-…`). **Started 2026-06-29 ~7:56 PM** after the players turned the key. **1× Wight** (CR 3)
-  reflavored as the frost-rimed **vault-keeper**; surprise off (adjudicated live — none, the keeper was
-  dormant and the PCs deliberately opened the door, standard initiative). Party 2/2 (Vale + Forge). **Round /
-  turn / HP / positions / conditions → DM Console, NOT here** (don't hand-copy). Design + the
-  *hold-person-fails* escalation (the keeper is genuinely UNDEAD): [`encounters/cold-vault.md`](encounters/cold-vault.md).
-  Reserve husks (Zombies) added live only if it's too easy. Keep the keeper's HP/AC secret; players roll their
-  own dice; run the Wight's turns from the combat workspace when initiative reaches it.
+- **CLOSED — "The Cold Vault"** (internal **"Cold Vault — the keeper"**), encounter id
+  `446dce33-e221-4d1f-a88b-4e81534b3399` (template `adc064e7-…`), map *Ashfall Waystation — the cold vault*
+  (`2899165e-…`). Started 2026-06-29 ~7:56 PM; **ended in VICTORY 2026-06-30 (R3)** — the lone **Wight** keeper
+  destroyed (Vale's two Shatters ground it down to the brink; **Forge finished it** with thrown handaxes, the killing
+  blow a NAT 20 vex crit). Surprise off (none — keeper dormant, PCs deliberately opened). Party 2/2, **no casualties**.
+  **Combat ended → `status=completed`**; ISSUE-038 auto-carried final HP/conditions to the sheets (Forge 25/32, Vale
+  24/24, no conditions). **No active encounter.** Reserve husks were never needed. Chronology:
+  [`sessions/session-01.md`](sessions/session-01.md); design: [`encounters/cold-vault.md`](encounters/cold-vault.md).
 - **CLOSED — "The Cellar"** (internal "Cellar — the brood"), encounter id
   `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. 4 combatants
   (Vale + Forge vs two ghouls). **Ended in victory 2026-06-28 at R11** — both ghouls dead, Forge
@@ -127,61 +126,35 @@ to Forge** — go down with her, or not? **Awaiting Forge's (Jonathan's) answer.
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **COMBAT LIVE — the Cold Vault boss fight, Round 2.** Live encounter `446dce33-e221-4d1f-a88b-4e81534b3399`.
-   The players turned the key, so the beat ran end-to-end (block B posted 7:55 PM → Start Combat ~7:56 PM).
-   **Pull the live board from the DM Console** — round/turn/HP/positions are generated there, not here. R1 order:
-   **Forge (14) → Wight keeper (14) → Vale (4)**. **R1 progress (06-30):** Forge moved up + raged (it lapsed —
-   no attack); the **keeper's turn was run** (Turn Builder → Longsword **hit Forge, 7 slashing**, 25/32) and
-   narrated; then Forge's player undo request was **granted — his wasted rage refunded 2→3** (in-combat Manual
-   Override → Feature Uses; audited `dm_override` + #combat-log correction), **DM Queue cleared to empty**.
-   **Vale then cast Shatter (L2) at the keeper** — it **failed its CON save in the open (nat 1+3=4 vs DC 13)** and
-   took **3d8 = 16 thunder** (HP secret; live total → Console); the blast was **narrated to #the-story** (read-aloud).
-   Vale's R1 **action was spent** on that Shatter. **R2 update (06-30):** combat is now in **Round 2** — Forge's
-   Greataxe hit the keeper (16) + Vale's dagger (1) left it **badly wounded**; the keeper's **R2 Longsword MISSED
-   Forge (11 vs AC 14)** (narrated 1:33 PM), so Vale's readied **`hellish rebuke`** (declared via `/reaction` — now
-   public after ISSUE-045) **did not trigger** and stays active. **It is now Vale's turn in R2 — await her action.** **Undo granted (06-30):** her R2 Shatter caught ally Forge, so her `/undo` was honored — cast **voided** (new **ISSUE-048** *Cancel pending save* button forfeits the whole AoE cast; both `s2c3` saves cleared, no damage), **pact slot refunded 0→1**, `undo_request` resolved. **Now awaiting Vale's recast** — Shatter placed further right, off Forge; never roll/act for her.
-   *(NB ISSUE-046 OPEN: nothing actually executes a declared reaction spell — the "Resolve" button is bookkeeping,
-   `/cast` is turn-gated. If her rebuke fires, hand-assemble it: she rolls 2d10 fire + DEX-save DC; you roll the
-   keeper's DEX save; apply damage via a path that does NOT leak HP — never `override/hp`; spend her pact slot; click
-   Resolve. Proposed proper fix mirrors the ISSUE-043 monster-save resolver.)* *(That cast
-   surfaced + fixed three bugs — pact-slot cast-log display **ISSUE-042**, the missing DM monster-save resolver
-   **ISSUE-043**, and a CRITICAL pre-existing bug where AoE save-for-half damage never applied **ISSUE-044**; all
-   FIXED + redeployed. Monster AoE saves now resolve via the **Combat workspace / DM Console resolver** — see
-   [`runbook.md`](runbook.md) §4 "Resolving a monster's saving throw".)*
-   **Still Vale's turn (PC) — await her next action; never roll/act for her.** Run the loop: observe each
-   player's slash command → adjudicate/narrate to #the-story → when initiative reaches the **Wight**, run its
-   turn from the **combat workspace Turn Builder** (`Run Enemy Turn — Wight` → Review → Confirm & Post auto-rolls
-   + logs to #combat-log; players roll their own saves). **Keep the keeper's HP/AC SECRET** — describe wounds, never quote numbers
-   ([`dm-rules.md`](dm-rules.md)). **Escalation: the keeper is UNDEAD → Vale's *hold person* FAILS** — telegraph
-   it the first time she casts (the spell finds nothing living to grip). Her tools that DO bite: *shatter*,
-   *hellish rebuke*, *chill touch* (DC 13). Forge's **Rage** resists the keeper's slashing but **NOT** its
-   necrotic **Life Drain** (max-HP erosion — watch his HP). **Reserve husks (Zombies) added live only if it's
-   too easy** — not pre-placed. Full design: [`encounters/cold-vault.md`](encounters/cold-vault.md). The other
-   standing hooks (for after the fight):
+1. **▶ THE COLD VAULT IS WON — the party is out of combat, free in the cleared vault.** The keeper (encounter
+   `446dce33-…`) is **destroyed** and combat is **ended** (`status=completed`; sheets carried — Forge 25/32, Vale
+   24/24, no conditions). **Spotlight is on the players now** — they decide what to do in the vault; **await their next
+   action and never narrate their choices** (per [`dm-rules.md`](dm-rules.md)). The scene to react to (don't pre-empt
+   their search): the **shrine stands hollowed and empty** — *something was chiselled out of it* (the journal's
+   "wearing their own faces" thread); the **cold door is open** behind where the keeper fell; the deeper dark is
+   **unexplored**. When they search/examine, adjudicate their rolls (they roll their own dice) and narrate the find to
+   #the-story (read-aloud). Likely next beats: examine the shrine / the keeper's remains, push past the cold door into
+   the deeper dark, or pull back to rest. Vale's patron is steering her downward (her stated *"i have no choice"*).
+   No reserve husks were used; if a new threat is warranted later, the design has Zombies in reserve
+   ([`encounters/cold-vault.md`](encounters/cold-vault.md)). **Still-live post-fight hooks:**
    - **✓ Journal read (1:38 PM).** It surfaced the **cold door** — an old vault lower than the cellar that the
      keeper unlocked; the wretches **fled up from it**, so the cellar door was clawed from inside to *escape*
      the cold door, not to reach the keeper. The keeper's last line: *"the cold iron key locks the cold door.
      Do not turn it."* This is now the campaign's central pull downward. (Beat logged in `sessions/session-01.md`.)
-   - **The cold iron key** — opens the **cold door** at the bottom of the deeper cellar (per the journal); it's
-     the gate into the pre-built Cold Vault below. Surfaces when they reach the door and choose to turn it (the
-     keeper warned against it — player's call). What's behind it is now **prepped** (see the descend hook).
-   - **▶ Descend to the cold door — the boss beat is PRE-BUILT and ready (06-29).** The brood are dead; the
-     deeper cellar leads to the **cold door** Vale's key opens. The fight behind it is built and DB-verified:
-     encounter **"Cold Vault — the keeper"** (`adc064e7-…`) — **1× Wight (CR 3)** reflavored as the
-     vault-keeper, on the new **cold vault** map, surprise off, party 2/2. **To run** when they descend:
-     post the **descent** read-aloud → the **cold door** beat → if they **turn the key**, post the **vault**
-     read-aloud → open the encounter → **Start Combat** (adjudicate surprise live). Full design + the two
-     staged read-alouds + the key twist: [`encounters/cold-vault.md`](encounters/cold-vault.md). **Escalation
-     to remember:** the keeper is genuinely **UNDEAD**, so Vale's **hold person FAILS** here (Humanoid-only) —
-     the easy button from the living-wretch fights is gone. Keep enemy HP/AC secret ([`dm-rules.md`](dm-rules.md));
-     players roll their own dice; reserve husks (Zombies) added live only if it's too easy.
+   - **✓ The cold iron key — USED.** Vale turned it (against the keeper's warning), the cold door opened, and the
+     keeper rose: the Cold Vault boss beat. Key spent on the door; still on Vale's sheet as a quest token.
+   - **✓ Descend + the boss beat — DONE (06-30).** The party descended, turned the key, and **won** the Cold Vault
+     fight (the Wight keeper destroyed; combat ended). What's *deeper* than the vault — past the now-open cold door,
+     the chiselled-out shrine, the journal's "wearing their own faces" — is the **new** unexplored thread. Design /
+     history for reference: [`encounters/cold-vault.md`](encounters/cold-vault.md), `sessions/session-01.md`.
    - **The healing draught (on the sheet, unused):** if a PC drinks it later it restores **2d4+2** — **the
      players roll it** ([`dm-rules.md`](dm-rules.md)). Apply via **Party → Edit status** (add to current HP,
      capped at max) and decrement the potion in Manage inventory. At full HP now it's a saved resource for the
      next fight.
-   - **Drop-to-0 logging gap (follow-up, non-blocking):** the feature shipped 06-28 (`dfefd8e`) did **not**
-     log G1's defeat — the player `/attack` damage path doesn't funnel through `Service.ApplyDamage` where
-     `notifyDroppedToZero` is gated. Forward-fix candidate; logged in session log + issues, table not blocked.
+   - **Drop-to-0 logging gap — looks RESOLVED (06-30, verify before closing).** The same scenario that silently
+     failed on 06-28 (G1) now **fired correctly**: Forge's `/attack` handaxe dropping the keeper posted
+     *"💀 Wight drops to 0 HP — defeated"* to #combat-log + a `downed` action_log row. So the player `/attack` path
+     now does funnel the drop notice. Confirm against the ISSUE log / code before marking the old gap closed.
 2. **Onboard new players** as they arrive (`/register` → build → DM-approve → roster row + sheet →
    fold into the fiction). 3-4 more PCs expected. See [`runbook.md`](runbook.md) "Onboarding
    players" + [`big-party.md`](big-party.md).
