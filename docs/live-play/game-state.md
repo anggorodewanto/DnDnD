@@ -10,7 +10,7 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-06-29 — **The party DESCENDED — now standing at the cold door, the boss beat one player-choice away.** Both PCs committed (Forge *"I'm in"* 5:12 PM; Vale *"descents the cellar, and further into darkness below"* 7:13 PM), so the pre-built cold-door beat is now LIVE-TRIGGERED. DM Console was clean first (0 pending, no active encounter). Posted the **descent read-aloud (block A)** to #the-story (7:15 PM, Post History confirmed): the stair into the cold the brood fled, the deepening mineral cold, the passage ending at a **frost-rimed black-iron door** whose lock fits **Vale's cold iron key**, something patient behind it, and the keeper's *"do not turn it."* **Ends on the door — a clean cliffhanger.** No mechanics yet (pure narration; both PCs still full — **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**; three finds on Vale's sheet — Potion of Healing unused, Cold Iron Key, Water-Rotted Journal). **Turning the key is the players' call — NOT scripted.** When they turn it: post **block B** (vault) → open **"Cold Vault — the keeper"** (`adc064e7-…`, 1× Wight CR3 on map `2899165e-…`, surprise off, party 2/2) → **Start Combat** (adjudicate surprise live; *hold person* FAILS — the keeper is UNDEAD). Design + staged read-alouds: [`encounters/cold-vault.md`](encounters/cold-vault.md). **Combat NOT started — awaiting the players' move at the cold door.** ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
+_Last updated: 2026-06-29 — **COMBAT LIVE — the Cold Vault boss fight is ON (Round 1).** The players turned the key (Forge *"follows to descend below"* 7:17 PM; Vale *"inserts the key… nodded to Forge and turns the key"* 7:54 PM), so the beat ran end-to-end: posted **block B** (the vault read-aloud — the door opening on grave-cold air, the chiselled-out shrine, the keeper rising in its frost-grey clothes; 7:55 PM, Post History confirmed) → opened **"Cold Vault — the keeper"** → **Start Combat** (~7:56 PM). **Live encounter `446dce33-e221-4d1f-a88b-4e81534b3399`.** Surprise adjudicated live = **none** (keeper dormant, PCs deliberately opened — standard initiative). **Round 1 order (from the Console): Forge (14) → Wight keeper (14, tie→Forge first) → Vale (4).** PCs entered bottom-center (the cold door); keeper top-center — ~40 ft gap to close. **It's Forge's turn (PC) — awaiting his slash command; do NOT act/roll for him.** Run the **Wight's** turn from the combat workspace when initiative reaches it; keep its HP/AC SECRET. **Escalation in play: the keeper is UNDEAD → Vale's *hold person* will FAIL** (telegraph it the first time she tries). Live round/turn/HP/positions → **DM Console** (`#dm-console`), not this file. ISSUE-038 fixed: End Combat now AUTO-carries PC HP/conditions to the sheets (the manual carry-out footgun is gone).
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -76,14 +76,15 @@ recent action timeline are **generated** — read them live, never transcribe th
 
 ## Active encounter (durable refs — live state via the Console)
 
-- **PRE-BUILT, NOT STARTED — "The Cold Vault"** (internal **"Cold Vault — the keeper"**),
-  template id `adc064e7-2800-4787-8cb8-5deb23d1fc1f`, map *Ashfall Waystation — the cold vault*
-  (`2899165e-…`). **1× Wight** (CR 3) reflavored as the frost-rimed **vault-keeper**, placed
-  top-center (6,1); surprise OFF; party 2/2 (Vale + Forge). The **cold-door boss beat** the
-  journal points to — built 06-29, **awaiting the players' descent**. Design + staged
-  read-alouds + the *hold-person-fails* escalation: [`encounters/cold-vault.md`](encounters/cold-vault.md).
-  **To run:** narrate the descent + the cold door, then (if they turn the key) open the encounter →
-  **Start Combat** (adjudicate surprise live). Reserve husks (Zombies) added live only if it's too easy.
+- **LIVE — "The Cold Vault"** (internal **"Cold Vault — the keeper"**), **live encounter id
+  `446dce33-e221-4d1f-a88b-4e81534b3399`** (template `adc064e7-…`), map *Ashfall Waystation — the cold vault*
+  (`2899165e-…`). **Started 2026-06-29 ~7:56 PM** after the players turned the key. **1× Wight** (CR 3)
+  reflavored as the frost-rimed **vault-keeper**; surprise off (adjudicated live — none, the keeper was
+  dormant and the PCs deliberately opened the door, standard initiative). Party 2/2 (Vale + Forge). **Round /
+  turn / HP / positions / conditions → DM Console, NOT here** (don't hand-copy). Design + the
+  *hold-person-fails* escalation (the keeper is genuinely UNDEAD): [`encounters/cold-vault.md`](encounters/cold-vault.md).
+  Reserve husks (Zombies) added live only if it's too easy. Keep the keeper's HP/AC secret; players roll their
+  own dice; run the Wight's turns from the combat workspace when initiative reaches it.
 - **CLOSED — "The Cellar"** (internal "Cellar — the brood"), encounter id
   `8509d1f6-da9d-451c-bb2e-8571b9402e9e`, map *Ashfall Waystation — cellar*. 4 combatants
   (Vale + Forge vs two ghouls). **Ended in victory 2026-06-28 at R11** — both ghouls dead, Forge
@@ -126,15 +127,19 @@ to Forge** — go down with her, or not? **Awaiting Forge's (Jonathan's) answer.
 
 > Open the **DM Console** first for `next_step` + the live board, then apply this intent.
 
-1. **DESCENDED — the party stands at the cold door; the boss beat is one player-choice away.** No active
-   encounter yet. Both PCs at full — **Vale 24/24 (Pact L2 2/2), Forge 32/32, no conditions**; all three finds
-   on Vale's sheet (Potion of Healing **unused**, Cold Iron Key, Water-Rotted Journal). Both committed and the
-   party **actually moved** (Forge *"I'm in"* 5:12 PM; Vale *"descents the cellar, and further into darkness
-   below"* 7:13 PM), so the **descent read-aloud (block A) is POSTED** (7:15 PM) — they're now at the
-   frost-rimed black-iron door, key in hand, the keeper's *"do not turn it"* ringing. **The next decision is
-   THEIRS: turn the key or not** — do NOT script it. When they turn it (or force the door): post **block B**
-   (vault) → open **"Cold Vault — the keeper"** → **Start Combat** (surprise live; *hold person* FAILS). If they
-   balk/retreat, follow their lead. **Awaiting the players' move at the cold door.** The live hooks:
+1. **COMBAT LIVE — the Cold Vault boss fight, Round 1.** Live encounter `446dce33-e221-4d1f-a88b-4e81534b3399`.
+   The players turned the key, so the beat ran end-to-end (block B posted 7:55 PM → Start Combat ~7:56 PM).
+   **Pull the live board from the DM Console** — round/turn/HP/positions are generated there, not here. R1 order:
+   **Forge (14) → Wight keeper (14) → Vale (4)**; it opens on **Forge's turn (PC)** — **await his action; never
+   roll/act for him.** Run the loop: observe each player's slash command → adjudicate/narrate to #the-story →
+   when initiative reaches the **Wight**, run its turn from the **combat workspace** (apply attacks/damage there;
+   players roll their own saves). **Keep the keeper's HP/AC SECRET** — describe wounds, never quote numbers
+   ([`dm-rules.md`](dm-rules.md)). **Escalation: the keeper is UNDEAD → Vale's *hold person* FAILS** — telegraph
+   it the first time she casts (the spell finds nothing living to grip). Her tools that DO bite: *shatter*,
+   *hellish rebuke*, *chill touch* (DC 13). Forge's **Rage** resists the keeper's slashing but **NOT** its
+   necrotic **Life Drain** (max-HP erosion — watch his HP). **Reserve husks (Zombies) added live only if it's
+   too easy** — not pre-placed. Full design: [`encounters/cold-vault.md`](encounters/cold-vault.md). The other
+   standing hooks (for after the fight):
    - **✓ Journal read (1:38 PM).** It surfaced the **cold door** — an old vault lower than the cellar that the
      keeper unlocked; the wretches **fled up from it**, so the cellar door was clawed from inside to *escape*
      the cold door, not to reach the keeper. The keeper's last line: *"the cold iron key locks the cold door.

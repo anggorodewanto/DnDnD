@@ -968,3 +968,28 @@ rolls, no mutations; logged for narrative continuity only._
   (or otherwise forces the door), post the **block B** vault read-aloud → open **"Cold Vault — the keeper"** →
   **Start Combat** (adjudicate surprise live; remember *hold person* FAILS on the undead keeper). If they balk
   and retreat, follow their lead. **Awaiting the players' move at the cold door.**
+
+### They turn the key — COMBAT: the Cold Vault boss begins (06-29, ~7:54–7:56 PM)
+
+- **Player beats (in-fiction, #in-character):**
+  - **Forge (JonathanEka), 7:17 PM:** *"Nodding in solemn, Forge follows to descend below.."* — at the door
+    with Vale.
+  - **Vale (dewa), 7:54 PM:** *"Standing in front of the door, Vale inserts the key. She waited a beat, then
+    nodded to Forge and turns the key."* — **the key is turned** (the keeper's warning ignored). Trigger to run
+    block B + Start Combat.
+- **DM beat — vault read-aloud posted (block B, 7:55 PM, Post History confirmed):** the door swinging in on
+  grave-cold air, the vault as a **shrine to a forgotten god whose name has been chiselled out of every stone**,
+  and the **keeper rising** in its own frost-grey clothes — *it does not lunge; it lifts one hand, almost gently,
+  and the air between you turns to winter.*
+- **Combat STARTED (~7:56 PM).** Opened *"Cold Vault — the keeper"* in the builder (party 2/2 confirmed: Vale ✓
+  Forge ✓; W1 Wight at (6,1), Surprised OFF) → **Start Combat** → *"Combat started. Encounter:
+  `446dce33-e221-4d1f-a88b-4e81534b3399`."* Board auto-posted to #combat-map; initiative to #initiative-tracker.
+- **Surprise adjudicated live = none** — the keeper was dormant/waiting and the PCs deliberately opened the door;
+  no ambush either way → **standard initiative.**
+- **Round 1 order (DM Console):** **Forge (14) → Wight keeper (14, tie → Forge first) → Vale (4).** PCs entered
+  **bottom-center** (the cold-door threshold); the keeper waits **top-center** — roughly a board's length to
+  close. **Live HP/positions are in the Console, not transcribed here.**
+- **Standing this turn:** R1 opens on **Forge's turn (PC)** — **awaiting his slash command; not rolling/acting
+  for him.** When initiative reaches the **Wight**, its turn is run from the combat workspace (its HP/AC kept
+  secret; players roll their own saves). **Watch for Vale's *hold person* — it FAILS on the undead keeper**
+  (telegraph the first attempt). Reserve husks held off-board unless the fight proves too easy.
