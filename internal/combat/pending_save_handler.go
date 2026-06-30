@@ -135,6 +135,62 @@ func (h *DMDashboardHandler) ResolveMonsterPendingSave(w http.ResponseWriter, r 
 	writeJSON(w, http.StatusOK, toMonsterSaveResolveResponse(res))
 }
 
+// CancelAoEPendingSave handles
+// POST /api/combat/{encounterID}/pending-saves/{saveID}/cancel. It voids the
+// whole AoE cast the clicked save belongs to (every same-source pending save),
+// so a DM can grant a player's undo of a misplaced AoE spell in one click. No
+// damage lands and no HP is touched or surfaced — enemy HP stays secret.
+func (h *DMDashboardHandler) CancelAoEPendingSave(w http.ResponseWriter, r *http.Request) {
+	encounterID, saveID, err := parsePendingSaveIDs(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := h.svc.CancelAoEPendingSave(r.Context(), encounterID, saveID)
+	if err != nil {
+		writeSaveResolveError(w, err)
+		return
+	}
+
+	line := formatAoESaveCancelLog(res)
+
+	// #combat-log: the cancellation only (never any HP).
+	if h.poster != nil {
+		h.poster.PostCorrection(r.Context(), encounterID, line)
+	}
+
+	// Best-effort audit row, parented to the active turn when one exists.
+	turnID := uuid.Nil
+	if turn, terr := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID); terr == nil {
+		turnID = turn.ID
+	}
+	h.svc.recordCombatAction(r.Context(), turnID, encounterID, res.CombatantID, uuid.NullUUID{}, "dm_cancel_aoe", line)
+
+	h.svc.publish(r.Context(), encounterID)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"save_id":  res.SaveID.String(),
+		"spell_id": res.SpellID,
+		"canceled": res.Canceled,
+	})
+}
+
+// formatAoESaveCancelLog renders the #combat-log / action_log line for a voided
+// AoE cast. It names the spell and the count of saves cleared, never any HP.
+func formatAoESaveCancelLog(res AoESaveCancellation) string {
+	spell := res.SpellID
+	if spell == "" {
+		spell = "AoE spell"
+	}
+	noun := "save"
+	if res.Canceled != 1 {
+		noun = "saves"
+	}
+	return fmt.Sprintf("\U0001f6e1️ **DM Correction:** %s cast canceled — %d pending %s voided, no damage applied.",
+		spell, res.Canceled, noun)
+}
+
 // writeSaveResolveError maps the resolver's sentinel errors to HTTP statuses.
 func writeSaveResolveError(w http.ResponseWriter, err error) {
 	switch {

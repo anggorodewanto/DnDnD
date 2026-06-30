@@ -4,7 +4,7 @@ import {
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
-  getPendingSaves, resolveMonsterSave, resolveMonsterSaveByUrl,
+  getPendingSaves, resolveMonsterSave, resolveMonsterSaveByUrl, cancelMonsterSave,
   listActionLog,
   undoLastAction,
   overrideCombatantHP as overrideCombatantHPDM,
@@ -624,6 +624,35 @@ describe('resolveMonsterSaveByUrl', () => {
       text: () => Promise.resolve('pending save not found'),
     });
     await expect(resolveMonsterSaveByUrl('/api/combat/x/pending-saves/y/resolve')).rejects.toThrow('pending save not found');
+  });
+});
+
+describe('cancelMonsterSave', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs an empty JSON body to the cancel endpoint and returns the result', async () => {
+    const mockResult = { save_id: 's-1', spell_id: 'shatter', canceled: 2 };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mockResult) });
+
+    const result = await cancelMonsterSave('enc-1', 's-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/pending-saves/s-1/cancel');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
+  it('throws the server text on a 409 (cast already applied)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('pending save is already resolved'),
+    });
+    await expect(cancelMonsterSave('enc-1', 's-1')).rejects.toThrow('pending save is already resolved');
   });
 });
 

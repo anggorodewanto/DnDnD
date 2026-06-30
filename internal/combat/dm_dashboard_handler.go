@@ -69,6 +69,8 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		// ISSUE-043: DM-side resolution of a monster/NPC's pending AoE save.
 		r.Get("/{encounterID}/pending-saves", h.ListPendingSaves)
 		r.Post("/{encounterID}/pending-saves/{saveID}/resolve", h.ResolveMonsterPendingSave)
+		// ISSUE-048: void a mid-flight AoE cast's pending saves (DM undo grant).
+		r.Post("/{encounterID}/pending-saves/{saveID}/cancel", h.CancelAoEPendingSave)
 	})
 }
 

@@ -176,6 +176,9 @@ type Store interface {
 	UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
 	MarkPendingSaveApplied(ctx context.Context, id uuid.UUID) error
 	CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
+	// ForfeitPendingSave voids one pending/rolled save (status='forfeited') so it
+	// never applies damage — used to cancel a mid-flight AoE cast on a DM undo.
+	ForfeitPendingSave(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
 
 	// Impact Summary
 	GetLastCompletedTurnByCombatant(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)

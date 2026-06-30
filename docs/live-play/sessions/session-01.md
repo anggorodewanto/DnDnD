@@ -1091,3 +1091,25 @@ rolls, no mutations; logged for narrative continuity only._
   attacker's turn; and the one-click damage control (`override/hp`) would leak the keeper's secret HP. The spell *is*
   modelled (2d10 fire, DEX save half). Today the DM hand-assembles it; proposed fix = an "execute reaction spell"
   resolver mirroring the monster-save resolver (ISSUE-043). Logged for a future build — **does not block play**.
+
+### Round 2 — Vale's Shatter clips Forge, undo granted; ISSUE-048 (cancel an AoE cast) built live (06-30)
+
+- **Vale cast Shatter (R2) and it caught Forge.** Her 10-ft blast was placed so the sphere caught **both** the keeper
+  **and her ally Forge**. Mid-resolution it was clean to reverse: pact slot spent, two `pending_saves` (the keeper's
+  DM-resolved + Forge's player `/save`), **no damage applied yet** (AoE damage defers until every target's save resolves
+  — the ISSUE-044 gate). She ran **`/undo`** ("i need to cast it more to the right") to recast off Forge.
+- **Granting the undo cleanly hit a product gap.** The `undo_request` queue resolver only acknowledges (writes an
+  outcome note); `undo-last-action` restores only HP/position/conditions (no slot refund, no save clear); and the **only**
+  pending-save endpoint is `…/resolve`, which *applies* damage. There was no way to *cancel* a mid-flight AoE cast — so
+  granting the undo would leave un-cancelable pending saves (a duplicate "Resolve save" footgun + an oldest-first `/save`
+  mis-attribution). The `ForfeitPendingSave`/`CancelAllPendingSavesByCombatant` SQL existed but had no handler/button.
+- **Fix-now (DM choice: fix cleanly, then grant) — ISSUE-048 FIXED.** Built a DM **Cancel** path (red/green TDD):
+  `Service.CancelAoEPendingSave` forfeits every not-yet-applied save sharing the clicked save's `source`
+  (`aoe:shatter:s2c3` → voids the **whole** blast in one click), `POST …/pending-saves/{id}/cancel` (added to both the
+  handler RegisterRoutes **and** the `main.go` mount — the ISSUE-043 two-list trap), a `dm_cancel_aoe` audit + #combat-log
+  correction that never surfaces HP, and an amber **Cancel** button beside "Resolve save" in `PendingMonsterSavesPanel`.
+  4 Go + 2 vitest tests; `make cover-check` + 747 vitest green; rebuilt + redeployed.
+- **Grant executed on the live board.** Clicked the new **Cancel** → it voided **2** saves (`canceled=2`: the keeper +
+  Forge), **no damage** (Forge still 25/32, keeper HP unmoved). Refunded Vale's **pact slot 0→1** (slot override, audited)
+  and **resolved the `undo_request`** with a player-safe whisper ("your Shatter is recalled and your pact slot refunded —
+  recast further right, clear of Forge"). **Now awaiting Vale's recast** — never roll/act for her.

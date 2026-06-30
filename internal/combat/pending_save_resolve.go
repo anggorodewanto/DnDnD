@@ -25,9 +25,10 @@ import (
 // enum), so 'applied' (ISSUE-044) needs no migration. Lifecycle:
 // pending → rolled → applied.
 const (
-	pendingSaveStatusPending = "pending"
-	pendingSaveStatusRolled  = "rolled"
-	pendingSaveStatusApplied = "applied"
+	pendingSaveStatusPending   = "pending"
+	pendingSaveStatusRolled    = "rolled"
+	pendingSaveStatusApplied   = "applied"
+	pendingSaveStatusForfeited = "forfeited"
 )
 
 // ErrPendingSaveNotFound signals the pending_saves row could not be loaded; the

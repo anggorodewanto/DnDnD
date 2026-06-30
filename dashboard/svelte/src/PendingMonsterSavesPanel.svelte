@@ -5,7 +5,7 @@
   // of the rolled outcomes so the result survives the list refreshing the
   // resolved save off. onResolved lets the parent reload the workspace so the
   // applied damage shows on the affected token's HP.
-  import { getPendingSaves, resolveMonsterSave } from './lib/api.js';
+  import { getPendingSaves, resolveMonsterSave, cancelMonsterSave } from './lib/api.js';
   import { formatMonsterSaveResult } from './lib/combat.js';
 
   let { encounterId, onResolved } = $props();
@@ -14,6 +14,7 @@
   let loading = $state(true);
   let error = $state(null);
   let resolving = $state(null); // save ID currently being resolved
+  let canceling = $state(null); // save ID currently being canceled
   let results = $state([]); // [{ text, ok }] newest-first rolled outcomes
 
   $effect(() => {
@@ -54,6 +55,29 @@
       resolving = null;
     }
   }
+
+  // Void the whole AoE cast this save belongs to (no damage lands) — for a DM
+  // granting a player's undo of a misplaced AoE spell.
+  async function handleCancel(saveId) {
+    if (canceling || resolving) return;
+    canceling = saveId;
+    try {
+      const result = await cancelMonsterSave(encounterId, saveId);
+      const noun = result.canceled === 1 ? 'save' : 'saves';
+      results = [
+        { text: `${result.spell_id || 'AoE spell'} cast canceled — ${result.canceled} pending ${noun} voided, no damage applied.`, ok: true },
+        ...results,
+      ];
+      error = null;
+      await loadSaves(); // the voided saves drop off the list
+      if (onResolved) onResolved(); // let the workspace refresh
+    } catch (e) {
+      // 409 already-applied, 404 not found, 400 bad ids → plain-text message.
+      results = [{ text: e.message, ok: false }, ...results];
+    } finally {
+      canceling = null;
+    }
+  }
 </script>
 
 {#if saves.length > 0 || results.length > 0}
@@ -73,14 +97,25 @@
               <span class="save-ability">{(save.ability || '').toUpperCase()}</span>
               <span class="save-dc">DC {save.dc}</span>
             </span>
-            <button
-              class="resolve-btn"
-              onclick={() => handleResolve(save.id)}
-              disabled={resolving === save.id}
-              data-testid="resolve-save-{save.id}"
-            >
-              {resolving === save.id ? 'Resolving…' : 'Resolve save'}
-            </button>
+            <span class="save-actions">
+              <button
+                class="resolve-btn"
+                onclick={() => handleResolve(save.id)}
+                disabled={resolving === save.id || canceling === save.id}
+                data-testid="resolve-save-{save.id}"
+              >
+                {resolving === save.id ? 'Resolving…' : 'Resolve save'}
+              </button>
+              <button
+                class="cancel-btn"
+                onclick={() => handleCancel(save.id)}
+                disabled={resolving === save.id || canceling === save.id}
+                title="Void this AoE cast (no damage) — for granting a player's undo"
+                data-testid="cancel-save-{save.id}"
+              >
+                {canceling === save.id ? 'Canceling…' : 'Cancel'}
+              </button>
+            </span>
           </li>
         {/each}
       </ul>
@@ -157,9 +192,16 @@
     font-size: 0.75rem;
   }
 
-  .resolve-btn {
+  .save-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+
+  .resolve-btn,
+  .cancel-btn {
     padding: 0.2rem 0.5rem;
-    background: #22c55e;
     color: #1a1a2e;
     border: none;
     border-radius: 3px;
@@ -169,11 +211,24 @@
     white-space: nowrap;
   }
 
+  .resolve-btn {
+    background: #22c55e;
+  }
+
   .resolve-btn:hover:not(:disabled) {
     background: #16a34a;
   }
 
-  .resolve-btn:disabled {
+  .cancel-btn {
+    background: #e2a23b;
+  }
+
+  .cancel-btn:hover:not(:disabled) {
+    background: #c4861f;
+  }
+
+  .resolve-btn:disabled,
+  .cancel-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

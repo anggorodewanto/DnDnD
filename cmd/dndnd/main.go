@@ -535,6 +535,8 @@ func mountCombatDashboardRoutes(
 	// ISSUE-043: DM resolves a monster's pending AoE saving throw.
 	router.Get("/api/combat/{encounterID}/pending-saves", dm.ListPendingSaves)
 	router.Post("/api/combat/{encounterID}/pending-saves/{saveID}/resolve", dm.ResolveMonsterPendingSave)
+	// ISSUE-048: DM voids a mid-flight AoE cast's pending saves (undo grant).
+	router.Post("/api/combat/{encounterID}/pending-saves/{saveID}/cancel", dm.CancelAoEPendingSave)
 	return combatDashboardWiring{handler: dm, poster: poster}
 }
 

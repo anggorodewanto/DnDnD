@@ -973,6 +973,24 @@ export async function resolveMonsterSaveByUrl(resolveUrl) {
 }
 
 /**
+ * Cancel (void) the AoE cast a pending save belongs to. Forfeits every
+ * same-source pending save so the cast lands NO damage — used when a DM grants
+ * a player's undo of a misplaced AoE spell. apiFetch throws Error(serverText)
+ * on non-2xx (404 not found, 409 already-applied, 400 bad ids).
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} saveId - Any pending save UUID in the cast.
+ * @returns {Promise<{save_id:string, spell_id:string, canceled:number}>}
+ */
+export async function cancelMonsterSave(encounterId, saveId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/pending-saves/${saveId}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+/**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

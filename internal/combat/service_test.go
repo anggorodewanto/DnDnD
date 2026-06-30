@@ -120,6 +120,7 @@ type mockStore struct {
 	updatePendingSaveResultFn          func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
 	markPendingSaveAppliedFn           func(ctx context.Context, id uuid.UUID) error
 	cancelAllPendingSavesByCombatantFn func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
+	forfeitPendingSaveFn               func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
 
 	// Turn Timer
 	listTurnsNeedingNudgeFn             func(ctx context.Context) ([]refdata.Turn, error)
@@ -682,6 +683,12 @@ func (m *mockStore) CancelAllPendingSavesByCombatant(ctx context.Context, arg re
 		return m.cancelAllPendingSavesByCombatantFn(ctx, arg)
 	}
 	return nil
+}
+func (m *mockStore) ForfeitPendingSave(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error) {
+	if m.forfeitPendingSaveFn != nil {
+		return m.forfeitPendingSaveFn(ctx, id)
+	}
+	return refdata.PendingSafe{ID: id, Status: "forfeited"}, nil
 }
 func (m *mockStore) ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error) {
 	if m.listTurnsNeedingNudgeFn != nil {
