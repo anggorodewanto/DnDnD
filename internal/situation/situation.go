@@ -140,4 +140,7 @@ const (
 	SourceQueue    = "queue"
 	SourceApproval = "approval"
 	SourceLevelUp  = "levelup"
+	// SourceSave is an unresolved monster/NPC AoE saving throw the DM must roll
+	// (ISSUE-043). It blocks AoE damage from landing until resolved.
+	SourceSave = "save"
 )

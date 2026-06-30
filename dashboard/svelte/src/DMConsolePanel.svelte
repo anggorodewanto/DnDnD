@@ -6,10 +6,19 @@
   // the live encounter state, and the recent timeline. The server resolves the
   // active campaign from the authenticated session, so no campaign id prop.
   import { fetchDMSituation, formatConditions, formatDeathSaves } from './lib/dmsituation.js';
+  import { resolveMonsterSaveByUrl } from './lib/api.js';
+  import { formatMonsterSaveResult } from './lib/combat.js';
 
   let situation = $state(null);
   let loading = $state(true);
   let loadError = $state(null);
+
+  // Monster-save resolution: the situation `pending[]` carries kind:"monster_save"
+  // items whose resolve_url is a POST endpoint (not a hash route), so they get a
+  // Resolve button instead of a plain link. resolvingSaveId guards a double-click;
+  // saveResults keeps the rolled outcome around after the item drops off the list.
+  let resolvingSaveId = $state(null);
+  let saveResults = $state([]); // [{ text, ok }] newest-first
 
   async function load() {
     loading = true;
@@ -20,6 +29,21 @@
       loadError = e.message;
     } finally {
       loading = false;
+    }
+  }
+
+  async function resolveSave(item) {
+    if (resolvingSaveId) return;
+    resolvingSaveId = item.id;
+    try {
+      const result = await resolveMonsterSaveByUrl(item.resolve_url);
+      saveResults = [{ text: formatMonsterSaveResult(result), ok: true }, ...saveResults];
+      await load(); // the resolved save drops off pending
+    } catch (e) {
+      // 404 not found, 409 already-resolved / player-save, 400 bad ids → plain text.
+      saveResults = [{ text: e.message, ok: false }, ...saveResults];
+    } finally {
+      resolvingSaveId = null;
     }
   }
 
@@ -88,9 +112,27 @@
               {#if item.summary}
                 <p class="pending-summary">{item.summary}</p>
               {/if}
-              {#if item.resolve_url}
+              {#if item.kind === 'monster_save'}
+                <button
+                  class="resolve-save-btn"
+                  onclick={() => resolveSave(item)}
+                  disabled={resolvingSaveId === item.id}
+                  data-testid="resolve-save-{item.id}"
+                >
+                  {resolvingSaveId === item.id ? 'Resolving…' : 'Resolve'}
+                </button>
+              {:else if item.resolve_url}
                 <a class="pending-link" href={item.resolve_url}>Resolve</a>
               {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if saveResults.length > 0}
+        <ul class="save-results" data-testid="save-results">
+          {#each saveResults as result, i (i)}
+            <li class="save-result" class:failure={!result.ok} data-testid="save-result-{i}">
+              {result.text}
             </li>
           {/each}
         </ul>
@@ -346,6 +388,51 @@
 
   .pending-link:hover {
     text-decoration: underline;
+  }
+
+  /* Monster-save Resolve button + rolled-outcome log. */
+  .resolve-save-btn {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    background: #22c55e;
+    color: #0f1a2e;
+    border: none;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .resolve-save-btn:hover:not(:disabled) {
+    background: #16a34a;
+  }
+
+  .resolve-save-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .save-results {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .save-result {
+    padding: 0.35rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    background: rgba(34, 197, 94, 0.12);
+    border-left: 3px solid #22c55e;
+    color: #e0e0e0;
+  }
+
+  .save-result.failure {
+    background: rgba(239, 68, 68, 0.12);
+    border-left-color: #ef4444;
   }
 
   /* Encounter state */

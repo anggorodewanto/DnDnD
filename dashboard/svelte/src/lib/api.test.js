@@ -4,6 +4,7 @@ import {
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
+  getPendingSaves, resolveMonsterSave, resolveMonsterSaveByUrl,
   listActionLog,
   undoLastAction,
   overrideCombatantHP as overrideCombatantHPDM,
@@ -532,6 +533,97 @@ describe('cancelReaction', () => {
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/combat/enc-1/reactions/r-1/cancel');
     expect(options.method).toBe('POST');
+  });
+});
+
+// --- Pending Monster Saves API ---
+
+describe('getPendingSaves', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('GETs the encounter pending-saves list', async () => {
+    const mock = [
+      { id: 's-1', combatant_id: 'c-1', combatant_name: 'Wight', ability: 'con', dc: 13, source: 'spell', spell_id: 'fireball', cover_bonus: 0 },
+    ];
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mock) });
+
+    const result = await getPendingSaves('enc-1');
+    expect(result).toEqual(mock);
+    expect(fetch).toHaveBeenCalledWith('/api/combat/enc-1/pending-saves', undefined);
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('invalid encounter ID'),
+    });
+    await expect(getPendingSaves('bad')).rejects.toThrow('invalid encounter ID');
+  });
+});
+
+describe('resolveMonsterSave', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs an empty JSON body to the resolve endpoint and returns the rolled result', async () => {
+    const mockResult = {
+      save_id: 's-1', combatant_id: 'c-1', combatant_name: 'Wight', ability: 'con',
+      dc: 13, natural_roll: 4, save_bonus: 0, cover_bonus: 0, total: 4, success: false,
+      damage: { total_damage: 16, targets: [{ combatant_id: 'c-1', display_name: 'Wight', save_success: false, damage_dealt: 16 }] },
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mockResult) });
+
+    const result = await resolveMonsterSave('enc-1', 's-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/pending-saves/s-1/resolve');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
+  it('throws the server text on a 409 (already resolved / player save)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('pending save already resolved'),
+    });
+    await expect(resolveMonsterSave('enc-1', 's-1')).rejects.toThrow('pending save already resolved');
+  });
+});
+
+describe('resolveMonsterSaveByUrl', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs an empty JSON body to the supplied resolve URL', async () => {
+    const mockResult = { save_id: 's-9', success: true };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mockResult) });
+
+    const url = '/api/combat/enc-7/pending-saves/s-9/resolve';
+    const result = await resolveMonsterSaveByUrl(url);
+    expect(result).toEqual(mockResult);
+
+    const [calledUrl, options] = fetch.mock.calls[0];
+    expect(calledUrl).toBe(url);
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
+  it('throws the server text on a 404', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('pending save not found'),
+    });
+    await expect(resolveMonsterSaveByUrl('/api/combat/x/pending-saves/y/resolve')).rejects.toThrow('pending save not found');
   });
 });
 

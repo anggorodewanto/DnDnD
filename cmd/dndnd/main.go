@@ -532,6 +532,9 @@ func mountCombatDashboardRoutes(
 	// C-35: per-attack DM advantage/disadvantage override.
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/advantage", dm.OverrideCombatantNextAttackAdvantage)
 	router.Post("/api/combat/{encounterID}/combatants/{combatantID}/concentration/drop", dm.DropConcentration)
+	// ISSUE-043: DM resolves a monster's pending AoE saving throw.
+	router.Get("/api/combat/{encounterID}/pending-saves", dm.ListPendingSaves)
+	router.Post("/api/combat/{encounterID}/pending-saves/{saveID}/resolve", dm.ResolveMonsterPendingSave)
 	return combatDashboardWiring{handler: dm, poster: poster}
 }
 

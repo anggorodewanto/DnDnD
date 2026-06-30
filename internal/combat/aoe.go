@@ -935,45 +935,71 @@ func CharLevelFromAoEPendingSaveSource(source string) int {
 // land once every affected combatant's save has come back, regardless of
 // whether it was rolled by a player (/save) or by the DM (dashboard).
 func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*AoEDamageResult, error) {
-	rows, err := s.store.ListPendingSavesByEncounter(ctx, encounterID)
+	// ISSUE-044: list EVERY save row for the encounter regardless of status. The
+	// apply step is driven AFTER a save flips pending→rolled, so the row being
+	// gated on is already resolved; the pending-only ListPendingSavesByEncounter
+	// would hide it and the gate would never fire (damage never applied).
+	rows, err := s.store.ListSavesByEncounter(ctx, encounterID)
 	if err != nil {
-		return nil, fmt.Errorf("listing pending saves: %w", err)
+		return nil, fmt.Errorf("listing saves: %w", err)
 	}
 	// SR-025: rows for the same spell may use either the plain source
 	// ("aoe:<spell-id>") or the Empowered variant ("aoe:<spell-id>:eN").
-	// Match by SpellIDFromAoEPendingSaveSource so both shapes resolve and
-	// the highest-N suffix wins as the empowered reroll count.
-	empoweredRerolls := 0
+	// Match by SpellIDFromAoEPendingSaveSource so both shapes resolve.
 	var spellRows []refdata.PendingSafe
 	for _, r := range rows {
 		if SpellIDFromAoEPendingSaveSource(r.Source) != spellID {
 			continue
 		}
 		spellRows = append(spellRows, r)
+	}
+	// Gate (a): nothing tagged for this spell.
+	if len(spellRows) == 0 {
+		return nil, nil
+	}
+	// Gate (b): still waiting on at least one target's save.
+	for _, r := range spellRows {
+		if r.Status == pendingSaveStatusPending {
+			return nil, nil
+		}
+	}
+	// Apply only to rows that have rolled but not yet been applied. This makes
+	// the drive idempotent and multi-cast-safe: a row marked 'applied' is never
+	// damaged again, so repeated drives (player /save + DM resolver both call
+	// this) and a second cast of the same spell in one encounter cannot
+	// double-hit. SR-025: the highest empowered-reroll suffix among the rows
+	// being applied wins.
+	empoweredRerolls := 0
+	var toApply []refdata.PendingSafe
+	for _, r := range spellRows {
+		if r.Status != pendingSaveStatusRolled {
+			continue
+		}
+		toApply = append(toApply, r)
 		if n := EmpoweredRerollsFromAoEPendingSaveSource(r.Source); n > empoweredRerolls {
 			empoweredRerolls = n
 		}
 	}
-	if len(spellRows) == 0 {
+	// Gate (c): every matched row is already 'applied' → idempotent no-op.
+	if len(toApply) == 0 {
 		return nil, nil
 	}
-	for _, r := range spellRows {
-		if r.Status == "pending" {
-			return nil, nil
-		}
-	}
 
-	// All resolved — derive damage parameters from the spell and run the
-	// existing ResolveAoESaves pipeline. Forfeited rows (DM cancelled, etc.)
-	// are treated as failed saves: that matches the player-side default of
-	// "no roll means no benefit of the save".
+	// Gate (d): all resolved with at least one freshly rolled row — derive
+	// damage parameters from the spell and run the ResolveAoESaves pipeline.
+	// Forfeited rows (DM cancelled, etc.) are treated as failed saves: that
+	// matches the player-side default of "no roll means no benefit of the save".
 	spell, err := s.store.GetSpell(ctx, spellID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up spell %q for AoE damage: %w", spellID, err)
 	}
 	if !spell.Damage.Valid {
 		// Non-damaging AoE (e.g. condition-only). Nothing to apply at this
-		// hook; condition/effect work happens elsewhere.
+		// hook; condition/effect work happens elsewhere. Still close the
+		// lifecycle so the next drive is an idempotent no-op.
+		if err := s.markSavesApplied(ctx, toApply); err != nil {
+			return nil, err
+		}
 		return &AoEDamageResult{}, nil
 	}
 	dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
@@ -983,16 +1009,16 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 
 	// E-C02: scale damage dice using slot level and char level encoded in
 	// the source tag. Legacy tags without scaling info fall back to base dice.
-	slotLevel := SlotLevelFromAoEPendingSaveSource(spellRows[0].Source)
-	charLevel := CharLevelFromAoEPendingSaveSource(spellRows[0].Source)
+	slotLevel := SlotLevelFromAoEPendingSaveSource(toApply[0].Source)
+	charLevel := CharLevelFromAoEPendingSaveSource(toApply[0].Source)
 	scaledDice := ScaleSpellDice(dmgInfo, int(spell.Level), slotLevel, charLevel)
 
 	saveEffect := ""
 	if spell.SaveEffect.Valid {
 		saveEffect = spell.SaveEffect.String
 	}
-	saveResults := make([]SaveResult, 0, len(spellRows))
-	for _, r := range spellRows {
+	saveResults := make([]SaveResult, 0, len(toApply))
+	for _, r := range toApply {
 		success := r.Success.Valid && r.Success.Bool
 		total := 0
 		if r.RollResult.Valid {
@@ -1018,7 +1044,21 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 	if err != nil {
 		return nil, err
 	}
+	if err := s.markSavesApplied(ctx, toApply); err != nil {
+		return nil, err
+	}
 	return &res, nil
+}
+
+// markSavesApplied closes the lifecycle on every freshly-applied save so a
+// repeated ResolveAoEPendingSaves drive becomes an idempotent no-op (ISSUE-044).
+func (s *Service) markSavesApplied(ctx context.Context, rows []refdata.PendingSafe) error {
+	for _, r := range rows {
+		if err := s.store.MarkPendingSaveApplied(ctx, r.ID); err != nil {
+			return fmt.Errorf("marking save %s applied: %w", r.ID, err)
+		}
+	}
+	return nil
 }
 
 // RecordAoEPendingSaveRoll resolves a single AoE pending_saves row for a

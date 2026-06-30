@@ -23,6 +23,9 @@ type Provider interface {
 	QueueItems(ctx context.Context, campaignID string) ([]QueueRow, error)
 	Approvals(ctx context.Context, campaignID string) ([]ApprovalRow, error)
 	LevelUps(ctx context.Context, campaignID string) ([]LevelUpRow, error)
+	// PendingSaves returns the active encounter's unresolved monster/NPC AoE
+	// saving throws (ISSUE-043); empty when out of combat or none are pending.
+	PendingSaves(ctx context.Context, campaignID string) ([]SaveRow, error)
 	// Encounter returns the campaign's single active encounter, or nil when
 	// there is none (out of combat / between encounters).
 	Encounter(ctx context.Context, campaignID string) (*EncounterRow, error)
@@ -57,6 +60,18 @@ type LevelUpRow struct {
 	ID        string
 	Name      string
 	CreatedAt time.Time
+}
+
+// SaveRow is one unresolved monster/NPC AoE saving throw in neutral form
+// (ISSUE-043). The adapter resolves the combatant's display name and filters to
+// NPC AoE-cast rows so the aggregator just maps it into a PendingItem.
+type SaveRow struct {
+	ID            string
+	EncounterID   string
+	CombatantName string
+	Ability       string
+	DC            int
+	CreatedAt     time.Time
 }
 
 // EncounterRow is the live encounter plus its combatants.
@@ -173,6 +188,22 @@ func (s *Service) buildPending(ctx context.Context, campaignID string, collect f
 			Summary:   approvalSummary(a),
 			Priority:  priorityApproval,
 			CreatedAt: a.CreatedAt,
+		})
+	}
+
+	saves, err := s.provider.PendingSaves(ctx, campaignID)
+	collect(err)
+	for _, sv := range saves {
+		items = append(items, PendingItem{
+			ID:         sv.ID,
+			Source:     SourceSave,
+			Kind:       "monster_save",
+			Label:      "Monster Saving Throw",
+			Player:     sv.CombatantName,
+			Summary:    saveSummary(sv),
+			ResolveURL: fmt.Sprintf("/api/combat/%s/pending-saves/%s/resolve", sv.EncounterID, sv.ID),
+			Priority:   priorityCombatBlocking,
+			CreatedAt:  sv.CreatedAt,
 		})
 	}
 
@@ -310,6 +341,11 @@ func formatPosition(col string, row int) string {
 		return ""
 	}
 	return col + strconv.Itoa(row)
+}
+
+// saveSummary renders a monster save's worklist summary, e.g. "DEX save vs DC 15".
+func saveSummary(s SaveRow) string {
+	return fmt.Sprintf("%s save vs DC %d", strings.ToUpper(s.Ability), s.DC)
 }
 
 func approvalSummary(a ApprovalRow) string {

@@ -110,6 +110,68 @@ func (p *situationProvider) LevelUps(ctx context.Context, campaignID string) ([]
 	return out, nil
 }
 
+// PendingSaves returns the active encounter's unresolved monster/NPC AoE saving
+// throws (ISSUE-043). It joins pending_saves against the combatant list to keep
+// only NPC AoE-cast rows and to resolve each combatant's display name; PC saves
+// (rolled in Discord via /save) and non-AoE saves are filtered out.
+func (p *situationProvider) PendingSaves(ctx context.Context, campaignID string) ([]situation.SaveRow, error) {
+	id, ok := parseUUID(campaignID)
+	if !ok {
+		return nil, nil
+	}
+	encs, err := p.queries.ListEncountersByCampaignID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var active *refdata.Encounter
+	for i := range encs {
+		if encs[i].Status == "active" {
+			active = &encs[i]
+			break
+		}
+	}
+	if active == nil {
+		return nil, nil
+	}
+
+	saves, err := p.queries.ListPendingSavesByEncounter(ctx, active.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(saves) == 0 {
+		return nil, nil
+	}
+
+	combs, err := p.queries.ListCombatantsByEncounterID(ctx, active.ID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[uuid.UUID]refdata.Combatant, len(combs))
+	for _, c := range combs {
+		byID[c.ID] = c
+	}
+
+	rows := make([]situation.SaveRow, 0, len(saves))
+	for _, sv := range saves {
+		if !combat.IsAoEPendingSaveSource(sv.Source) {
+			continue
+		}
+		c, found := byID[sv.CombatantID]
+		if !found || !c.IsNpc {
+			continue
+		}
+		rows = append(rows, situation.SaveRow{
+			ID:            sv.ID.String(),
+			EncounterID:   active.ID.String(),
+			CombatantName: c.DisplayName,
+			Ability:       sv.Ability,
+			DC:            int(sv.Dc),
+			CreatedAt:     sv.CreatedAt,
+		})
+	}
+	return rows, nil
+}
+
 func (p *situationProvider) Encounter(ctx context.Context, campaignID string) (*situation.EncounterRow, error) {
 	id, ok := parseUUID(campaignID)
 	if !ok {

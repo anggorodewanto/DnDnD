@@ -65,6 +65,10 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 
 		// Phase 118: voluntary concentration drop.
 		r.Post("/{encounterID}/combatants/{combatantID}/concentration/drop", h.DropConcentration)
+
+		// ISSUE-043: DM-side resolution of a monster/NPC's pending AoE save.
+		r.Get("/{encounterID}/pending-saves", h.ListPendingSaves)
+		r.Post("/{encounterID}/pending-saves/{saveID}/resolve", h.ResolveMonsterPendingSave)
 	})
 }
 

@@ -205,6 +205,64 @@ func (q *Queries) ListPendingSavesByEncounter(ctx context.Context, encounterID u
 	return items, nil
 }
 
+const listSavesByEncounter = `-- name: ListSavesByEncounter :many
+SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus FROM pending_saves
+WHERE encounter_id = $1
+ORDER BY created_at ASC
+`
+
+// ISSUE-044: lists every save row for an encounter REGARDLESS of status. The
+// AoE damage-apply gate must see rows that have already flipped to 'rolled'
+// (the pending-only list above hides them, so damage never lands).
+func (q *Queries) ListSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]PendingSafe, error) {
+	rows, err := q.db.QueryContext(ctx, listSavesByEncounter, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingSafe{}
+	for rows.Next() {
+		var i PendingSafe
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.CombatantID,
+			&i.Ability,
+			&i.Dc,
+			&i.Source,
+			&i.Status,
+			&i.RollResult,
+			&i.Success,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CoverBonus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markPendingSaveApplied = `-- name: MarkPendingSaveApplied :exec
+UPDATE pending_saves
+SET status = 'applied', updated_at = now()
+WHERE id = $1
+`
+
+// ISSUE-044: closes the lifecycle pending→rolled→applied so a repeated
+// damage-apply drive is an idempotent no-op.
+func (q *Queries) MarkPendingSaveApplied(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, markPendingSaveApplied, id)
+	return err
+}
+
 const updatePendingSaveResult = `-- name: UpdatePendingSaveResult :one
 UPDATE pending_saves
 SET roll_result = $2, success = $3, status = 'rolled', updated_at = now()

@@ -918,6 +918,60 @@ export async function resolvePendingAction(encounterId, actionId, data) {
   return res.json();
 }
 
+// --- Pending monster AoE saving throws ---
+//
+// Monster (NPC) AoE saves that the DM must roll. Surfaced both in the Combat
+// workspace and the DM Console. The list endpoint returns only unresolved
+// monster saves and works regardless of whose turn it is; resolve rolls the
+// save server-side and applies any damage. Backed by
+// internal/combat/pending_save_handler.go.
+
+/**
+ * List unresolved monster AoE saving throws for an encounter.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<Array<{id:string, combatant_id:string, combatant_name:string,
+ *   ability:string, dc:number, source:string, spell_id:string, cover_bonus:number}>>}
+ */
+export async function getPendingSaves(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/pending-saves`);
+  return res.json();
+}
+
+/**
+ * Resolve a single monster pending save by its IDs. Sends an empty JSON body.
+ * apiFetch throws Error(serverText) on non-2xx so callers can surface the
+ * backend's plain-text message (404 not found, 409 already-resolved /
+ * player-save, 400 bad ids).
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} saveId - Pending save UUID.
+ * @returns {Promise<object>} The rolled result (save_id, natural_roll, total,
+ *   success, optional damage…).
+ */
+export async function resolveMonsterSave(encounterId, saveId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/pending-saves/${saveId}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+/**
+ * Resolve a monster pending save via a server-supplied resolve URL (the DM
+ * situation `pending[]` items carry the POST path as `resolve_url`). Same body
+ * and error semantics as resolveMonsterSave.
+ * @param {string} resolveUrl - The POST resolve path from the situation item.
+ * @returns {Promise<object>} The rolled result.
+ */
+export async function resolveMonsterSaveByUrl(resolveUrl) {
+  const res = await apiFetch(resolveUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
 /**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.

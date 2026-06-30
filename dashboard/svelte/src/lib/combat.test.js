@@ -19,6 +19,8 @@ import {
   combatantsAtTile,
   nextStackedSelection,
   stackedTileCounts,
+  monsterSaveDamageDealt,
+  formatMonsterSaveResult,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -530,5 +532,88 @@ describe('stackedTileCounts', () => {
 
   it('tolerates null combatants', () => {
     expect(stackedTileCounts(null).size).toBe(0);
+  });
+});
+
+describe('monsterSaveDamageDealt', () => {
+  it('returns the matching target\'s damage_dealt', () => {
+    const result = {
+      combatant_id: 'c-1',
+      damage: {
+        total_damage: 30,
+        targets: [
+          { combatant_id: 'c-2', damage_dealt: 14 },
+          { combatant_id: 'c-1', damage_dealt: 16 },
+        ],
+      },
+    };
+    expect(monsterSaveDamageDealt(result)).toBe(16);
+  });
+
+  it('falls back to total_damage when no target matches', () => {
+    const result = {
+      combatant_id: 'c-9',
+      damage: { total_damage: 22, targets: [{ combatant_id: 'c-1', damage_dealt: 5 }] },
+    };
+    expect(monsterSaveDamageDealt(result)).toBe(22);
+  });
+
+  it('returns null when there is no damage object', () => {
+    expect(monsterSaveDamageDealt({ combatant_id: 'c-1' })).toBeNull();
+    expect(monsterSaveDamageDealt(null)).toBeNull();
+  });
+
+  it('preserves a zero damage_dealt (saved for half / no damage)', () => {
+    const result = {
+      combatant_id: 'c-1',
+      damage: { total_damage: 0, targets: [{ combatant_id: 'c-1', damage_dealt: 0 }] },
+    };
+    expect(monsterSaveDamageDealt(result)).toBe(0);
+  });
+});
+
+describe('formatMonsterSaveResult', () => {
+  it('formats a failed save with damage (matches the spec example)', () => {
+    const result = {
+      combatant_id: 'c-1',
+      combatant_name: 'Wight',
+      ability: 'con',
+      dc: 13,
+      natural_roll: 4,
+      save_bonus: 0,
+      total: 4,
+      success: false,
+      damage: {
+        total_damage: 16,
+        targets: [{ combatant_id: 'c-1', display_name: 'Wight', save_success: false, damage_dealt: 16 }],
+      },
+    };
+    expect(formatMonsterSaveResult(result)).toBe('Wight CON save: 4 vs DC 13 — Failure! Takes 16 damage');
+  });
+
+  it('uses total (bonus folded in) for the comparison, upper-cases the ability', () => {
+    const result = {
+      combatant_id: 'c-1',
+      combatant_name: 'Goblin',
+      ability: 'dex',
+      dc: 15,
+      natural_roll: 12,
+      save_bonus: 4,
+      total: 16,
+      success: true,
+    };
+    expect(formatMonsterSaveResult(result)).toBe('Goblin DEX save: 16 vs DC 15 — Success!');
+  });
+
+  it('omits the damage tail when no damage applied', () => {
+    const result = {
+      combatant_id: 'c-1', combatant_name: 'Orc', ability: 'wis', dc: 12, total: 18, success: true,
+    };
+    expect(formatMonsterSaveResult(result)).toBe('Orc WIS save: 18 vs DC 12 — Success!');
+  });
+
+  it('returns empty string for nullish input', () => {
+    expect(formatMonsterSaveResult(null)).toBe('');
+    expect(formatMonsterSaveResult(undefined)).toBe('');
   });
 });

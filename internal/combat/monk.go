@@ -2,7 +2,6 @@ package combat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -318,45 +317,11 @@ type StunningStrikeResult struct {
 
 // resolveTargetConSave resolves the target's CON save bonus.
 // For creatures, checks saving_throws JSON for "con" bonus, else uses ability scores CON modifier.
-// For PCs, uses ability scores CON modifier.
+// For PCs, uses ability scores CON modifier. Delegates to the general
+// ability-keyed resolver (ISSUE-043) so the monk and AoE-save paths share one
+// implementation.
 func (s *Service) resolveTargetConSave(ctx context.Context, target refdata.Combatant) (int, error) {
-	if target.CreatureRefID.Valid && target.CreatureRefID.String != "" {
-		creature, err := s.store.GetCreature(ctx, target.CreatureRefID.String)
-		if err != nil {
-			return 0, fmt.Errorf("getting creature for save: %w", err)
-		}
-		// Check for explicit save bonus
-		if creature.SavingThrows.Valid && len(creature.SavingThrows.RawMessage) > 0 {
-			var saves map[string]int
-			if err := json.Unmarshal(creature.SavingThrows.RawMessage, &saves); err == nil {
-				if conSave, ok := saves["con"]; ok {
-					return conSave, nil
-				}
-			}
-		}
-		// Fall back to ability score
-		scores, err := ParseAbilityScores(creature.AbilityScores)
-		if err != nil {
-			return 0, fmt.Errorf("parsing creature ability scores: %w", err)
-		}
-		return AbilityModifier(scores.Con), nil
-	}
-
-	// PC target
-	if target.CharacterID.Valid {
-		char, err := s.store.GetCharacter(ctx, target.CharacterID.UUID)
-		if err != nil {
-			return 0, fmt.Errorf("getting target character: %w", err)
-		}
-		scores, err := ParseAbilityScores(char.AbilityScores)
-		if err != nil {
-			return 0, fmt.Errorf("parsing target ability scores: %w", err)
-		}
-		return AbilityModifier(scores.Con), nil
-	}
-
-	// NPC without creature ref — default to +0
-	return 0, nil
+	return s.resolveCombatantSaveBonus(ctx, target, "con")
 }
 
 // StunningStrike handles the stunning strike prompt after a melee hit.

@@ -2313,7 +2313,7 @@ func TestResolveAoEPendingSaves_AppliesDamageOnceAllResolved(t *testing.T) {
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
-	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
 		// One rolled (success=true), one rolled (success=false) — fully resolved
 		return []refdata.PendingSafe{
 			{ID: uuid.New(), EncounterID: encounterID, CombatantID: combAID, Source: source, Ability: "dex", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
@@ -2444,7 +2444,7 @@ func TestResolveAoEPendingSaves_NoopWhenPendingRemain(t *testing.T) {
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
-	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
 		return []refdata.PendingSafe{
 			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), Source: source, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
 			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), Source: source, Status: "pending"},
@@ -3066,7 +3066,7 @@ func TestResolveAoEPendingSaves_UpcastScalesDamageDice(t *testing.T) {
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
-	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
 		return []refdata.PendingSafe{
 			{ID: uuid.New(), EncounterID: encounterID, CombatantID: goblinID, Source: source, Ability: "dex", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 8, Valid: true}, Success: sql.NullBool{Bool: false, Valid: true}},
 		}, nil

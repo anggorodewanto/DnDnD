@@ -169,7 +169,12 @@ type Store interface {
 	GetPendingSave(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
 	ListPendingSavesByCombatant(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
 	ListPendingSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
+	// ListSavesByEncounter lists every save row regardless of status (ISSUE-044);
+	// the AoE damage-apply gate needs to see rows that already flipped to
+	// 'rolled', which the pending-only list above hides.
+	ListSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
 	UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
+	MarkPendingSaveApplied(ctx context.Context, id uuid.UUID) error
 	CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
 	// Impact Summary

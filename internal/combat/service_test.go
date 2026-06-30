@@ -108,8 +108,17 @@ type mockStore struct {
 	createPendingSaveFn                func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error)
 	getPendingSaveFn                   func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
 	listPendingSavesByCombatantFn      func(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
+	// listPendingSavesByEncounterFn models the PENDING-ONLY query (status='pending').
+	// listSavesByEncounterFn models the ALL-STATUS query (ISSUE-044). The two are
+	// distinct on purpose: the AoE apply gate uses the all-status list, while the
+	// DM ListPendingSaves handler + situation builder use the pending-only one.
+	// Feeding resolved rows into the pending-only mock is exactly what masked the
+	// production bug, so tests that drive ResolveAoEPendingSaves must set
+	// listSavesByEncounterFn.
 	listPendingSavesByEncounterFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
+	listSavesByEncounterFn             func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
 	updatePendingSaveResultFn          func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
+	markPendingSaveAppliedFn           func(ctx context.Context, id uuid.UUID) error
 	cancelAllPendingSavesByCombatantFn func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
 	// Turn Timer
@@ -650,11 +659,23 @@ func (m *mockStore) ListPendingSavesByEncounter(ctx context.Context, encounterID
 	}
 	return []refdata.PendingSafe{}, nil
 }
+func (m *mockStore) ListSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error) {
+	if m.listSavesByEncounterFn != nil {
+		return m.listSavesByEncounterFn(ctx, encounterID)
+	}
+	return []refdata.PendingSafe{}, nil
+}
 func (m *mockStore) UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
 	if m.updatePendingSaveResultFn != nil {
 		return m.updatePendingSaveResultFn(ctx, arg)
 	}
 	return refdata.PendingSafe{ID: arg.ID, Status: "rolled", RollResult: arg.RollResult, Success: arg.Success}, nil
+}
+func (m *mockStore) MarkPendingSaveApplied(ctx context.Context, id uuid.UUID) error {
+	if m.markPendingSaveAppliedFn != nil {
+		return m.markPendingSaveAppliedFn(ctx, id)
+	}
+	return nil
 }
 func (m *mockStore) CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error {
 	if m.cancelAllPendingSavesByCombatantFn != nil {

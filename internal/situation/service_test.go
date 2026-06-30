@@ -11,21 +11,23 @@ import (
 // slice/pointer is returned verbatim; each *Err field forces that source to
 // fail so the best-effort / errors.Join behaviour can be exercised.
 type fakeProvider struct {
-	queue      []QueueRow
-	approvals  []ApprovalRow
-	levelUps   []LevelUpRow
-	encounter  *EncounterRow
-	actions    []TimelineRow
-	narration  []TimelineRow
-	resolution []TimelineRow
+	queue        []QueueRow
+	approvals    []ApprovalRow
+	levelUps     []LevelUpRow
+	pendingSaves []SaveRow
+	encounter    *EncounterRow
+	actions      []TimelineRow
+	narration    []TimelineRow
+	resolution   []TimelineRow
 
-	queueErr      error
-	approvalsErr  error
-	levelUpsErr   error
-	encounterErr  error
-	actionsErr    error
-	narrationErr  error
-	resolutionErr error
+	queueErr        error
+	approvalsErr    error
+	levelUpsErr     error
+	pendingSavesErr error
+	encounterErr    error
+	actionsErr      error
+	narrationErr    error
+	resolutionErr   error
 
 	gotEncounterID string
 }
@@ -38,6 +40,9 @@ func (f *fakeProvider) Approvals(_ context.Context, _ string) ([]ApprovalRow, er
 }
 func (f *fakeProvider) LevelUps(_ context.Context, _ string) ([]LevelUpRow, error) {
 	return f.levelUps, f.levelUpsErr
+}
+func (f *fakeProvider) PendingSaves(_ context.Context, _ string) ([]SaveRow, error) {
+	return f.pendingSaves, f.pendingSavesErr
 }
 func (f *fakeProvider) Encounter(_ context.Context, _ string) (*EncounterRow, error) {
 	return f.encounter, f.encounterErr
@@ -459,4 +464,38 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// ISSUE-043: an unresolved monster AoE save surfaces as a combat-blocking
+// pending item with a resolve URL, and drives the next-step hint.
+func TestBuild_MonsterPendingSaveSurfaces(t *testing.T) {
+	f := &fakeProvider{
+		pendingSaves: []SaveRow{
+			{ID: "save-1", EncounterID: "enc-1", CombatantName: "Goblin", Ability: "dex", DC: 15, CreatedAt: ts(1)},
+		},
+	}
+	got, err := NewService(f).Build(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Pending) != 1 {
+		t.Fatalf("Pending = %d, want 1", len(got.Pending))
+	}
+	item := got.Pending[0]
+	if item.Source != SourceSave {
+		t.Errorf("Source = %q, want %q", item.Source, SourceSave)
+	}
+	if item.Kind != "monster_save" {
+		t.Errorf("Kind = %q, want monster_save", item.Kind)
+	}
+	if item.Priority != priorityCombatBlocking {
+		t.Errorf("Priority = %d, want %d (combat-blocking)", item.Priority, priorityCombatBlocking)
+	}
+	wantURL := "/api/combat/enc-1/pending-saves/save-1/resolve"
+	if item.ResolveURL != wantURL {
+		t.Errorf("ResolveURL = %q, want %q", item.ResolveURL, wantURL)
+	}
+	if !contains(got.NextStep, "Goblin") || !contains(got.NextStep, "DEX save vs DC 15") {
+		t.Errorf("NextStep = %q, want it to mention the monster save", got.NextStep)
+	}
 }

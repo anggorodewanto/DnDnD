@@ -47,6 +47,7 @@
   import TurnQueue from './TurnQueue.svelte';
   import ActionResolver from './ActionResolver.svelte';
   import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
+  import PendingMonsterSavesPanel from './PendingMonsterSavesPanel.svelte';
   import ActionLogViewer from './ActionLogViewer.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
   import SlotEditor from './SlotEditor.svelte';
@@ -1295,6 +1296,11 @@
           activeTurnCombatantId={activeEncounter.active_turn_combatant_id}
           activeTurnIsNpc={activeEncounter.combatants?.find(c => c.id === activeEncounter.active_turn_combatant_id)?.is_npc || false}
           onReactionResolved={loadWorkspace}
+        />
+
+        <PendingMonsterSavesPanel
+          encounterId={activeEncounter.id}
+          onResolved={loadWorkspace}
         />
 
         <ActionLogViewer encounterId={activeEncounter.id} />

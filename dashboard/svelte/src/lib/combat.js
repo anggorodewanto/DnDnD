@@ -412,3 +412,44 @@ export function stackedTileCounts(combatants) {
   }
   return counts;
 }
+
+/**
+ * Damage dealt to the monster whose save was just resolved. The resolve
+ * response carries a `damage` object only when the resolution applied damage;
+ * its `targets[]` lists every affected combatant. Prefer the target row that
+ * matches the saving combatant; fall back to the pool's total_damage; return
+ * null when no damage was applied so callers can omit the "Takes N damage" tail.
+ * @param {object} result - The monster-save resolve response.
+ * @returns {number|null}
+ */
+export function monsterSaveDamageDealt(result) {
+  const damage = result?.damage;
+  if (!damage) return null;
+  const targets = Array.isArray(damage.targets) ? damage.targets : [];
+  const own = targets.find((t) => t.combatant_id === result.combatant_id);
+  if (own && typeof own.damage_dealt === 'number') return own.damage_dealt;
+  if (typeof damage.total_damage === 'number') return damage.total_damage;
+  return null;
+}
+
+/**
+ * One-line summary of a resolved monster AoE saving throw, e.g.
+ * "Wight CON save: 4 vs DC 13 — Failure! Takes 16 damage". Uses `total` (what
+ * the engine compared to the DC) so any save/cover bonus is already folded in,
+ * upper-cases the ability, and appends the damage tail only when damage applied.
+ * @param {object} result - The monster-save resolve response.
+ * @returns {string}
+ */
+export function formatMonsterSaveResult(result) {
+  if (!result) return '';
+  const name = result.combatant_name || 'Monster';
+  const ability = (result.ability || '').toUpperCase();
+  const total = typeof result.total === 'number' ? result.total : result.natural_roll;
+  const outcome = result.success ? 'Success' : 'Failure';
+  let text = `${name} ${ability} save: ${total} vs DC ${result.dc} — ${outcome}!`;
+  const damage = monsterSaveDamageDealt(result);
+  if (damage !== null) {
+    text += ` Takes ${damage} damage`;
+  }
+  return text;
+}
