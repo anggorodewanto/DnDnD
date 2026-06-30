@@ -187,14 +187,16 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Notify DM of the rest request via #dm-queue (no-op if no notifier wired).
-	h.postRestRequestToDMQueue(ctx, interaction.GuildID, campaign.ID.String(), char.Name, restType)
-
-	// med-34 / Phase 83a: gate behind the auto_approve_rest campaign
-	// setting. When the DM has explicitly turned off auto-approval, we
-	// only post the request to #dm-queue (above) and tell the player to
-	// wait — the rest applies once the DM resolves the queue entry.
+	// med-34 / Phase 83a: gate behind the auto_approve_rest campaign setting.
+	// When the DM has turned auto-approval off we post the request to #dm-queue
+	// (so the DM knows to act) and tell the player to wait — the rest applies
+	// once the DM resolves the queue entry. On the auto-approve path no DM
+	// action is needed, so we deliberately do NOT post a notification: it would
+	// otherwise linger forever as a pending rest_request item (cosmetic noise),
+	// since the auto path never resolves it.
 	if !restAutoApproved(campaign) {
+		// Notify DM of the rest request via #dm-queue (no-op if no notifier wired).
+		h.postRestRequestToDMQueue(ctx, interaction.GuildID, campaign.ID.String(), char.Name, restType)
 		respondEphemeral(h.session, interaction, fmt.Sprintf(
 			"⏳ %s rest request sent to the DM. Your rest will apply once they approve it.",
 			strings.ToUpper(restType[:1])+restType[1:],

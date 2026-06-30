@@ -33,10 +33,12 @@ type Settings struct {
 }
 
 // AutoApproveRestEnabled reports whether /rest should bypass DM approval.
-// Defaults to false (DM approval required per spec) when the field is absent.
+// Defaults to true (auto-approve) when the field is absent — matching the
+// AutoApproveRest field contract and restAutoApproved's null-settings branch.
+// A DM opts into gating by explicitly setting auto_approve_rest=false.
 func (s Settings) AutoApproveRestEnabled() bool {
 	if s.AutoApproveRest == nil {
-		return false
+		return true
 	}
 	return *s.AutoApproveRest
 }

@@ -148,11 +148,18 @@ func TestRestHandler_PostsToDMQueueViaNotifier(t *testing.T) {
 			return refdata.Character{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
 		},
 	}
+	// The #dm-queue notification only fires on the gated (approval-required)
+	// path; the auto-approve path is silent (no lingering pending item). Use
+	// gated settings so this test exercises the notification's shape.
+	autoFalse := false
+	gatedRaw, _ := json.Marshal(struct {
+		AutoApproveRest *bool `json:"auto_approve_rest"`
+	}{AutoApproveRest: &autoFalse})
 	h := NewRestHandler(
 		sess,
 		roller,
 		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: campaignID}, nil
+			return refdata.Campaign{ID: campaignID, Settings: pqtype.NullRawMessage{RawMessage: gatedRaw, Valid: true}}, nil
 		}},
 		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
 			return char, nil
@@ -1484,6 +1491,141 @@ func TestRestHandler_AutoApproveRest_DefaultIsTrue(t *testing.T) {
 
 	if !strings.Contains(responded, "Short Rest") {
 		t.Errorf("expected the actual rest prompt when auto-approval defaults to on, got: %s", responded)
+	}
+}
+
+// Reproduces the live bug: a campaign with VALID settings JSON that simply
+// omits auto_approve_rest (e.g. only channel_ids/diagonal_rule set) must still
+// default to auto-approve. The null-settings DefaultIsTrue test above never
+// exercises AutoApproveRestEnabled() because it short-circuits on !Settings.Valid;
+// this one drives the field-absent path, where the nil default decides.
+func TestRestHandler_AutoApproveRest_ValidSettingsMissingField_DefaultsTrue(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	// Valid settings, but auto_approve_rest is absent (the real-world shape).
+	settings := struct {
+		TurnTimeoutHours int    `json:"turn_timeout_hours"`
+		DiagonalRule     string `json:"diagonal_rule"`
+	}{TurnTimeoutHours: 24, DiagonalRule: "standard"}
+	raw, _ := json.Marshal(settings)
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+	updater := &mockRestCharacterUpdater{
+		updateCharacterFn: func(_ context.Context, _ refdata.UpdateCharacterParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
+		},
+	}
+	h := NewRestHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{
+				ID:       campaignID,
+				Settings: pqtype.NullRawMessage{RawMessage: raw, Valid: true},
+			}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		updater, &mockCheckRollLogger{}, nil,
+	)
+	h.SetNotifier(&recordingNotifier{})
+	h.Handle(makeRestInteraction("short"))
+
+	if strings.Contains(strings.ToLower(responded), "approve") {
+		t.Errorf("rest must NOT be gated when auto_approve_rest is absent from valid settings, got: %s", responded)
+	}
+	if !strings.Contains(responded, "Short Rest") {
+		t.Errorf("expected the hit-dice prompt (auto-approve default), got: %s", responded)
+	}
+}
+
+// restHandlerForSettings builds a RestHandler whose campaign carries the given
+// settings JSON and a no-encounter provider, returning the handler plus the
+// recording notifier so a test can assert whether /rest posted to #dm-queue.
+func restHandlerForSettings(t *testing.T, sess *MockSession, settingsRaw []byte) (*RestHandler, *recordingNotifier) {
+	t.Helper()
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	roller := dice.NewRoller(func(int) int { return 6 })
+	updater := &mockRestCharacterUpdater{
+		updateCharacterFn: func(_ context.Context, _ refdata.UpdateCharacterParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
+		},
+	}
+	h := NewRestHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{
+				ID:       campaignID,
+				Settings: pqtype.NullRawMessage{RawMessage: settingsRaw, Valid: true},
+			}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		updater, &mockCheckRollLogger{}, nil,
+	)
+	rec := &recordingNotifier{}
+	h.SetNotifier(rec)
+	return h, rec
+}
+
+// On the auto-approve path the rest needs no DM action, so /rest must NOT leave
+// a lingering pending rest_request notification in #dm-queue (cosmetic noise).
+func TestRestHandler_AutoApprove_DoesNotPostRestNotification(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+
+	// Valid settings, auto_approve_rest absent → auto-approve.
+	raw, _ := json.Marshal(struct {
+		TurnTimeoutHours int    `json:"turn_timeout_hours"`
+		DiagonalRule     string `json:"diagonal_rule"`
+	}{TurnTimeoutHours: 24, DiagonalRule: "standard"})
+
+	h, rec := restHandlerForSettings(t, sess, raw)
+	h.Handle(makeRestInteraction("short"))
+
+	if len(rec.posted) != 0 {
+		t.Errorf("auto-approved rest must not post a #dm-queue notification, got %d post(s)", len(rec.posted))
+	}
+}
+
+// The gated path DOES need DM action, so it must still post the notification.
+func TestRestHandler_Gated_PostsRestNotification(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+
+	autoFalse := false
+	raw, _ := json.Marshal(struct {
+		TurnTimeoutHours int    `json:"turn_timeout_hours"`
+		DiagonalRule     string `json:"diagonal_rule"`
+		AutoApproveRest  *bool  `json:"auto_approve_rest"`
+	}{TurnTimeoutHours: 24, DiagonalRule: "standard", AutoApproveRest: &autoFalse})
+
+	h, rec := restHandlerForSettings(t, sess, raw)
+	h.Handle(makeRestInteraction("short"))
+
+	if len(rec.posted) != 1 {
+		t.Fatalf("gated rest must post exactly one #dm-queue notification, got %d", len(rec.posted))
+	}
+	if rec.posted[0].Kind != dmqueue.KindRestRequest {
+		t.Errorf("expected KindRestRequest, got %v", rec.posted[0].Kind)
 	}
 }
 

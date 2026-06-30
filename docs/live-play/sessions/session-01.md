@@ -1166,3 +1166,63 @@ rolls, no mutations; logged for narrative continuity only._
   out of it); the cold door is open; what lies deeper is unexplored. Spotlight handed to the players — they decide what to
   search/do next. Standing campaign pull: the journal's warning (the Harrow couple "wearing their own faces"), the
   hollowed shrine, and Vale's patron steering her downward. Await player action — never narrate their choices.
+
+### Out of combat — Vale examines the shrine (06-30)
+
+- **Vale's player (dewa) opened the post-combat beat** (#in-character, 9:44 PM — Discord-only RP, invisible to the
+  DB / DM Console): *"Vale gives Forge a thumb up. Then examines the shrine."* The DM only sees it by reading Discord.
+- **Board reconciled quiet first:** no live encounter (all `completed`), DM Queue empty, `action_log` ends at the kill —
+  the move exists only in Discord RP, nothing to catch up on mechanically.
+- **Adjudication:** examining the gouged-out shrine is an exploration check. Per [`dm-rules.md`](../dm-rules.md) the
+  **player rolls her own dice** — so I narrated the freely-apparent read and called for an **Investigation check** (secret
+  **DC 13**, ruled **tiered**: even a low roll yields the obvious + her patron's certainty that *this* is the place, so the
+  campaign's central pull is never hard-blocked; a good roll earns the breadcrumb).
+- **Narrated to #the-story** (read-aloud, 9:50 PM): the cooling remains; the shrine itself — a worn stone ring, an altar
+  gone concave under centuries of hands, a niche in the back wall where **something was pried / chiselled out, recently**
+  (stone scraped bright and raw); the forgotten god's name cut deep and scratched out over and over by a frightened hand,
+  for years; the cold coming off the shrine, not the walls; and **Vale's patron-pull drawing tight as a plumb-line — *this*
+  is the forgotten god it set her chasing.** Held back the gated detail (a surviving fragment of the scratched-out name /
+  what the niche held / the "story" her patron wants) behind her roll.
+- **Awaiting Vale's Investigation roll** (`/roll 1d20+<Investigation>`), then adjudicate vs the secret DC and narrate the
+  find — the next breadcrumb per [`encounters/cold-vault.md`](../encounters/cold-vault.md) "Loot / thread." Do **not** roll
+  for her.
+
+### Out of combat — the shrine reveals the faceless god (06-30)
+
+- **Joint examination.** Vale called Forge in (#in-character, 9:53 PM — *"Forge, can you help me examine this stone?"* /
+  Forge: *"ok, i'll investigate"*) — both PCs reading the shrine together.
+- **Rolls (#roll-history):** **Vale — Investigation 22** (NAT 20 on the die, d20=20 +2) — smashes the secret DC 13;
+  **Forge — Investigation 9** (d20+0) — under the DC. Adjudication: Vale's nat-20 earns the **full breadcrumb**; Forge's
+  9 gets the **Forge-flavored craft read** (a smith reads *tools*, not esoterica), not the deep lore.
+- **Narrated to #the-story** (read-aloud, 9:57 PM):
+  - **Forge (craft, the 9):** the niche idol was **pried out recently** — pry-bar + cold-chisel, fresh bright cuts, dust
+    still loose, levered free without breaking; the keeper's own tools lie frost-welded an arm's reach away.
+  - **Vale (lore, the nat-20):** the carve-and-erase scarring on every surface is **ritual** — a god's name carved to
+    **call** it, then scratched out to **un**-call it, over and over for years by a frightened devotion trying to take
+    itself back. Behind the niche (where the scraping couldn't reach) **one fragment of the name survives**, beneath a
+    worn relief of a **faceless** face — a blank oval where eyes/mouth should be. A **forgotten god of stolen faces**;
+    its image was the thing carried off **through the cold door**.
+  - **Patron beat:** Vale's pull goes **hot / fed** — recognition. This is the story her patron set her chasing (a
+    forgotten deity); the line in her chest draws taut toward the dark beyond the open door.
+- **Threads tied:** forgotten god (Vale's patron hook) + the journal's "wearing their own faces" (now: a god of *stolen
+  faces*) + the pried-out idol gone through the cold door = **the campaign's next pull, pointing into the deeper dark.**
+  Left OPEN — **spotlight back to the players;** never narrate their choices. Likely next beats: follow the idol/pull
+  through the cold door into the dark, search the keeper's remains/tools, or pull back to rest.
+
+### Out of combat — short rest gated by a bug, fixed live (ISSUE-050, 06-30)
+
+- **Both PCs tried to rest and were stuck.** Vale + Forge each ran `/rest short` (~15:03) and got *"⏳ rest request
+  sent to the DM. Your rest will apply once they approve it."* — but there was **no resolvable rest action** on the DM
+  side (the queue resolver only acknowledges; it never delivers the hit-dice prompt). The player asked how to spend
+  hit dice on a short rest, which surfaced the gating as a bug.
+- **Root cause:** a self-contradiction in the rest-approval default. `Settings.AutoApproveRest *bool`'s field doc + the
+  `restAutoApproved` null-settings branch both say *nil ⇒ auto-approve*, but `AutoApproveRestEnabled()` returned
+  **false** on nil ("per spec"). This campaign's settings JSON has other keys but **omits `auto_approve_rest`** →
+  `Settings.Valid=true`, so the null short-circuit is skipped → nil → false → **gated**. The existing
+  `DefaultIsTrue` test only used *null* settings, so it never caught the valid-but-field-absent path.
+- **Fix-now TDD (ISSUE-050):** flipped the nil default to **true** (matches the field contract; a DM opts into gating
+  by explicitly setting `auto_approve_rest=false`). Red/green `…ValidSettingsMissingField_DefaultsTrue`; affected
+  packages green; **rebuilt + redeployed**; cleared the 2 stale gated `rest_request` queue items via the dashboard.
+- **Now:** players re-run `/rest short` → immediate **ephemeral hit-dice buttons** — they pick how many HD to spend
+  (per die type for multiclass), the bot rolls `1dX + CON` per click (their click = their roll), HP up, `hit_dice_remaining`
+  down. **HD return only on a `/rest long`** (half total level, min 1). Spotlight still on the players, out of combat.
