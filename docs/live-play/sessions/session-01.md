@@ -1289,3 +1289,65 @@ rolls, no mutations; logged for narrative continuity only._
   stealth toward the heart / retreat). Never roll/act/decide for them. If they advance or the aware figure closes,
   **build the gallery map + encounter live** at that point (reserve **Zombies** = the faceless standing dead; scale per
   [`../big-party.md`](../big-party.md)). Board: out of combat, DM Queue empty, no active encounter.
+
+### Out of combat — the party creeps the drag-line toward the waiting shape (07-01)
+
+- **Player actions (#in-character, Discord-only):**
+  - **Vale (12:55 PM):** *"Vale steps gingerly closer to the waiting shape. Taking care to only step along the drag
+    lines, avoiding to touch any other shapes."* + prays to her patron — *"Please guide me, there are much of my story
+    that i still want to uncover"* — *"continues tiptoeing while listening for any response."* Careful scouting: she
+    closes on the one aware figure but keeps to the bare drag-scar (no bowed shapes to brush) and keeps the floating
+    Mage Hand lantern out as the decoy for its attention.
+  - **Forge (1:01 PM):** *"not sure what to do... Forge follow the path"* + explicit *"(For DM: Forge needs to do
+    perception check)"* — follows Vale up the same drag-line, dwarf-eyes open.
+- **DM adjudication:** still a scouting beat — **combat NOT sprung**. Two things are genuinely uncertain, so both go to
+  **player-rolled** dice (never roll for them):
+  - **Vale → Dexterity (Stealth)** — does her creep stay unnoticed while the floating lantern holds the waiting shape's
+    attention, or does that cold attention slide off the decoy onto the warm thing tiptoeing up? Secret DC, **tiered**
+    (a low roll does not auto-start the fight — it escalates the dread/choice, the attention drifting toward her).
+  - **Forge → Wisdom (Perception)** — honoring the player's explicit ask; dwarf darkvision reading the hewn gallery as
+    he advances. Secret DC, tiered — sets how much he catches of the waiting shape + what lies past the lantern's reach.
+- **DM narration — the approach + the patron answers** (#the-story read-aloud, DM Console timeline top): both creep the
+  drag-scar up the middle; the faceless crowd stays tipped toward the dark ahead, none toward the two living things; the
+  lantern drifts on and the one turned shape keeps its blank face lifted to that floating light (tracking it, not them
+  — tactic still paying off). Vale's plea is **answered** — patron is fed/close/eager (game-state), so it answers **not
+  in words** but in the hot glad pull behind her ribs + an ugly certainty: the waiting shape *was a person*, and
+  something **lifted the face off it and wore the emptiness like a borrowed mask** — the gallery is the faced made
+  faceless and kept; the patron leans through her, *delighted*, "the way a starving thing leans toward a laid table"
+  (the patron's hunger telegraphed as its own quiet danger). And now, close enough to hear it: a **thin dry draw of
+  air — breath through a throat with no mouth to let it out.** Theme threads tied (forgotten god of stolen faces /
+  "wearing their own faces"); no stat line, specifics still secret.
+- **Spotlight to the players — awaiting two rolls** (Vale Stealth, Forge Perception; #roll-history). When they land,
+  narrate the world's response per tier; if a low Stealth turns the aware shape's attention onto the party (or they
+  press closer / touch the heart), **build the gallery map + encounter live** then (reserve **Zombies** = the faceless
+  standing dead; scale per [`../big-party.md`](../big-party.md)). Board: out of combat, DM Queue empty, no active
+  encounter.
+
+### Out of combat → CONTACT MADE — Vale's creep is heard; the gallery wakes (07-01)
+
+- **Rolls (public, #roll-history):** **Vale — stealth check d20+0 = 6** (1:04 PM); **Forge — perception check
+  d20+0 = 14** (1:13 PM). (Both flat +0 = real character mods — the bot *does* apply skill mods, e.g. Vale's earlier
+  Investigation d20+2; Vale simply isn't Stealth-proficient, Forge isn't Perception-proficient. No `/check` bug.)
+- **Adjudication (tiered, secret DCs):**
+  - **Vale 6 → creep FAILS.** The cold attention slides off the decoy lantern and finds her — she's **detected**.
+  - **Forge 14 → good read.** Dwarf-eyes catch the tell the lantern hid: the nearest bowed "statues" are **not stone**
+    — a grey hand uncurls, dust sifts from a rising shoulder — the gallery's dead are **waking**; the heart stays
+    dormant. Party is **not caught flat-footed** (first move theirs if they strike).
+  - **Combat still NOT sprung unilaterally** — contact is made, tension maxed. Held it at a **cliffhanger** rather than
+    forcing initiative (the tiered low-Stealth outcome = detection + rising stakes, player keeps the choice of the break).
+- **DM narration — the detection beat** (#the-story read-aloud, DM Console timeline top): Vale's heel turns a fallen
+  stone chip; in the held silence it's enough — the waiting shape lifts its blank face **off the lantern and levels it
+  at Vale** (dry breath quickening), and Forge clocks the nearest dead beginning to stir while the black weight at the
+  heart has not moved ("It doesn't need to. It has these"). Ends: *"You have one breath before the waiting shape closes
+  the distance."*
+- **DM cliffhanger prompt (same #the-story post):** *"Vale, Forge — you've been seen. What do you do?"* — options
+  telegraphed (strike first / break and run for the entry throat / try to speak to or turn it / something cleverer),
+  and the board gets built on their declaration. Explicitly told they're **not flat-footed** (first move theirs).
+- **Queue hygiene:** both `skill_check_narration` items resolved via the **#dm-queue inline resolver** (Send Narration)
+  — short roll-outcome stubs delivered publicly to #in-character (1:26 PM: *@dewa Stealth 6…*, *@JonathanEka
+  Perception 14…*), each pointing to the full beat in #the-story. DM Queue now **empty**.
+- **Spotlight on the players — awaiting their reaction to the cliffhanger** (fight / flee / parley / clever). On their
+  declaration, **build the gallery map + encounter LIVE**: the aware **masked sentinel** (the "waiting shape") + the
+  **2–3 nearest faceless dead** rousing now (reserve **Zombies**), the rest of the crowd + the **heart** still dormant
+  (dread reserve); scale per [`../big-party.md`](../big-party.md) (currently a 2-PC party). No board prepped past the
+  Cold Vault. Never act/roll/decide for them.
