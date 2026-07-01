@@ -1436,3 +1436,75 @@ rolls, no mutations; logged for narrative continuity only._
   BUILD THE GALLERY MAP + ENCOUNTER LIVE then — masked sentinel + 2–3 nearest faceless dead (reserve Zombies), heart +
   crowd dormant (dread reserve); scale per [`../big-party.md`](../big-party.md) (2-PC party). Never act/roll/decide for
   them. Board: out of combat, DM Queue empty, no active encounter.
+
+### PARLEY — Vale pays the price: the grand tale (07-01, 4:26 PM)
+
+- **Player beat (Vale, #in-character 4:26 PM, roleplay — NO roll):** answering the god's demand for proof, Vale took out
+  her performance tools (fans, bells, mage-hand trinkets) and told the whole tale — *"the legend of the nameless god"*:
+  a god grown from **love into cruelty** (the more mortals prayed his name, the stronger he grew; power corrupted him);
+  in a campaign to save the realm the **mortals sacrificed themselves to erase his name** — ending their own lives so no
+  memory of him would remain; but the god was tricky and **left clues scattered across the realm** — finding one is
+  meaningless, finding them ALL brings him back; so a **nameless god waits in the dark** for someone to gather the clues
+  and set him free. She closed on a bell-chime and fan-flourish. **The tale is uncannily the faceless god's own shape**
+  — she has, knowingly or not, described the thing she kneels before. (This IS the "true lost story" the god demanded as
+  proof; delivered as substance, no `/check` issued.)
+- **DM adjudication:** the payment lands as *content*, but a god that "trades only in kind and doesn't yet believe she
+  can pay" cannot tell a **true** shard from a **beautiful lie** — so the beat resolves not as auto-success but as the god
+  **demanding the tale be SEALED** (proven / made undeniable) **or backed with something true it can taste — a name, a
+  face, a fragment.** (Live callback the DM is holding: Vale actually **carries a surviving fragment of the god's name**
+  from the shrine Investigation nat-20 — a real, ownable token she can offer as proof.) Kept tiered + player-driven: no
+  roll forced on her; next roll (or offered token) is hers to pick.
+- **DM narration — the world leans in to hear the end** (#the-story read-aloud 4:29 PM, DM Console timeline top; `POST
+  /api/narration/post → 201` verified, coordinate-clicked Post per the ref-no-op lesson, single clean post confirmed via
+  #the-story screenshot — one NEW badge): the bells die into the dark; then the faceless god **LEANS** — *the stillness
+  of a thing hearing its own story told back in a stranger's mouth.* The waking dead **stop their half-rise and turn
+  eyeless faces to the telling** (an audience, or a jury); the cold deepens, frost blooms down the drag-scar; the hunger
+  bends over the lantern-light until the dark itself seems to kneel to hear the end. But a starved god is no kind judge
+  and **cannot tell what it holds** — teller who KNOWS, or finest liar? It will forgive a **true** tale anything, a
+  **beautiful lie exactly once** — or fold the liar into the gallery. It wants the tale **sealed** — or backed with
+  **a name, a face, a fragment.** Forge holds at her shoulder, both axes low and ready, reading the dead for the first to
+  lean too close. Ends: *"The dark waits to learn whether the story is true."* No stat line; heart/HP/specifics secret.
+- **Spotlight on the players — awaiting Vale's move to SEAL** (fresh Performance to make it undeniable / Deception to
+  pass the improvisation as real lore / Persuasion) **or PRODUCE the true token** (the name-fragment / a face / press for
+  terms first) **or strike**; Forge follows (hold guard / add his voice / interpose / open the dance). On her roll,
+  narrate the god's verdict **per tier** (true-enough → it opens: passage or a clue; middling → wants more / holds;
+  failure or **exposed lie** → the dead resume and it moves to TAKE). On a strike or soured/exposed bargain, BUILD THE
+  GALLERY MAP + ENCOUNTER LIVE then (masked sentinel + 2–3 nearest faceless dead, reserve Zombies; heart + crowd dormant;
+  scale per [`../big-party.md`](../big-party.md), 2-PC party). Never act/roll/decide for them. Board: out of combat, DM
+  Queue empty, no active encounter.
+
+### PARLEY — the seal is paid: Vale shows her pact-shard (07-01, 4:50 PM)
+
+- **Player beat (Vale, #in-character 4:50 PM, roleplay — NO roll):** answering the god's demand for something true it can
+  taste, Vale **mage-hands up an item hanging from her neck** — *"a piece of what used to be a round disc, made of some
+  exotic metal. It looks like stone, but it isn't."* She presents it: *"Behold, O ancient one. One of the clues. And also
+  the tether, a conduit, between me and my patron."* One object, two claims: it is **one of the faceless god's scattered
+  clues** AND **Vale's pact-focus / patron-conduit.** (This is a player-established fact about Vale's own gear/backstory
+  — the disc is genuinely her pact-tether; whether it is literally one of *this* god's clues, the god adjudicates by
+  tasting it.)
+- **DM adjudication — the showing is auto-proof, no roll:** a god that "trades only in kind" **knows its own** — it tastes
+  the truth of the shard across the cold, so recognition is automatic (no Charisma check to be *believed*; the token IS
+  the proof). Ruling: this validates her claim (the disc rings true to the god as its own kind) **and** deepens the
+  mystery — how a story-collector's patron-tether comes to be a shard of a forgotten god of stolen faces is a **new
+  campaign thread** left deliberately open (rival collector? jailer? another shard of the same broken god?). Bold play
+  rewarded: the seal she couldn't buy with the tale, the fragment pays outright.
+- **DM narration — the god believes; the god hungers; the tether wakes** (#the-story read-aloud 4:54 PM, DM Console
+  timeline top; `POST /api/narration/post → 201` verified, coordinate-click Post per the ref-no-op lesson, single clean
+  post confirmed via #the-story screenshot — one NEW badge): the disc rises, pale metal wearing "the manners of stone";
+  **every faceless head turns to the FRAGMENT** (near, far, and back into the unseen dark — iron filings to a lodestone);
+  the heart bends closer than all night — *it knows its own.* **The seal:** doubt gone, it no longer wonders whether she
+  can pay. Then two beats in one breath — (1) **HUNGER:** cold spikes, frost jumps the drag-scar, the bowed crowd leans a
+  hand's width closer, *"a starved thing shown its payment does not always wait to be handed it"*; (2) **TETHER TAUT:**
+  the disc is a patron's conduit, so the instant it lifts into the god's regard the pull behind her ribs goes hard and
+  present — *that other power suddenly here,* a second hand on the same shard the faceless god can feel but **cannot yet
+  name.** Three touch one piece of metal: Vale, the heart, and whatever she is bound to. Forge sets his weight, axes low,
+  disliking the lean of the dark. Ends: *"The god believes her. The god wants what she is holding. The dark waits to hear
+  her price — or to stop waiting."* No stat line; heart/HP/specifics secret.
+- **Spotlight on the players — awaiting Vale's terms** (name her price / bargain clue-for-passage-or-a-clue / offer OR
+  withhold the fragment / press terms / strike — a hard bargain may call a Charisma check to control the exchange, her
+  pick + roll) **+ Forge's follow** (hold guard / add his voice / interpose / open the dance). On her play, narrate the
+  god's response **per tier** (fair terms + belief → it opens: passage, a clue, or a name; greed/overreach on the shard →
+  it lunges to TAKE; a fumbled or insulting bargain → it stops waiting). On a strike or soured exchange, BUILD THE GALLERY
+  MAP + ENCOUNTER LIVE then (masked sentinel + 2–3 nearest faceless dead, reserve Zombies; heart + crowd dormant; scale
+  per [`../big-party.md`](../big-party.md), 2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue
+  empty, no active encounter.
