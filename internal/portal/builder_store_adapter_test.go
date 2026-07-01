@@ -1099,11 +1099,12 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_Multiclass(t *testing.T) {
 	// Total level should reflect the sum
 	assert.Equal(t, int32(8), creator.capturedParams.Level)
 
-	// Hit dice map should include both classes
+	// Hit dice map is keyed by die string (fighter=d10, wizard=d6), matching
+	// what the rest flow + hit-dice buttons consume — not by class name.
 	var hitDice map[string]int
 	require.NoError(t, json.Unmarshal(creator.capturedParams.HitDiceRemaining, &hitDice))
-	assert.Equal(t, 5, hitDice["fighter"])
-	assert.Equal(t, 3, hitDice["wizard"])
+	assert.Equal(t, 5, hitDice["d10"])
+	assert.Equal(t, 3, hitDice["d6"])
 }
 
 // TestBuilderStoreAdapter_CreateCharacterRecord_FallsBackToSingleClass

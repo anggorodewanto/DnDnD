@@ -1083,8 +1083,47 @@ func TestDeriveDMStats_HitDiceRemaining(t *testing.T) {
 	}
 	stats := DeriveStats(sub, nil)
 
-	assert.Equal(t, 5, stats.HitDiceRemaining["Fighter"])
-	assert.Equal(t, 3, stats.HitDiceRemaining["Rogue"])
+	// HitDiceRemaining is keyed by die string (what the rest flow + hit-dice
+	// buttons consume), NOT by class name. Fighter=d10, Rogue=d8.
+	assert.Equal(t, 5, stats.HitDiceRemaining["d10"])
+	assert.Equal(t, 3, stats.HitDiceRemaining["d8"])
+}
+
+// TestDeriveStats_HitDiceRemaining_KeyedByDie is a regression guard for the
+// live-play bug where a barbarian short rest failed with "invalid hit die
+// type: barbarian": HitDiceRemaining was keyed by class name, so the rest
+// service (which looks up HitDieValue by die string) rejected the key.
+func TestDeriveStats_HitDiceRemaining_KeyedByDie(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "barbarian", Level: 4},
+		},
+		AbilityScores: PointBuyScores{
+			STR: 16, DEX: 12, CON: 14, INT: 8, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveStats(sub, nil)
+
+	assert.Equal(t, 4, stats.HitDiceRemaining["d12"], "barbarian hit dice keyed by d12")
+	assert.NotContains(t, stats.HitDiceRemaining, "barbarian", "must not key by class name")
+}
+
+// TestDeriveStats_HitDiceRemaining_MulticlassSameDie verifies that two classes
+// sharing a hit die accumulate under the single die key instead of colliding.
+func TestDeriveStats_HitDiceRemaining_MulticlassSameDie(t *testing.T) {
+	sub := CharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "fighter", Level: 5}, // d10
+			{Class: "paladin", Level: 3}, // d10
+		},
+		AbilityScores: PointBuyScores{
+			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveStats(sub, nil)
+
+	assert.Equal(t, 8, stats.HitDiceRemaining["d10"], "fighter+paladin d10 dice sum")
+	assert.Len(t, stats.HitDiceRemaining, 1)
 }
 
 func TestDeriveDMStats_BackgroundSkillProficiencies_Acolyte(t *testing.T) {

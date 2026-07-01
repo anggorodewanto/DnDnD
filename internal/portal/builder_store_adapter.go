@@ -113,10 +113,13 @@ func buildCharacterColumns(p CreateCharacterParams) (characterColumns, error) {
 	scoresJSON, _ := json.Marshal(p.AbilityScores)
 	classEntries := resolveClassEntries(p)
 	classesJSON, _ := json.Marshal(classEntries)
+	// Key by die string (e.g. "d12"), not class name: the persisted map feeds
+	// the rest flow / hit-dice buttons, which look up HitDieValue by die
+	// string. Classes sharing a die accumulate under the one key.
 	hitDice := make(map[string]int, len(classEntries))
 	totalLevel := 0
 	for _, ce := range classEntries {
-		hitDice[ce.Class] = ce.Level
+		hitDice[ClassHitDie(ce.Class)] += ce.Level
 		totalLevel += ce.Level
 	}
 	if totalLevel < 1 {

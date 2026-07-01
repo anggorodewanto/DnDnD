@@ -79,7 +79,7 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_WithSpellSlots(t *testi
 	featureUses := map[string]character.FeatureUse{"Arcane Recovery": {Current: 1, Max: 1, Recharge: "long"}}
 	featureUsesJSON, _ := json.Marshal(featureUses)
 
-	hitDice := map[string]int{"wizard": 5}
+	hitDice := map[string]int{"d6": 5}
 	hitDiceJSON, _ := json.Marshal(hitDice)
 
 	attunement := []character.AttunementSlot{{ItemID: "wand-1", Name: "Wand of Fire"}}
@@ -119,7 +119,7 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_WithSpellSlots(t *testi
 	assert.Equal(t, 3, data.PactMagicSlots.SlotLevel)
 	assert.NotNil(t, data.FeatureUses)
 	assert.Equal(t, 1, data.FeatureUses["Arcane Recovery"].Current)
-	assert.Equal(t, 5, data.HitDiceRemaining["wizard"])
+	assert.Equal(t, 5, data.HitDiceRemaining["d6"])
 	assert.Len(t, data.AttunementSlots, 1)
 	assert.Equal(t, "Wand of Fire", data.AttunementSlots[0].Name)
 }

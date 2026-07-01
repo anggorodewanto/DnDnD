@@ -94,9 +94,12 @@ func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStat
 		skills[skill] = character.SkillModifier(scores, skill, skillProfs, nil, false, profBonus)
 	}
 
+	// Key by die string (e.g. "d12"), not class name: the rest flow and the
+	// hit-dice buttons look up HitDieValue by die string. Classes sharing a
+	// die (fighter+paladin => d10) accumulate under the one key.
 	hitDiceRemaining := make(map[string]int, len(classes))
 	for _, c := range classes {
-		hitDiceRemaining[c.Class] = c.Level
+		hitDiceRemaining[ClassHitDie(c.Class)] += c.Level
 	}
 
 	spellSlots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
