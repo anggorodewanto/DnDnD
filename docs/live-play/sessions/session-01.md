@@ -1262,3 +1262,30 @@ rolls, no mutations; logged for narrative continuity only._
   unprepped territory** — the campaign's next chapter opening past the Cold Vault (design left it open on purpose,
   [`../encounters/cold-vault.md`](../encounters/cold-vault.md) "Loot / thread"). If the gallery becomes a fight, build
   the map + encounter live (reserve **Zombies** exist in the cold-vault design; scale per [`../big-party.md`](../big-party.md)).
+
+### Out of combat — Vale lights the gallery with Mage Hand (07-01)
+
+- **Player action (Vale, 12:21 PM, #in-character, Discord-only):** *"Vale uses Mage Hand to bring the lantern up and
+  away, trying to illuminate the gallery."* Clever, careful scouting — she floats the light out ahead on the spectral
+  hand and keeps **herself** back from it. Mage Hand is a cantrip, the lantern well under its 10-lb limit ⇒
+  **auto-succeeds, no roll called** (never roll for the players).
+- **DM adjudication + narration** (#the-story read-aloud, DM Console timeline top): the raised lantern pushes the dark
+  back only so far (the gallery is too vast for it), and in that slice the **near standing shapes resolve into
+  figures** — a close-packed crowd of men, women, one child-height, all worked from (or wearing) the grey stone, all
+  turned inward toward the gallery's unseen heart, and **all faceless** — eyes and mouth smoothed to blank ovals, a
+  hundred of them bowed the way the idol's drag-mark runs. The light does **not** reach the ranks behind them or
+  whatever they face. **Rewarding the tactic:** the *thing* out in the dark tracks the **floating lantern**, not Vale —
+  the cold leans toward the light, and far back among the crowd **one smooth grey face turns to point at the lantern**
+  while the rest stay bowed. Telegraph delivered without a stat line; enemy specifics stay secret.
+- **DM narration — Forge's darkvision** (#the-story read-aloud, Console timeline top). Forge is a **dwarf (darkvision
+  60 ft)**, so the DM posted a **colorless-grey extension** of the reveal from Forge's eyes: where Vale's lantern carves
+  a bright slice, Forge already reads ~60 ft of grey — the standing figures **fill the hewn gallery rank on rank** (not
+  a knot at the door), the walls carry the same eyeless ovals, the drag-mark runs a clean road through the crowd toward
+  the heart, and **that heart sits past even his 60 ft (still black)** — mystery kept. He also confirms, low and certain,
+  the **one blank face in the middle distance turned to track the floating lantern**. No stats/counts; specifics still
+  secret. (Posted to #the-story as narration at the player's request — same table-visible beat, Forge POV.)
+- **Spotlight back on the players** — the reveal is a dread/choice beat, not an ambush; combat was **not** sprung on a
+  pure scouting action. Await their next declared move (advance / pull the light back / examine the faceless figures /
+  stealth toward the heart / retreat). Never roll/act/decide for them. If they advance or the aware figure closes,
+  **build the gallery map + encounter live** at that point (reserve **Zombies** = the faceless standing dead; scale per
+  [`../big-party.md`](../big-party.md)). Board: out of combat, DM Queue empty, no active encounter.
