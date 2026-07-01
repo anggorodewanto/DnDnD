@@ -1565,3 +1565,75 @@ rolls, no mutations; logged for narrative continuity only._
   content. The roll-clarification was table-public, so narrate would have been the cleaner channel — recorded for next time.
 - **Still AWAIT Vale's Charisma roll (#roll-history, her pick) + Forge's stance.** Board: out of combat, DM Queue empty,
   no active encounter.
+
+### PARLEY WON — Vale's Deception 21 seals the bargain; the god pays (07-01, 6:19 PM)
+
+- **Player roll (#roll-history 6:12 PM):** after the whisper answer, Vale ran `/check` and rolled **Deception d20+5 = 16
+  + 5 = 21** — her pick of skill (selling the shard-withdrawal as nothing worth minding). No extra RP flavor posted; the
+  roll *is* the move. `/check` filed a `skill_check_narration` dm-queue item (Console `next_step` = "Resolve … Deception
+  check (rolled 21)").
+- **DM adjudication — 21 clears the top secret tier → strong success.** She's bluffing a truth-tasting god, and a 21
+  makes the bluff perfect: it finds only her ease, takes no fright from the palmed shard, and — starved for exactly what
+  she offers (to be carried / told / un-forgotten) — **accepts the trade in kind.** A god that trades only in kind gives
+  something real: (1) **passage** — the faceless crowd parts and the drag-scar road opens toward the heart; (2) a
+  **relic** — a blank ashen face-shard, humming like a struck bell, "a face that was never worn, a story with the name
+  still folded inside" (a story-vessel, and almost certainly another of the god's scattered clues for Vale's patron-quest);
+  (3) a **binding** — taking it is a compact to carry the tale true / un-forget the god, "a debt no god forgives."
+  **Latent hook kept open (not resolved):** the bargain was struck on a *Deception* — a truth-taster was bluffed, so if
+  she never spreads its tale or the lie ever surfaces, the creditor is a god. Patron-tether thread deepened (patron
+  attentive down the cord, a second hand on the same kind of shard). Rewards the strong roll, advances the campaign
+  (deeper + a clue-relic), and plants tension — without deciding the players' next move.
+- **DM narration** (#the-story read-aloud 6:19 PM, Console timeline top; `POST /api/narration/post → 201`, coordinate-click
+  Post, single clean post verified via #the-story screenshot — one NEW badge, *"1 new message since 6:19 PM"*): the lie
+  lands, the cold eases to "almost courtesy," the crowd parts and the road opens, the relic is set at the lantern's edge,
+  and the taking binds her — "Down the tether at Vale's ribs that other power stirs, attentive … Forge sets his shoulder
+  at her back." Ends: *"The way is clear. The relic waits. The god has paid — and now it is owed."* No stat line; heart/
+  HP/specifics secret.
+- **Queue resolve — outcome stub delivered, item resolved, cosmetic 503 (ISSUE-052 class):** resolved the
+  `skill_check_narration` item via the #dm-queue inline resolver ("Send Narration") with a concise no-numbers stub →
+  delivered to **#in-character 6:20 PM** (*"Deception 21 — flawless … a relic waits … the taking binds you to the telling
+  …"*). `POST /dashboard/queue/<id>/narrate` returned **503**, but the work fully SUCCEEDED — **DB-verified**
+  `dm_queue_items` row `status=resolved`, outcome persisted, `resolved_at` set; stub visibly delivered; **no server error
+  logged** (no ERROR/WARN). Same "real work done, secondary step fails the status" shape as ISSUE-052; the dashboard tab
+  also froze the renderer twice, so treated as a client / Discord-rate-limit timing artifact, not chased as a fresh code
+  bug. **Per the belt-and-suspenders rule: verified delivery + resolution before moving on; did NOT retry** (a blind retry
+  would double-DM). 503 recurrence noted in [`../issues.md`](../issues.md) under ISSUE-052.
+- **Spotlight back on the players — parley won, no fight.** AWAIT their next move: Vale — TAKE the relic (accept the geas)
+  / hesitate or refuse / examine it / press for more / advance the now-open road toward the heart; Forge — take point /
+  guard / add his voice. Deeper in is NEW unprepped territory toward the dormant HEART; if a fight later erupts (the heart
+  rouses, the deception unravels, or they provoke it), build the gallery map + encounter live then (reserve Zombies; scale
+  per [`../big-party.md`](../big-party.md), 2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue
+  empty, no active encounter.
+
+### RELIC TAKEN — Vale accepts the geas; the compact seals (07-02, 6:40–6:43 AM)
+
+- **Player beat (Vale, #in-character 07-02 6:40 AM, roleplay, no roll):** *"Vale gets closer to the relic, and uses mage
+  to pick it up."* Her declared answer to the offered bargain — she **takes** the blank ashen face-shard the god set at
+  the lantern's edge, lifting it with **Mage Hand**.
+- **DM ruling — no roll; taking = accepting the compact.** Mage Hand is a cantrip and the shard is palm-sized (far under
+  the 10-lb limit) → **auto-success** on the lift; and *accepting* a god's relic is a declared roleplay choice, not a
+  check. So no dice — the consequence is world-reaction narration, not a gated roll. The taking is the acceptance: she now
+  owes the god the **telling** (carry its tale, tell it TRUE, un-forget it — *"a debt no god forgives"*). The god pays in
+  kind (passage already granted stays open; the relic is now hers).
+- **DM narration** (#the-story read-aloud 6:43 AM, Console timeline top; `POST /api/narration/post → 201`, coordinate-click
+  Post per the ref-no-op lesson, single clean post verified via #the-story screenshot — one NEW badge, July-2 divider):
+  the mage-hand lifts the shard (she takes it **at arm's length, never bare skin** — her caution honored, her *decision*
+  not narrated); the bargain **seals** the instant it crosses into her keeping (no thunder — the god unmade every mouth —
+  only a cold *"taken, therefore owed"*); the hundred bowed heads stay turned aside and the drag-scar road stays open
+  toward the heart (**passage confirmed paid**); down the tether her patron stirs attentive (a second hand closing on its
+  own edge of the same broken shard, close + interested); Forge shifts at her shoulder, axes low. Ends: *"The relic is
+  hers. The god has been paid — in the one coin it cannot yet taste as false. And the road goes down."* No stat line;
+  heart/specifics kept secret.
+- **Latent hook seeded, NOT resolved:** *"the one coin it cannot yet taste as false"* — the debt was struck on a
+  **Deception** (her earlier 21). A truth-tasting god was paid in a lie; the geas holds only as long as she tells the tale
+  TRUE and the bluff never surfaces. If she never spreads it / the lie is tasted, the creditor is a god. Kept as a live
+  campaign tension.
+- **New durable kit on Vale:** (a) the **ashen face-shard relic** — a story-vessel, *"a story with the name still folded
+  inside,"* almost certainly another of the faceless god's scattered patron-quest clues; (b) the **GEAS** (owe the
+  telling). Both recorded on her party sheet + in game-state.
+- **No queue item / no whisper this beat** — pure roleplay + narration; DM Queue stayed empty, no `/check` filed.
+- **Spotlight back on the players — bargain complete, no fight.** AWAIT their next move: advance the open drag-scar road
+  DEEPER toward the dormant HEART (NEW unprepped territory) / examine the relic / Vale press the god for more / Forge take
+  point. If a fight erupts deeper in (the heart rouses, the deception unravels, or they provoke it), build the gallery map
+  + encounter live then (masked sentinel + faceless dead, reserve Zombies; scale per [`../big-party.md`](../big-party.md),
+  2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue empty, no active encounter.

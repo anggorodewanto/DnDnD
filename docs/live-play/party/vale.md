@@ -43,3 +43,22 @@
 
 - Equip leather armor for AC 11: `/equip item:leather armor:true` (item already in
   inventory). Dagger / light-crossbow likewise equippable.
+
+## Story-durable kit (narrative, not on the character-sheet inventory)
+
+Clue-relics + bindings Vale carries for the faceless-god arc — narrative state the
+DB can't derive; see [`../game-state.md`](../game-state.md) + [`../sessions/`](../sessions/):
+
+- **Patron-conduit disc** — a broken round disc of exotic metal ("looks like stone,
+  but it isn't"), worn at her neck. Both *"one of the clues"* AND *"the tether, a
+  conduit, between me and my patron."* Shown to the faceless god as auto-proof (a god
+  that trades only in kind tastes its own).
+- **Ashen face-shard relic** *(taken 07-02)* — a smooth blank ashen face the size of
+  her palm, humming like a struck bell; *"a story with the name still folded inside."*
+  A story-vessel, almost certainly another of the god's scattered clues. Lifted with
+  Mage Hand from the god's own offering.
+- **GEAS — owe the god the telling** *(struck 07-02)* — the price of taking the shard:
+  carry the god's tale, tell it TRUE, un-forget it — *"a debt no god forgives."*
+  **Struck on a Deception (her 21)** — a truth-taster paid in a lie; the geas holds
+  only while she tells the tale true / the bluff never surfaces. **Latent hook, not
+  resolved.**
