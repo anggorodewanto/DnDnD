@@ -1508,3 +1508,60 @@ rolls, no mutations; logged for narrative continuity only._
   MAP + ENCOUNTER LIVE then (masked sentinel + 2–3 nearest faceless dead, reserve Zombies; heart + crowd dormant; scale
   per [`../big-party.md`](../big-party.md), 2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue
   empty, no active encounter.
+
+### PARLEY — Vale names her terms: withhold the shard, spread-tales-for-the-relic (07-01, 5:40 PM)
+
+- **Player beat (#in-character, roleplay, no roll):** with the seal paid and the god believing she can pay, Vale did not
+  hand over the fragment. **5:34 PM (dewa/Vale):** *"Vale quickly put the conduit back under her clothes.* / *'Now, let
+  me spread your tales. Give me your relic, imbued with your tales, o faceless one.'"* Two moves in one: she **WITHDREW
+  the shard** (pocketing the very thing the starved god hungers for) and **flipped the exchange** — instead of feeding it
+  its own fragment she offered to be the **mouth that un-forgets it across the realm** (*"spread your tales"* — the god's
+  exact craving of Story / Spread / Un-forgotten, and the very trade her patron deals in) and **demanded the god's RELIC**
+  in return.
+- **DM adjudication — a control-the-exchange moment → player-rolled Charisma check (her pick), secret tiered DC:** she is
+  pressing a hard, uneven bargain on a powerful, starved thing that *"trades only in kind"* — a *promise* of telling for a
+  *real relic now*, with the proof she just showed palmed back out of reach. That is exactly the "pushing a hard bargain
+  may call a Charisma check to control the exchange" case. Ruled it calls **Vale's Charisma check — her pick (Persuasion
+  to broker it / Deception to make the withdrawal read as safe & routine / Intimidation), her roll** — with a **secret
+  tiered DC**: a low roll does **NOT** auto-spring combat, it thins the god's patience (a thing fed then denied reads the
+  withdrawal as a tease → escalate dread toward *"it stops waiting"*); a high roll = it entertains parting with a relic /
+  granting passage for the promise of being carried. Fiction-cued (as the earlier Performance beat was); **players roll
+  their own dice — never rolled for her.** She has **not yet rolled** (latest #roll-history entry is still the 3:36 PM
+  Performance 11).
+- **DM narration — the god weighs her tongue against its relic** (#the-story read-aloud 5:40 PM, DM Console timeline top;
+  `POST /api/narration/post → 201` verified, coordinate-click Post per the ref-no-op lesson, single clean post confirmed
+  via #the-story screenshot — one NEW badge, *"1 new message since 5:40 PM"*): the disc goes back under her collar and the
+  cold **FOLLOWS it** — the whole starved attention bending after the hidden thing *"the way a hound leans after meat
+  lifted off the table"*; the courtesy thins, every bowed grey head tilts a fraction as if the crowd felt the tease. Then
+  her offer lands on the **one nerve a forgotten god has left** — to be *carried*, *un-forgotten*, a story loose in the
+  bright world again — and the hunger draws in until the flame gutters. But it feels the **uneven shape**: *"give me
+  something real and mine — for a promise of telling, and keep the shard you showed me besides."* It wants what she offers
+  more than anything in an age, yet has **not decided** her tongue is worth the price, nor that *"a mouth quick to pocket
+  its proof can be trusted to carry a true tale and not the finest lie ever told down here."* Ends: *"The faceless heart
+  holds, and holds — and waits to hear how she means to make it believe."* No stat line; heart/HP/specifics secret.
+- **Spotlight on the players — AWAIT Vale's Charisma roll (#roll-history, her pick) + Forge's stance** (hold guard / add
+  his voice / interpose / open the dance). On the roll, narrate the god's verdict **per tier**: strong → it entertains the
+  trade (a relic / passage / a clue, likely **BINDING her to the telling** — it trades only in kind); middling → it wants
+  the shard first or more proof before it gives anything (stalls, hunger visible); fail/insulting → the withdrawal reads
+  as bait, patience cracks, it moves to **TAKE** → BUILD THE GALLERY MAP + ENCOUNTER LIVE (masked sentinel + 2–3 nearest
+  faceless dead, reserve Zombies; heart + crowd dormant; scale per [`../big-party.md`](../big-party.md), 2-PC party). The
+  patron ↔ faceless-god shard thread stays open (do not resolve). Never act/roll/decide for them. Board: out of combat,
+  DM Queue empty, no active encounter.
+
+### OOC — "do I need to roll?" + Message Player whisper bug (ISSUE-053, 07-01, ~6:07 PM)
+
+- **Player OOC (#in-character 6:07 PM, dewa):** *"(to DM: do I need to roll? It wasn't clear from the story post)"* — the
+  fiction-cue for the Charisma check was too subtle. Answered the direct rules question: **yes — a Charisma check, her
+  pick (Persuasion / Deception / Intimidation), to control the exchange.**
+- **Delivered via dashboard Message Player (whisper) — and hit a bug:** `POST /api/message-player/` returned **500**
+  (`dm_player_messages_player_character_id_fkey`, SQLSTATE 23503). **The DM was still delivered** — the service sends the
+  Discord DM *before* logging the row, so only the (unlogged) history insert failed. Did **not** retry (would double-DM).
+- **Fix-now TDD → ISSUE-053 FIXED + redeployed:** `PlayerLookupAdapter.LookupPlayer` never set `PlayerInfo.RowID`, so the
+  insert used `player_character_id = nil` and violated the FK. Red (extended `TestPlayerLookupAdapter_Success` to assert
+  `RowID` = the player_characters PK) → green (`RowID: row.ID`). `internal/messageplayer` green @ 96.4% + vet; rebuilt +
+  redeployed. Details in [`../issues.md`](../issues.md) ISSUE-053.
+- **DM-guide rule added** (per user, [`../dm-rules.md`](../dm-rules.md) "How DM actions must be performed"): reply to
+  players via **Narrate → #the-story by default** (table sees it); use the **whisper only for genuinely secret** DM↔player
+  content. The roll-clarification was table-public, so narrate would have been the cleaner channel — recorded for next time.
+- **Still AWAIT Vale's Charisma roll (#roll-history, her pick) + Forge's stance.** Board: out of combat, DM Queue empty,
+  no active encounter.

@@ -60,5 +60,9 @@ func (a *PlayerLookupAdapter) LookupPlayer(ctx context.Context, characterID uuid
 	return PlayerInfo{
 		DiscordUserID: row.DiscordUserID,
 		CampaignID:    row.CampaignID,
+		// RowID is the player_characters PK — the FK target for
+		// dm_player_messages.player_character_id. Omitting it leaves RowID nil,
+		// which 500s the log insert on the FK constraint *after* the DM is sent.
+		RowID: row.ID,
 	}, nil
 }

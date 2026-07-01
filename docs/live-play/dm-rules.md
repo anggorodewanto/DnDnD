@@ -50,6 +50,18 @@ big-party technique is in [`big-party.md`](big-party.md).
   to #the-story via the Narrate editor, wrap the prose in a `:::read-aloud … :::`
   block (use the editor's **Insert Read-Aloud Block** button). See
   [`runbook.md`](runbook.md) §8.
+- **Replying to players: Narrate by default; Whisper only for secrets.** Answering
+  a player — a ruling, a clarification ("yes, roll a Charisma check"), a reaction,
+  any table-visible reply — through the **Narrate editor → #the-story is fine**, so
+  the whole table sees it (wrap in-world prose in a read-aloud block; a brief
+  out-of-character DM aside for a pure rules answer is fine too). Use the
+  **Message Player** whisper (a private Discord DM) **only when the content is
+  genuinely secret between the DM and that one player** — a hidden result, private
+  information, a solo scene, something the others must not see. Don't whisper
+  table-public info. (Whisper delivery note: `Send DM` sends the Discord DM *before*
+  it logs the row, so a dashboard error after the send does **not** mean the whisper
+  failed — verify delivery before retrying, or you double-DM the player. See
+  [`issues.md`](issues.md) ISSUE-053.)
 
 ## At the table
 

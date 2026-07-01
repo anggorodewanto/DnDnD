@@ -40,9 +40,11 @@ func (f *fakeLookupRefdata) GetPlayerCharacterByCharacter(_ context.Context, arg
 func TestPlayerLookupAdapter_Success(t *testing.T) {
 	charID := uuid.New()
 	campID := uuid.New()
+	pcRowID := uuid.New()
 	fake := &fakeLookupRefdata{
 		char: refdata.Character{ID: charID, CampaignID: campID},
 		pc: refdata.PlayerCharacter{
+			ID:            pcRowID,
 			CampaignID:    campID,
 			CharacterID:   charID,
 			DiscordUserID: "user-42",
@@ -55,6 +57,13 @@ func TestPlayerLookupAdapter_Success(t *testing.T) {
 	}
 	if info.DiscordUserID != "user-42" || info.CampaignID != campID {
 		t.Fatalf("info = %+v", info)
+	}
+	// Regression guard for the FK-violation bug: RowID must be the
+	// player_characters PK (the dm_player_messages FK target), not left nil.
+	// A nil RowID makes InsertDMMessage 500 on
+	// dm_player_messages_player_character_id_fkey even though the DM was sent.
+	if info.RowID != pcRowID {
+		t.Fatalf("RowID = %s, want player_characters PK %s", info.RowID, pcRowID)
 	}
 	// Regression guard: the player_characters row is resolved by character_id
 	// (+ that character's campaign), not by the PK passed in.
