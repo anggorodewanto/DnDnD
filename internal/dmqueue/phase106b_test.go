@@ -203,3 +203,23 @@ func TestResolveWhisper_UnknownItem(t *testing.T) {
 		t.Errorf("got %v want ErrItemNotFound", err)
 	}
 }
+
+// ISSUE-052: a retry after a spurious failure must be idempotent — it must not
+// re-send the whisper DM to the player.
+func TestResolveWhisper_AlreadyResolvedNoRedeliver(t *testing.T) {
+	f := &fakeSender{nextMsgID: "m1"}
+	n := NewNotifier(f, staticChannelResolver("c1"), func(id string) string { return "/q/" + id })
+	d := &fakeDeliverer{}
+	n.SetWhisperDeliverer(d)
+
+	itemID, _ := n.PostWhisper(context.Background(), "Aria", `"pickpocket"`, "user-42", "g1", "camp-1")
+	if err := n.ResolveWhisper(context.Background(), itemID, "first"); err != nil {
+		t.Fatalf("first resolve: %v", err)
+	}
+	if err := n.ResolveWhisper(context.Background(), itemID, "second"); err != nil {
+		t.Fatalf("second resolve should be a no-op, got: %v", err)
+	}
+	if len(d.calls) != 1 {
+		t.Fatalf("expected exactly 1 DM delivery across two resolves, got %d", len(d.calls))
+	}
+}

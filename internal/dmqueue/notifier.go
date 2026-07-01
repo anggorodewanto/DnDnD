@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -248,7 +249,17 @@ func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) e
 	if item.ChannelID == "" || item.MessageID == "" {
 		return nil // no channel, or Send failed: no Discord message to edit
 	}
-	return n.editHandled(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
+	// The item is already marked resolved in the store; the dm-queue message
+	// edit (checkmark + button strip) is cosmetic and best-effort. A failed
+	// edit must NOT fail the resolve: doing so once surfaced as a spurious 503
+	// to the DM while the narration/whisper had already been delivered to the
+	// player, and a naive retry then double-posted it (ISSUE-052). A stray
+	// click on the un-stripped button is already guarded by the resolve handler.
+	if err := n.editHandled(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome)); err != nil {
+		slog.Warn("dm-queue resolve: cosmetic message edit failed; item already resolved",
+			"item_id", itemID, "error", err)
+	}
+	return nil
 }
 
 // editHandled rewrites a handled (resolved/cancelled) dm-queue message with
@@ -317,6 +328,9 @@ func (n *DefaultNotifier) ResolveWhisper(ctx context.Context, itemID, replyText 
 	if !ok {
 		return ErrItemNotFound
 	}
+	if item.Status != StatusPending {
+		return nil // already handled — do not re-send the whisper DM (ISSUE-052)
+	}
 	if item.Event.Kind != KindPlayerWhisper {
 		return ErrNotWhisperItem
 	}
@@ -345,6 +359,9 @@ func (n *DefaultNotifier) ResolveSkillCheckNarration(ctx context.Context, itemID
 	}
 	if !ok {
 		return ErrItemNotFound
+	}
+	if item.Status != StatusPending {
+		return nil // already handled — do not re-deliver the narration (ISSUE-052)
 	}
 	if item.Event.Kind != KindSkillCheckNarration {
 		return ErrNotSkillCheckNarrationItem

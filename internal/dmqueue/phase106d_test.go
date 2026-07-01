@@ -181,3 +181,74 @@ func TestResolveSkillCheckNarration_UnknownItem(t *testing.T) {
 		t.Errorf("got %v want ErrItemNotFound", err)
 	}
 }
+
+// ISSUE-052: the narration was delivered and the item marked resolved, but the
+// cosmetic dm-queue message edit (checkmark + button strip) failed. That edit
+// is best-effort and must NOT fail the resolve — a spurious error once surfaced
+// as a 503 to the DM while the player had already received the narration, and a
+// naive retry then double-posted it.
+func TestResolveSkillCheckNarration_EditFailureStillResolves(t *testing.T) {
+	f := &fakeSender{nextMsgID: "m-skill", editErr: errors.New("discord edit 503")}
+	n := NewNotifier(f, staticChannelResolver("dm-q"), func(id string) string { return "/q/" + id })
+	d := &fakeNarrationDeliverer{}
+	n.SetSkillCheckNarrationDeliverer(d)
+
+	itemID, err := n.Post(context.Background(), Event{
+		Kind:       KindSkillCheckNarration,
+		PlayerName: "Aria",
+		Summary:    "Perception check — total 17",
+		GuildID:    "g1",
+		CampaignID: "camp-1",
+		ExtraMetadata: map[string]string{
+			SkillCheckChannelIDKey:       "chan-77",
+			SkillCheckPlayerDiscordIDKey: "user-42",
+			SkillCheckSkillLabelKey:      "Perception",
+			SkillCheckTotalKey:           "17",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+
+	if err := n.ResolveSkillCheckNarration(context.Background(), itemID, "You spot the trap."); err != nil {
+		t.Fatalf("resolve must swallow cosmetic edit failure, got: %v", err)
+	}
+	if len(d.calls) != 1 {
+		t.Fatalf("expected exactly 1 narration delivery, got %d", len(d.calls))
+	}
+	item, _ := n.Get(itemID)
+	if item.Status != StatusResolved {
+		t.Errorf("status = %q want resolved", item.Status)
+	}
+}
+
+// ISSUE-052: a retry after a spurious failure must be idempotent — it must not
+// re-deliver the narration to the player (a double-post at the table).
+func TestResolveSkillCheckNarration_AlreadyResolvedNoRedeliver(t *testing.T) {
+	f := &fakeSender{nextMsgID: "m-skill"}
+	n := NewNotifier(f, staticChannelResolver("dm-q"), func(id string) string { return "/q/" + id })
+	d := &fakeNarrationDeliverer{}
+	n.SetSkillCheckNarrationDeliverer(d)
+
+	itemID, _ := n.Post(context.Background(), Event{
+		Kind:       KindSkillCheckNarration,
+		PlayerName: "Aria",
+		Summary:    "Perception",
+		GuildID:    "g1",
+		ExtraMetadata: map[string]string{
+			SkillCheckChannelIDKey:       "chan-77",
+			SkillCheckPlayerDiscordIDKey: "user-42",
+			SkillCheckSkillLabelKey:      "Perception",
+			SkillCheckTotalKey:           "17",
+		},
+	})
+	if err := n.ResolveSkillCheckNarration(context.Background(), itemID, "first"); err != nil {
+		t.Fatalf("first resolve: %v", err)
+	}
+	if err := n.ResolveSkillCheckNarration(context.Background(), itemID, "second"); err != nil {
+		t.Fatalf("second resolve should be a no-op, got: %v", err)
+	}
+	if len(d.calls) != 1 {
+		t.Fatalf("expected exactly 1 narration delivery across two resolves, got %d", len(d.calls))
+	}
+}
