@@ -1351,3 +1351,88 @@ rolls, no mutations; logged for narrative continuity only._
   **2–3 nearest faceless dead** rousing now (reserve **Zombies**), the rest of the crowd + the **heart** still dormant
   (dread reserve); scale per [`../big-party.md`](../big-party.md) (currently a 2-PC party). No board prepped past the
   Cold Vault. Never act/roll/decide for them.
+
+### Out of combat → PARLEY — Vale kneels and offers the faceless god a story-trade (07-01)
+
+- **Player reaction to the cliffhanger (#in-character, Discord-only):** **Vale (3:25 PM)** answered *"you've been seen —
+  what do you do?"* with the boldest of the offered options — **parley, not steel**: *"Vale kneels, speaking in both
+  common and infernal. 'O ancient one, I come bearing the gift and burden of stories lost. Regale us with your tale,
+  and we will spread it upon the realm.'"* She offers the aware sentinel / the dormant heart the **exact trade her
+  patron deals in** — the forgotten god's tale, *un-forgotten and spread*. Thematically dead-on: a **god of stolen
+  faces** addressed by a **story-collector** whose patron set her chasing this very deity. **Forge has NOT yet declared
+  a reaction** (his last IC line, 1:01 PM, predates the detection).
+- **DM adjudication (tiered, secret DC — combat still NOT sprung):** parley of a *detected* standoff neither auto-wins
+  nor auto-fails → gate it on a **player-rolled Charisma check** (never roll for her). Ruled a **real lever, not a lost
+  cause** (the theme genuinely bites), but a big ask kneeling before a hungry, half-woken thing that has already marked
+  her. Left the **skill choice to Vale** — *Persuasion* (plead true) / *Deception* (oversell) / *Performance* (tell the
+  tale to hook it) — the approach shapes what lands. Secret DC, **tiered**: a low roll does **not** pitch her into its
+  jaws — it decides whether the heart takes her for a **teller** or a **trespasser**, and the waking dead are only
+  **paused**, not stopped.
+- **DM narration — the offer, and the world leaning in** (#the-story read-aloud, DM Console timeline top, 3:33 PM): the
+  offer goes out common-then-infernal, flat and carrying too far; the waiting shape doesn't move (blank face still
+  levelled at Vale, dry breath in/out) — but **something deeper does**: for the first time the **black weight at the
+  gallery's heart *attends*** (a pressure, an ear turning where it has no ear) — a god starved of exactly this word:
+  *Story. Spread. Un-forgotten.* The **nearest waking dead go still — poised, not down** (a held breath); the
+  sentinel's faceless head **tilts a fraction, listening past Vale to whatever owns it.** Ends: *"The dark has heard it.
+  It is deciding whether it wants a teller — or one more face."* No stat line; heart/HP/specifics still secret.
+- **DM prompts (same #the-story post, non-read-aloud):** **Vale →** give me a **Charisma check** (her pick of
+  Persuasion/Deception/Performance); **Forge →** while she kneels and bargains for both their lives, what does he do —
+  stand ready at her back, add his own voice, put himself between her and the nearest waking dead, or set his grip to
+  strike the instant this sours? (Prompt = asking, not deciding for him.)
+- **Post glitch (logged, not a product bug):** the Narrate **Post to #the-story** button did not fire on two `ref`
+  clicks (no `POST /api/narration/post` in the network log, nothing in Discord); a **coordinate click** on the same
+  button fired `POST /api/narration/post → 201` and the beat landed (3:33 PM). Single post confirmed (realtime Discord
+  showed no earlier duplicate). Takeaway: verify Narrate posts via the 201 / #the-story, and fall back to a coordinate
+  click if a `ref` click on Post silently no-ops.
+- **Spotlight on the players — awaiting Vale's Charisma roll (#roll-history) + Forge's declared stance.** On the roll,
+  narrate the heart's verdict per tier (grants a hearing / stalls the waking / the offer isn't enough and the dead
+  resume); if it sours, **build the gallery map + encounter LIVE** then — the aware **masked sentinel** + the **2–3
+  nearest faceless dead** (reserve **Zombies**), rest of crowd + heart dormant (dread reserve); scale per
+  [`../big-party.md`](../big-party.md) (2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue
+  empty, no active encounter.
+
+### Out of combat → PARLEY, the god answers — Vale Performance 11, a TESTING half-success (07-01)
+
+- **Rolls / declarations:**
+  - **Vale — performance check d20+5 = 11** (#roll-history 3:36 PM). She chose **Performance** of the three offered
+    approaches — *telling the tale* to hook the story-hungry thing. (+5 = real CHA/proficiency mod; die came up 6.)
+  - **Forge (#in-character 3:35 PM):** *"Forge getting ready with both handaxe equipped, just in case that fiend
+    disturbs Vale's incantation"* — **backs her play**: both handaxes drawn, on guard, held to strike **only if** the
+    parley sours. Not aggressing → no attack, so combat stays un-sprung; he's the coiled spring at her back (a readied
+    reaction in all but name).
+- **Adjudication (tiered, secret DC — combat still NOT sprung):** DC intent — clean hearing/safe passage ~15, strong
+  turn ~18. **11 = the middling band → a TESTING half-success.** Her telling *wavers* (die 6) so she buys the thing's
+  **attention, not its trust, and not passage**. Ruled: the offer lands enough that it does **not** strike (dead stay
+  *paused*), but a god of stolen faces **trades only in kind** and doesn't yet believe the trembling teller can pay —
+  it **demands proof** (a true lost story / a name / a face) before it grants anything. Low-but-not-failed never hard-
+  blocks; it escalates + hands the choice back. **No free win, no combat forced.**
+- **DM narration — the god answers, and tests her** (#the-story read-aloud, DM Console timeline top; `POST
+  /api/narration/post → 201` verified, coordinate-clicked Post per the ref-no-op lesson): Vale gives the dark a *thread*
+  of something true and lost; for the **first time the thing at the heart does more than attend — it ANSWERS** (not in
+  words — it has unmade every mouth, its own among them — but through the pull behind her ribs + the dead): the nearest
+  waking figures turn their smooth faces to her together; the **sentinel sinks to her level, emptiness eye-to-eye,
+  breath stirring her hair.** Meaning arrives as *hunger dressed as courtesy* — it will hear her, it is starved for
+  exactly this, but **prove it or it will simply take** (as it took every bowed one). Its blank attention slides **once
+  to Forge's readied axes** (weighing the steel) then back to Vale. The dead **lean a half-step closer and hold.**
+  *"Whatever the offer bought, it did not buy leaving."* No stat line; heart/HP/specifics still secret.
+- **DM prompts (same #the-story post, non-read-aloud):** **Vale →** parley alive but wants **proof, not just an offer**
+  — tell a true lost story worth the trade (another Performance/Persuasion, or name the actual tale she pays with) /
+  offer something it hungers for (a name, a face, a token — mind the cost) / press-or-change the bargain / read this as
+  the turn and strike first. **Forge →** it clocked his axes — hold the guard / add his voice / interpose vs the nearest
+  waking dead / open the dance? His move rides with hers.
+- **Queue hygiene + PRODUCT BUG surfaced:** resolved Vale's `skill_check_narration` item (`56740f81-…`) via the
+  **#dm-queue inline resolver** (Open → Send Narration) with a short outcome stub. **The stub DID deliver** to
+  #in-character (3:40 PM: *"@dewa Performance Check (rolled 11) — your tale wavers, but the offer lands…"*) **AND** the
+  item is now resolved (`pending: []`, `next_step: ""`) — but the resolver HTTP call `POST
+  /dashboard/queue/<id>/narrate` returned **503** to the client despite BOTH side effects succeeding. So the endpoint
+  **lies about failure**: a DM who retried on the 503 would **double-post** the narration to the players. Did NOT retry
+  (verified delivery + empty queue first). **→ FIXED (ISSUE-052, red/green TDD, redeployed 07-01):** root cause was
+  `DefaultNotifier.Resolve` letting a **cosmetic** #dm-queue message edit (`editHandled`) gate the HTTP status after the
+  success-critical deliver + `MarkResolved` had already committed; compounded by non-idempotent resolvers (a retry
+  re-delivers → double-post). Fix: `editHandled` now best-effort (`slog.Warn` + return nil); `ResolveSkillCheckNarration`
+  + `ResolveWhisper` short-circuit `if item.Status != StatusPending`. 3 red→green tests; dmqueue + dashboard + build +
+  vet green. (App request-level logging is silent — only startup logs emit — so the 503 was traced in code, not logs.)
+- **Spotlight on the players — awaiting Vale's next move (proof/offer/press/strike) + Forge's follow.** If it sours,
+  BUILD THE GALLERY MAP + ENCOUNTER LIVE then — masked sentinel + 2–3 nearest faceless dead (reserve Zombies), heart +
+  crowd dormant (dread reserve); scale per [`../big-party.md`](../big-party.md) (2-PC party). Never act/roll/decide for
+  them. Board: out of combat, DM Queue empty, no active encounter.
