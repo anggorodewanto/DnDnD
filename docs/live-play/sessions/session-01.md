@@ -1637,3 +1637,22 @@ rolls, no mutations; logged for narrative continuity only._
   point. If a fight erupts deeper in (the heart rouses, the deception unravels, or they provoke it), build the gallery map
   + encounter live then (masked sentinel + faceless dead, reserve Zombies; scale per [`../big-party.md`](../big-party.md),
   2-PC party). Never act/roll/decide for them. Board: out of combat, DM Queue empty, no active encounter.
+
+### OOC — "is there more down here, or is the relic all?" (07-02, 6:50–6:53 AM)
+
+- **Player question (Vale, #in-character 6:50 AM, to DM):** *"do I see or sense that there's more things to find
+  further down the gallery or this relic is all that's important down here?"* — a perception/meta question, table-public
+  (not secret), so answered via **Narrate → #the-story** per the [`../dm-rules.md`](../dm-rules.md) reply rule.
+- **DM ruling — no roll.** Her patron-tether pull is established always-on fiction (it has pointed "dead ahead, hot and
+  close" toward the heart since the gallery reveal), so the gut-sense answers for free; her *eyes* are still capped by the
+  lantern's slice of dark. No `/check`, no queue item.
+- **DM narration** (#the-story read-aloud 6:53 AM, Console timeline top; `POST /api/narration/post → 201`, coordinate-click
+  Post, single clean post verified — one NEW badge, *"1 new message since 6:53 AM"*): answered in two voices — **eyes**
+  give little (lantern ends where it always has; the road runs on into dark too big to read from here); the **tether** does
+  NOT settle — the relic hums like *a* single struck note, not a closing chord, and the pull slides straight through it and
+  keeps going toward the black heart the crowd bows to. *"Her patron is not done. This was a clue, not the prize."* Seeded
+  two implicit action paths WITHOUT deciding: **read the shard** (coax loose the folded name — would be a check if she
+  tries) / **advance** toward the heart (walk toward it to learn). Heart/specifics kept secret.
+- **Spotlight still on the players.** The answer reinforces the open options: advance the drag-scar road deeper toward the
+  dormant HEART (unprepped → build map + encounter live if it turns to a fight) / still herself and read the relic / press
+  the god / Forge take point. Never act/roll/decide for them. Board: out of combat, DM Queue empty, no active encounter.

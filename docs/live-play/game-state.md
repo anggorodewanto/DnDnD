@@ -143,7 +143,12 @@ to Forge** — go down with her, or not? **Awaiting Forge's (Jonathan's) answer.
    the open drag-scar road DEEPER toward the dormant HEART (unprepped) / examine the relic / press the god for more / Forge
    take point. If a fight erupts deeper in (heart rouses / deception unravels / they provoke it), BUILD THE GALLERY MAP +
    ENCOUNTER LIVE (masked sentinel + faceless dead, reserve Zombies; scale per big-party.md, 2-PC party). **Never
-   roll/act/decide for them.** _Earlier (07-01, 6:12–6:20 PM) — PARLEY WON:_ Vale rolled **Deception d20+5 = 21** (her pick, selling the shard-palm as
+   roll/act/decide for them.** _Follow-up (07-02 6:53 AM):_ answered Vale's OOC sense-question (#in-character 6:50 AM —
+   *"do I see/sense more to find deeper, or is the relic all?"*) via **Narrate → #the-story** (table-public, no roll — her
+   patron-tether pull is always-on): the relic is *a* clue, **not the prize** — the pull strains past it toward the heart,
+   *"her patron is not done"*; seeded two paths (still herself + **read the shard** = a check if she tries / **advance**
+   toward the heart) WITHOUT deciding. `POST /api/narration/post → 201`, single clean post verified. Spotlight still hers.
+   _Earlier (07-01, 6:12–6:20 PM) — PARLEY WON:_ Vale rolled **Deception d20+5 = 21** (her pick, selling the shard-palm as
    nothing worth minding) → **strong success, clears the top secret tier.** The truth-tasting god takes no fright from her
    ease and, starved for exactly what she offers (carried / told / un-forgotten), **accepts in kind:** the crowd **parts**
    (drag-scar road opens toward the heart — passage deeper granted); a **relic** is offered (a blank ashen face-shard,
