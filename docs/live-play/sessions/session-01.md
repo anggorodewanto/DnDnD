@@ -1226,3 +1226,39 @@ rolls, no mutations; logged for narrative continuity only._
 - **Now:** players re-run `/rest short` → immediate **ephemeral hit-dice buttons** — they pick how many HD to spend
   (per die type for multiclass), the bot rolls `1dX + CON` per click (their click = their roll), HP up, `hit_dice_remaining`
   down. **HD return only on a `/rest long`** (half total level, min 1). Spotlight still on the players, out of combat.
+
+### Out of combat — hit-dice spend crashed on class-name key, fixed live (ISSUE-051, 07-01)
+
+- **Forge's short-rest hit-die click failed.** With rests unblocked (ISSUE-050), Forge (Barbarian 3) ran `/rest short`
+  and hit the hit-dice buttons — the bot answered *"rest failed: invalid hit die type: barbarian."*
+- **Root cause:** `HitDiceRemaining` was persisted **keyed by class name** (`{"barbarian":3}`) instead of by die string
+  (`{"d12":3}`). Two producers keyed by `c.Class` — the builder DB-persist path (`portal/builder_store_adapter.go`) and
+  `DeriveStats` (`portal/derive_stats.go`) — while **every consumer keys by die string** (the rest service's
+  `HitDieValue`, the hit-dice buttons, `ddbimport`, the sheet template). So the buttons rendered *"barbarian Skip/1/2/3"*
+  and a click passed `dieType="barbarian"` → `HitDieValue`=0 → the error. **Both** live rows were corrupt (Forge
+  `{"barbarian":3}`, Vale `{"warlock":3}`); Vale's earlier `/rest short` only worked because she skipped hit dice
+  (the pact-slot restore path never calls `HitDieValue`).
+- **Fix-now TDD (ISSUE-051):** both producers now key by `ClassHitDie(c.Class)` with `+=` (multiclass classes sharing a
+  die accumulate). Regressions — barbarian ⇒ `d12`, fighter+paladin ⇒ `d10` sum — + flipped 3 tests that had enshrined
+  class-name keys. `make cover-check` green; committed `03642e2`; **rebuilt + redeployed**. Re-keyed the two corrupt
+  live rows out of band (authorized one-off DB UPDATE, counts preserved, guarded on old value): Forge → `{"d12":3}`,
+  Vale → `{"d8":3}`. Both PCs' `/rest short` hit-dice buttons now heal.
+
+### Out of combat — the party crosses into the deeper dark (07-01)
+
+- **Both players declared readiness to descend.** After the shrine find + a short rest each (Vale pact slots back;
+  Forge's d12 rest now works post-ISSUE-051), the human layer signalled go (#in-character, Discord-only): **Vale**
+  (11:50 AM) *"pointed at the door to further darkness. 'Ready to go? I feel we are close to whatever or whoever this
+  is.'"*; **Forge** (11:54 AM) *"stands up & takes a look at the door, 'Yeah, more than ready.'"*
+- **DM narration — the crossing** (#the-story read-aloud, 07-01, DM Console timeline top): past the hollowed shrine the
+  vault's far wall folds back on a worked-stone throat, scored by a single wide **drag-mark** (the pried idol, hauled
+  out and down). Following it: the mineral cold deepens, the frightened carve-and-erase graffiti **thins and stops**
+  (past the last stone the keeper dared mark), and beyond that line the **faceless god is everywhere** — a hundred
+  smooth eyeless ovals worked into the walls. The throat then **opens onto a buried gallery** too vast for the lantern,
+  its floor lost under unnamed standing shapes; out in the dark the drag-mark ends and **something notices the light —
+  a slow turning of cold attention**. Vale's patron pull points **dead ahead, hot and close**.
+- **Spotlight back on the players** — they stand at the lip of the gallery; await their next declared action (advance,
+  light the dark, stealth, call out, examine the standing shapes). Never roll/act/decide for them. This is **new,
+  unprepped territory** — the campaign's next chapter opening past the Cold Vault (design left it open on purpose,
+  [`../encounters/cold-vault.md`](../encounters/cold-vault.md) "Loot / thread"). If the gallery becomes a fight, build
+  the map + encounter live (reserve **Zombies** exist in the cold-vault design; scale per [`../big-party.md`](../big-party.md)).
