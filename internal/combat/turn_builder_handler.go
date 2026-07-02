@@ -380,6 +380,11 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		return nil, fmt.Errorf("updating turn actions: %w", err)
 	}
 
+	// ISSUE-057: this NPC's turn is now taken — cancel its enemy_turn_ready
+	// #dm-queue prompt so the DM Console next_step stops pointing at it. Runs
+	// after the turn state is persisted so a notifier hiccup can't undo it.
+	s.resolveEnemyTurnReady(ctx, encounterID)
+
 	// F-11: Publish WebSocket snapshot after all mutations complete.
 	s.publish(ctx, encounterID)
 

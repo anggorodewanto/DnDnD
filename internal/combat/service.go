@@ -373,18 +373,31 @@ type Service struct {
 	// resolve/cancel from the dashboard).
 	pendingOAsMu          sync.Mutex
 	pendingOAsByEncounter map[uuid.UUID][]string
+
+	// ISSUE-057 — in-memory tracker of the enemy_turn_ready dm-queue item ID
+	// for the DM-controlled combatant currently "up", keyed by encounter ID.
+	// createActiveTurn records the ID when it posts the prompt (via
+	// postEnemyTurnReady); ExecuteEnemyTurn and the next createActiveTurn cancel
+	// it once that NPC's turn is taken/advanced, so a stale "enemy turn ready"
+	// stub never lingers in #dm-queue and misleads the DM Console next_step.
+	// One NPC is up per encounter at a time, so a single ID per encounter
+	// suffices. No DB column — dropped on process restart (a harmless orphan
+	// the DM can still resolve from the dashboard), mirroring pendingOAs.
+	enemyTurnReadyMu          sync.Mutex
+	enemyTurnReadyByEncounter map[uuid.UUID]string
 }
 
 // NewService creates a new combat Service.
 func NewService(store Store) *Service {
 	return &Service{
-		store:                 store,
-		summonedResources:     NewSummonedTurnResources(),
-		ammoTracker:           NewAmmoSpentTracker(),
-		roller:                dice.NewRoller(nil),
-		hostilesPrompted:      make(map[uuid.UUID]bool),
-		usedEffects:           make(map[uuid.UUID]map[uuid.UUID]map[string]bool),
-		pendingOAsByEncounter: make(map[uuid.UUID][]string),
+		store:                     store,
+		summonedResources:         NewSummonedTurnResources(),
+		ammoTracker:               NewAmmoSpentTracker(),
+		roller:                    dice.NewRoller(nil),
+		hostilesPrompted:          make(map[uuid.UUID]bool),
+		usedEffects:               make(map[uuid.UUID]map[uuid.UUID]map[string]bool),
+		pendingOAsByEncounter:     make(map[uuid.UUID][]string),
+		enemyTurnReadyByEncounter: make(map[uuid.UUID]string),
 	}
 }
 

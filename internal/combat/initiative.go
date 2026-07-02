@@ -698,6 +698,13 @@ func hasCondition(conds []CombatCondition, name string) bool {
 // It processes turn-start condition expiration before creating the turn.
 // For PC combatants, it sets started_at and timeout_at based on campaign settings.
 func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) (TurnInfo, error) {
+	// ISSUE-057: whenever a new turn starts, cancel any enemy_turn_ready stub
+	// left by the previously-active NPC. ExecuteEnemyTurn already resolves it
+	// on Confirm & Post; this is the safety net for a manual dashboard
+	// turn-advance (no Turn Builder) so the stub never lingers in #dm-queue.
+	// A no-op when nothing is tracked (empty map entry).
+	s.resolveEnemyTurnReady(ctx, encounterID)
+
 	speedFt, attacksRemaining, err := s.ResolveTurnResources(ctx, combatant)
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("resolving turn resources: %w", err)
@@ -923,11 +930,48 @@ func (s *Service) postEnemyTurnReady(ctx context.Context, encounterID uuid.UUID,
 	if err != nil {
 		return
 	}
-	_, _ = s.dmNotifier.Post(ctx, dmqueue.Event{
+	itemID, _ := s.dmNotifier.Post(ctx, dmqueue.Event{
 		Kind:       dmqueue.KindEnemyTurnReady,
 		PlayerName: combatant.DisplayName,
 		Summary:    "is up",
 		GuildID:    camp.GuildID,
 		CampaignID: camp.ID.String(),
 	})
+	// ISSUE-057: remember the item ID so the prompt is cancelled once this
+	// NPC's turn is actually run/advanced instead of rotting as `pending`.
+	s.recordEnemyTurnReady(encounterID, itemID)
+}
+
+// recordEnemyTurnReady stores the dm-queue item ID for the DM-controlled
+// combatant currently "up" so it can be cancelled when that enemy's turn is
+// taken (ExecuteEnemyTurn) or advanced past (createActiveTurn). One NPC is up
+// per encounter at a time, so a single ID per encounter suffices. Empty IDs
+// (no #dm-queue configured for the guild) are ignored (ISSUE-057).
+func (s *Service) recordEnemyTurnReady(encounterID uuid.UUID, itemID string) {
+	if itemID == "" {
+		return
+	}
+	s.enemyTurnReadyMu.Lock()
+	defer s.enemyTurnReadyMu.Unlock()
+	s.enemyTurnReadyByEncounter[encounterID] = itemID
+}
+
+// resolveEnemyTurnReady pops any tracked enemy_turn_ready dm-queue item for
+// the encounter and cancels it through the DM notifier, so a run/advanced NPC
+// turn clears its own #dm-queue stub instead of leaving a `pending` item that
+// misleads the DM Console next_step (ISSUE-057). Best-effort: a nil notifier
+// or a Cancel error is swallowed, and the in-memory entry is popped either way
+// so a flaky notifier never re-cancels the same stale item.
+func (s *Service) resolveEnemyTurnReady(ctx context.Context, encounterID uuid.UUID) {
+	s.enemyTurnReadyMu.Lock()
+	itemID := s.enemyTurnReadyByEncounter[encounterID]
+	delete(s.enemyTurnReadyByEncounter, encounterID)
+	s.enemyTurnReadyMu.Unlock()
+	if itemID == "" {
+		return
+	}
+	if s.dmNotifier == nil {
+		return
+	}
+	_ = s.dmNotifier.Cancel(ctx, itemID, "enemy turn taken")
 }
