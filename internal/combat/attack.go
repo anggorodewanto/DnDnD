@@ -481,6 +481,14 @@ type AttackResult struct {
 	// combatant's own turn starts again.
 	OncePerTurnEffectsFired []string
 
+	// OncePerTurnEffectNames carries the source feature names (e.g. "Sneak
+	// Attack") of the once-per-turn effects that fired, paralleling
+	// OncePerTurnEffectsFired's type strings. Display-only: FormatAttackLog
+	// reads it to surface a player-visible tag without decoding the folded
+	// dice. The engine's trigger logic never consults this field — populating
+	// it does not change when any effect fires.
+	OncePerTurnEffectNames []string
+
 	// 2024 Weapon Mastery: the mastery slug that fired on this attack
 	// ("" if none). Only set when the attacker knows the weapon's mastery
 	// (masteryActive). Graze fires on a miss; Topple fires on a hit.
@@ -722,9 +730,13 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		// "turn window" (since their own turn last started). The damage
 		// trigger is where Sneak Attack's extra_damage_dice lives.
 		for _, re := range dmgResult.AppliedEffects {
-			if re.Effect.Conditions.OncePerTurn {
-				result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, string(re.Effect.Type))
+			if !re.Effect.Conditions.OncePerTurn {
+				continue
 			}
+			result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, string(re.Effect.Type))
+			// Display-only: keep the feature name so FormatAttackLog can tag
+			// e.g. "Sneak Attack" by name rather than hard-coding the dice.
+			result.OncePerTurnEffectNames = append(result.OncePerTurnEffectNames, re.FeatureName)
 		}
 	}
 
@@ -927,6 +939,20 @@ func CheckAutoCrit(conditions json.RawMessage, distFt int, weapon refdata.Weapon
 	return false, ""
 }
 
+// sneakAttackTag returns the player-visible Sneak Attack suffix when the
+// attacker's own Sneak Attack fired on this attack, or "" otherwise. It is
+// keyed on the fired once-per-turn effect's feature name (never the dice), so
+// it generalizes and never mislabels a different once-per-turn effect. The tag
+// reveals only the attacker's own feature — no enemy HP/AC.
+func sneakAttackTag(result AttackResult) string {
+	for _, name := range result.OncePerTurnEffectNames {
+		if name == "Sneak Attack" {
+			return " \u2014 \u26a1 Sneak Attack!"
+		}
+	}
+	return ""
+}
+
 // FormatAttackLog formats the combat log output for an attack result.
 func FormatAttackLog(result AttackResult) string {
 	var b strings.Builder
@@ -964,7 +990,7 @@ func FormatAttackLog(result AttackResult) string {
 
 	if result.AutoCrit {
 		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
-		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)", result.DamageTotal, result.DamageType, result.DamageDice)
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)%s", result.DamageTotal, result.DamageType, result.DamageDice, sneakAttackTag(result))
 		return b.String()
 	}
 
@@ -984,7 +1010,7 @@ func FormatAttackLog(result AttackResult) string {
 		if result.CriticalHit {
 			diceLabel = "doubled dice: " + result.DamageDice
 		}
-		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)", result.DamageTotal, result.DamageType, diceLabel)
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)%s", result.DamageTotal, result.DamageType, diceLabel, sneakAttackTag(result))
 	}
 
 	// 2024 Weapon Mastery \u2014 Cleave: surface the auto-resolved secondary hit so

@@ -696,6 +696,62 @@ func TestFormatAttackLog_MeleeNoDistance(t *testing.T) {
 	assert.NotContains(t, log, "(5ft)")
 }
 
+// TestFormatAttackLog_SneakAttackTag asserts the combat log surfaces an explicit
+// "Sneak Attack" tag on the damage line when a rogue's Sneak Attack fired, so
+// players see it directly instead of decoding the folded dice expression. The
+// tag is detected by the fired once-per-turn effect's feature name (never by the
+// dice), so it generalizes and does not mislabel a different once-per-turn effect.
+func TestFormatAttackLog_SneakAttackTag(t *testing.T) {
+	tests := []struct {
+		name        string
+		effectNames []string
+		wantTag     bool
+	}{
+		{
+			name:        "sneak attack fired surfaces the tag",
+			effectNames: []string{"Sneak Attack"},
+			wantTag:     true,
+		},
+		{
+			name:        "no once-per-turn effect leaves the tag off",
+			effectNames: nil,
+			wantTag:     false,
+		},
+		{
+			name:        "unrelated once-per-turn effect is not mislabeled",
+			effectNames: []string{"Some Other Feature"},
+			wantTag:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := AttackResult{
+				AttackerName:           "Sly",
+				TargetName:             "Goblin #1",
+				WeaponName:             "Dagger",
+				DistanceFt:             5,
+				IsMelee:                true,
+				Hit:                    true,
+				D20Roll:                dice.D20Result{Chosen: 15, Total: 18, Modifier: 3},
+				DamageTotal:            23,
+				DamageType:             "piercing",
+				DamageDice:             "1d8+3+3d6",
+				OncePerTurnEffectNames: tt.effectNames,
+			}
+
+			log := FormatAttackLog(result)
+			if tt.wantTag {
+				assert.Contains(t, log, "⚡ Sneak Attack!")
+				// Tag rides the damage line; it never leaks any enemy AC/HP.
+				assert.Contains(t, log, "Damage: 23 piercing")
+				return
+			}
+			assert.NotContains(t, log, "Sneak Attack")
+		})
+	}
+}
+
 // --- Service.Attack integration test ---
 
 func TestServiceAttack_BasicFlow(t *testing.T) {
