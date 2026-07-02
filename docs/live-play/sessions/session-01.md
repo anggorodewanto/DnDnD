@@ -1800,3 +1800,24 @@ goes low, or anyone strikes, or the heart otherwise wakes → BUILD THE GALLERY 
 LIVE** (masked sentinel + the tensed faceless dead nearest the heart, reserve Zombies; scale per
 [`../big-party.md`](../big-party.md) — **3-PC party**, and the split matters: Vale is isolated
 40 ft up the road). Never roll/act/decide for them.
+
+### The god wakes — Vale's Persuasion 7 cracks the parley; combat goes live in the Buried Gallery (07-02, ~2:00–2:25 PM)
+
+**Board on resume:** out of combat, DM Console clean except two pending skill-check narrations — Vale Persuasion 7, Windreth Stealth 13 — plus Forge's `/move` in #in-character. The pivot I'd gated last beat (Vale's bare-hand demand on the dormant god) had landed on the die.
+
+**The three player moves.**
+- **Vale (dewa)** picked **Persuasion = 7** for her demand. Secret tiered DC ≈16 → **LOW.** A truth-tasting god, felt skin-to-skin, tasted the whole stolen shape of it: a hand that swore never to touch it, a debt still owed, a bargain paid in a lie. Per the pre-committed low/fumble tier → **the god WAKES.** Stub → #in-character (2:00 PM): *"…Your easy words don't land. Under your palm the stone stops being cold. It felt the demand as a hand in its pocket. And it wakes."*
+- **Windreth (Winfroz)** rolled **Stealth = 13** → slipped off the road into the crowd's shadow, working a line toward the heart, unseen, with a clear angle on the tensed dead. Stub → #in-character.
+- **Forge (JonathanEka)** `/move` (1:34 PM): *"Moving nearby Vale. Dual wielding handaxe, getting ready. Slowly & holding his breath…"* → charging up the road.
+
+Both queue stubs delivered despite the cosmetic **503** (ISSUE-052 class — verified delivered + both RESOLVED, queue empty; NOT retried).
+
+**Built the gallery encounter live.** New map **"Buried Gallery of the Faceless God"** (12×12, id `39ecd023-51d8-44bb-bf8e-29e1eff3a231`; player spawn bottom/mouth, enemy spawn top/heart). New encounter **"The Buried Gallery of the Faceless God"** (id `9e558982-697a-4cc8-8c25-abe3d34cf201`) — **1 Ghoul (the masked sentinel) + 2 Zombies (the tensed dead)**, reserve Zombies held; scaled per big-party.md for a 3-PC party with Vale isolated. **Start Combat** → 200.
+
+**PRODUCT BUG hit live (ISSUE-054, OPEN):** Start Combat auto-placed only the 3 PCs (player spawn); the **3 enemies came out UNPLACED** (empty position) despite the enemy spawn zone → the Discord #combat-map showed no enemy tokens (the user flagged it). **Workaround:** hand-placed every token in the Combat workspace (drag works there; the encounter-builder canvas froze screenshots + its drag-to-place is HTML5-DnD-finicky). Also noted: DM token drags update the DB but don't re-post the #combat-map — it refreshes on the next combat action; no manual re-post button exists. Fix-now TDD investigation launched (background) — report-for-review, no redeploy yet.
+
+**Positions set to match the fiction (workspace drags):** Vale **F3** (the heart, ALONE, at the god's front); Ghoul **G3** (adjacent to Vale); Zombie 2 **D4** + Windreth **C4** (left flank — she's poised to Sneak-Attack it); Zombie 1 **H4** (right flank); Forge **F7** (mid-road, closing). Initiative (Console): **Windreth 23 → Forge 19 → Ghoul 15 → Zombie 2 11 → Vale 9 → Zombie 1 3.** Enemies flagged Surprised in the builder (dormant dead sluggish; the ready party gets the jump — verify it holds at their turns).
+
+**Narrated the wake → #the-story** (read-aloud, `POST /api/narration/post → 201`, single clean post; OOC-first/box-last confirmed) — in **plain simple English** per the new dm-rule. The god has no eyes to open, but the cold under Vale's hand turns from stone-cold to a listening cold; it does not forgive; the tall watcher turns its blank face on her; two kneeling dead push up on either side; *"The god is awake. It wants its faces back. And Vale is standing alone in the middle of it."* Per-PC OOC coda: the board + Windreth's turn (unseen → advantage/Sneak Attack; `/attack` / `/move` / Cunning Action / `/done`).
+
+**AWAIT the players' turns in order** — Windreth first, then Forge (closes to Vale), then the sentinel. On the Ghoul's turn, if surprise didn't apply in-engine, play it as just-rousing (no alpha-strike on isolated Vale — she has 24 HP, Misty Step, Forge closing). Reserve Zombies in pocket. Enemy HP/AC secret. Never roll/act/decide for them.
