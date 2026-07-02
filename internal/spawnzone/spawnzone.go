@@ -107,6 +107,20 @@ func expandTiles(z SpawnZone) []TilePos {
 	return tiles
 }
 
+// SpawnTilesForType returns, in zone order (each zone iterated row-major),
+// every tile covered by spawn zones whose ZoneType matches zoneType
+// (e.g. "player" or "enemy"). Returns nil when no matching zone exists.
+func SpawnTilesForType(zones []SpawnZone, zoneType string) []TilePos {
+	var tiles []TilePos
+	for _, z := range zones {
+		if z.ZoneType != zoneType {
+			continue
+		}
+		tiles = append(tiles, z.Tiles...)
+	}
+	return tiles
+}
+
 // AssignPCsToSpawnZones deterministically assigns each PC ID to a unique
 // player spawn tile. PCs are assigned in input order; tiles are consumed
 // row-major from the first player zone, then the second, etc.
@@ -118,13 +132,7 @@ func AssignPCsToSpawnZones(zones []SpawnZone, pcIDs []string) (map[string]TilePo
 		return positions, nil
 	}
 
-	var available []TilePos
-	for _, z := range zones {
-		if z.ZoneType != "player" {
-			continue
-		}
-		available = append(available, z.Tiles...)
-	}
+	available := SpawnTilesForType(zones, "player")
 	if len(available) == 0 {
 		return nil, ErrNoPlayerSpawnZones
 	}

@@ -917,10 +917,14 @@ func (s *Service) CreateEncounterFromTemplate(ctx context.Context, templateID uu
 		return refdata.Encounter{}, nil, fmt.Errorf("parsing template creatures: %w", err)
 	}
 
-	// Validate creature positions against map bounds.
+	// Validate creature positions against map bounds, and capture the map's
+	// tiled JSON so creatures left "Not placed" in the builder (empty
+	// position_col) can be auto-seated into the authored enemy spawn zone below.
+	var mapTiledJSON json.RawMessage
 	if tmpl.MapID.Valid {
 		m, err := s.store.GetMapByIDUnchecked(ctx, tmpl.MapID.UUID)
 		if err == nil {
+			mapTiledJSON = m.TiledJson
 			for _, tc := range templateCreatures {
 				col := colToIndex(tc.PositionCol)
 				if col < 0 || col >= int(m.WidthSquares) || tc.PositionRow < 0 || tc.PositionRow >= int(m.HeightSquares) {
@@ -944,6 +948,12 @@ func (s *Service) CreateEncounterFromTemplate(ctx context.Context, templateID uu
 		return refdata.Encounter{}, nil, fmt.Errorf("creating encounter: %w", err)
 	}
 
+	// Unplaced creatures (empty position_col) are seated, in creation order,
+	// into the map's authored "enemy" spawn zone — the enemy counterpart to the
+	// PC player-zone seating in seatPCsInSpawnZones. Best-effort: an absent enemy
+	// zone yields an empty queue, leaving them at the zero-value position.
+	enemyTiles := enemySpawnQueue(mapTiledJSON, templateCreatures)
+
 	var combatants []refdata.Combatant
 	for _, tc := range templateCreatures {
 		creature, err := s.store.GetCreature(ctx, tc.CreatureRefID)
@@ -959,7 +969,15 @@ func (s *Service) CreateEncounterFromTemplate(ctx context.Context, templateID uu
 				displayName = fmt.Sprintf("%s %d", tc.DisplayName, i+1)
 			}
 
-			params := CombatantFromCreature(creature, shortID, displayName, tc.PositionCol, int32(tc.PositionRow))
+			posCol, posRow := tc.PositionCol, int32(tc.PositionRow)
+			if posCol == "" && len(enemyTiles) > 0 {
+				tile := enemyTiles[0]
+				enemyTiles = enemyTiles[1:]
+				posCol = indexToColLabel(tile.Col)
+				posRow = int32(tile.Row + 1)
+			}
+
+			params := CombatantFromCreature(creature, shortID, displayName, posCol, posRow)
 			c, err := s.AddCombatant(ctx, enc.ID, params)
 			if err != nil {
 				return refdata.Encounter{}, nil, fmt.Errorf("creating combatant %s: %w", shortID, err)
@@ -969,6 +987,45 @@ func (s *Service) CreateEncounterFromTemplate(ctx context.Context, templateID uu
 	}
 
 	return enc, combatants, nil
+}
+
+// enemySpawnQueue returns the map's "enemy" spawn-zone tiles available for
+// seating creatures that have no explicit template position, row-major and in
+// zone order, excluding any tile already claimed by an explicitly-placed
+// template creature so an auto-seated enemy never lands on a hand-placed one.
+//
+// Best-effort: an empty/unparseable map or an absent enemy zone yields nil,
+// leaving unplaced creatures at their zero-value position — the unchanged legacy
+// behavior for maps without an authored enemy zone.
+func enemySpawnQueue(tiledJSON json.RawMessage, creatures []TemplateCreature) []spawnzone.TilePos {
+	if len(tiledJSON) == 0 {
+		return nil
+	}
+	zones, err := spawnzone.ParseSpawnZones(tiledJSON)
+	if err != nil {
+		return nil
+	}
+	tiles := spawnzone.SpawnTilesForType(zones, "enemy")
+	if len(tiles) == 0 {
+		return nil
+	}
+
+	occupied := make(map[spawnzone.TilePos]bool)
+	for _, tc := range creatures {
+		if tc.PositionCol == "" {
+			continue
+		}
+		occupied[spawnzone.TilePos{Col: colToIndex(tc.PositionCol), Row: tc.PositionRow - 1}] = true
+	}
+
+	queue := make([]spawnzone.TilePos, 0, len(tiles))
+	for _, t := range tiles {
+		if occupied[t] {
+			continue
+		}
+		queue = append(queue, t)
+	}
+	return queue
 }
 
 // CreateActionLogInput holds parameters for creating an action log entry.

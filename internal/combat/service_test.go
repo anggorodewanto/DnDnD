@@ -1356,6 +1356,102 @@ func TestService_CreateEncounterFromTemplate_OutOfBoundsPosition(t *testing.T) {
 	assert.Contains(t, err.Error(), "outside map bounds")
 }
 
+// --- ISSUE-039: unplaced enemies auto-seat into the map's enemy spawn zone ---
+
+// TestService_CreateEncounterFromTemplate_SeatsUnplacedEnemiesInEnemySpawnZone
+// covers the reported live-play bug: a template whose creatures are "Not placed"
+// in the builder (empty position_col) must be auto-seated into the map's authored
+// "enemy" spawn zone at combat start — mirroring how PCs seat into the "player"
+// zone — instead of falling to the zero-value position (col "", row 0), which the
+// map renderer skips (tokens missing / stacked at the A1 corner on #combat-map).
+func TestService_CreateEncounterFromTemplate_SeatsUnplacedEnemiesInEnemySpawnZone(t *testing.T) {
+	mapID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         uuid.New(),
+			CampaignID: uuid.New(),
+			MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:       "Ambush",
+			// Two zombies with NO position_col — "Not placed" in the builder.
+			Creatures: json.RawMessage(`[{"creature_ref_id":"zombie","short_id":"Z","display_name":"Zombie","quantity":2}]`),
+		}, nil
+	}
+	// Enemy spawn zone at tile (5,0), 2 wide x 1 tall (px x=240,w=96,h=48).
+	store.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{
+			ID: mapID, WidthSquares: 10, HeightSquares: 10,
+			TiledJson: json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[{"name":"spawn_zones","type":"objectgroup","objects":[{"x":240,"y":0,"width":96,"height":48,"type":"enemy"}]}]}`),
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "zombie", Ac: 8, HpAverage: 22, Speed: json.RawMessage(`{"walk":20}`)}, nil
+	}
+	var created []refdata.CreateCombatantParams
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		created = append(created, arg)
+		return refdata.Combatant{ID: uuid.New(), EncounterID: arg.EncounterID, ShortID: arg.ShortID, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(store)
+	_, combatants, err := svc.CreateEncounterFromTemplate(context.Background(), uuid.New())
+	require.NoError(t, err)
+	require.Len(t, combatants, 2)
+	require.Len(t, created, 2)
+
+	// Enemy zone tiles iterate row-major: (5,0),(6,0). col 5 -> "F", 6 -> "G";
+	// tile rows are 0-indexed, combatant rows are 1-indexed.
+	assert.Equal(t, "F", created[0].PositionCol, "first enemy seated at enemy-zone tile (5,0)")
+	assert.Equal(t, int32(1), created[0].PositionRow)
+	assert.Equal(t, "G", created[1].PositionCol, "second enemy seated at enemy-zone tile (6,0)")
+	assert.Equal(t, int32(1), created[1].PositionRow)
+	assert.NotEqual(t, created[0].PositionCol, created[1].PositionCol, "enemies must not stack on the same tile")
+}
+
+// TestService_CreateEncounterFromTemplate_AutoSeatSkipsHandPlacedEnemyTile
+// verifies an auto-seated (unplaced) enemy never lands on an enemy-zone tile a
+// DM already claimed by hand-placing a creature there.
+func TestService_CreateEncounterFromTemplate_AutoSeatSkipsHandPlacedEnemyTile(t *testing.T) {
+	mapID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         uuid.New(),
+			CampaignID: uuid.New(),
+			MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:       "Ambush",
+			// Ghoul hand-placed at "F" (enemy-zone tile (5,0)); zombie unplaced.
+			Creatures: json.RawMessage(`[{"creature_ref_id":"ghoul","short_id":"GH","display_name":"Ghoul","position_col":"F","position_row":1,"quantity":1},{"creature_ref_id":"zombie","short_id":"Z","display_name":"Zombie","quantity":1}]`),
+		}, nil
+	}
+	// Enemy spawn zone at tiles (5,0) and (6,0).
+	store.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{
+			ID: mapID, WidthSquares: 10, HeightSquares: 10,
+			TiledJson: json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[{"name":"spawn_zones","type":"objectgroup","objects":[{"x":240,"y":0,"width":96,"height":48,"type":"enemy"}]}]}`),
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: id, Ac: 8, HpAverage: 22, Speed: json.RawMessage(`{"walk":20}`)}, nil
+	}
+	var created []refdata.CreateCombatantParams
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		created = append(created, arg)
+		return refdata.Combatant{ID: uuid.New(), EncounterID: arg.EncounterID, ShortID: arg.ShortID, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(store)
+	_, _, err := svc.CreateEncounterFromTemplate(context.Background(), uuid.New())
+	require.NoError(t, err)
+	require.Len(t, created, 2)
+
+	// Ghoul keeps its hand-placed tile; zombie auto-seats onto the remaining
+	// enemy-zone tile (6,0) -> "G", skipping the occupied "F".
+	assert.Equal(t, "F", created[0].PositionCol, "hand-placed ghoul keeps its tile")
+	assert.Equal(t, "G", created[1].PositionCol, "unplaced zombie skips the occupied F tile")
+	assert.Equal(t, int32(1), created[1].PositionRow)
+}
+
 // --- TDD Cycle 21: ListActionLog ---
 
 func TestService_ListActionLogByEncounterID(t *testing.T) {
