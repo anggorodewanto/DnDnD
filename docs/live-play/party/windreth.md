@@ -9,7 +9,7 @@
   the portal. (Remote vs local TBD; reached the builder + OAuth normally.)
   **Discord handle: `Winfroz`** (confirmed 07-02 — Party Overview shows exactly 3 PCs
   and no pending approvals, so the new author "Winfroz" acting in-character maps to
-  Windreth by elimination). Watch for her actions under `Winfroz` in #in-character.
+  Windreth by elimination). Watch for his actions under `Winfroz` in #in-character.
 - **Character id:** `b2c436da-6762-458f-8016-3fe8f18e35e6`
 - **High-Elf Rogue 3** (Roguish Archetype: **Thief**), **urchin** background.
 - **APPROVED** 2026-07-02 via the dashboard approvals page
@@ -48,24 +48,24 @@
 
 ## Live notes
 
-- **Player-controlled** — narrate her *arrival / the world's reaction*, never her
+- **Player-controlled** — narrate his *arrival / the world's reaction*, never his
   choices or dialogue. (Standing rule, see [`../dm-rules.md`](../dm-rules.md).)
 - **Role:** scout / skirmisher / the party's lock-trap-and-lore reader — Expertise
-  in **investigation + stealth** makes her the natural examine/scout lead
+  in **investigation + stealth** makes him the natural examine/scout lead
   (Vale + Forge already read the shard; Windreth is built to out-read both).
-  Sneak Attack + Cunning Action make her the mobile burst-damage PC in a fight.
+  Sneak Attack + Cunning Action make him the mobile burst-damage PC in a fight.
 - **First scene action** 2026-07-02 (~12:32 PM, as `Winfroz`): *"looking around."* DM
   gave the plain scout/darkvision read for free (rank-on-rank faceless bowed dead, the
   drag-scar road, the one sentinel still turned to the light, the heart past even
   elf-sight) and offered a `/check perception` or `/check investigation` to dig past it
-  (hidden way / trap / safe path / weakness). She rolled it — see next bullet.
+  (hidden way / trap / safe path / weakness). He rolled it — see next bullet.
 - **First roll** 2026-07-02 (~1:05 PM, as `Winfroz`): `/check perception` = **17**
-  (secret tiered DC ≈15, high). Resolved as her scout's read of the gallery crowd — most
+  (secret tiered DC ≈15, high). Resolved as his scout's read of the gallery crowd — most
   of the bowed dead are only dead, but the sentinel that tracked the lantern + a knot
   nearest the heart are **tensed, angled toward Vale** (out alone 40 ft up the road); the
   drag-scar is the only clear lane; if it sours *those* wake first. A real tactical edge,
-  no enemy numbers. She's now the party's early-warning, positioned at the mouth beside
-  Forge while Vale touches the heart. Awaiting her next move (`/check stealth` to
+  no enemy numbers. He's now the party's early-warning, positioned at the mouth beside
+  Forge while Vale touches the heart. Awaiting his next move (`/check stealth` to
   reposition / ready vs the tensed dead / move up).
 - **Woven in** 2026-07-02 at the mouth of the Buried Gallery of the Faceless God
   as a traveler who followed the cold down through the clawed-open Ashfall cellar
