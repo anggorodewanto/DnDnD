@@ -84,6 +84,22 @@ big-party technique is in [`big-party.md`](big-party.md).
 - **Don't narrate player choices.** Player-controlled PCs decide and speak for
   themselves; narrate their *arrival / the world's reaction*, not their decisions or
   dialogue. (See per-PC sheets in [`party/`](party/).)
+- **Nudge with OOC hints — keep the spotlight moving.** After narrating a beat, add
+  a brief **out-of-character coda** (plain text after the read-aloud block) that hands
+  the spotlight back and lays out *concrete* options — the specific things each PC
+  could do next and the exact rolls they could make (`/check history`,
+  `/check perception`, "touch it / commune / hold your ground", etc.). **Do this
+  often, and especially when an RP phase is dragging** — players hesitating, going
+  quiet, or circling the same beat: surface 2-4 clear choices + the slash commands so
+  nobody is stuck guessing what's possible. When the party is **split, or a PC is new
+  or quiet**, make it **per-PC** (name each one + a tailored hook / suggested roll) so
+  everyone gets an explicit invitation to act. Keep the coda a **menu, not a
+  decision** — suggest, never pick; this pairs with "don't narrate player choices" and
+  "players roll their own dice" (you list what they *could* do; they choose and roll).
+  Keep it tight and non-spoilery: the bot renders the OOC coda **first** and the
+  read-aloud box **last**, so the coda is the lead-in, not the reveal. (Player feedback
+  07-02: *"I like the way you use OOC nudge and hint to players on what they can do and
+  roll — do that more often, especially if an RP phase is dragging."*)
 
 ## Keep the record straight
 

@@ -1656,3 +1656,89 @@ rolls, no mutations; logged for narrative continuity only._
 - **Spotlight still on the players.** The answer reinforces the open options: advance the drag-scar road deeper toward the
   dormant HEART (unprepped → build map + encounter live if it turns to a fight) / still herself and read the relic / press
   the god / Forge take point. Never act/roll/decide for them. Board: out of combat, DM Queue empty, no active encounter.
+
+### Forge examines the shard — free glance-read + a called check (07-02, 8:10–8:29 AM)
+
+- **Player question (Forge / Jonathan, #in-character 8:10 AM, to DM):** *"is there a hint of dwarf/gnome inscription in
+  the shard. or should I do 'check'?"* — Forge (dwarf, smith's/craft eye) leans in to examine the ashen face-shard Vale
+  holds. Table-public → answered via **Narrate → #the-story** + an OOC check-prompt per the [`../dm-rules.md`](../dm-rules.md)
+  reply rule.
+- **DM ruling — free glance, then gate the deeper read on a `/check`.** A dwarf's craft eye gets the *obvious* for free
+  (no roll): it's **not dwarf- or gnome-work** — no maker's rune, no tool-bite, no seam, all one piece worked by nothing
+  he's watched hands do; should be dead clay yet rings like struck bronze — *wrong all the way through.* But reading true
+  hidden script / the "folded name" is past a glance → **called a player-rolled check, his pick: Investigation** (search
+  the shard for marks/seams) **or History** (does a dwarf's memory know this ash-faced god / its script). **Secret tiered
+  DC (held in head, ~15):** low still confirms the wrongness + a sense that something IS folded in (a thread, never
+  hard-blocked); mid → a partial (a fragment of not-mortal shape/script tied to the faceless god); high → a real hint (a
+  syllable of the folded name / the same carve-then-erase ritual script from the shrine / a dwarf-legend of face-theft).
+  Consistent with the 6:53 seed ("she might coax the name loose if she stilled herself and listened").
+- **DM narration** (#the-story read-aloud 8:29 AM, Console timeline top; `POST /api/narration/post → 201`, coordinate-click
+  Post, single clean post verified — badge counts the 6:53 + 8:29 posts). Read-aloud = the glance-read; an OOC coda after
+  the block prompts the `/check` (Investigation or History, his pick, report the number). Heart/specifics kept secret.
+- **AWAIT Forge's `/check` roll** (#roll-history) — a `/check` files a `skill_check_narration` dm-queue item → becomes
+  `next_step`; resolve it per tier via the #dm-queue inline resolver (no-numbers outcome stub → #in-character), then narrate
+  the find to #the-story. Spotlight stays on the players (Vale may also act / advance). Never roll/act/decide for them.
+  Board: out of combat, DM Queue empty (pre-roll), no active encounter.
+
+### Forge reads the shard — Investigation 19, the made-blank and the surviving stroke (07-02, 11:19–11:32 AM)
+
+Following the 8:29 AM setup (free glance-read + a called `/check`), Forge's player rolled **Investigation** — **19** (#in-character 11:19 AM: *"my check investigation roll is 19"*), filing a `skill_check_narration` dm-queue item (the DM Console `next_step`). 19 clears the secret tiered DC (≈15) → **high tier.** Resolved via the **#dm-queue inline resolver** (Open → outcome textbox → Send Narration): the shard is a **MADE blank** — a face was carved into it once, patient and fine, then ground smooth and *unmade*, the same **carve-to-call / scratch-to-un-call** trick worked on the shrine upstairs; the erasure **slipped**, leaving **one surviving stroke at the cold rim = a single folded syllable of the name that used to live in this face** → the thread to pull. The `POST /dashboard/queue/<id>/narrate` again threw a cosmetic **503**, but the outcome fully delivered to #in-character (11:29 AM, verified on-screen) and the item flipped **RESOLVED** (queue empty) — **not retried** (ISSUE-052 class; see issues.md). Table-facing beat narrated to #the-story as a read-aloud (below, combined with Windreth's arrival).
+
+### Windreth joins — a high-elf rogue at the gallery mouth (07-02, ~11:29–11:32 AM)
+
+A **new player** joined the Ashfall party. Their PC — **Windreth**, **High-Elf Rogue 3 (Thief)**, urchin (id `b2c436da-6762-458f-8016-3fe8f18e35e6`) — was already self-built via the portal and sitting in the approvals queue. Reviewed on the dashboard **Character Approvals → Review**: clean, legal L3 build — DEX 17 (+3), CON 14, WIS 14; AC 14 (leather + DEX), HP 24 (d8 average method); saves DEX/INT; 7 skills (4 rogue + 2 urchin + Keen Senses perception) with **Expertise in investigation + stealth**; Cunning Action / Sneak Attack / Fey Ancestry / Trance / Thief archetype; urchin kit (shortbow, shortsword, dagger, thieves' tools, map of a city, pet mouse, token of remembrance). Only cosmetic gap: the 2024 high-elf cantrip + 3rd language not wired (same class as Vale's ISSUE-009) — non-blocking, left as-is rather than stall a waiting player. **Approved** (`POST /dashboard/api/approvals/…/approve → 200`; approval queue emptied; bot auto-posts the character card + DMs the welcome).
+
+**Woven into the fiction** (per world.md's fold-in) at the **mouth of the Buried Gallery of the Faceless God** as a traveler who reached the cold, keeper-less Ashfall Waystation, found the cellar door clawed open from the inside, and followed the cold-and-a-held-breath down after the party. Narrated her **arrival + the world's reaction only** (never her choices): a slight, road-worn, elf-quiet newcomer resolving out of the dark up the worked-stone throat, behind Vale + Forge and the shard-light. Per-PC hook seeded on entry (thief/elf senses): a thief's eye reads the pried niche (worked-not-smashed) and the carve-then-silenced name; elf-keen ears catch the near-name folded into the humming shard; the dormant heart does not stir, but *"the whole starved attention of the place has just noticed there is one more story in the room."* Combined with Forge's find into one #the-story read-aloud (`POST /api/narration/post → 201`, 11:32 AM, coordinate-click Post, single clean post verified) + a brief OOC welcome handing the spotlight to the new player. Roster + a new `party/windreth.md` sheet added. **Party now 3 PCs (Vale, Forge, Windreth).** Board: out of combat, DM Queue empty, no active encounter — **awaiting the players' next move** (Windreth's first action / advance toward the heart / read the shard's stroke further).
+
+### The heart in view — Windreth's first look, Forge reaches for a memory, Vale walks to the god (07-02, ~11:32 AM–12:45 PM)
+
+Three players acted at one moment, out of combat, at the gallery mouth. Board pulled first
+(DM Console: `next_step` empty, `pending: 0`, no active encounter — clean).
+
+**Player→PC mapping confirmed.** A new author, **Winfroz**, posted in-character. Party
+Overview shows **exactly 3 PCs** (Vale, Forge, Windreth) and no pending approvals, so by
+elimination **Winfroz = Windreth's player** (Discord handle). No 4th onboarding needed;
+recorded the handle on [`../party/windreth.md`](../party/windreth.md).
+
+The three declared moves (#in-character):
+- **Forge** (JonathanEka, 11:32 AM): *"Interesting shard it is. Let me hold & take a look at
+  this inscription closer. (to DM: should I do 'History' check to recall what I know? since we
+  unravel new facts from this shard)."*
+- **Windreth** (Winfroz, 12:32 PM): *"(to DM: looking around)"* — her first action in the scene.
+- **Vale** (dewa, 12:36 PM): *"Vale let Forge study the shard, and walked plainly, jauntily, to
+  mask her trembling feet, towards the heart of the gallery."*
+
+**Adjudication.**
+- **Forge → History granted.** His Investigation 19 already read the *object* (the made-blank +
+  the surviving stroke). History is a genuinely different axis — does a dwarf's memory hold an
+  old tale of *stolen faces* — so it isn't an info-farm re-roll. Allowed one **History** check,
+  **secret tiered DC ≈15** (low = a shiver of half-remembered fear, nothing solid; mid = a
+  fragment of dwarrow-legend; high = a real recalled tale that contextualizes the faceless god).
+  He rolls his own die → a `/check history` will file a `skill_check_narration` queue item.
+- **Windreth → free scout read + deeper check offered.** "Looking around" gets her the plain
+  darkvision/keen-senses read for free (rank-on-rank faceless bowed dead, the drag-scar road,
+  the one sentinel still turned to the light, the heart past even elf-sight). Offered a
+  `/check perception` or `/check investigation` to dig past the obvious (a hidden way, a trap,
+  the safe path, a weakness). No roll for the plain read.
+- **Vale → walks the paid-open road, auto-pass, the HEART is revealed.** She bought passage
+  (the crowd parted when the god was paid), so walking the drag-scar road needs no roll — the
+  faceless heads incline *aside* and let her through. At the road's end: a cleared ring, and
+  the **idol pried from the shrine above and dragged all the way down, enthroned on a low heap
+  of pale, curved, overlapping things she does not let herself name** — colossal, faceless,
+  **DORMANT**; her patron-pull ends dead in its blank front; the cold pours off it. Kept the
+  heart dormant and **all mechanics SECRET**. **Combat NOT sprung** — a non-hostile approach on
+  paid passage, and the heart has not roused. The **party is now SPLIT**: Vale alone at the
+  heart, Forge + Windreth back at the mouth.
+
+**Narration.** One braided read-aloud to #the-story (`POST /api/narration/post → 201`, 12:45 PM,
+coordinate-click Post, single clean post verified) — Windreth's first read, Forge's
+almost-memory, and Vale's walk to the revealed heart, closing on *"The dark waits to see what
+she does with it."* (Render note: the bot puts the plain OOC coda **first** and the read-aloud
+box **last** regardless of source order — confirmed against the 11:32 post — so the box lands as
+the closer; trimmed the OOC bullets so they don't pre-spoil the heart the box reveals.)
+
+**Await the players** — Vale's move at the heart (speak / touch / commune / hold / call the
+others up) / Forge's `/check history` / Windreth's `/check perception|investigation`. **If the
+heart wakes or they provoke it → BUILD THE GALLERY MAP + ENCOUNTER LIVE** (masked sentinel +
+faceless dead, reserve Zombies; scale per [`../big-party.md`](../big-party.md) — now a **3-PC
+party**). Never roll/act/decide for them.
