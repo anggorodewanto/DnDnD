@@ -100,6 +100,12 @@ big-party technique is in [`big-party.md`](big-party.md).
   read-aloud box **last**, so the coda is the lead-in, not the reveal. (Player feedback
   07-02: *"I like the way you use OOC nudge and hint to players on what they can do and
   roll — do that more often, especially if an RP phase is dragging."*)
+- **Write the story in plain, simple English.** The players asked for this directly. Keep
+  #the-story narration easy to read: pick the common word over the fancy one, keep sentences
+  short, favor concrete images over ornate phrasing, and drop the archaic / purple / clause-
+  stacked style. Simpler is not flatter — stay vivid and atmospheric — but a player skimming on
+  a phone should get the beat in one pass. Applies to the read-aloud prose **and** the OOC coda.
+  (Player feedback 07-02: *"use simpler English for the DM story."*)
 
 ## Keep the record straight
 

@@ -58,7 +58,15 @@
   gave the plain scout/darkvision read for free (rank-on-rank faceless bowed dead, the
   drag-scar road, the one sentinel still turned to the light, the heart past even
   elf-sight) and offered a `/check perception` or `/check investigation` to dig past it
-  (hidden way / trap / safe path / weakness). Roll pending — she rolls her own die.
+  (hidden way / trap / safe path / weakness). She rolled it — see next bullet.
+- **First roll** 2026-07-02 (~1:05 PM, as `Winfroz`): `/check perception` = **17**
+  (secret tiered DC ≈15, high). Resolved as her scout's read of the gallery crowd — most
+  of the bowed dead are only dead, but the sentinel that tracked the lantern + a knot
+  nearest the heart are **tensed, angled toward Vale** (out alone 40 ft up the road); the
+  drag-scar is the only clear lane; if it sours *those* wake first. A real tactical edge,
+  no enemy numbers. She's now the party's early-warning, positioned at the mouth beside
+  Forge while Vale touches the heart. Awaiting her next move (`/check stealth` to
+  reposition / ready vs the tensed dead / move up).
 - **Woven in** 2026-07-02 at the mouth of the Buried Gallery of the Faceless God
   as a traveler who followed the cold down through the clawed-open Ashfall cellar
   (per [`../world.md`](../world.md) fold-in). Per-PC hook seeded on arrival: a

@@ -1742,3 +1742,61 @@ others up) / Forge's `/check history` / Windreth's `/check perception|investigat
 heart wakes or they provoke it → BUILD THE GALLERY MAP + ENCOUNTER LIVE** (masked sentinel +
 faceless dead, reserve Zombies; scale per [`../big-party.md`](../big-party.md) — now a **3-PC
 party**). Never roll/act/decide for them.
+
+### Windreth reads the room, Forge's memory fails, and Vale lays a bare hand on the god (07-02, ~1:20–1:30 PM)
+
+**Board on resume.** Out of combat, no active encounter. DM Console **NEXT STEP** =
+*"Resolve Skill Check Narration from Windreth: Perception check (rolled 17)"*, **Pending 2**
+(Windreth Perception 17 + Forge History 3). Discord #in-character carried three fresh moves
+since the 12:45 PM heart-reveal: Windreth `/check perception` (1:05 PM), Forge's History roll
+reported (`(to DM: my check history roll is 3)`, 1:27 PM), and — the big one — **Vale** (dewa,
+1:20 PM): *"Vale reached out to touch the seated figure. 'Give me your story, faceless one.'"*
+
+**Two checks resolved** via the #dm-queue inline resolver (each a no-numbers stub → #in-character;
+both `POST /dashboard/queue/<id>/narrate` threw the cosmetic **503** again — ISSUE-052 class —
+but **both fully delivered + items RESOLVED**, verified in #in-character 1:29/1:30 PM and Console
+**Pending 0**; NOT retried):
+- **Windreth — Perception 17** (secret tiered DC ≈15, high). Her first mechanical contribution
+  as the scout: a thief's read of the crowd — most of the bowed dead are only dead, but the
+  **sentinel that tracked the lantern + a knot nearest the heart are tensed, listening, angled
+  toward Vale out on the road alone**; if it sours *those* wake first and Vale is 40 ft out with
+  no one beside her; the drag-scar road is the only clear lane. A real tactical edge + tension,
+  no enemy numbers.
+- **Forge — History 3** (secret tiered DC ≈15, low). Thematic floor: his dwarf-memory reaches
+  for a tale of an ash-faced face-stealing god and it **slides off the harder he grips** —
+  nothing solid, but the blank itself is the tell (*a thing built to be un-remembered resists
+  even a dwarf's memory*). No fabricated lore; the Investigation-19 shard read stands as the
+  concrete thread.
+
+**Vale touches the god — adjudication.** Her declared move is a genuine provoke: a **bare hand**
+(she'd been careful "never bare skin" before) on the **dormant** faceless idol + a **demand**
+for its story, while she already carries the geas (owes the telling) and struck the first
+bargain on a **deception**. Passage was bought for *walking* the road, not for *seizing* the
+god — so this is beyond the paid auto-pass and warrants a roll. Did **not** unilaterally spring
+combat and did **not** decide for her: narrated the **contact + the god stirring** (cold
+"opens," the patron-tether snaps taut, the dormant weight shifts "not awake, not asleep," the
+gallery draws a breath toward the point she touches) and **gated the outcome on her own
+Charisma roll** (her pick — Persuasion / Deception / Intimidation; secret tiered DC ≈16, it's a
+god). This keeps the latent **deception-crack** tension live on the die (skin-to-skin with a
+truth-taster) without resolving it. Intended tiers when she rolls: **high** → the story gives
+(a real new thread via the tether, geas humming approval, no combat); **mid** → it half-wakes
+and weighs the imbalance (she demands while owing), gives a fragment, hunger visible, holds;
+**low/fumble** → the touch lets it taste the lie or reads the demand as theft → it **WAKES** →
+BUILD THE GALLERY MAP + ENCOUNTER LIVE (masked sentinel + the tensed dead nearest the heart
+rouse; Vale alone on the road, Forge + Windreth 40 ft back at the mouth).
+
+**Narration.** One braided read-aloud → #the-story (`POST /api/narration/post → 201`, ~1:33 PM,
+coordinate-click Post, single clean post verified) — Windreth's read, Forge's memory that won't
+come, and Vale's bare-hand touch + the god's stir, closing on *"waiting to learn whether this
+is worship, or theft."* Followed by a **per-PC OOC coda** (split party, so each named + given
+concrete options and exact rolls per the new dm-rules nudge guideline): Vale → her Charisma
+`/check`; Forge → `/move` up the road / hold / ready / call to her; Windreth → `/check stealth` /
+ready against the tensed dead / move up beside Forge. Render confirmed OOC-first / box-last in
+the preview again.
+
+**Await the players' declared moves + Vale's roll.** Vale's Charisma check is the pivot — narrate
+the god's verdict per tier on the roll; Forge + Windreth may act in parallel. **If Vale's roll
+goes low, or anyone strikes, or the heart otherwise wakes → BUILD THE GALLERY MAP + ENCOUNTER
+LIVE** (masked sentinel + the tensed faceless dead nearest the heart, reserve Zombies; scale per
+[`../big-party.md`](../big-party.md) — **3-PC party**, and the split matters: Vale is isolated
+40 ft up the road). Never roll/act/decide for them.
