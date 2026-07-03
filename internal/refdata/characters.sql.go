@@ -533,6 +533,24 @@ func (q *Queries) UpdateCharacter(ctx context.Context, arg UpdateCharacterParams
 	return i, err
 }
 
+const updateCharacterAC = `-- name: UpdateCharacterAC :exec
+UPDATE characters SET ac = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCharacterACParams struct {
+	ID uuid.UUID `json:"id"`
+	Ac int32     `json:"ac"`
+}
+
+// Used by ASI approval / feat ASI bonuses to keep the stored base AC in sync
+// after a DEX/CON/WIS score change (ISSUE-064). Base AC only — magic-item and
+// fighting-style overlays are applied at combat time.
+func (q *Queries) UpdateCharacterAC(ctx context.Context, arg UpdateCharacterACParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterAC, arg.ID, arg.Ac)
+	return err
+}
+
 const updateCharacterAbilityScores = `-- name: UpdateCharacterAbilityScores :exec
 UPDATE characters SET ability_scores = $2, updated_at = now()
 WHERE id = $1

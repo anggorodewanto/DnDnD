@@ -10,8 +10,8 @@
 | PC | Player | Race / Class / Lvl | AC (base) | Durable kit (max resources / signature) | Sheet |
 | --- | --- | --- | --- | --- | --- |
 | **Vale** | the user | Tiefling Warlock **4** (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; **Pact of the Tome** — Book of Shadows cantrips Guidance / Minor Illusion / Prestidigitation; **Invocations:** Agonizing Blast (+CHA to each Eldritch Blast beam), Mask of Many Faces (*disguise self* at will); spells Eldritch Blast, Hex, Misty Step, Hold Person, Shatter, Hellish Rebuke, Chill Touch, Mage Hand; light crossbow + bolts. _L4 ASI: **+2 CHA → 18** (spell DC 14, atk +6)._ | [vale.md](vale.md) |
-| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian **4** (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack. _ASI/feat @ L4 still to pick._ | [forge.md](forge.md) |
-| **Windreth** | friend (new 07-02) | High-Elf Rogue **4** (Thief) | **14** (leather+DEX) | Sneak Attack **2d6**; **Expertise investigation + stealth**; Cunning Action; shortbow + shortsword/dagger, thieves' tools. _ASI/feat @ L4 still to pick._ | [windreth.md](windreth.md) |
+| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian **4** (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack. _L4 feat: **Great Weapon Master** (crit/kill → bonus-action melee swing; −5 to hit / +10 dmg on a heavy weapon; applied 07-03)._ | [forge.md](forge.md) |
+| **Windreth** | friend (new 07-02) | High-Elf Rogue **4** (Thief) | **15** (leather+DEX 18) | Sneak Attack **2d6**; **Expertise investigation + stealth**; Cunning Action; shortbow + shortsword/dagger, thieves' tools. _L4 feat: **Defensive Duelist** (2024 half-feat: **+1 DEX → 18**, so AC 14→15; reaction: +prof to AC vs a melee hit while wielding a finesse weapon; applied 07-03, DEX corrected 07-03)._ | [windreth.md](windreth.md) |
 
 _Add a row + a `party/<name>.md` sheet for each new PC on approval. Keep this table to durable
 facts; for who's bloodied / where they stand right now, open the DM Console._

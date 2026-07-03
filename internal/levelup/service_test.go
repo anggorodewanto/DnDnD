@@ -15,11 +15,17 @@ import (
 // --- Mock dependencies ---
 
 type mockCharacterStore struct {
-	chars map[uuid.UUID]*StoredCharacter
+	chars     map[uuid.UUID]*StoredCharacter
+	acInputs  map[uuid.UUID]ACInputs
+	acWritten map[uuid.UUID]int32
 }
 
 func newMockCharacterStore() *mockCharacterStore {
-	return &mockCharacterStore{chars: make(map[uuid.UUID]*StoredCharacter)}
+	return &mockCharacterStore{
+		chars:     make(map[uuid.UUID]*StoredCharacter),
+		acInputs:  make(map[uuid.UUID]ACInputs),
+		acWritten: make(map[uuid.UUID]int32),
+	}
 }
 
 func (m *mockCharacterStore) GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (*StoredCharacter, error) {
@@ -69,6 +75,18 @@ func (m *mockCharacterStore) UpdateProficiencies(ctx context.Context, id uuid.UU
 		return fmt.Errorf("not found")
 	}
 	c.Proficiencies = proficiencies
+	return nil
+}
+
+// GetACInputs returns the configured AC inputs for a character (zero value =
+// unarmored, no shield, no formula → base AC 10 + DEX mod).
+func (m *mockCharacterStore) GetACInputs(ctx context.Context, id uuid.UUID) (ACInputs, error) {
+	return m.acInputs[id], nil
+}
+
+// UpdateAC records the recomputed base AC for later assertion.
+func (m *mockCharacterStore) UpdateAC(ctx context.Context, id uuid.UUID, ac int32) error {
+	m.acWritten[id] = ac
 	return nil
 }
 
@@ -329,6 +347,37 @@ func TestService_ApproveASI_Plus2(t *testing.T) {
 	}
 }
 
+// ISSUE-064 B: a +2 DEX ASI must also recompute the stored base AC.
+// Leather (11) + DEX 16→18 (mod +4) ⇒ AC 15.
+func TestService_ApproveASI_DexRecomputesAC(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 8, DEX: 16, CON: 14, INT: 11, WIS: 14, CHA: 10}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+	}
+	charStore.acInputs[charID] = ACInputs{Armor: &character.ArmorInfo{ACBase: 11, DexBonus: true}}
+
+	svc := NewService(charStore, classStore, notifier)
+	if err := svc.ApproveASI(context.Background(), charID, ASIChoice{Type: ASIPlus2, Ability: "dex"}); err != nil {
+		t.Fatalf("ApproveASI error: %v", err)
+	}
+
+	if got := charStore.acWritten[charID]; got != 15 {
+		t.Errorf("recomputed AC = %d, want 15 (leather 11 + DEX 18 mod +4)", got)
+	}
+}
+
 func TestService_ApproveASI_InvalidChoice(t *testing.T) {
 	charID := uuid.New()
 	charStore := newMockCharacterStore()
@@ -510,6 +559,104 @@ func TestService_ApplyFeat_WithASIBonus(t *testing.T) {
 	json.Unmarshal(charStore.chars[charID].AbilityScores, &updatedScores)
 	if updatedScores.CON != 15 {
 		t.Errorf("CON = %d, want 15", updatedScores.CON)
+	}
+}
+
+// ISSUE-064 B: a DEX-affecting half-feat must recompute the stored base AC, not
+// just the ability score. Windreth: leather (11) + DEX 17→18 (mod +4) ⇒ AC 15.
+func TestService_ApplyFeat_DexHalfFeatRecomputesAC(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 8, DEX: 17, CON: 14, INT: 11, WIS: 14, CHA: 10}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, []character.Feature{}),
+	}
+	// Leather armor, no shield, no unarmored formula.
+	charStore.acInputs[charID] = ACInputs{Armor: &character.ArmorInfo{ACBase: 11, DexBonus: true}}
+
+	feat := FeatInfo{
+		ID:       "defensive-duelist",
+		Name:     "Defensive Duelist",
+		ASIBonus: map[string]any{"dex": float64(1)},
+	}
+
+	svc := NewService(charStore, classStore, notifier)
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	var updated character.AbilityScores
+	json.Unmarshal(charStore.chars[charID].AbilityScores, &updated)
+	if updated.DEX != 18 {
+		t.Fatalf("DEX = %d, want 18", updated.DEX)
+	}
+	if got := charStore.acWritten[charID]; got != 15 {
+		t.Errorf("recomputed AC = %d, want 15 (leather 11 + DEX 18 mod +4)", got)
+	}
+}
+
+// ISSUE-064 C: re-applying the exact same feat must be a no-op — no duplicate
+// feature entry and no second ASI bump.
+func TestService_ApplyFeat_IdempotentOnReapply(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 8, DEX: 17, CON: 14, INT: 11, WIS: 14, CHA: 10}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, []character.Feature{}),
+	}
+
+	feat := FeatInfo{
+		ID:       "defensive-duelist",
+		Name:     "Defensive Duelist",
+		ASIBonus: map[string]any{"dex": float64(1)},
+	}
+
+	svc := NewService(charStore, classStore, notifier)
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("first ApplyFeat error: %v", err)
+	}
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("second ApplyFeat error: %v", err)
+	}
+
+	var features []character.Feature
+	json.Unmarshal(charStore.chars[charID].Features, &features)
+	count := 0
+	for _, f := range features {
+		if f.Name == "Defensive Duelist" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("Defensive Duelist feature count = %d, want 1 (no duplicate on re-apply)", count)
+	}
+
+	var updated character.AbilityScores
+	json.Unmarshal(charStore.chars[charID].AbilityScores, &updated)
+	if updated.DEX != 18 {
+		t.Errorf("DEX = %d, want 18 (ASI must not apply twice)", updated.DEX)
 	}
 }
 

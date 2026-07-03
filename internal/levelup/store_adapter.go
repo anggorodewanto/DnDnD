@@ -99,6 +99,44 @@ func (a *characterStoreAdapter) UpdateProficiencies(ctx context.Context, id uuid
 	})
 }
 
+// GetACInputs loads the character's equipped body armor, off-hand shield, and
+// Unarmored Defense formula so the service can recompute base AC. Mirrors
+// combat's hasEquippedShield / lookupBodyArmor: the off-hand counts as a shield
+// only when the equipped item is armor of type "shield", and a body-armor slot
+// holding a shield (or an unknown id) is treated as no armor.
+func (a *characterStoreAdapter) GetACInputs(ctx context.Context, id uuid.UUID) (ACInputs, error) {
+	ch, err := a.queries.GetCharacter(ctx, id)
+	if err != nil {
+		return ACInputs{}, fmt.Errorf("loading character: %w", err)
+	}
+
+	in := ACInputs{}
+	if ch.AcFormula.Valid {
+		in.ACFormula = ch.AcFormula.String
+	}
+	if ch.EquippedArmor.Valid && ch.EquippedArmor.String != "" {
+		if ar, err := a.queries.GetArmor(ctx, ch.EquippedArmor.String); err == nil && ar.ArmorType != "shield" {
+			in.Armor = &character.ArmorInfo{
+				ACBase:   int(ar.AcBase),
+				DexBonus: ar.AcDexBonus.Valid && ar.AcDexBonus.Bool,
+			}
+			if ar.AcDexMax.Valid {
+				in.Armor.DexMax = int(ar.AcDexMax.Int32)
+			}
+		}
+	}
+	if ch.EquippedOffHand.Valid && ch.EquippedOffHand.String != "" {
+		oa, err := a.queries.GetArmor(ctx, ch.EquippedOffHand.String)
+		in.HasShield = err == nil && oa.ArmorType == "shield"
+	}
+	return in, nil
+}
+
+// UpdateAC persists a recomputed base AC.
+func (a *characterStoreAdapter) UpdateAC(ctx context.Context, id uuid.UUID, ac int32) error {
+	return a.queries.UpdateCharacterAC(ctx, refdata.UpdateCharacterACParams{ID: id, Ac: ac})
+}
+
 // classStoreAdapter wraps *refdata.Queries to satisfy levelup.ClassStore.
 type classStoreAdapter struct {
 	queries *refdata.Queries

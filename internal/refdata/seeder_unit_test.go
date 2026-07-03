@@ -301,6 +301,32 @@ func TestSeedFeats_ErrorWrapping(t *testing.T) {
 	}
 }
 
+// TestFeatSeeds_DefensiveDuelistGrantsDex pins the 2024 ruling that Defensive
+// Duelist is a half-feat granting +1 DEX (the 2014 version had no ASI).
+func TestFeatSeeds_DefensiveDuelistGrantsDex(t *testing.T) {
+	seeds := featSeeds()
+	var dd *UpsertFeatParams
+	for i := range seeds {
+		if seeds[i].ID == "defensive-duelist" {
+			dd = &seeds[i]
+			break
+		}
+	}
+	if dd == nil {
+		t.Fatal("defensive-duelist not found in featSeeds()")
+	}
+	if !dd.AsiBonus.Valid {
+		t.Fatal("defensive-duelist should grant an ability score increase (2024 half-feat), but asi_bonus is null")
+	}
+	var asi map[string]int
+	if err := json.Unmarshal(dd.AsiBonus.RawMessage, &asi); err != nil {
+		t.Fatalf("unmarshaling asi_bonus: %v", err)
+	}
+	if len(asi) != 1 || asi["dex"] != 1 {
+		t.Fatalf("defensive-duelist should grant exactly +1 DEX, got %v", asi)
+	}
+}
+
 func TestSeedAll_ClassesErrorWrapping(t *testing.T) {
 	dbErr := errors.New("class exec failed")
 	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount}

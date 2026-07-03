@@ -5,7 +5,11 @@ import (
 )
 
 func seedFeats(ctx context.Context, q *Queries) error {
-	feats := []UpsertFeatParams{
+	return seedEntities(ctx, featSeeds(), q.UpsertFeat, "feat")
+}
+
+func featSeeds() []UpsertFeatParams {
+	return []UpsertFeatParams{
 		{
 			ID: "alert", Name: "Alert",
 			Description:      "Always on the lookout for danger, you gain the following benefits: +5 bonus to initiative, you can't be surprised while you are conscious, other creatures don't gain advantage on attack rolls against you as a result of being unseen by you.",
@@ -29,8 +33,9 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "defensive-duelist", Name: "Defensive Duelist",
-			Description:      "When you are wielding a finesse weapon with which you are proficient and another creature hits you with a melee attack, you can use your reaction to add your proficiency bonus to your AC for that attack, potentially causing the attack to miss you.",
+			Description:      "You gain a +1 bonus to Dexterity (max 20). When you are wielding a finesse weapon with which you are proficient and another creature hits you with a melee attack, you can use your reaction to add your proficiency bonus to your AC for that attack, potentially causing the attack to miss you.",
 			Prerequisites:    optJSON(map[string]any{"ability": map[string]int{"dex": 13}}),
+			AsiBonus:         optJSON(map[string]any{"dex": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "reaction_add_proficiency_to_ac", "condition": "wielding_finesse_weapon"}}),
 		},
 		{
@@ -236,6 +241,4 @@ func seedFeats(ctx context.Context, q *Queries) error {
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_4_weapons"}}),
 		},
 	}
-
-	return seedEntities(ctx, feats, q.UpsertFeat, "feat")
 }

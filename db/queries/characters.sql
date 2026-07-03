@@ -222,3 +222,10 @@ WHERE id = $1;
 -- Used by feat application to grant selected save/skill proficiencies.
 UPDATE characters SET proficiencies = $2, updated_at = now()
 WHERE id = $1;
+
+-- name: UpdateCharacterAC :exec
+-- Used by ASI approval / feat ASI bonuses to keep the stored base AC in sync
+-- after a DEX/CON/WIS score change (ISSUE-064). Base AC only — magic-item and
+-- fighting-style overlays are applied at combat time.
+UPDATE characters SET ac = $2, updated_at = now()
+WHERE id = $1;

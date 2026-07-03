@@ -2,6 +2,7 @@ package levelup_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -155,6 +156,80 @@ func TestCharacterStoreAdapter_UpdateAbilityScores(t *testing.T) {
 	row, err := q.GetCharacterForLevelUp(ctx, char.ID)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(newScores), string(row.AbilityScores))
+}
+
+func TestCharacterStoreAdapter_UpdateAC(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := context.Background()
+	_, q := setupLevelUpTestDB(t)
+	camp := createLevelUpCampaign(t, q, "guild-levelup-ac")
+	char := createLevelUpCharacter(t, q, camp.ID, "Windreth")
+
+	adapter := levelup.NewCharacterStoreAdapter(q)
+
+	require.NoError(t, adapter.UpdateAC(ctx, char.ID, 15))
+
+	row, err := q.GetCharacter(ctx, char.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(15), row.Ac)
+}
+
+func TestCharacterStoreAdapter_GetACInputs_Unarmored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := context.Background()
+	_, q := setupLevelUpTestDB(t)
+	camp := createLevelUpCampaign(t, q, "guild-levelup-acinputs-bare")
+	char := createLevelUpCharacter(t, q, camp.ID, "Barefist")
+
+	adapter := levelup.NewCharacterStoreAdapter(q)
+
+	in, err := adapter.GetACInputs(ctx, char.ID)
+	require.NoError(t, err)
+	assert.Nil(t, in.Armor)
+	assert.False(t, in.HasShield)
+	assert.Empty(t, in.ACFormula)
+}
+
+func TestCharacterStoreAdapter_GetACInputs_ArmoredWithShield(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := context.Background()
+	_, q := setupLevelUpTestDB(t)
+	camp := createLevelUpCampaign(t, q, "guild-levelup-acinputs-armored")
+	char := createLevelUpCharacter(t, q, camp.ID, "Bulwark")
+
+	// Seed the two armor rows GetACInputs will look up.
+	require.NoError(t, q.UpsertArmor(ctx, refdata.UpsertArmorParams{
+		ID: "leather", Name: "Leather", AcBase: 11,
+		AcDexBonus: sql.NullBool{Bool: true, Valid: true}, ArmorType: "light",
+	}))
+	require.NoError(t, q.UpsertArmor(ctx, refdata.UpsertArmorParams{
+		ID: "shield", Name: "Shield", AcBase: 2, ArmorType: "shield",
+	}))
+	_, err := q.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
+		ID:              char.ID,
+		EquippedOffHand: sql.NullString{String: "shield", Valid: true},
+		EquippedArmor:   sql.NullString{String: "leather", Valid: true},
+		Ac:              18,
+	})
+	require.NoError(t, err)
+
+	adapter := levelup.NewCharacterStoreAdapter(q)
+
+	in, err := adapter.GetACInputs(ctx, char.ID)
+	require.NoError(t, err)
+	require.NotNil(t, in.Armor)
+	assert.Equal(t, 11, in.Armor.ACBase)
+	assert.True(t, in.Armor.DexBonus)
+	assert.True(t, in.HasShield)
 }
 
 func TestCharacterStoreAdapter_UpdateFeatures(t *testing.T) {

@@ -70,6 +70,17 @@ type LevelUpDetails struct {
 	NeedsSubclass       bool
 }
 
+// ACInputs carries the non-score inputs needed to recompute a character's
+// stored base AC after an ability-score change (equipped armor, shield, and any
+// Unarmored Defense formula). It mirrors the build-time derivation
+// (internal/portal) — base AC only; magic-item and fighting-style overlays are
+// applied at combat time, so they are deliberately excluded here.
+type ACInputs struct {
+	Armor     *character.ArmorInfo
+	HasShield bool
+	ACFormula string
+}
+
 // CharacterStore is the interface for character data access.
 type CharacterStore interface {
 	GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (*StoredCharacter, error)
@@ -77,6 +88,10 @@ type CharacterStore interface {
 	UpdateAbilityScores(ctx context.Context, id uuid.UUID, scores json.RawMessage) error
 	UpdateFeatures(ctx context.Context, id uuid.UUID, features json.RawMessage) error
 	UpdateProficiencies(ctx context.Context, id uuid.UUID, proficiencies json.RawMessage) error
+	// GetACInputs loads the armor / shield / formula needed to recompute base AC.
+	GetACInputs(ctx context.Context, id uuid.UUID) (ACInputs, error)
+	// UpdateAC persists a recomputed base AC.
+	UpdateAC(ctx context.Context, id uuid.UUID, ac int32) error
 }
 
 // ClassStore is the interface for class reference data access.
@@ -359,6 +374,9 @@ func (s *Service) ApproveASI(ctx context.Context, characterID uuid.UUID, choice 
 	if err := s.charStore.UpdateAbilityScores(ctx, characterID, scoresJSON); err != nil {
 		return err
 	}
+	if err := s.recomputeAndPersistAC(ctx, characterID, newScores); err != nil {
+		slog.Error("levelup: AC recompute after ASI approval failed", "error", err, "character_id", characterID)
+	}
 	s.publishForCharacter(ctx, characterID)
 	s.notifyCardUpdate(ctx, characterID)
 	return nil
@@ -402,6 +420,16 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 		}
 	}
 
+	// Idempotency (ISSUE-064): re-applying the exact same feat (same name +
+	// identical choices) is a no-op — never duplicate the feature or re-apply
+	// its ASI / proficiency grants.
+	newChoices := featChoicesMap(feat.Choices)
+	for i := range features {
+		if features[i].Source == "feat" && features[i].Name == feat.Name && sameFeatChoices(features[i].Choices, newChoices) {
+			return nil
+		}
+	}
+
 	// Add the feat as a feature
 	feature := character.Feature{
 		Name:        feat.Name,
@@ -412,7 +440,7 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 		effectJSON, _ := json.Marshal(specializeFeatEffects(feat.MechanicalEffect, feat.Choices))
 		feature.MechanicalEffect = string(effectJSON)
 	}
-	feature.Choices = featChoicesMap(feat.Choices)
+	feature.Choices = newChoices
 	features = append(features, feature)
 
 	featuresJSON, err := json.Marshal(features)
@@ -571,9 +599,43 @@ func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBo
 	if err := s.charStore.UpdateAbilityScores(ctx, char.ID, scoresJSON); err != nil {
 		return err
 	}
+	if err := s.recomputeAndPersistAC(ctx, char.ID, scores); err != nil {
+		slog.Error("levelup: AC recompute after feat ASI failed", "error", err, "character_id", char.ID)
+	}
 	s.publishForCharacter(ctx, char.ID)
 	s.notifyCardUpdate(ctx, char.ID)
 	return nil
+}
+
+// recomputeAndPersistAC recalculates and stores the character's base AC after an
+// ability-score change so DEX/CON/WIS-affecting ASIs and half-feats keep AC in
+// sync out of combat (ISSUE-064). It mirrors the build-time derivation (base AC
+// only); magic-item and fighting-style overlays are applied at combat time.
+func (s *Service) recomputeAndPersistAC(ctx context.Context, charID uuid.UUID, scores character.AbilityScores) error {
+	in, err := s.charStore.GetACInputs(ctx, charID)
+	if err != nil {
+		return fmt.Errorf("loading AC inputs: %w", err)
+	}
+	ac := character.CalculateAC(scores, in.Armor, in.HasShield, in.ACFormula)
+	if err := s.charStore.UpdateAC(ctx, charID, int32(ac)); err != nil {
+		return fmt.Errorf("persisting AC: %w", err)
+	}
+	return nil
+}
+
+// sameFeatChoices reports whether two feat-choice maps are equal, treating nil
+// and empty as equal. Used to detect an already-applied feat (ISSUE-064).
+func sameFeatChoices(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !slices.Equal(av, bv) {
+			return false
+		}
+	}
+	return true
 }
 
 // toInt converts a JSON number value to int.
