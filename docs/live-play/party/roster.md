@@ -9,7 +9,7 @@
 
 | PC | Player | Race / Class / Lvl | AC (base) | Durable kit (max resources / signature) | Sheet |
 | --- | --- | --- | --- | --- | --- |
-| **Vale** | the user | Tiefling Warlock **4** (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; **Pact of the Tome** — Book of Shadows cantrips Guidance / Minor Illusion / Prestidigitation; **Invocations:** Agonizing Blast (+CHA to each Eldritch Blast beam), Mask of Many Faces (*disguise self* at will); spells Eldritch Blast, Hex, Misty Step, Hold Person, Shatter, Hellish Rebuke, Chill Touch, Mage Hand; light crossbow + bolts. _ASI @ L4 submitted (+1 DEX/+1 CHA), pending DM approval._ | [vale.md](vale.md) |
+| **Vale** | the user | Tiefling Warlock **4** (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; **Pact of the Tome** — Book of Shadows cantrips Guidance / Minor Illusion / Prestidigitation; **Invocations:** Agonizing Blast (+CHA to each Eldritch Blast beam), Mask of Many Faces (*disguise self* at will); spells Eldritch Blast, Hex, Misty Step, Hold Person, Shatter, Hellish Rebuke, Chill Touch, Mage Hand; light crossbow + bolts. _L4 ASI: **+2 CHA → 18** (spell DC 14, atk +6)._ | [vale.md](vale.md) |
 | **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian **4** (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack. _ASI/feat @ L4 still to pick._ | [forge.md](forge.md) |
 | **Windreth** | friend (new 07-02) | High-Elf Rogue **4** (Thief) | **14** (leather+DEX) | Sneak Attack **2d6**; **Expertise investigation + stealth**; Cunning Action; shortbow + shortsword/dagger, thieves' tools. _ASI/feat @ L4 still to pick._ | [windreth.md](windreth.md) |
 
