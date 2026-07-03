@@ -255,6 +255,18 @@ type ResolvedEffect struct {
 	Priority    ResolutionPriority
 }
 
+// DamageComponent attributes a portion of an attack's (or spell's) damage to
+// the feature/rider that produced it, so both the player-facing #combat-log and
+// the DM action log can "call out" each contributor (e.g. Hex, Agonizing Blast,
+// Great Weapon Master). It is display metadata: the parent result's DamageTotal
+// already includes every component — the breakdown decomposes that total, it
+// does not add to it.
+type DamageComponent struct {
+	SourceName string // ResolvedEffect.FeatureName — e.g. "Hex", "Great Weapon Master"
+	Amount     int    // rolled dice total (crit-doubled) or flat modifier
+	DamageType string // Effect.DamageTypes[0]; "" means weapon/untyped
+}
+
 // ProcessorResult holds the output of the single-pass effect processor.
 type ProcessorResult struct {
 	FlatModifier     int

@@ -87,9 +87,32 @@ func describeAttack(r AttackResult) string {
 		outcome = "missed"
 	}
 	if r.WeaponName == "" {
-		return fmt.Sprintf("%s attacked %s — %s", r.AttackerName, r.TargetName, outcome) + describeCleave(r.CleaveAttack)
+		return fmt.Sprintf("%s attacked %s — %s", r.AttackerName, r.TargetName, outcome) + describeBreakdown(r) + describeCleave(r.CleaveAttack)
 	}
-	return fmt.Sprintf("%s attacked %s with %s — %s", r.AttackerName, r.TargetName, r.WeaponName, outcome) + describeCleave(r.CleaveAttack)
+	return fmt.Sprintf("%s attacked %s with %s — %s", r.AttackerName, r.TargetName, r.WeaponName, outcome) + describeBreakdown(r) + describeCleave(r.CleaveAttack)
+}
+
+// describeBreakdown renders a compact " (incl. +4 necrotic Hex, +3 Great Weapon
+// Master)" suffix for the DM action-log line so the timeline records which feat
+// riders contributed to a hit. Sneak Attack is skipped (already folded into the
+// damage total and not separately tagged in the terse timeline). Returns "" when
+// no rider fired.
+func describeBreakdown(r AttackResult) string {
+	var parts []string
+	for _, c := range r.DamageBreakdown {
+		if c.SourceName == "Sneak Attack" {
+			continue
+		}
+		if c.DamageType != "" {
+			parts = append(parts, fmt.Sprintf("+%d %s %s", c.Amount, c.DamageType, c.SourceName))
+		} else {
+			parts = append(parts, fmt.Sprintf("+%d %s", c.Amount, c.SourceName))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (incl. " + strings.Join(parts, ", ") + ")"
 }
 
 // describeCleave renders the trailing " — Cleave hits/misses <2nd target>"

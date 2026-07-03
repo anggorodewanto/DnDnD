@@ -489,6 +489,14 @@ type AttackResult struct {
 	// it does not change when any effect fires.
 	OncePerTurnEffectNames []string
 
+	// DamageBreakdown decomposes DamageTotal into per-rider contributions
+	// (Feature Effect System extra dice + flat damage mods such as GWM's +PB,
+	// magic-item riders, Hex, Agonizing Blast). Display-only: DamageTotal
+	// already includes every component, so the logs render these as "of which"
+	// call-outs, not additional damage. Base weapon damage is the unlisted
+	// remainder. Empty when no rider fired.
+	DamageBreakdown []DamageComponent
+
 	// 2024 Weapon Mastery: the mastery slug that fired on this attack
 	// ("" if none). Only set when the attacker knows the weapon's mastery
 	// (masteryActive). Graze fires on a miss; Topple fires on a hit.
@@ -707,7 +715,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	// Apply Feature Effect System bonuses (class features, fighting styles,
 	// magic items). Only post-cancellation Advantage counts as "has advantage"
 	// for FES purposes — cancelled adv+disadv = normal roll.
-	var fesDamageDice []string
+	var fesDamageEffects []ResolvedEffect
 	if len(input.Features) > 0 {
 		attackCtx := BuildAttackEffectContext(AttackEffectInput{
 			Weapon:             input.Weapon,
@@ -724,7 +732,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 
 		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
 		dmgMod += dmgResult.FlatModifier
-		fesDamageDice = dmgResult.ExtraDice
+		fesDamageEffects = dmgResult.AppliedEffects
 		// SR-010: surface once-per-turn effect types that actually fired
 		// so the service layer can mark them used for this combatant's
 		// "turn window" (since their own turn last started). The damage
@@ -747,8 +755,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
 		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller, input.MonkLevel)
-		extra := rollFESExtraDice(fesDamageDice, true, roller)
+		extra, comps := buildFESDamageBreakdown(fesDamageEffects, true, roller)
 		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
+		result.DamageBreakdown = comps
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
 		// 2024 Weapon Mastery — an auto-crit is a hit, so the on-hit masteries
@@ -790,8 +799,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 
 	// Roll damage
 	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller, input.MonkLevel)
-	extra := rollFESExtraDice(fesDamageDice, result.CriticalHit, roller)
+	extra, comps := buildFESDamageBreakdown(fesDamageEffects, result.CriticalHit, roller)
 	result.DamageTotal = dmg + gwmSharpshooterBonus + extra
+	result.DamageBreakdown = comps
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
 
@@ -812,20 +822,61 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	return result, nil
 }
 
-// rollFESExtraDice rolls each dice expression collected from the Feature
-// Effect System (Sneak Attack, smite-style on-hit dice, etc.) and returns
-// the summed total. On a critical hit each dice group's count is doubled
-// (per Roller.RollDamage). Empty input returns 0.
-func rollFESExtraDice(exprs []string, critical bool, roller *dice.Roller) int {
-	total := 0
-	for _, expr := range exprs {
-		r, err := roller.RollDamage(expr, critical)
-		if err != nil {
-			continue
+// buildFESDamageBreakdown rolls each on-damage Feature Effect System effect
+// individually and attributes it to its source feature, so the #combat-log and
+// DM action log can call out per-rider contributions (Sneak Attack, Hex, GWM,
+// magic items, …). It returns the summed extra-dice total plus the component
+// list.
+//
+// The returned total is identical to the previous blind sum for the same roller
+// state and effect order: it consumes effects in the same order the underlying
+// ExtraDice were appended (ProcessEffects appends AppliedEffects and ExtraDice
+// in one pass), and only EffectExtraDamageDice consume the roller — so seeded
+// rolls are unchanged.
+//
+// Flat EffectModifyDamageRoll modifiers are emitted as components (for the
+// call-out) but are NOT added to the returned total: they were already folded
+// into the base weapon roll via dmgMod and are never crit-doubled.
+func buildFESDamageBreakdown(effects []ResolvedEffect, critical bool, roller *dice.Roller) (int, []DamageComponent) {
+	extraDiceTotal := 0
+	var components []DamageComponent
+	for _, re := range effects {
+		e := re.Effect
+		switch e.Type {
+		case EffectModifyDamageRoll:
+			if e.Modifier == 0 {
+				continue
+			}
+			components = append(components, DamageComponent{
+				SourceName: re.FeatureName,
+				Amount:     e.Modifier,
+				DamageType: firstDamageType(e.DamageTypes),
+			})
+		case EffectExtraDamageDice:
+			if e.Dice == "" {
+				continue
+			}
+			r, err := roller.RollDamage(e.Dice, critical)
+			if err != nil {
+				continue
+			}
+			extraDiceTotal += r.Total
+			components = append(components, DamageComponent{
+				SourceName: re.FeatureName,
+				Amount:     r.Total,
+				DamageType: firstDamageType(e.DamageTypes),
+			})
 		}
-		total += r.Total
 	}
-	return total
+	return extraDiceTotal, components
+}
+
+// firstDamageType returns the first declared damage type, or "" (weapon/untyped).
+func firstDamageType(types []string) string {
+	if len(types) == 0 {
+		return ""
+	}
+	return types[0]
 }
 
 // resolveInLongRange determines if the attack is in long range, handling
@@ -953,6 +1004,23 @@ func sneakAttackTag(result AttackResult) string {
 	return ""
 }
 
+// writeDamageBreakdown appends one "of which" sub-line per damage rider (Hex,
+// Agonizing Blast, Great Weapon Master, magic items, …) so players see each
+// feature's contribution to the total. Sneak Attack is skipped — it is already
+// surfaced by sneakAttackTag on the damage line — so it is never double-printed.
+func writeDamageBreakdown(b *strings.Builder, result AttackResult) {
+	for _, c := range result.DamageBreakdown {
+		if c.SourceName == "Sneak Attack" {
+			continue
+		}
+		if c.DamageType != "" {
+			fmt.Fprintf(b, "\n        ↳ includes +%d %s (%s)", c.Amount, c.DamageType, c.SourceName)
+		} else {
+			fmt.Fprintf(b, "\n        ↳ includes +%d (%s)", c.Amount, c.SourceName)
+		}
+	}
+}
+
 // FormatAttackLog formats the combat log output for an attack result.
 func FormatAttackLog(result AttackResult) string {
 	var b strings.Builder
@@ -991,6 +1059,7 @@ func FormatAttackLog(result AttackResult) string {
 	if result.AutoCrit {
 		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)%s", result.DamageTotal, result.DamageType, result.DamageDice, sneakAttackTag(result))
+		writeDamageBreakdown(&b, result)
 		return b.String()
 	}
 
@@ -1011,6 +1080,7 @@ func FormatAttackLog(result AttackResult) string {
 			diceLabel = "doubled dice: " + result.DamageDice
 		}
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)%s", result.DamageTotal, result.DamageType, diceLabel, sneakAttackTag(result))
+		writeDamageBreakdown(&b, result)
 	}
 
 	// 2024 Weapon Mastery \u2014 Cleave: surface the auto-resolved secondary hit so
