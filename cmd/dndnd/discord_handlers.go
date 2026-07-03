@@ -1384,11 +1384,11 @@ func (a *asiFeatLister) ListEligibleFeats(ctx context.Context, charID uuid.UUID)
 
 	eligible := levelup.FilterEligibleFeats(allFeats, scores, profs.Armor, isSpellcaster, ownedIDs)
 
+	// Return every eligible feat; buildFeatSelectMenu spreads them across
+	// multiple select menus (Discord's per-menu cap is 25). Capping here
+	// silently dropped eligible feats — the bug this replaces.
 	out := make([]discord.FeatOption, 0, len(eligible))
 	for _, f := range eligible {
-		if len(out) >= 25 {
-			break
-		}
 		out = append(out, discord.FeatOption{
 			ID:   f.ID,
 			Name: f.Name,
