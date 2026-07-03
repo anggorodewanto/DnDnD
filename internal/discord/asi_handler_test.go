@@ -1176,6 +1176,92 @@ func TestASIHandler_HandleASIChoiceButton_Feat_WithLister_PostsSelectMenu(t *tes
 	}
 }
 
+// buildFeatSelectMenu must spread more than 25 eligible feats across multiple
+// select menus (Discord caps a single menu at 25 options) so none are silently
+// dropped. Regression: a Barbarian's 35 eligible feats were truncated to 25.
+func TestBuildFeatSelectMenu_PaginatesBeyond25(t *testing.T) {
+	charID := uuid.New()
+	feats := make([]FeatOption, 35)
+	for i := range feats {
+		feats[i] = FeatOption{ID: fmt.Sprintf("feat-%02d", i), Name: fmt.Sprintf("Feat %02d", i), Description: "d"}
+	}
+
+	rows := buildFeatSelectMenu(charID, feats)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 select menus for 35 feats, got %d", len(rows))
+	}
+
+	seen := map[string]int{}
+	customIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ar, ok := row.(*discordgo.ActionsRow)
+		if !ok {
+			t.Fatalf("expected ActionsRow, got %T", row)
+		}
+		menu, ok := ar.Components[0].(discordgo.SelectMenu)
+		if !ok {
+			t.Fatalf("expected SelectMenu, got %T", ar.Components[0])
+		}
+		if len(menu.Options) > 25 {
+			t.Fatalf("menu has %d options, exceeds Discord's 25 cap", len(menu.Options))
+		}
+		customIDs = append(customIDs, menu.CustomID)
+		for _, o := range menu.Options {
+			seen[o.Value]++
+		}
+	}
+
+	if len(seen) != 35 {
+		t.Fatalf("expected all 35 feats across menus, got %d unique", len(seen))
+	}
+	for v, n := range seen {
+		if n != 1 {
+			t.Fatalf("feat %s appeared %d times, want exactly once", v, n)
+		}
+	}
+
+	// Page 0 keeps the legacy custom ID; later pages must be unique and still
+	// parse back to the character ID so clicks route correctly.
+	if customIDs[0] != "asi_feat_select:"+charID.String() {
+		t.Errorf("page 0 customID = %q, want legacy form", customIDs[0])
+	}
+	if customIDs[1] == customIDs[0] {
+		t.Errorf("menu custom IDs must be unique, both = %q", customIDs[0])
+	}
+	for _, cid := range customIDs {
+		got, err := ParseASIFeatSelectCustomID(cid)
+		if err != nil {
+			t.Fatalf("ParseASIFeatSelectCustomID(%q) error: %v", cid, err)
+		}
+		if got != charID {
+			t.Errorf("parsed charID = %s, want %s", got, charID)
+		}
+	}
+}
+
+func TestBuildFeatSelectMenu_CapsAtFiveMenus(t *testing.T) {
+	charID := uuid.New()
+	feats := make([]FeatOption, 130) // beyond Discord's 5 action-rows * 25
+	for i := range feats {
+		feats[i] = FeatOption{ID: fmt.Sprintf("f%03d", i), Name: fmt.Sprintf("F%03d", i)}
+	}
+	rows := buildFeatSelectMenu(charID, feats)
+	if len(rows) != 5 {
+		t.Fatalf("expected menus capped at 5 (Discord row limit), got %d", len(rows))
+	}
+}
+
+func TestParseASIFeatSelectCustomID_AcceptsPagedForm(t *testing.T) {
+	charID := uuid.New()
+	got, err := ParseASIFeatSelectCustomID("asi_feat_select:" + charID.String() + ":2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != charID {
+		t.Errorf("charID = %s, want %s", got, charID)
+	}
+}
+
 func TestASIHandler_HandleASIChoiceButton_Feat_NoLister_FallsBackToStub(t *testing.T) {
 	charID := uuid.New()
 	svc := &mockASIService{

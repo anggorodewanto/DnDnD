@@ -634,43 +634,71 @@ func (h *ASIHandler) handleFeatChoice(interaction *discordgo.Interaction, charDa
 	})
 }
 
-// buildFeatSelectMenu renders up to 25 eligible feats as a Discord select
-// menu (Discord caps at 25 options per menu — pagination is a follow-up).
+// buildFeatSelectMenu renders the eligible feats as Discord select menus. A
+// single menu caps at 25 options, so longer lists are spread across multiple
+// menus (one per action row) up to Discord's 5-row-per-message limit — 125
+// feats total. Page 0 keeps the legacy custom ID (asi_feat_select:<charID>);
+// later pages append the page index so each menu's custom ID stays unique,
+// and ParseASIFeatSelectCustomID accepts both forms.
 func buildFeatSelectMenu(charID uuid.UUID, feats []FeatOption) []discordgo.MessageComponent {
-	customID := fmt.Sprintf("%s:%s", asiFeatSelectPrefix, charID.String())
-	options := make([]discordgo.SelectMenuOption, 0, len(feats))
-	for i, f := range feats {
-		if i >= 25 {
-			break
+	const perMenu = 25
+	const maxMenus = 5 // Discord allows at most 5 action rows per message.
+	paginated := len(feats) > perMenu
+
+	var rows []discordgo.MessageComponent
+	for page := 0; page*perMenu < len(feats) && page < maxMenus; page++ {
+		start := page * perMenu
+		end := start + perMenu
+		if end > len(feats) {
+			end = len(feats)
 		}
-		desc := f.Description
-		if len(desc) > 100 {
-			desc = desc[:97] + "..."
+
+		customID := fmt.Sprintf("%s:%s", asiFeatSelectPrefix, charID.String())
+		if page > 0 {
+			customID = fmt.Sprintf("%s:%s:%d", asiFeatSelectPrefix, charID.String(), page)
 		}
-		options = append(options, discordgo.SelectMenuOption{
-			Label:       f.Name,
-			Value:       f.ID,
-			Description: desc,
-		})
-	}
-	return []discordgo.MessageComponent{
-		&discordgo.ActionsRow{
+
+		options := make([]discordgo.SelectMenuOption, 0, end-start)
+		for _, f := range feats[start:end] {
+			desc := f.Description
+			if len(desc) > 100 {
+				desc = desc[:97] + "..."
+			}
+			options = append(options, discordgo.SelectMenuOption{
+				Label:       f.Name,
+				Value:       f.ID,
+				Description: desc,
+			})
+		}
+
+		// When split across menus, label each by its name range so the player
+		// can tell them apart ("Feats Alert–Polearm Master").
+		placeholder := "Pick a feat"
+		if paginated {
+			placeholder = fmt.Sprintf("Feats %s–%s", feats[start].Name, feats[end-1].Name)
+		}
+
+		rows = append(rows, &discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
 				discordgo.SelectMenu{
 					CustomID:    customID,
-					Placeholder: "Pick a feat",
+					Placeholder: placeholder,
 					Options:     options,
 				},
 			},
-		},
+		})
 	}
+	return rows
 }
 
 // ParseASIFeatSelectCustomID parses a custom ID like
 // "asi_feat_select:<charID>" and returns the character ID.
 func ParseASIFeatSelectCustomID(customID string) (uuid.UUID, error) {
+	// Accept both the single-menu form (asi_feat_select:<charID>) and the
+	// paginated form (asi_feat_select:<charID>:<page>); the page index only
+	// keeps each menu's custom ID unique and is not otherwise needed here.
 	parts := strings.Split(customID, ":")
-	if len(parts) != 2 || parts[0] != asiFeatSelectPrefix {
+	if len(parts) < 2 || len(parts) > 3 || parts[0] != asiFeatSelectPrefix {
 		return uuid.Nil, fmt.Errorf("invalid %s custom ID: %s", asiFeatSelectPrefix, customID)
 	}
 	charID, err := uuid.Parse(parts[1])
