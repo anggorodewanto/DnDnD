@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -1160,6 +1161,110 @@ func TestServiceAttack_VexHitAppliesVexAdvantageToAttacker(t *testing.T) {
 			assert.NotEqual(t, "vex_advantage", c.Condition, "vex_advantage must not land on the target")
 		}
 	}
+}
+
+// TestOffhandAttack_VexHitAppliesVexAdvantageToAttacker verifies that an
+// OFF-HAND (two-weapon-fighting) swing with a known Vex weapon applies the
+// vex_advantage condition to the attacker, exactly like the main-hand path.
+// Regression: the off-hand path set result.MasteryProperty but never called
+// applyMasteryEffects, so an off-hand Vex hit granted no advantage next turn
+// (Windreth's off-hand shortsword vex silently did nothing).
+func TestOffhandAttack_VexHitAppliesVexAdvantageToAttacker(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	// Main hand: light dagger (satisfies TWF). Off hand: shortsword with Vex,
+	// whose mastery the attacker knows.
+	char := makeCharacter(16, 14, 2, "dagger")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "shortsword", Valid: true}
+	char.CharacterData = charDataWithMasteries(`{"weapon_masteries":["shortsword"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "dagger":
+			return makeDagger(), nil
+		case "shortsword":
+			sw := makeShortsword()
+			sw.Mastery = "vex"
+			return sw, nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	condWrites := make(map[uuid.UUID][]CombatCondition)
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		var conds []CombatCondition
+		_ = json.Unmarshal(arg.Conditions, &conds)
+		condWrites[arg.ID] = conds
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18 // hit
+		}
+		return 3
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Windreth",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Zombie #2",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpCurrent:   20,
+		HpMax:       20,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	// AttacksRemaining: 0 → the Attack action was already used this turn, which
+	// the off-hand swing requires.
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 0}
+
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "vex", result.MasteryProperty)
+
+	attackerConds, ok := condWrites[attackerID]
+	require.True(t, ok, "expected a condition write on the attacker for vex_advantage")
+	var vex *CombatCondition
+	for i := range attackerConds {
+		if attackerConds[i].Condition == "vex_advantage" {
+			vex = &attackerConds[i]
+		}
+	}
+	require.NotNil(t, vex, "expected vex_advantage on attacker from off-hand Vex hit")
+	assert.Equal(t, targetID.String(), vex.TargetCombatantID, "vex_advantage must be scoped to the target")
 }
 
 // --- Sap (service-level) ---

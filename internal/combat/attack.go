@@ -1585,6 +1585,18 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
+
+	// 2024 Weapon Mastery — apply the on-hit effect that fired on the off-hand
+	// swing (Vex/Sap/Topple/Slow/Push), mirroring the main-hand Attack path
+	// (see the applyMasteryEffects call in Attack). Without this the off-hand
+	// path detected the mastery (result.MasteryProperty was set) but never
+	// applied it — e.g. an off-hand Vex hit granted no advantage next turn.
+	// Runs before the scoped-advantage consume below, which reads the stale
+	// pre-attack condition snapshot and so never clears this fresh grant.
+	if err := s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
+		return result, err
+	}
+
 	// 2024 Weapon Mastery — Nick: mark the free off-hand spent for this turn so
 	// a SECOND Nick off-hand the same turn costs the bonus action. Recorded
 	// after the swing resolves so a rejected attack does not burn the slot.
