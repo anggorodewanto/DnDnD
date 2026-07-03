@@ -1478,6 +1478,23 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	// hand (the throw cleared EquippedMainHand) — otherwise a legitimate two-
 	// dagger thrower can't follow a thrown main-hand dagger with an off-hand throw.
 	used := s.usedEffectsSnapshot(cmd.Attacker.EncounterID, cmd.Attacker.ID)
+
+	// ISSUE-062: once-per-turn cap on the Light-property (off-hand) extra
+	// attack. The first off-hand swing this turn is always allowed; a SECOND is
+	// allowed only with the Dual Wielder feat (and never a third). Without the
+	// feat, Nick merely frees the bonus action — it does not grant an extra
+	// swing. Recorded (offhand_extra / dw_extra) only after the swing resolves,
+	// below, so a rejected/out-of-range attack never burns the per-turn slot.
+	secondExtra := used[offhandExtraUsedEffect]
+	if secondExtra {
+		if !HasFeatureByName(char.Features.RawMessage, "Dual Wielder") {
+			return AttackResult{}, fmt.Errorf("you've already made your off-hand (Light weapon) extra attack this turn; only the Dual Wielder feat grants a second")
+		}
+		if used[dwExtraUsedEffect] {
+			return AttackResult{}, fmt.Errorf("no off-hand attacks remain this turn")
+		}
+	}
+
 	if !used[mainHandThrownLightEffect] {
 		if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
 			return AttackResult{}, fmt.Errorf("off-hand attack needs a light melee weapon in your main hand (two-weapon fighting requires a weapon in each hand)")
@@ -1603,6 +1620,15 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if nickFree {
 		s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, []string{nickUsedEffect})
 	}
+	// ISSUE-062: record the once-per-turn Light-extra cap key. The first off-hand
+	// swing marks offhand_extra; a Dual-Wielder-authorised second marks dw_extra
+	// (capping total off-hand swings at 2). Marked after the swing resolves so a
+	// rejected attack does not consume the slot (same discipline as Nick above).
+	if secondExtra {
+		s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, []string{dwExtraUsedEffect})
+	} else {
+		s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, []string{offhandExtraUsedEffect})
+	}
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
 	// SR-018 — off-hand swings count as an attack vs the target and so spend
@@ -1638,6 +1664,16 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 // attack is made free (absorbed into the Attack action). Shares the Sneak
 // Attack tracker so a second Nick off-hand the same turn costs the bonus action.
 const nickUsedEffect = "nick"
+
+// offhandExtraUsedEffect marks that the Light-property extra (off-hand) attack
+// was already made this turn. A second off-hand attack is allowed only with the
+// Dual Wielder feat (dwExtraUsedEffect below). ISSUE-062.
+const offhandExtraUsedEffect = "offhand_extra"
+
+// dwExtraUsedEffect marks that the Dual Wielder bonus-action extra attack was
+// made this turn (the legit 2nd off-hand swing). Caps total off-hand attacks at
+// 2 (3 total swings with Nick freeing the bonus action). ISSUE-062.
+const dwExtraUsedEffect = "dw_extra"
 
 // mainHandThrownLightEffect marks that the attacker threw a LIGHT melee weapon
 // from the main hand during the Attack action this turn. A thrown weapon leaves

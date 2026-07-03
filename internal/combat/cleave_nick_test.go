@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -780,6 +781,13 @@ func TestServiceOffhandAttack_NickOncePerTurn(t *testing.T) {
 	encounterID := uuid.New()
 
 	char := nickChar(charID, "shortsword", "dagger", `{"weapon_masteries":["dagger"]}`)
+	// ISSUE-062: a SECOND off-hand swing the same turn now requires the Dual
+	// Wielder feat. Nick's free swing is still once-per-turn (this test's point);
+	// the second swing is the Dual-Wielder extra and costs the bonus action.
+	char.Features = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Dual Wielder","source":"feat"}]`),
+		Valid:      true,
+	}
 
 	ms := defaultMockStore()
 	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
