@@ -429,6 +429,10 @@ type AttackInput struct {
 	AbilityUsed        string              // "str" or "dex" — which ability mod was chosen for this attack
 	UsedThisTurn       map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
 	WeaponMasteries    []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
+	// ReactionACBonus / ReactionReason carry a pre-roll reaction's AC boost
+	// (e.g. the target's Defensive Duelist +PB) into the hit test.
+	ReactionACBonus int
+	ReactionReason  string
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -458,6 +462,10 @@ type AttackResult struct {
 	GWM                 bool
 	Sharpshooter        bool
 	Reckless            bool
+	// ReactionACBonus / ReactionReason echo a pre-roll reaction that raised the
+	// target's AC for this attack (e.g. Defensive Duelist), so the log can note it.
+	ReactionACBonus     int
+	ReactionReason      string
 	AttackerRevealed    bool // True if a hidden attacker was revealed by this attack
 	InvisibilityBroken  bool // True if standard Invisibility condition was broken by this attack
 
@@ -551,6 +559,11 @@ type AttackCommand struct {
 	GWM2024             bool               // Great Weapon Master 2024: +proficiency bonus damage (heavy melee, 1/turn)
 	Sharpshooter        bool               // Sharpshooter flag
 	Reckless            bool               // Reckless Attack flag
+	// ReactionACBonus is AC the targeted PC gains against THIS attack from a
+	// reaction declared in the pre-roll window (e.g. Defensive Duelist +PB).
+	// ReactionReason names it for the log. Baked into effectiveAC by ResolveAttack.
+	ReactionACBonus int
+	ReactionReason  string
 	AttackerVision      VisionCapabilities // Vision capabilities of the attacker
 	TargetVision        VisionCapabilities // Vision capabilities of the target
 	// Walls are encounter-map wall segments used to compute attacker→target
@@ -626,7 +639,10 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		return AttackResult{}, fmt.Errorf("out of range: %dft away (max %dft)", input.DistanceFt, maxR)
 	}
 
-	effectiveAC := EffectiveAC(input.TargetAC, input.Cover)
+	// Pre-roll reaction (e.g. Defensive Duelist) raises the target's AC against
+	// this one attack. Declared before the roll, so it folds straight into the
+	// single hit test — nothing is resolved retroactively.
+	effectiveAC := EffectiveAC(input.TargetAC, input.Cover) + input.ReactionACBonus
 
 	// Improvised weapons: no proficiency bonus (unless Tavern Brawler)
 	profBonus := input.ProfBonus
@@ -677,9 +693,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		DamageType:     input.Weapon.DamageType,
 		Cover:          input.Cover,
 		InLongRange:    resolveInLongRange(input),
-		GWM:            input.GWM,
-		Sharpshooter:   input.Sharpshooter,
-		Reckless:       input.Reckless,
+		GWM:             input.GWM,
+		Sharpshooter:    input.Sharpshooter,
+		Reckless:        input.Reckless,
+		ReactionACBonus: input.ReactionACBonus,
+		ReactionReason:  input.ReactionReason,
 	}
 
 	// Detect advantage/disadvantage BEFORE the Feature Effect System runs so
@@ -1290,6 +1308,8 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.GWM = cmd.GWM
 	input.Sharpshooter = cmd.Sharpshooter
 	input.Reckless = cmd.Reckless
+	input.ReactionACBonus = cmd.ReactionACBonus
+	input.ReactionReason = cmd.ReactionReason
 	input.Cover = coverLevel
 
 	// 2024 Weapon Mastery: thread the attacker's known masteries (weapon ids)
