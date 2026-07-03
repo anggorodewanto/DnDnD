@@ -333,6 +333,26 @@ func GreatWeaponMasterFeature(profBonus int) FeatureDefinition {
 	}
 }
 
+// HexFeature returns the FeatureDefinition for the Hex spell's on-hit rider:
+// while the caster concentrates on Hex, every hit against the hexed target
+// deals an extra 1d6 necrotic. populateAttackFES injects it only when the
+// target carries this attacker's Hex marker (targetHexedBy), so the effect
+// needs no further condition gating here.
+func HexFeature() FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Hex",
+		Source: "spell",
+		Effects: []Effect{
+			{
+				Type:        EffectExtraDamageDice,
+				Trigger:     TriggerOnDamageRoll,
+				Dice:        "1d6",
+				DamageTypes: []string{"necrotic"},
+			},
+		},
+	}
+}
+
 // PackTacticsFeature returns the FeatureDefinition for Pack Tactics.
 // Creature feature: advantage on attack when ally within 5ft of target.
 func PackTacticsFeature() FeatureDefinition {

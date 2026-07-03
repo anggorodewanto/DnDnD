@@ -2288,5 +2288,12 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 		input.Features = append(input.Features, GreatWeaponMasterFeature(int(char.ProficiencyBonus)))
 	}
 
+	// Hex: when the target carries this attacker's source-tagged Hex marker,
+	// every hit adds 1d6 necrotic (5e Hex). Gating by the marker means only the
+	// caster concentrating on Hex against this target gets the rider.
+	if targetHexedBy(cmd.Target.Conditions, cmd.Attacker.ID) {
+		input.Features = append(input.Features, HexFeature())
+	}
+
 	return nil
 }
