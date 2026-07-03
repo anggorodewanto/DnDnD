@@ -98,8 +98,16 @@ func describeAttack(r AttackResult) string {
 // damage total and not separately tagged in the terse timeline). Returns "" when
 // no rider fired.
 func describeBreakdown(r AttackResult) string {
+	return describeComponents(r.DamageBreakdown)
+}
+
+// describeComponents renders the compact " (incl. +4 necrotic Hex, +6 force
+// Agonizing Blast)" action-log suffix from a damage breakdown, shared by weapon
+// attacks and spell casts. Sneak Attack is skipped (already folded into the hit
+// total and not separately tagged in the terse timeline). Returns "" when empty.
+func describeComponents(comps []DamageComponent) string {
 	var parts []string
-	for _, c := range r.DamageBreakdown {
+	for _, c := range comps {
 		if c.SourceName == "Sneak Attack" {
 			continue
 		}

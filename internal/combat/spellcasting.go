@@ -160,6 +160,7 @@ type CastResult struct {
 	ScaledDamageDice       string                     // damage dice after upcast/cantrip scaling
 	DamageType             string                     // damage type from spell damage JSON
 	DamageTotal            int                        // rolled damage total (applied on hit)
+	DamageBreakdown        []DamageComponent          // per-rider call-outs (e.g. Agonizing Blast); decomposes DamageTotal
 	ScaledHealingDice      string                     // healing dice after upcast scaling
 	HealingTotal           int                        // rolled healing total (applied to target)
 	Teleport               *TeleportResult            // teleportation outcome, nil if not a teleport spell
@@ -227,6 +228,13 @@ func FormatCastLog(result CastResult) string {
 	case result.IsAttack:
 		if result.Hit && result.DamageTotal > 0 {
 			fmt.Fprintf(&b, "\U0001f4a5 Damage: %d %s (%s)\n", result.DamageTotal, result.DamageType, result.ScaledDamageDice)
+			for _, c := range result.DamageBreakdown {
+				if c.DamageType != "" {
+					fmt.Fprintf(&b, "        ↳ includes +%d %s (%s)\n", c.Amount, c.DamageType, c.SourceName)
+				} else {
+					fmt.Fprintf(&b, "        ↳ includes +%d (%s)\n", c.Amount, c.SourceName)
+				}
+			}
 		}
 	case result.ScaledDamageDice != "":
 		fmt.Fprintf(&b, "\U0001f4a5 Damage: %s %s\n", result.ScaledDamageDice, result.DamageType)
@@ -664,11 +672,21 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		if err != nil {
 			return CastResult{}, fmt.Errorf("rolling spell damage: %w", err)
 		}
-		result.DamageTotal = rollResult.Total
+		raw := rollResult.Total
+		// Agonizing Blast: add the caster's spellcasting-ability modifier per
+		// Eldritch Blast beam. Must fold into `raw` (not just DamageTotal) so the
+		// bonus reaches the target's HP as well as the log.
+		if bonus, ok := agonizingBlastBonus(spell, char, spellAbilityScore); ok && bonus != 0 {
+			raw += bonus
+			result.DamageBreakdown = append(result.DamageBreakdown, DamageComponent{
+				SourceName: "Agonizing Blast", Amount: bonus, DamageType: result.DamageType,
+			})
+		}
+		result.DamageTotal = raw
 		_, err = s.ApplyDamage(ctx, ApplyDamageInput{
 			EncounterID: target.EncounterID,
 			Target:      target,
-			RawDamage:   rollResult.Total,
+			RawDamage:   raw,
 			DamageType:  result.DamageType,
 		})
 		if err != nil {
@@ -843,7 +861,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 	s.recordCombatAction(ctx, cmd.Turn.ID, castEnc, cmd.CasterID,
 		nullableCombatantID(cmd.TargetID), actionTypeCast,
-		describeCast(result.CasterName, result.SpellName, result.TargetName))
+		describeCast(result.CasterName, result.SpellName, result.TargetName)+describeComponents(result.DamageBreakdown))
 
 	// 19. med-26 / Phase 67: auto-create persistent zones for known
 	// AoE / area-effect spells. Best-effort — zone creation errors are
