@@ -735,9 +735,14 @@ func isMoveConfirmWithMode(customID string) bool {
 }
 
 // discordUserID extracts the Discord user ID from an interaction, returning "" if unavailable.
+// Guild interactions carry the user under Member.User; DM interactions (e.g. the ASI prompt
+// buttons) have a nil Member and carry the acting user under interaction.User instead.
 func discordUserID(interaction *discordgo.Interaction) string {
 	if interaction.Member != nil && interaction.Member.User != nil {
 		return interaction.Member.User.ID
+	}
+	if interaction.User != nil {
+		return interaction.User.ID
 	}
 	return ""
 }
