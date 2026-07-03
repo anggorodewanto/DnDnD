@@ -1,11 +1,13 @@
 package discord
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 )
 
 func TestSendContentReturningIDs_Short(t *testing.T) {
@@ -144,6 +146,95 @@ func TestDirectMessenger_SendDirectMessage_SendError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "sending direct message") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestDirectMessenger_SendASIPrompt_AttachesButtons(t *testing.T) {
+	charID := uuid.New()
+	var dmChannel string
+	var captured *discordgo.MessageSend
+	mock := &MockSession{
+		UserChannelCreateFunc: func(userID string) (*discordgo.Channel, error) {
+			if userID != "user-42" {
+				t.Fatalf("userID = %s", userID)
+			}
+			return &discordgo.Channel{ID: "dm-ch-1"}, nil
+		},
+		ChannelMessageSendComplexFunc: func(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+			dmChannel = channelID
+			captured = data
+			return &discordgo.Message{ID: "asi-1"}, nil
+		},
+	}
+
+	dm := NewDirectMessenger(mock)
+	ids, err := dm.SendASIPrompt("user-42", charID, "Choose your Ability Score Improvement")
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if dmChannel != "dm-ch-1" {
+		t.Fatalf("dm channel = %q", dmChannel)
+	}
+	if len(ids) != 1 || ids[0] != "asi-1" {
+		t.Fatalf("ids = %v", ids)
+	}
+	if captured == nil {
+		t.Fatal("ChannelMessageSendComplex was never called")
+	}
+	if captured.Content != "Choose your Ability Score Improvement" {
+		t.Fatalf("content = %q", captured.Content)
+	}
+	if len(captured.Components) == 0 {
+		t.Fatal("expected interactive button components, got none")
+	}
+	// The buttons must carry the character ID so clicks route back correctly.
+	raw, err := json.Marshal(captured.Components)
+	if err != nil {
+		t.Fatalf("marshal components: %v", err)
+	}
+	for _, want := range []string{
+		"asi_choice:" + charID.String() + ":plus2",
+		"asi_choice:" + charID.String() + ":plus1plus1",
+		"asi_choice:" + charID.String() + ":feat",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("components missing custom ID %q; got %s", want, raw)
+		}
+	}
+}
+
+func TestDirectMessenger_SendASIPrompt_UserChannelCreateError(t *testing.T) {
+	mock := &MockSession{
+		UserChannelCreateFunc: func(userID string) (*discordgo.Channel, error) {
+			return nil, errors.New("cannot DM")
+		},
+	}
+	dm := NewDirectMessenger(mock)
+	_, err := dm.SendASIPrompt("user-42", uuid.New(), "hi")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "creating DM channel") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestDirectMessenger_SendASIPrompt_SendError(t *testing.T) {
+	mock := &MockSession{
+		UserChannelCreateFunc: func(userID string) (*discordgo.Channel, error) {
+			return &discordgo.Channel{ID: "dm-ch"}, nil
+		},
+		ChannelMessageSendComplexFunc: func(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+			return nil, errors.New("send failed")
+		},
+	}
+	dm := NewDirectMessenger(mock)
+	_, err := dm.SendASIPrompt("user-42", uuid.New(), "hi")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "sending ASI prompt") {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }

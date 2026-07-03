@@ -12,6 +12,16 @@ type DirectMessenger interface {
 	SendDirectMessage(discordUserID, body string) ([]string, error)
 }
 
+// asiPromptMessenger is an optional capability: a DirectMessenger that can
+// deliver the ASI prompt WITH interactive buttons (carrying the character ID
+// so clicks route back correctly). *discord.DirectMessenger implements it.
+// Messengers without this method (headless/nil, test fakes) fall back to a
+// plain-text DM — which renders no buttons, so the buttoned path is required
+// for the player to actually make an ASI/Feat choice.
+type asiPromptMessenger interface {
+	SendASIPrompt(discordUserID string, characterID uuid.UUID, body string) ([]string, error)
+}
+
 // StoryPoster abstracts the public-channel surface (#the-story) used for
 // level-up announcements. The adapter in cmd/dndnd resolves the
 // character's campaign → guild and routes through narration.Poster, so the
@@ -64,11 +74,16 @@ func (a *notifierAdapter) SendPrivateLevelUp(_ context.Context, discordUserID st
 	return err
 }
 
-func (a *notifierAdapter) SendASIPrompt(_ context.Context, discordUserID string, _ uuid.UUID, characterName string) error {
+func (a *notifierAdapter) SendASIPrompt(_ context.Context, discordUserID string, characterID uuid.UUID, characterName string) error {
 	if a.messenger == nil || discordUserID == "" {
 		return nil
 	}
 	body := FormatASIPromptMessage(characterName)
+	if pm, ok := a.messenger.(asiPromptMessenger); ok {
+		_, err := pm.SendASIPrompt(discordUserID, characterID, body)
+		return err
+	}
+	// Fallback: no button capability — send plain text (renders no buttons).
 	_, err := a.messenger.SendDirectMessage(discordUserID, body)
 	return err
 }

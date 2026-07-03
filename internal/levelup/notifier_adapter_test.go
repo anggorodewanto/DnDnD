@@ -87,6 +87,39 @@ func TestNotifierAdapter_SendASIPrompt_DMsPlayer(t *testing.T) {
 	assert.Contains(t, fake.calls[0].body, "Bree")
 }
 
+// fakeButtonMessenger additionally implements the optional ASI-prompt-with-
+// buttons capability, so the adapter should route the ASI prompt through it
+// (carrying the character ID) instead of the plain-text fallback.
+type fakeButtonMessenger struct {
+	fakeDirectMessenger
+	asiCalls []fakeASIPrompt
+}
+
+type fakeASIPrompt struct {
+	userID string
+	charID uuid.UUID
+	body   string
+}
+
+func (f *fakeButtonMessenger) SendASIPrompt(userID string, charID uuid.UUID, body string) ([]string, error) {
+	f.asiCalls = append(f.asiCalls, fakeASIPrompt{userID: userID, charID: charID, body: body})
+	return []string{"asi-msg"}, nil
+}
+
+func TestNotifierAdapter_SendASIPrompt_UsesButtonsWhenSupported(t *testing.T) {
+	fake := &fakeButtonMessenger{}
+	adapter := levelup.NewNotifierAdapter(fake)
+	charID := uuid.New()
+
+	err := adapter.SendASIPrompt(context.Background(), "user-9", charID, "Zil")
+	require.NoError(t, err)
+	require.Len(t, fake.asiCalls, 1)
+	assert.Equal(t, "user-9", fake.asiCalls[0].userID)
+	assert.Equal(t, charID, fake.asiCalls[0].charID)
+	assert.Contains(t, fake.asiCalls[0].body, "Zil")
+	assert.Empty(t, fake.calls, "button path should be used, not the plain-text fallback")
+}
+
 func TestNotifierAdapter_SendASIDenied_DMsPlayerWithReason(t *testing.T) {
 	fake := &fakeDirectMessenger{}
 	adapter := levelup.NewNotifierAdapter(fake)
