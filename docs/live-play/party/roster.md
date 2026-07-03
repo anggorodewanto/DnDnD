@@ -9,9 +9,9 @@
 
 | PC | Player | Race / Class / Lvl | AC (base) | Durable kit (max resources / signature) | Sheet |
 | --- | --- | --- | --- | --- | --- |
-| **Vale** | the user | Tiefling Warlock 3 (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; light crossbow + bolts; Misty Step, Chill Touch, Hold Person | [vale.md](vale.md) |
-| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian 3 (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack | [forge.md](forge.md) |
-| **Windreth** | friend (new 07-02) | High-Elf Rogue 3 (Thief) | **14** (leather+DEX) | Sneak Attack; **Expertise investigation + stealth**; Cunning Action; shortbow + shortsword/dagger, thieves' tools | [windreth.md](windreth.md) |
+| **Vale** | the user | Tiefling Warlock **4** (Fiend) | **11** (leather) | Pact Magic **2× L2** slots, spell DC 13; **Pact of the Tome** — Book of Shadows cantrips Guidance / Minor Illusion / Prestidigitation; **Invocations:** Agonizing Blast (+CHA to each Eldritch Blast beam), Mask of Many Faces (*disguise self* at will); spells Eldritch Blast, Hex, Misty Step, Hold Person, Shatter, Hellish Rebuke, Chill Touch, Mage Hand; light crossbow + bolts. _ASI @ L4 submitted (+1 DEX/+1 CHA), pending DM approval._ | [vale.md](vale.md) |
+| **Forge Anvilbearer** | friend (remote) | Hill-Dwarf Barbarian **4** (Berserker) | **14** (unarmored 10+DEX+CON) | **greataxe**; Rage (B/P/S resist, Berserker Frenzy), Reckless Attack. _ASI/feat @ L4 still to pick._ | [forge.md](forge.md) |
+| **Windreth** | friend (new 07-02) | High-Elf Rogue **4** (Thief) | **14** (leather+DEX) | Sneak Attack **2d6**; **Expertise investigation + stealth**; Cunning Action; shortbow + shortsword/dagger, thieves' tools. _ASI/feat @ L4 still to pick._ | [windreth.md](windreth.md) |
 
 _Add a row + a `party/<name>.md` sheet for each new PC on approval. Keep this table to durable
 facts; for who's bloodied / where they stand right now, open the DM Console._
