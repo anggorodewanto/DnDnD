@@ -182,6 +182,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 
 	weapon := optionString(interaction, "weapon")
 	gwm := optionBool(interaction, "gwm")
+	gwm2024 := optionBool(interaction, "gwm2024")
 	sharpshooter := optionBool(interaction, "sharpshooter")
 	reckless := optionBool(interaction, "reckless")
 	twoHanded := optionBool(interaction, "twohanded")
@@ -254,6 +255,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 			Turn:           turn,
 			WeaponOverride: weapon,
 			GWM:            gwm,
+			GWM2024:        gwm2024,
 			Sharpshooter:   sharpshooter,
 			Reckless:       reckless,
 			TwoHanded:      twoHanded,

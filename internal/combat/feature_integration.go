@@ -309,6 +309,30 @@ func ResolvePaladinAura(classes []CharacterClass, chaMod int) (FeatureDefinition
 	return AuraOfProtectionFeature(chaMod), true
 }
 
+// GreatWeaponMasterFeature returns the FeatureDefinition for the 2024 Great
+// Weapon Master "extra damage" option: once per turn, when you hit a creature
+// with a Heavy melee weapon, add your Proficiency Bonus to the damage. It is
+// opt-in per attack (the /attack gwm2024 toggle), so the caller only injects
+// this definition when the player chose to use it and actually has the feat.
+func GreatWeaponMasterFeature(profBonus int) FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Great Weapon Master",
+		Source: "feat",
+		Effects: []Effect{
+			{
+				Type:     EffectModifyDamageRoll,
+				Trigger:  TriggerOnDamageRoll,
+				Modifier: profBonus,
+				Conditions: EffectConditions{
+					WeaponProperties: []string{"heavy"},
+					AttackType:       "melee",
+					OncePerTurn:      true,
+				},
+			},
+		},
+	}
+}
+
 // PackTacticsFeature returns the FeatureDefinition for Pack Tactics.
 // Creature feature: advantage on attack when ally within 5ft of target.
 func PackTacticsFeature() FeatureDefinition {

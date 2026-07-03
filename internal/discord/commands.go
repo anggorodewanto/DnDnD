@@ -95,7 +95,12 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "gwm",
-					Description: "Use Great Weapon Master (-5/+10)",
+					Description: "Use Great Weapon Master (2014: -5/+10)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "gwm2024",
+					Description: "Great Weapon Master (2024): +proficiency bonus damage (heavy melee, 1/turn)",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,

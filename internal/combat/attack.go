@@ -547,7 +547,8 @@ type AttackCommand struct {
 	IsImprovised        bool               // Improvised weapon attack
 	ImprovisedThrown    bool               // Improvised weapon thrown
 	Thrown              bool               // Throw a melee weapon with "thrown" property
-	GWM                 bool               // Great Weapon Master flag
+	GWM                 bool               // Great Weapon Master 2014 flag (-5 hit / +10 damage)
+	GWM2024             bool               // Great Weapon Master 2024: +proficiency bonus damage (heavy melee, 1/turn)
 	Sharpshooter        bool               // Sharpshooter flag
 	Reckless            bool               // Reckless Attack flag
 	AttackerVision      VisionCapabilities // Vision capabilities of the attacker
@@ -2275,6 +2276,16 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	if HasCondition(cmd.Attacker.Conditions, "sacred_weapon") {
 		chaMod := max(AbilityModifier(scores.Cha), 1)
 		input.Features = append(input.Features, SacredWeaponFeature(chaMod))
+	}
+
+	// 2024 Great Weapon Master (opt-in per attack): when the player toggles the
+	// gwm2024 flag AND actually has the feat, inject the +ProficiencyBonus
+	// once-per-turn damage rider. Name-based detection dodges the level-up
+	// mechanical_effect JSON-array shape that slug matching misses. The heavy
+	// melee gating is enforced by the FeatureDefinition's own conditions, so a
+	// non-heavy or ranged weapon simply won't trip it.
+	if cmd.GWM2024 && HasFeatureByName(char.Features.RawMessage, "Great Weapon Master") {
+		input.Features = append(input.Features, GreatWeaponMasterFeature(int(char.ProficiencyBonus)))
 	}
 
 	return nil
