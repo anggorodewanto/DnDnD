@@ -83,10 +83,11 @@ The combat effect engine is the spine most of these items plug into.
   `spellcasting.go:1276-1375`.
 - **GWM 2024**: −5/+10 + prof rider (once/turn) + bonus-action swing on crit/kill. `c8cea2b`.
 - **Warlock builder**: pact boon + invocation + expertise picker (ISSUE-060, `baaf206`).
-- Wired spell effects: spell-attack damage, AoE save damage, healing, teleport
-  (self / self+creature), agonizing-blast EB, Invisibility, Hex, Fly, Spare the Dying,
-  zone spells (Spirit Guardians, Wall of Fire, Fog Cloud, Darkness, Silence, Moonbeam…),
-  Counterspell, Divine Smite.
+- Wired spell effects: spell-attack damage, single-target + AoE save damage (COV-1),
+  **save-or-suck conditions via the generic `conditions_applied` array (COV-2)**, healing,
+  teleport (self / self+creature), agonizing-blast EB, Invisibility, Hex, Fly, Spare the
+  Dying, zone spells (Spirit Guardians, Wall of Fire, Fog Cloud, Darkness, Silence,
+  Moonbeam…), Counterspell, Divine Smite.
 
 ---
 
@@ -153,7 +154,42 @@ applied at *resolution* time, not cast time. Check how AoE defers it.
 ---
 
 ### COV-2 — `conditions_applied` is dead data; the condition never lands
-**Status:** OPEN · **Severity:** high · **Pkg:** `internal/combat` (+ maybe seed)
+**Status:** DONE (save-or-suck slice) 2026-07-04 · **Severity:** high · **Pkg:** `internal/combat`
+
+**Shipped.** `conditions_applied` is now read at **save-resolution** time. The shared
+resolver `ResolveAoEPendingSaves` (`aoe.go`) applies each `spell.ConditionsApplied` entry
+to every target that **failed** its save, via a new `applyOnFailConditions` helper —
+covering both single-target casts (COV-1 enqueue) and real multi-target AoE casts in one
+chokepoint. Each condition is scoped to the spell (`SourceSpell`) and, for concentration
+spells, to its caster (`SourceCombatantID`, found via `casterConcentratingOn` reading the
+encounter's concentration columns) so `RemoveSpellSourcedConditions` /
+`BreakConcentrationFully` strip it on concentration drop. The COV-1 enqueue gate widened
+from `hasDamage` to `hasDamage || hasConditions` (`hasConditions` in `metamagic.go`) so
+condition-only save spells (Hold Person, Sleep, Web…) now enqueue a save instead of
+printing a DC and doing nothing. Immune targets are skipped inside `ApplyCondition`
+(🛡️ line). Duration is indefinite (`DurationRounds=0`): concentration spells clear via
+teardown, non-concentration ones via combat-end cleanup / the DM editor. The hardcoded
+`invisibility`/`hex`/`fly` cast-time paths are left as-is — they are no-save self-buffs
+that never enqueue a save, so no double-apply. `AoEDamageResult.ConditionMessages` carries
+the log lines. Tests: `TestCast_SingleTargetConditionSaveSpell_CreatesPendingSave`,
+`TestResolveAoEPendingSaves_AppliesConditionOnFailedSave`,
+`TestResolveAoEPendingSaves_AppliesDamageAndConditionOnFail`. Coverage: combat 91.5%.
+
+**Deferred follow-ups (new COV items when picked up):**
+- **Per-turn re-saves & timed expiry** — save-or-suck conditions apply indefinitely; the
+  2024 end-of-turn repeat save (paralyzed/frightened/etc.) and non-concentration duration
+  expiry (Blindness/Deafness = 1 min) are not modeled. Cleared only by concentration
+  teardown, combat end, or the DM editor.
+- **Condition riders** — landing the condition is step one; whether the engine enforces
+  each rider (paralyzed = auto-crit in melee ≤5ft; frightened = disadvantage + no-approach)
+  is a separate audit.
+- **PC-target auto-prompt & multi-cast collision** — inherited from COV-1 (a PC target is
+  told to `/save` via the log line, not actively pinged; two simultaneous casts of the same
+  concentration spell resolve to the first concentrating caster found).
+
+---
+
+**Original problem (for reference):**
 
 **Problem.** ~20 save spells carry a `conditions_applied` array in seed data and classify
 as `auto` off it, but **combat never reads the field**. The only conditions that land
@@ -407,8 +443,9 @@ make sqlc-check    # if you touched .sql queries
 
 ## Suggested pickup order
 
-1. **COV-1 + COV-2** together (Tier 1) — highest leverage; makes ~20 save/condition spells
-   actually do something. One coupled workstream.
+1. ~~**COV-1 + COV-2** (Tier 1) — makes ~20 save/condition spells actually do something.~~
+   **DONE 2026-07-04.** Save damage + save-or-suck conditions both land through the shared
+   resolver. Follow-ups (per-turn re-saves, condition riders) noted inline under COV-2.
 2. **COV-3** (Evasion/Uncanny Dodge) + **COV-4** (Second Wind) — near-free, engine ready.
 3. **COV-10** — unblocks COV-8; seed the levels you need as you wire each martial rider.
 4. **COV-5** (Hunter's Mark), **COV-6** (invocations), **COV-9** (top feats) — parallelizable,

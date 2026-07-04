@@ -230,6 +230,42 @@ func TestHandlerResolveMonsterPendingSave_SuccessHalvedLog(t *testing.T) {
 	assert.NotContains(t, strings.ToLower(calls[0].Message), "hp")
 }
 
+// COV-2: resolving a monster's FAILED save against a condition-only spell
+// (Hold Person) both persists the condition and surfaces it in the #combat-log
+// line — the DM-facing proof that a save-or-suck condition actually landed.
+func TestHandlerResolveMonsterPendingSave_ConditionLandsOnFail(t *testing.T) {
+	encounterID := uuid.New()
+	saveID := uuid.New()
+	combatantID := uuid.New()
+	source := AoEPendingSaveSource("hold-person")
+
+	store := monsterSaveStore(encounterID, saveID, combatantID, source)
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeHoldPerson(), nil }
+	// casterConcentratingOn scans the encounter; nobody concentrates here, so
+	// the condition applies un-scoped but still lands on the failed target.
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{}, nil
+	}
+	conditionPersisted := false
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		conditionPersisted = true
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	poster := &fakeCombatLogPoster{}
+	r := newPendingSaveRouter(store, poster, rollerFor(3, 4)) // d20=3 → fail vs DC 15
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-saves/"+saveID.String()+"/resolve", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.True(t, conditionPersisted, "failed save must persist the condition")
+	calls := poster.Calls()
+	require.Len(t, calls, 1)
+	assert.Contains(t, calls[0].Message, "paralyzed", "combat log surfaces the landed condition")
+}
+
 func TestHandlerResolveMonsterPendingSave_NotAoE400(t *testing.T) {
 	encounterID := uuid.New()
 	saveID := uuid.New()

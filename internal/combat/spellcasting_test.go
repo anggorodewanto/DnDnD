@@ -536,15 +536,37 @@ func makeSacredFlame() refdata.Spell {
 
 func makeHoldPerson() refdata.Spell {
 	return refdata.Spell{
-		ID:             "hold-person",
-		Name:           "Hold Person",
-		Level:          2,
-		CastingTime:    "1 action",
-		RangeType:      "ranged",
-		RangeFt:        sql.NullInt32{Int32: 60, Valid: true},
-		SaveAbility:    sql.NullString{String: "wis", Valid: true},
-		Concentration:  sql.NullBool{Bool: true, Valid: true},
-		ResolutionMode: "auto",
+		ID:                "hold-person",
+		Name:              "Hold Person",
+		Level:             2,
+		CastingTime:       "1 action",
+		RangeType:         "ranged",
+		RangeFt:           sql.NullInt32{Int32: 60, Valid: true},
+		SaveAbility:       sql.NullString{String: "wis", Valid: true},
+		Concentration:     sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode:    "auto",
+		ConditionsApplied: []string{"paralyzed"},
+	}
+}
+
+// makeRayOfSickness is a single-target save + damage + condition spell: CON
+// save for no effect, 2d8 poison, and poisoned on a failed save.
+// Non-concentration. The COV-2 archetype where the resolver must apply BOTH
+// the COV-1 damage and the COV-2 condition on a failed save.
+func makeRayOfSickness() refdata.Spell {
+	return refdata.Spell{
+		ID:                "ray-of-sickness",
+		Name:              "Ray of Sickness",
+		Level:             1,
+		CastingTime:       "1 action",
+		RangeType:         "ranged",
+		RangeFt:           sql.NullInt32{Int32: 60, Valid: true},
+		SaveAbility:       sql.NullString{String: "con", Valid: true},
+		SaveEffect:        sql.NullString{String: "no_effect", Valid: true},
+		Damage:            pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"2d8","damage_type":"poison"}`), Valid: true},
+		ConditionsApplied: []string{"poisoned"},
+		ResolutionMode:    "auto",
+		Concentration:     sql.NullBool{Bool: false, Valid: true},
 	}
 }
 
@@ -1127,6 +1149,59 @@ func TestCast_AttackSpell_NoPendingSave(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, pendingCalls, "attack spells must not enqueue a pending save")
 	assert.False(t, result.SavePending)
+}
+
+// COV-2: a single-target save spell that applies a CONDITION but deals no
+// damage (Hold Person) must ALSO enqueue a pending save. The COV-1 gate only
+// covered save+damage spells, so condition-only save-or-suck spells printed a
+// DC and resolved to nothing.
+func TestCast_SingleTargetConditionSaveSpell_CreatesPendingSave(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6 // in range
+	target.EncounterID = uuid.New()
+
+	var pendingCalls []refdata.CreatePendingSaveParams
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeHoldPerson(), nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		pendingCalls = append(pendingCalls, arg)
+		return refdata.PendingSafe{ID: uuid.New(), CombatantID: arg.CombatantID, Ability: arg.Ability, Dc: arg.Dc, Source: arg.Source, Status: "pending"}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "hold-person",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+
+	require.Len(t, pendingCalls, 1, "condition-only save spell must enqueue exactly one pending save")
+	ps := pendingCalls[0]
+	assert.Equal(t, target.ID, ps.CombatantID)
+	assert.Equal(t, "wis", ps.Ability)
+	assert.True(t, IsAoEPendingSaveSource(ps.Source), "source must be AoE-tagged so /save + the resolver pick it up")
+	assert.Equal(t, "hold-person", SpellIDFromAoEPendingSaveSource(ps.Source))
+	assert.True(t, result.SavePending, "result must signal a save is pending")
 }
 
 // TDD Cycle 19: Cast cantrip does not consume slot

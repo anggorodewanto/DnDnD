@@ -57,6 +57,13 @@ func hasDamage(spell refdata.Spell) bool {
 	return spell.Damage.Valid && len(spell.Damage.RawMessage) > 0
 }
 
+// hasConditions reports whether the spell applies any status condition on a
+// failed save (COV-2). The conditions live in seed data's conditions_applied
+// array and are landed at save-resolution time by applyOnFailConditions.
+func hasConditions(spell refdata.Spell) bool {
+	return len(spell.ConditionsApplied) > 0
+}
+
 func validateCarefulSpell(spell refdata.Spell) error {
 	if !hasAreaOfEffect(spell) {
 		return fmt.Errorf("Careful Spell requires a spell with an area of effect")

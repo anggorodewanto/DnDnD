@@ -997,61 +997,132 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("looking up spell %q for AoE damage: %w", spellID, err)
 	}
-	if !spell.Damage.Valid {
-		// Non-damaging AoE (e.g. condition-only). Nothing to apply at this
-		// hook; condition/effect work happens elsewhere. Still close the
-		// lifecycle so the next drive is an idempotent no-op.
-		if err := s.markSavesApplied(ctx, toApply); err != nil {
+	// Resolve save-for-half/none damage (COV-1) when the spell deals damage. A
+	// condition-only save spell (Hold Person, Web) has no damage and leaves res
+	// zero-valued — it lands only its conditions in the shared tail below.
+	var res AoEDamageResult
+	if spell.Damage.Valid {
+		dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
+		if err != nil {
+			return nil, fmt.Errorf("parsing AoE damage: %w", err)
+		}
+
+		// E-C02: scale damage dice using slot level and char level encoded in
+		// the source tag. Legacy tags without scaling info fall back to base dice.
+		slotLevel := SlotLevelFromAoEPendingSaveSource(toApply[0].Source)
+		charLevel := CharLevelFromAoEPendingSaveSource(toApply[0].Source)
+		scaledDice := ScaleSpellDice(dmgInfo, int(spell.Level), slotLevel, charLevel)
+
+		saveEffect := ""
+		if spell.SaveEffect.Valid {
+			saveEffect = spell.SaveEffect.String
+		}
+		saveResults := make([]SaveResult, 0, len(toApply))
+		for _, r := range toApply {
+			success := r.Success.Valid && r.Success.Bool
+			total := 0
+			if r.RollResult.Valid {
+				total = int(r.RollResult.Int32)
+			}
+			saveResults = append(saveResults, SaveResult{
+				CombatantID: r.CombatantID,
+				Rolled:      total,
+				Total:       total,
+				Success:     success,
+			})
+		}
+		input := AoEDamageInput{
+			EncounterID:      encounterID,
+			SpellName:        spell.Name,
+			DamageDice:       scaledDice,
+			DamageType:       dmgInfo.DamageType,
+			SaveEffect:       saveEffect,
+			SaveResults:      saveResults,
+			EmpoweredRerolls: empoweredRerolls, // SR-025
+		}
+		res, err = s.ResolveAoESaves(ctx, input, roller)
+		if err != nil {
 			return nil, err
 		}
-		return &AoEDamageResult{}, nil
-	}
-	dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
-	if err != nil {
-		return nil, fmt.Errorf("parsing AoE damage: %w", err)
 	}
 
-	// E-C02: scale damage dice using slot level and char level encoded in
-	// the source tag. Legacy tags without scaling info fall back to base dice.
-	slotLevel := SlotLevelFromAoEPendingSaveSource(toApply[0].Source)
-	charLevel := CharLevelFromAoEPendingSaveSource(toApply[0].Source)
-	scaledDice := ScaleSpellDice(dmgInfo, int(spell.Level), slotLevel, charLevel)
-
-	saveEffect := ""
-	if spell.SaveEffect.Valid {
-		saveEffect = spell.SaveEffect.String
-	}
-	saveResults := make([]SaveResult, 0, len(toApply))
-	for _, r := range toApply {
-		success := r.Success.Valid && r.Success.Bool
-		total := 0
-		if r.RollResult.Valid {
-			total = int(r.RollResult.Int32)
-		}
-		saveResults = append(saveResults, SaveResult{
-			CombatantID: r.CombatantID,
-			Rolled:      total,
-			Total:       total,
-			Success:     success,
-		})
-	}
-	input := AoEDamageInput{
-		EncounterID:      encounterID,
-		SpellName:        spell.Name,
-		DamageDice:       scaledDice,
-		DamageType:       dmgInfo.DamageType,
-		SaveEffect:       saveEffect,
-		SaveResults:      saveResults,
-		EmpoweredRerolls: empoweredRerolls, // SR-025
-	}
-	res, err := s.ResolveAoESaves(ctx, input, roller)
+	// COV-2: land conditions_applied on every target that failed its save (in
+	// addition to any save-for-half/none damage above), then close the save
+	// lifecycle so the next drive is an idempotent no-op. Shared by the damage
+	// and condition-only paths.
+	condMsgs, err := s.applyOnFailConditions(ctx, encounterID, spell, toApply)
 	if err != nil {
 		return nil, err
 	}
+	res.ConditionMessages = condMsgs
 	if err := s.markSavesApplied(ctx, toApply); err != nil {
 		return nil, err
 	}
 	return &res, nil
+}
+
+// applyOnFailConditions lands each condition in spell.ConditionsApplied on
+// every target in rows whose save FAILED (COV-2). This is the resolution-time
+// counterpart to COV-1's save-for-half damage: the condition is applied only
+// after the save comes back failed, never at cast time.
+//
+// Each condition is scoped to the spell (SourceSpell) and, for concentration
+// spells, to its caster (SourceCombatantID, looked up from the encounter's
+// concentration columns) so BreakConcentrationFully / RemoveSpellSourcedConditions
+// strip it when the caster drops concentration. Duration is indefinite
+// (DurationRounds=0): concentration spells clear via teardown, non-concentration
+// ones via combat-end cleanup or the DM editor — per-turn re-saves and timed
+// expiry are a follow-up. Condition-immune targets are skipped inside
+// ApplyCondition (it emits a 🛡️ line, no error). Returns the combat-log lines.
+//
+// A no-op (returns nil, nil) for spells with no conditions_applied, so the
+// damage-only AoE/single-target path never touches the condition machinery.
+func (s *Service) applyOnFailConditions(ctx context.Context, encounterID uuid.UUID, spell refdata.Spell, rows []refdata.PendingSafe) ([]string, error) {
+	if !hasConditions(spell) {
+		return nil, nil
+	}
+	casterID, err := s.casterConcentratingOn(ctx, encounterID, spell.ID)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []string
+	for _, r := range rows {
+		if r.Success.Valid && r.Success.Bool {
+			continue // made the save — no condition
+		}
+		for _, name := range spell.ConditionsApplied {
+			_, applied, aerr := s.ApplyCondition(ctx, r.CombatantID, CombatCondition{
+				Condition:         name,
+				SourceSpell:       spell.ID,
+				SourceCombatantID: casterID,
+			})
+			if aerr != nil {
+				return msgs, fmt.Errorf("applying %q from %s: %w", name, spell.ID, aerr)
+			}
+			msgs = append(msgs, applied...)
+		}
+	}
+	return msgs, nil
+}
+
+// casterConcentratingOn returns the string ID of the combatant in the encounter
+// currently concentrating on spellID, or "" when none is (a non-concentration
+// spell, or the caster is not tracked). The value scopes an applied condition's
+// SourceCombatantID so concentration teardown can match and strip it.
+//
+// Known limitation (mirrors COV-1's multi-cast note): if two casters concentrate
+// on the same spell ID simultaneously, the first match wins — narrow window.
+func (s *Service) casterConcentratingOn(ctx context.Context, encounterID uuid.UUID, spellID string) (string, error) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return "", fmt.Errorf("listing combatants for condition source: %w", err)
+	}
+	for _, c := range combatants {
+		if c.ConcentrationSpellID.Valid && c.ConcentrationSpellID.String == spellID {
+			return c.ID.String(), nil
+		}
+	}
+	return "", nil
 }
 
 // markSavesApplied closes the lifecycle on every freshly-applied save so a
@@ -1127,6 +1198,11 @@ type AoEDamageInput struct {
 type AoEDamageResult struct {
 	Targets     []AoETargetOutcome
 	TotalDamage int
+	// ConditionMessages holds the combat-log lines for conditions applied to
+	// targets that FAILED their save (COV-2), e.g. "🧟 Goblin is paralyzed".
+	// Empty for damage-only spells; populated from spell.ConditionsApplied by
+	// applyOnFailConditions. Immune targets contribute a "🛡️ …immune…" line.
+	ConditionMessages []string
 }
 
 // AoETargetOutcome holds the outcome for a single target of an AoE spell.

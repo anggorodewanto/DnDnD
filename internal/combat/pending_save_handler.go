@@ -224,6 +224,14 @@ func formatMonsterSaveLog(res MonsterSaveResolution) string {
 			b.WriteString(" (halved on save)")
 		}
 	}
+	// COV-2: append condition lines for save-or-suck spells (e.g. paralyzed on a
+	// failed Hold Person). Present only on the drive that completes the save set
+	// — same surfacing point as the damage above.
+	if res.Damage != nil {
+		for _, msg := range res.Damage.ConditionMessages {
+			fmt.Fprintf(&b, "\n%s", msg)
+		}
+	}
 	return b.String()
 }
 

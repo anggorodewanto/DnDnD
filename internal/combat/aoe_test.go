@@ -2345,6 +2345,124 @@ func TestResolveAoEPendingSaves_AppliesDamageOnceAllResolved(t *testing.T) {
 	require.Equal(t, 2, len(hpUpdates))
 }
 
+// COV-2: resolving a condition-only save spell (Hold Person: no damage) must
+// apply spell.ConditionsApplied to every target that FAILED its save — scoped
+// to the concentrating caster + spell so concentration teardown strips them —
+// while a target that MADE its save gets nothing.
+func TestResolveAoEPendingSaves_AppliesConditionOnFailedSave(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	failerID := uuid.New()
+	saverID := uuid.New()
+	spellID := "hold-person"
+	source := AoEPendingSaveSource(spellID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeHoldPerson(), nil }
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: failerID, Source: source, Ability: "wis", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 8, Valid: true}, Success: sql.NullBool{Bool: false, Valid: true}},
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: saverID, Source: source, Ability: "wis", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
+		}, nil
+	}
+	// The caster is the combatant concentrating on the spell — its ID scopes the
+	// applied condition so BreakConcentrationFully can later strip it.
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: casterID, DisplayName: "Wizard", ConcentrationSpellID: sql.NullString{String: spellID, Valid: true}},
+		}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "Target", Conditions: json.RawMessage(`[]`)}, nil
+	}
+	var condUpdates []refdata.UpdateCombatantConditionsParams
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		condUpdates = append(condUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, dice.NewRoller(func(_ int) int { return 4 }))
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	require.Len(t, condUpdates, 1, "only the target that failed its save is conditioned")
+	assert.Equal(t, failerID, condUpdates[0].ID)
+	conds, err := ListConditions(condUpdates[0].Conditions)
+	require.NoError(t, err)
+	require.Len(t, conds, 1)
+	assert.Equal(t, "paralyzed", conds[0].Condition)
+	assert.Equal(t, spellID, conds[0].SourceSpell, "scoped to spell for concentration teardown")
+	assert.Equal(t, casterID.String(), conds[0].SourceCombatantID, "scoped to caster for concentration teardown")
+}
+
+// COV-2 + COV-1 together: a single-target save+damage+condition spell (Ray of
+// Sickness) applies BOTH the damage and the condition on a failed save. A made
+// save takes damage per its save_effect but gets no condition. The spell is
+// non-concentration, so the condition carries no caster scope (cleared at
+// combat end / by the DM editor rather than concentration teardown).
+func TestResolveAoEPendingSaves_AppliesDamageAndConditionOnFail(t *testing.T) {
+	encounterID := uuid.New()
+	failerID := uuid.New()
+	saverID := uuid.New()
+	spellID := "ray-of-sickness"
+	source := AoEPendingSaveSource(spellID)
+
+	failer := refdata.Combatant{ID: failerID, DisplayName: "Goblin A", HpMax: 30, HpCurrent: 30, IsAlive: true, Conditions: json.RawMessage(`[]`)}
+	saver := refdata.Combatant{ID: saverID, DisplayName: "Goblin B", HpMax: 30, HpCurrent: 30, IsAlive: true, Conditions: json.RawMessage(`[]`)}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeRayOfSickness(), nil }
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: failerID, Source: source, Ability: "con", Dc: 13, Status: "rolled", Success: sql.NullBool{Bool: false, Valid: true}},
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: saverID, Source: source, Ability: "con", Dc: 13, Status: "rolled", Success: sql.NullBool{Bool: true, Valid: true}},
+		}, nil
+	}
+	// Nobody is concentrating on ray-of-sickness → caster scope is empty.
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{failer, saver}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == failerID {
+			return failer, nil
+		}
+		return saver, nil
+	}
+	var hpUpdates []refdata.UpdateCombatantHPParams
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates = append(hpUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+	var condUpdates []refdata.UpdateCombatantConditionsParams
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		condUpdates = append(condUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, dice.NewRoller(func(_ int) int { return 4 }))
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var failerDamaged bool
+	for _, u := range hpUpdates {
+		if u.ID == failerID {
+			failerDamaged = true
+		}
+	}
+	assert.True(t, failerDamaged, "failed target takes damage (COV-1)")
+
+	require.Len(t, condUpdates, 1, "condition lands only on the failed save (COV-2)")
+	assert.Equal(t, failerID, condUpdates[0].ID)
+	conds, err := ListConditions(condUpdates[0].Conditions)
+	require.NoError(t, err)
+	require.Len(t, conds, 1)
+	assert.Equal(t, "poisoned", conds[0].Condition)
+	assert.Equal(t, spellID, conds[0].SourceSpell)
+	assert.Equal(t, "", conds[0].SourceCombatantID, "non-concentration spell → no caster scope")
+}
+
 // E-59 TDD: AoE source helpers round-trip the spell ID.
 func TestAoEPendingSaveSourceHelpers(t *testing.T) {
 	src := AoEPendingSaveSource("fireball")

@@ -138,18 +138,18 @@ func SpellcastingAbilityForClass(className string) string {
 
 // CastResult holds the outcome of a /cast command.
 type CastResult struct {
-	CasterName             string
-	SpellName              string
-	SpellLevel             int
-	IsBonusAction          bool
-	IsAttack               bool
-	AttackRoll             int
-	AttackTotal            int
-	TargetAC               int
-	Hit                    bool
-	TargetName             string
-	SaveDC                 int
-	SaveAbility            string
+	CasterName    string
+	SpellName     string
+	SpellLevel    int
+	IsBonusAction bool
+	IsAttack      bool
+	AttackRoll    int
+	AttackTotal   int
+	TargetAC      int
+	Hit           bool
+	TargetName    string
+	SaveDC        int
+	SaveAbility   string
 	// SavePending is true when the cast enqueued a single-target saving throw
 	// (COV-1): the target must roll /save (PC) or the DM resolves it from the
 	// dashboard, and damage/effects land through the shared pending-save
@@ -816,20 +816,21 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 	result.ConcentrationCleanup = cleanup
 
-	// 16b. COV-1: single-target saving-throw spell. Enqueue one pending save
-	// reusing the AoE-tagged source so the /save handler, the DM dashboard, and
-	// ResolveAoEPendingSaves all resolve it and apply save-for-half/none damage
-	// — instead of only displaying the DC and resolving to nothing. Damage lands
+	// 16b. COV-1/COV-2: single-target saving-throw spell. Enqueue one pending
+	// save reusing the AoE-tagged source so the /save handler, the DM dashboard,
+	// and ResolveAoEPendingSaves all resolve it and apply save-for-half/none
+	// damage (COV-1) AND land any conditions_applied on a failed save (COV-2) —
+	// instead of only displaying the DC and resolving to nothing. Both land
 	// through the shared resolver once the target's save comes back.
 	//
 	// Placed after the resource deductions (13–16) and concentration (16a),
 	// mirroring the deferred material/concentration writes, so a late error
 	// can't orphan a pending-save row with no slot spent.
 	//
-	// Scope: save + damage, non-attack, auto-resolved, non-area single targets.
-	// Condition-only save spells (Hold Person, Sleep…) are wired separately by
-	// COV-2; DM-routed spells (resolution_mode != "auto") stay DM-routed.
-	if hasTarget && hasSavingThrow(spell) && hasDamage(spell) && !result.IsAttack &&
+	// Scope: non-attack, auto-resolved, non-area single targets that either deal
+	// damage (COV-1) or apply a condition (COV-2 — e.g. Hold Person, Sleep).
+	// DM-routed spells (resolution_mode != "auto") stay DM-routed.
+	if hasTarget && hasSavingThrow(spell) && (hasDamage(spell) || hasConditions(spell)) && !result.IsAttack &&
 		spell.ResolutionMode == "auto" && !hasAreaOfEffect(spell) {
 		source := AoEPendingSaveSourceFull(spell.ID, effectiveSlotLevel, int(char.Level), result.EmpoweredRerolls)
 		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
