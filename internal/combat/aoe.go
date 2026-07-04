@@ -785,10 +785,12 @@ func applyAoEMetamagicEffects(result *AoECastResult, metamagics []string, spell 
 }
 
 // AoEPendingSaveSourcePrefix is the source-column prefix used for pending_saves
-// rows persisted by CastAoE. Encoded as "aoe:<spell-id>" (or
-// "aoe:<spell-id>:e<N>" when Empowered metamagic is active) so the resolver
-// can distinguish AoE-cast rows from concentration / DM-prompted saves and
-// look the spell up for damage application without a side-table.
+// rows persisted by CastAoE and by single-target Cast (COV-1). The "aoe:" name
+// is historical — the tag really means "a cast-originated spell save this
+// pipeline owns", of which a single-target save is an "AoE of one". Encoded as
+// "aoe:<spell-id>" (or "aoe:<spell-id>:e<N>" when Empowered metamagic is active)
+// so the resolver can distinguish these rows from concentration / DM-prompted
+// saves and look the spell up for damage application without a side-table.
 const AoEPendingSaveSourcePrefix = "aoe:"
 
 // AoEPendingSaveSource returns the canonical pending_saves.source value for
@@ -933,7 +935,9 @@ func CharLevelFromAoEPendingSaveSource(source string) int {
 //
 // This is the post-resolution hook required by E-59: damage / effects must
 // land once every affected combatant's save has come back, regardless of
-// whether it was rolled by a player (/save) or by the DM (dashboard).
+// whether it was rolled by a player (/save) or by the DM (dashboard). Despite
+// the name it is target-agnostic: single-target save spells (COV-1) enqueue one
+// row with the same tag and resolve through this identical path (an "AoE of one").
 func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*AoEDamageResult, error) {
 	// ISSUE-044: list EVERY save row for the encounter regardless of status. The
 	// apply step is driven AFTER a save flips pending→rolled, so the row being

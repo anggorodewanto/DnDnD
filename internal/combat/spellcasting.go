@@ -150,6 +150,11 @@ type CastResult struct {
 	TargetName             string
 	SaveDC                 int
 	SaveAbility            string
+	// SavePending is true when the cast enqueued a single-target saving throw
+	// (COV-1): the target must roll /save (PC) or the DM resolves it from the
+	// dashboard, and damage/effects land through the shared pending-save
+	// resolver rather than inline at cast time.
+	SavePending            bool
 	Concentration          ConcentrationResult
 	ResolutionMode         string
 	SlotUsed               int
@@ -257,7 +262,11 @@ func FormatCastLog(result CastResult) string {
 
 	// Save DC
 	if result.SaveDC > 0 {
-		fmt.Fprintf(&b, "\U0001f6e1\ufe0f DC %d %s save\n", result.SaveDC, strings.ToUpper(result.SaveAbility))
+		suffix := ""
+		if result.SavePending && result.TargetName != "" {
+			suffix = fmt.Sprintf(" \u2014 %s must save (roll /save, or resolve on the dashboard)", result.TargetName)
+		}
+		fmt.Fprintf(&b, "\U0001f6e1\ufe0f DC %d %s save%s\n", result.SaveDC, strings.ToUpper(result.SaveAbility), suffix)
 	}
 
 	// Concentration
@@ -806,6 +815,36 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, err
 	}
 	result.ConcentrationCleanup = cleanup
+
+	// 16b. COV-1: single-target saving-throw spell. Enqueue one pending save
+	// reusing the AoE-tagged source so the /save handler, the DM dashboard, and
+	// ResolveAoEPendingSaves all resolve it and apply save-for-half/none damage
+	// — instead of only displaying the DC and resolving to nothing. Damage lands
+	// through the shared resolver once the target's save comes back.
+	//
+	// Placed after the resource deductions (13–16) and concentration (16a),
+	// mirroring the deferred material/concentration writes, so a late error
+	// can't orphan a pending-save row with no slot spent.
+	//
+	// Scope: save + damage, non-attack, auto-resolved, non-area single targets.
+	// Condition-only save spells (Hold Person, Sleep…) are wired separately by
+	// COV-2; DM-routed spells (resolution_mode != "auto") stay DM-routed.
+	if hasTarget && hasSavingThrow(spell) && hasDamage(spell) && !result.IsAttack &&
+		spell.ResolutionMode == "auto" && !hasAreaOfEffect(spell) {
+		source := AoEPendingSaveSourceFull(spell.ID, effectiveSlotLevel, int(char.Level), result.EmpoweredRerolls)
+		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
+			EncounterID: target.EncounterID,
+			CombatantID: target.ID,
+			Ability:     strings.ToLower(spell.SaveAbility.String),
+			Dc:          int32(result.SaveDC),
+			Source:      source,
+			// CoverBonus 0: single-target cover-vs-DEX-save is a follow-up; the
+			// AoE path computes per-tile cover, the single-target path does not yet.
+		}); err != nil {
+			return CastResult{}, fmt.Errorf("creating pending save: %w", err)
+		}
+		result.SavePending = true
+	}
 
 	// 17. Apply invisibility condition when casting Invisibility / Greater Invisibility.
 	if spell.ID == InvisibilitySpellID || spell.ID == GreaterInvisibilitySpellID {

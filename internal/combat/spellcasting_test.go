@@ -395,6 +395,23 @@ func TestFormatCastLog(t *testing.T) {
 		assert.Contains(t, log, "DEX")
 	})
 
+	t.Run("single-target pending save prompts the target to roll", func(t *testing.T) {
+		result := CastResult{
+			CasterName:  "Gandalf",
+			SpellName:   "Sacred Flame",
+			SpellLevel:  0,
+			SaveDC:      15,
+			SaveAbility: "dex",
+			TargetName:  "Goblin",
+			SavePending: true,
+		}
+		log := FormatCastLog(result)
+		assert.Contains(t, log, "DC 15")
+		assert.Contains(t, log, "DEX")
+		assert.Contains(t, log, "Goblin")
+		assert.Contains(t, log, "/save")
+	})
+
 	t.Run("dm_required resolution", func(t *testing.T) {
 		result := CastResult{
 			CasterName:     "Gandalf",
@@ -493,6 +510,25 @@ func makeMistyStep() refdata.Spell {
 		Level:          2,
 		CastingTime:    "1 bonus action",
 		RangeType:      "self",
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+	}
+}
+
+// makeSacredFlame is a single-target save+damage cantrip (DEX save for no
+// effect, radiant, cantrip-scaling) — the COV-1 archetype the single-target
+// Cast path must now resolve via a pending save.
+func makeSacredFlame() refdata.Spell {
+	return refdata.Spell{
+		ID:             "sacred-flame",
+		Name:           "Sacred Flame",
+		Level:          0,
+		CastingTime:    "1 action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 60, Valid: true},
+		SaveAbility:    sql.NullString{String: "dex", Valid: true},
+		SaveEffect:     sql.NullString{String: "no_effect", Valid: true},
+		Damage:         pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"1d8","type":"radiant","cantrip_scaling":true}`), Valid: true},
 		ResolutionMode: "auto",
 		Concentration:  sql.NullBool{Bool: false, Valid: true},
 	}
@@ -990,6 +1026,107 @@ func TestCast_SaveDC(t *testing.T) {
 	// DC = 8 + prof(3) + INT mod(+4) = 15
 	assert.Equal(t, 15, result.SaveDC)
 	assert.Equal(t, "dex", result.SaveAbility)
+}
+
+// COV-1: a single-target save+damage spell must enqueue a pending save (same
+// "aoe:"-tagged source the /save handler and AoE resolver already understand)
+// so the save actually gets rolled and damage applied — rather than only
+// printing a DC line and resolving to nothing.
+func TestCast_SingleTargetSaveSpell_CreatesPendingSave(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6 // in range
+	target.EncounterID = uuid.New()
+
+	var pendingCalls []refdata.CreatePendingSaveParams
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeSacredFlame(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		pendingCalls = append(pendingCalls, arg)
+		return refdata.PendingSafe{ID: uuid.New(), CombatantID: arg.CombatantID, Ability: arg.Ability, Dc: arg.Dc, Source: arg.Source, Status: "pending"}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "sacred-flame",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+
+	require.Len(t, pendingCalls, 1, "single-target save spell must enqueue exactly one pending save")
+	ps := pendingCalls[0]
+	assert.Equal(t, target.ID, ps.CombatantID)
+	assert.Equal(t, target.EncounterID, ps.EncounterID)
+	assert.Equal(t, "dex", ps.Ability)
+	assert.Equal(t, int32(result.SaveDC), ps.Dc)
+	assert.True(t, IsAoEPendingSaveSource(ps.Source), "source must be AoE-tagged so /save + the resolver pick it up")
+	assert.Equal(t, "sacred-flame", SpellIDFromAoEPendingSaveSource(ps.Source))
+	assert.True(t, result.SavePending, "result must signal a save is pending")
+}
+
+// COV-1 scope guard: spell-attack spells stay synchronous (roll to hit, apply
+// damage inline) and must NOT enqueue a pending save.
+func TestCast_AttackSpell_NoPendingSave(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+
+	pendingCalls := 0
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeFireBolt(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		pendingCalls++
+		return refdata.PendingSafe{ID: uuid.New()}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fire-bolt",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, 0, pendingCalls, "attack spells must not enqueue a pending save")
+	assert.False(t, result.SavePending)
 }
 
 // TDD Cycle 19: Cast cantrip does not consume slot

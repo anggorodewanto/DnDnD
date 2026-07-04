@@ -93,7 +93,33 @@ The combat effect engine is the spine most of these items plug into.
 ## Tier 1 — Systemic holes (one fix unlocks many spells)
 
 ### COV-1 — Single-target save spells resolve to nothing
-**Status:** OPEN · **Severity:** high · **Pkg:** `internal/combat`
+**Status:** DONE (save+damage slice) 2026-07-04 · **Severity:** high · **Pkg:** `internal/combat`
+
+**Shipped.** `Service.Cast` now enqueues one pending save for single-target
+save+damage spells (`spellcasting.go` step "12γ"), reusing the AoE-tagged source
+(`AoEPendingSaveSourceFull`) so the existing `/save` handler, DM dashboard
+(`ListPendingSaves`), and `ResolveAoEPendingSaves` resolve it and apply
+save-for-half/none damage — with zero new Discord/DB plumbing. `CastResult.SavePending`
+signals it; `FormatCastLog` prompts the target to roll. Verified end-to-end: the
+monster-resolve path (`pending_save_resolve.go:168`) drives the apply step.
+Gate: `hasSavingThrow && hasDamage && !IsAttack && ResolutionMode=="auto" && !area`.
+Tests: `TestCast_SingleTargetSaveSpell_CreatesPendingSave`, `TestCast_AttackSpell_NoPendingSave`,
+`FormatCastLog` pending-save subtest.
+
+**Deferred follow-ups (new COV items when picked up):**
+- **Condition-on-fail** for save+damage spells with a rider (Ray of Sickness→poisoned) —
+  belongs to **COV-2** (generic `conditions_applied`).
+- **Single-target cover** vs DEX saves — `CoverBonus` passed as 0 (AoE computes per-tile;
+  single-target does not yet).
+- **PC-target auto-prompt** — a PC target isn't yet actively pinged to `/save` (the log
+  line tells them; the DM-dashboard path for monster targets is fully automatic).
+- **Multi-cast collision** — two *simultaneously-pending* single-target casts of the *same*
+  spell share the spell-id source tag, so the resolver waits for both (pre-existing AoE
+  behavior). Narrow window; independent-per-target source tags would fix it.
+
+---
+
+**Original problem (for reference):**
 
 **Problem.** `Service.Cast` computes and *prints* the save DC line
 (`spellcasting.go:260` → `🛡️ DC %d %s save`; `result.SaveAbility` set `:651`) but creates
