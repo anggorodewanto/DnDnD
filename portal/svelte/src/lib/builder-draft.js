@@ -39,6 +39,8 @@ const DRAFT_FIELDS = [
   'abilityRolls',
   'selectedSkills',
   'selectedExpertise',
+  'selectedPactBoon',
+  'selectedInvocations',
   'selectedSpells',
   'chosenLanguages',
   'selectedMasteries',

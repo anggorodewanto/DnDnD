@@ -188,6 +188,11 @@ func buildCharacterColumns(p CreateCharacterParams) (characterColumns, error) {
 	if len(p.Spells) > 0 {
 		charData["spells"] = p.Spells
 	}
+	// Warlock invocation-granted spells: a SEPARATE key from "spells" so the
+	// known-spell budget stays honest (mirrors AlwaysPreparedSpells).
+	if len(p.GrantedSpells) > 0 {
+		charData["granted_spells"] = p.GrantedSpells
+	}
 	if len(p.WeaponMasteries) > 0 {
 		charData["weapon_masteries"] = p.WeaponMasteries
 	}
@@ -546,6 +551,16 @@ func submissionFromCharacter(ch refdata.Character) CharacterSubmission {
 		if json.Unmarshal(ch.Proficiencies.RawMessage, &prof) == nil {
 			sub.Skills = prof.Skills
 			sub.Expertise = prof.Expertise
+		}
+	}
+
+	// ISSUE-060: restore Warlock pact-boon / invocation picks from persisted
+	// features so an edit round-trip re-injects them instead of resetting to the
+	// choose_* placeholders.
+	if ch.Features.Valid {
+		var feats []character.Feature
+		if json.Unmarshal(ch.Features.RawMessage, &feats) == nil {
+			sub.PactBoon, sub.Invocations = classFeatureChoicesFromFeatures(feats)
 		}
 	}
 

@@ -400,6 +400,48 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) 
 	assert.Equal(t, []string{"fire-bolt", "mage-hand", "magic-missile", "shield"}, spells)
 }
 
+// P5: invocation-granted spells persist under a SEPARATE character_data key
+// ("granted_spells"), never merged into "spells" — so the known-spell budget
+// stays honest while the granted spells are still castable / displayable.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsGrantedSpells(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Vale",
+		Race:          "Human",
+		Class:         "Warlock",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 10, WIS: 13, CHA: 16},
+		HPMax:         9,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Spells:        []string{"eldritch-blast", "hex"},
+		GrantedSpells: []string{"disguise-self", "mage-armor"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.CharacterData.Valid, "CharacterData should be valid")
+
+	var charData map[string]json.RawMessage
+	err = json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData)
+	require.NoError(t, err)
+
+	grantedRaw, ok := charData["granted_spells"]
+	require.True(t, ok, "character_data should have 'granted_spells' key")
+	var granted []string
+	require.NoError(t, json.Unmarshal(grantedRaw, &granted))
+	assert.Equal(t, []string{"disguise-self", "mage-armor"}, granted)
+
+	// The known-spell budget stays honest: "spells" is unchanged, no merge.
+	var spells []string
+	require.NoError(t, json.Unmarshal(charData["spells"], &spells))
+	assert.Equal(t, []string{"eldritch-blast", "hex"}, spells)
+}
+
 // A submission with no languages (the portal builder does not yet collect
 // concrete languages) must still persist a non-nil array: the characters.
 // languages column is TEXT[] NOT NULL, and pq.Array of a nil slice writes

@@ -898,6 +898,24 @@ func makeIdentifyTestCharacter(charID uuid.UUID, items []byte, slots []byte) ref
 	}
 }
 
+// P5: a Warlock Eldritch-Invocation granted spell (stored under the separate
+// character_data "granted_spells" key) is castable — characterKnowsSpell must
+// accept it, while still rejecting a spell the character does not have.
+func TestCharacterKnowsSpell_GrantedSpells(t *testing.T) {
+	char := refdata.Character{
+		CharacterData: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"granted_spells":["disguise-self"]}`),
+			Valid:      true,
+		},
+	}
+	if !characterKnowsSpell(char, "disguise-self") {
+		t.Error("granted spell should be castable via characterKnowsSpell")
+	}
+	if characterKnowsSpell(char, "fireball") {
+		t.Error("an unknown spell must still be rejected")
+	}
+}
+
 func TestCastHandler_IdentifyShortCircuits(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 

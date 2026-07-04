@@ -1322,10 +1322,12 @@ func (h *CastHandler) persistIdentify(
 	return h.inventoryAdapter.UpdateCharacterSpellSlots(ctx, char.ID, pqtype.NullRawMessage{RawMessage: slotJSON, Valid: true})
 }
 
-// characterKnowsSpell inspects character_data.spells_known and
-// character_data.spells_prepared to determine whether the caster knows the
-// named spell. Returns false when character_data is missing or unreadable so
-// the inventory.CastIdentify call surfaces the canonical error.
+// characterKnowsSpell inspects character_data.spells_known,
+// character_data.spells_prepared, character_data.spells, and
+// character_data.granted_spells (Warlock Eldritch-Invocation grants) to
+// determine whether the caster knows the named spell. Returns false when
+// character_data is missing or unreadable so the inventory.CastIdentify call
+// surfaces the canonical error.
 func characterKnowsSpell(char refdata.Character, spellID string) bool {
 	if !char.CharacterData.Valid {
 		return false
@@ -1334,7 +1336,7 @@ func characterKnowsSpell(char refdata.Character, spellID string) bool {
 	if err := json.Unmarshal(char.CharacterData.RawMessage, &data); err != nil {
 		return false
 	}
-	for _, key := range []string{"spells_known", "spells_prepared", "spells"} {
+	for _, key := range []string{"spells_known", "spells_prepared", "spells", "granted_spells"} {
 		if matchesSpellList(data[key], spellID) {
 			return true
 		}

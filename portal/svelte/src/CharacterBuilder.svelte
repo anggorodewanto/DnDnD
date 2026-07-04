@@ -21,7 +21,11 @@
   import { draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './lib/builder-draft.js';
   import { humanizeSubmitError } from './lib/submit-error.js';
   import { submissionRequirements, canSubmit } from './lib/submission-requirements.js';
-  import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState } from './lib/builder-steps.js';
+  import { nextStep as computeNextStep, prevStep as computePrevStep, isStepVisible, spellStepState, SPELLS_STEP, CLASS_FEATURES_STEP } from './lib/builder-steps.js';
+  import {
+    pactBoonList, pactBoonGranted, warlockLevelOf, hasClassFeatureChoices,
+    computeInvocationState, reconcileInvocations, reconcilePactBoon,
+  } from './lib/invocations.js';
   import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
   import { assembleEquipment } from './lib/equipment-assembly.js';
 
@@ -49,7 +53,7 @@
   let draftIdentity = $derived(draftScope(mode, campaign, token));
 
   // Steps
-  const STEPS = ['Basics', 'Class', 'Ability Scores', 'Skills', 'Equipment', 'Spells', 'Review'];
+  const STEPS = ['Basics', 'Class', 'Ability Scores', 'Skills', 'Equipment', 'Spells', 'Class Features', 'Review'];
   let currentStep = $state(0);
 
   // Form state preserved across steps
@@ -73,6 +77,11 @@
   // Expertise skills (Rogue L1 / Bard L3+) — a subset of the proficient skills
   // that gets double proficiency. Empty for every other class. ISSUE-005.
   let selectedExpertise = $state([]);
+  // Warlock class-feature choices (ISSUE-060): a pact-boon id and the chosen
+  // Eldritch Invocation ids. Both resolve server-side into character features
+  // (an invocation id doubles as its combat mechanical_effect slug).
+  let selectedPactBoon = $state('');
+  let selectedInvocations = $state([]);
   let selectedSpells = $state([]);
   // Concrete bonus languages chosen by the player. The race's base languages
   // are read-only; this holds only the background-granted picks (ISSUE-009).
@@ -196,6 +205,23 @@
     if (!sameSkillSet(next, selectedExpertise)) selectedExpertise = next;
   });
 
+  // Keep Warlock pact-boon + invocation picks legal as class / level / boon /
+  // known-spells change: clear a boon below level 3, and prune invocations whose
+  // prerequisites are no longer met or that exceed the warlock-level grant.
+  // Mirrors the expertise prune effect. ISSUE-060.
+  $effect(() => {
+    const warlockLevel = warlockLevelOf(classEntries);
+    const boon = reconcilePactBoon({ warlockLevel, pactBoon: selectedPactBoon });
+    if (boon !== selectedPactBoon) selectedPactBoon = boon;
+    const next = reconcileInvocations({
+      warlockLevel,
+      pactBoon: boon,
+      knownSpells: selectedSpells,
+      selected: selectedInvocations,
+    });
+    if (!sameSkillSet(next, selectedInvocations)) selectedInvocations = next;
+  });
+
   // Keep bonus language picks legal as race / background change: drop any pick
   // that is no longer a valid bonus choice (e.g. it became a race base language)
   // and never let the count exceed the background's bonus grant. Mirrors the
@@ -260,6 +286,8 @@
     if (d.abilityRolls !== undefined) abilityRolls = d.abilityRolls;
     if (Array.isArray(d.selectedSkills)) selectedSkills = d.selectedSkills;
     if (Array.isArray(d.selectedExpertise)) selectedExpertise = d.selectedExpertise;
+    if (d.selectedPactBoon !== undefined) selectedPactBoon = d.selectedPactBoon;
+    if (Array.isArray(d.selectedInvocations)) selectedInvocations = d.selectedInvocations;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
     if (Array.isArray(d.chosenLanguages)) chosenLanguages = d.chosenLanguages;
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
@@ -279,7 +307,8 @@
     return $state.snapshot({
       currentStep, name, race, subrace, background, appearance, backstory,
       classEntries, scores, abilityMethod, abilityRolls,
-      selectedSkills, selectedExpertise, selectedSpells, chosenLanguages, selectedMasteries, packChoices, manualEquipment,
+      selectedSkills, selectedExpertise, selectedPactBoon, selectedInvocations,
+      selectedSpells, chosenLanguages, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
     });
   }
@@ -355,6 +384,8 @@
     abilityMethod = 'point_buy';
     selectedSkills = Array.isArray(ch.skills) ? ch.skills : [];
     selectedExpertise = Array.isArray(ch.expertise) ? ch.expertise : [];
+    selectedPactBoon = ch.pact_boon || '';
+    selectedInvocations = Array.isArray(ch.invocations) ? ch.invocations : [];
     selectedSpells = Array.isArray(ch.spells) ? ch.spells : [];
     selectedMasteries = Array.isArray(ch.weapon_masteries) ? ch.weapon_masteries : [];
     chosenLanguages = Array.isArray(ch.languages) ? ch.languages : [];
@@ -430,15 +461,26 @@
   // Step navigation skips the Spells step for non-casters (it would only show
   // a misleading empty state) — see lib/builder-steps.js.
   function nextStep() {
-    currentStep = computeNextStep(currentStep, STEPS.length, isCaster);
+    currentStep = computeNextStep(currentStep, STEPS.length, stepCtx);
   }
 
   function prevStep() {
-    currentStep = computePrevStep(currentStep, isCaster);
+    currentStep = computePrevStep(currentStep, stepCtx);
   }
 
   function goToStep(i) {
     currentStep = i;
+  }
+
+  // Toggle a Warlock invocation pick. The over-cap / unmet-prereq cases are
+  // guarded by the checkbox `disabled` state (computeInvocationState); the
+  // reconcile effect is the belt-and-suspenders.
+  function toggleInvocation(id) {
+    if (selectedInvocations.includes(id)) {
+      selectedInvocations = selectedInvocations.filter((x) => x !== id);
+    } else {
+      selectedInvocations = [...selectedInvocations, id];
+    }
   }
 
   function increment(ability) {
@@ -654,6 +696,10 @@
   // and budgets aggregate across ALL caster entries — a non-caster primary must
   // not hide the Spells step when a secondary casts (e.g. Fighter 1 / Wizard 3).
   let isCaster = $derived(anyCaster(classEntries));
+  // Warlock pact-boon + invocation step gating (ISSUE-060). stepCtx feeds the
+  // wizard nav so both the Spells and Class Features steps skip cleanly.
+  let hasClassFeatures = $derived(hasClassFeatureChoices(classEntries));
+  let stepCtx = $derived({ isCaster, hasClassFeatures });
   // Per-class spell counts use that class's own spellcasting ability, so pass
   // the modifier for each casting ability and let the helper pick per entry.
   let spellMods = $derived({
@@ -705,6 +751,16 @@
     const classes = classEntries
       .filter(c => c.class)
       .map(c => ({ class: c.class, level: Number(c.level) || 1, subclass: c.subclass || '' }));
+    // Reconcile Warlock pact-boon + invocation picks at submit time so a stale
+    // draft or a class/level/spell change never submits an illegal set (ISSUE-060).
+    const warlockLevel = warlockLevelOf(classEntries);
+    const pactBoon = reconcilePactBoon({ warlockLevel, pactBoon: selectedPactBoon });
+    const invocations = reconcileInvocations({
+      warlockLevel,
+      pactBoon,
+      knownSpells: selectedSpells,
+      selected: selectedInvocations,
+    });
     return {
       name,
       race,
@@ -720,6 +776,8 @@
       ability_rolls: abilityRolls,
       skills,
       expertise,
+      pact_boon: pactBoon,
+      invocations,
       equipment: submissionEquipment(),
       spells: selectedSpells,
       languages: assembleLanguages(raceBaseLanguages(selectedRaceData), chosenLanguages),
@@ -747,7 +805,7 @@
   // Load the server preview when entering the Spells step (step 5 — supplies
   // the castable max spell level for the picker) and the Review step (the full
   // stat block). Re-fire only on step change, not on in-step edits.
-  const PREVIEW_STEPS = [5, STEPS.length - 1];
+  const PREVIEW_STEPS = [SPELLS_STEP, STEPS.length - 1];
   let lastPreviewedStep = -1;
   $effect(() => {
     if (PREVIEW_STEPS.includes(currentStep) && currentStep !== lastPreviewedStep) {
@@ -863,7 +921,7 @@
     <!-- Step navigation -->
     <nav class="steps">
       {#each STEPS as step, i}
-        {#if isStepVisible(i, isCaster)}
+        {#if isStepVisible(i, stepCtx)}
           <button
             class="step-btn"
             class:active={i === currentStep}
@@ -1448,8 +1506,75 @@
         {/if}
       </div>
 
-    <!-- Step 6: Review -->
-    {:else if currentStep === 6}
+    <!-- Step 6: Class Features (Warlock pact boon + Eldritch Invocations) -->
+    {:else if currentStep === CLASS_FEATURES_STEP}
+      {@const warlockLevel = warlockLevelOf(classEntries)}
+      <div class="step-content">
+        <h3>Class Features</h3>
+        {#if warlockLevel < 2}
+          <p class="muted">No class-feature choices for the current build.</p>
+        {:else}
+          {#if pactBoonGranted(warlockLevel)}
+            <div class="cf-section">
+              <h4>Pact Boon</h4>
+              <p class="muted">Your patron bestows one gift at level 3.</p>
+              <div class="cf-options">
+                {#each pactBoonList() as boon}
+                  <label class="cf-option" class:selected={selectedPactBoon === boon.id}>
+                    <input
+                      type="radio"
+                      name="pact-boon"
+                      value={boon.id}
+                      checked={selectedPactBoon === boon.id}
+                      onchange={() => (selectedPactBoon = boon.id)}
+                    />
+                    <div class="cf-body">
+                      <div class="cf-name">{boon.name}{#if boon.edition}<span class="cf-badge cf-badge-{boon.edition}">{boon.edition}</span>{/if}</div>
+                      <div class="cf-desc">{boon.description}</div>
+                    </div>
+                  </label>
+                {/each}
+              </div>
+              {#if selectedPactBoon}
+                <button type="button" class="cf-clear" onclick={() => (selectedPactBoon = '')}>Clear pact boon</button>
+              {/if}
+            </div>
+          {/if}
+
+          {@const invState = computeInvocationState({ warlockLevel, pactBoon: selectedPactBoon, knownSpells: selectedSpells, selected: selectedInvocations })}
+          <div class="cf-section">
+            <h4>Eldritch Invocations</h4>
+            <p class="cf-budget">
+              Chosen <strong>{invState.chosen}</strong> / {invState.max}.
+              {#if selectedSpells.length === 0}
+                <span class="muted">Pick Eldritch Blast in the Spells step to unlock its invocations.</span>
+              {/if}
+            </p>
+            <div class="cf-options">
+              {#each invState.options as opt}
+                <label class="cf-option" class:selected={opt.checked} class:cf-disabled={opt.disabled}>
+                  <input
+                    type="checkbox"
+                    checked={opt.checked}
+                    disabled={opt.disabled}
+                    onchange={() => toggleInvocation(opt.id)}
+                  />
+                  <div class="cf-body">
+                    <div class="cf-name">{opt.name}{#if opt.edition}<span class="cf-badge cf-badge-{opt.edition}">{opt.edition}</span>{/if}</div>
+                    <div class="cf-desc">{opt.description}</div>
+                    {#if !opt.available}
+                      <div class="cf-reason">{opt.reason}</div>
+                    {/if}
+                  </div>
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
+
+    <!-- Review (always the terminal step, so index-shift-proof) -->
+    {:else}
       {@const submission = gatherSubmission()}
       <div class="step-content">
         <h3>Review & Submit</h3>
@@ -1639,6 +1764,36 @@
   .step-btn.completed { background: #0f3460; }
   .step-content { margin-bottom: 1.5rem; }
   .step-content h3 { color: #e94560; margin-bottom: 1rem; }
+
+  /* Warlock Class Features step (pact boon + Eldritch Invocations). */
+  .cf-section { margin-bottom: 1.5rem; }
+  .cf-section h4 { color: #e0e0e0; margin: 0 0 0.25rem; }
+  .cf-budget { font-size: 0.95rem; margin: 0.25rem 0 0.75rem; }
+  .cf-options { display: flex; flex-direction: column; gap: 0.5rem; }
+  .cf-option {
+    display: flex; gap: 0.6rem; align-items: flex-start; margin: 0;
+    padding: 0.6rem 0.75rem; border: 1px solid #0f3460; border-radius: 6px;
+    background: #16213e; cursor: pointer;
+  }
+  .cf-option.selected { border-color: #e94560; background: #1d2748; }
+  .cf-option.cf-disabled { opacity: 0.55; cursor: not-allowed; }
+  .cf-option input { margin-top: 0.2rem; flex: 0 0 auto; }
+  .cf-body { flex: 1 1 auto; }
+  .cf-name { font-weight: 600; }
+  .cf-badge {
+    display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.35rem;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em;
+    border-radius: 3px; vertical-align: middle;
+  }
+  .cf-badge-2024 { background: #1f6f43; color: #d8f5e3; }
+  .cf-badge-2014 { background: #3a3a52; color: #c8c8d8; }
+  .cf-desc { font-size: 0.85rem; color: #b8b8c8; margin-top: 0.15rem; }
+  .cf-reason { font-size: 0.8rem; color: #e9a545; margin-top: 0.2rem; }
+  .cf-clear {
+    margin-top: 0.5rem; padding: 0.3rem 0.7rem; font-size: 0.8rem;
+    background: #16213e; color: #e0e0e0; border: 1px solid #0f3460;
+    border-radius: 4px; cursor: pointer;
+  }
   label { display: block; margin-bottom: 0.75rem; }
   input[type="text"], select, textarea {
     display: block; width: 100%; padding: 0.5rem; margin-top: 0.25rem;

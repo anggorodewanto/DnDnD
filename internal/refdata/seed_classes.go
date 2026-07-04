@@ -380,7 +380,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 					{"name": "Eldritch Invocations", "description": "In your study of occult lore, you have unearthed eldritch invocations, fragments of forbidden knowledge that imbue you with an abiding magical ability.", "mechanical_effect": "choose_2_eldritch_invocations"},
 				},
 				"3": []map[string]string{
-					{"name": "Pact Boon", "description": "Your otherworldly patron bestows a gift upon you for your loyal service.", "mechanical_effect": "choose_pact_boon"},
+					{"name": "Pact Boon", "description": "Your otherworldly patron bestows a gift upon you for your loyal service.", "mechanical_effect": ChoosePactBoonEffect},
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),

@@ -452,7 +452,7 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 				Prepared: preparedSet[id],
 			}
 		}
-		return entries
+		return appendGrantedSpells(entries, data)
 	}
 
 	// Try DDB format: []character.DDBSpellEntry
@@ -473,6 +473,39 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 	}
 
 	return nil
+}
+
+// appendGrantedSpells appends Warlock Eldritch-Invocation granted spells
+// (character_data.granted_spells, stored as []string separate from the
+// known-spell budget) to the display list. Granted-only spells are tagged
+// Source "invocation"; ids already present (manually known) are skipped so
+// there are no duplicates. Best-effort: a missing or malformed granted_spells
+// leaves entries unchanged.
+func appendGrantedSpells(entries []SpellDisplayEntry, data map[string]json.RawMessage) []SpellDisplayEntry {
+	grantedRaw, ok := data["granted_spells"]
+	if !ok {
+		return entries
+	}
+	var granted []string
+	if err := json.Unmarshal(grantedRaw, &granted); err != nil {
+		return entries
+	}
+	present := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		present[e.ID] = true
+	}
+	for _, id := range granted {
+		if present[id] {
+			continue
+		}
+		present[id] = true
+		entries = append(entries, SpellDisplayEntry{
+			ID:     id,
+			Name:   id,
+			Source: "invocation",
+		})
+	}
+	return entries
 }
 
 func parseHitDiceRemaining(raw json.RawMessage) map[string]int {

@@ -37,24 +37,31 @@ var (
 // Class/Subclass for persistence. Class/Subclass remain on the payload
 // so older single-class submitters keep working.
 type CharacterSubmission struct {
-	Name            string                 `json:"name"`
-	Race            string                 `json:"race"`
-	Subrace         string                 `json:"subrace,omitempty"`
-	Background      string                 `json:"background"`
-	Class           string                 `json:"class"`
-	Subclass        string                 `json:"subclass,omitempty"`
-	Classes         []character.ClassEntry `json:"classes,omitempty"`
-	AbilityScores   PointBuyScores         `json:"ability_scores"`
-	AbilityMethod   AbilityScoreMethod     `json:"ability_method,omitempty"`
-	AbilityRolls    map[string][]int       `json:"ability_rolls,omitempty"`
-	Skills          []string               `json:"skills"`
-	Expertise       []string               `json:"expertise,omitempty"`
-	Equipment       []string               `json:"equipment,omitempty"`
-	Spells          []string               `json:"spells,omitempty"`
-	WeaponMasteries []string               `json:"weapon_masteries,omitempty"`
-	Languages       []string               `json:"languages,omitempty"`
-	EquippedWeapon  string                 `json:"equipped_weapon,omitempty"`
-	WornArmor       string                 `json:"worn_armor,omitempty"`
+	Name          string                 `json:"name"`
+	Race          string                 `json:"race"`
+	Subrace       string                 `json:"subrace,omitempty"`
+	Background    string                 `json:"background"`
+	Class         string                 `json:"class"`
+	Subclass      string                 `json:"subclass,omitempty"`
+	Classes       []character.ClassEntry `json:"classes,omitempty"`
+	AbilityScores PointBuyScores         `json:"ability_scores"`
+	AbilityMethod AbilityScoreMethod     `json:"ability_method,omitempty"`
+	AbilityRolls  map[string][]int       `json:"ability_rolls,omitempty"`
+	Skills        []string               `json:"skills"`
+	Expertise     []string               `json:"expertise,omitempty"`
+	// PactBoon and Invocations are the Warlock class-feature choices (ISSUE-060).
+	// PactBoon is a pact-boon id (refdata.PactBoonCatalog); Invocations is a list
+	// of Eldritch Invocation ids (refdata.InvocationCatalog). Both resolve into
+	// character.Feature entries via injectClassFeatureChoices — an invocation id
+	// doubles as the clean-slug mechanical_effect the combat engine reads.
+	PactBoon        string   `json:"pact_boon,omitempty"`
+	Invocations     []string `json:"invocations,omitempty"`
+	Equipment       []string `json:"equipment,omitempty"`
+	Spells          []string `json:"spells,omitempty"`
+	WeaponMasteries []string `json:"weapon_masteries,omitempty"`
+	Languages       []string `json:"languages,omitempty"`
+	EquippedWeapon  string   `json:"equipped_weapon,omitempty"`
+	WornArmor       string   `json:"worn_armor,omitempty"`
 	// Appearance and Backstory are optional free-form descriptive text. They
 	// are display-only flavor (never validated, never queried) — persisted in
 	// the character_data JSONB bag. See character.CharacterProfile.
@@ -229,24 +236,29 @@ func validateAbilityForMode(s CharacterSubmission, mode CreateMode) []string {
 // Classes drives the JSONB classes column when non-empty; otherwise the
 // adapter falls back to a single ClassEntry built from Class/Subclass.
 type CreateCharacterParams struct {
-	CampaignID      string
-	Name            string
-	Race            string
-	Subrace         string
-	Class           string
-	Subclass        string
-	Classes         []character.ClassEntry
-	Background      string
-	AbilityScores   character.AbilityScores
-	HPMax           int
-	AC              int
-	SpeedFt         int
-	ProfBonus       int
-	Skills          []string
-	Saves           []string
-	Expertise       []string
-	Equipment       []string
-	Spells          []string
+	CampaignID    string
+	Name          string
+	Race          string
+	Subrace       string
+	Class         string
+	Subclass      string
+	Classes       []character.ClassEntry
+	Background    string
+	AbilityScores character.AbilityScores
+	HPMax         int
+	AC            int
+	SpeedFt       int
+	ProfBonus     int
+	Skills        []string
+	Saves         []string
+	Expertise     []string
+	Equipment     []string
+	Spells        []string
+	// GrantedSpells are Warlock Eldritch-Invocation granted spells, persisted
+	// under a SEPARATE character_data "granted_spells" key (not merged into
+	// Spells) so the known-spell budget stays honest. See
+	// invocationGrantedSpellsForSubmission.
+	GrantedSpells   []string
 	WeaponMasteries []string
 	Languages       []string
 	Features        []character.Feature
@@ -526,6 +538,11 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 	if err := validateSubmittedExpertise(sub); err != nil {
 		errs = append(errs, err.Error())
 	}
+	// ISSUE-060: reject illegal Warlock pact-boon / Eldritch Invocation picks
+	// (non-warlock, over the warlock-level grant, unmet prereqs, unknown ids).
+	if err := validateSubmittedClassFeatures(sub); err != nil {
+		errs = append(errs, err.Error())
+	}
 	if len(errs) > 0 {
 		return CreateCharacterParams{}, errs
 	}
@@ -541,6 +558,9 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 			svc.featureProvider.RacialTraits(sub.Race),
 		)
 	}
+	// ISSUE-060: resolve Warlock pact-boon / invocation picks into concrete
+	// features (clean-slug mechanical_effect), replacing the choose_* placeholders.
+	features = injectClassFeatureChoices(features, sub)
 
 	// Honour explicitly chosen skills (the builder UI lets the player/DM
 	// pick them); fall back to the class+background defaults when none were
@@ -569,6 +589,7 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 		Expertise:       expertiseSkillsForSubmission(sub),
 		Equipment:       sub.Equipment,
 		Spells:          sub.Spells,
+		GrantedSpells:   invocationGrantedSpellsForSubmission(sub),
 		WeaponMasteries: sub.WeaponMasteries,
 		Languages:       sub.Languages,
 		Features:        features,
@@ -829,6 +850,9 @@ func (svc *BuilderService) Preview(ctx context.Context, sub CharacterSubmission)
 			svc.featureProvider.RacialTraits(sub.Race),
 		)
 	}
+	// ISSUE-060: mirror the create path so the Review step previews resolved
+	// pact-boon / invocation features (not the choose_* placeholders).
+	stats.Features = injectClassFeatureChoices(stats.Features, sub)
 	return stats
 }
 

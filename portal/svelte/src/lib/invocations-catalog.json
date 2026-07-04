@@ -1,0 +1,247 @@
+{
+  "pact_boons": [
+    {
+      "id": "pact_of_the_blade",
+      "name": "Pact of the Blade",
+      "description": "You can use your action to create a pact weapon in your empty hand. You are proficient with it while you wield it, and can use your Charisma for its attack and damage rolls."
+    },
+    {
+      "id": "pact_of_the_chain",
+      "name": "Pact of the Chain",
+      "description": "You learn the find familiar spell and can cast it as a ritual. Your familiar can take special forms (imp, pseudodragon, quasit, or sprite) and you can forgo an attack to let it use its reaction to attack."
+    },
+    {
+      "id": "pact_of_the_tome",
+      "name": "Pact of the Tome",
+      "description": "Your patron gives you a Book of Shadows holding three cantrips of your choice from any class's spell list, which you can cast at will."
+    },
+    {
+      "id": "pact_of_the_talisman",
+      "name": "Pact of the Talisman",
+      "description": "Your patron gives you an amulet. While you wear it, you can add a d4 to a failed ability check a number of times per long rest equal to your proficiency bonus.",
+      "edition": "2014"
+    }
+  ],
+  "invocations": [
+    {
+      "id": "agonizing_blast",
+      "name": "Agonizing Blast",
+      "description": "When you cast eldritch blast, add your Charisma modifier to the damage it deals on a hit.",
+      "prereq": {
+        "requires_eldritch_blast": true
+      }
+    },
+    {
+      "id": "eldritch_spear",
+      "name": "Eldritch Spear",
+      "description": "When you cast eldritch blast, its range is 300 feet.",
+      "prereq": {
+        "requires_eldritch_blast": true
+      }
+    },
+    {
+      "id": "repelling_blast",
+      "name": "Repelling Blast",
+      "description": "When you hit a creature with eldritch blast, you can push it up to 10 feet away from you in a straight line.",
+      "prereq": {
+        "requires_eldritch_blast": true
+      }
+    },
+    {
+      "id": "armor_of_shadows",
+      "name": "Armor of Shadows",
+      "description": "You can cast mage armor on yourself at will, without expending a spell slot or material components.",
+      "prereq": {},
+      "grants_spells": [
+        "mage-armor"
+      ]
+    },
+    {
+      "id": "beast_speech",
+      "name": "Beast Speech",
+      "description": "You can cast speak with animals at will, without expending a spell slot.",
+      "prereq": {},
+      "grants_spells": [
+        "speak-with-animals"
+      ]
+    },
+    {
+      "id": "beguiling_influence",
+      "name": "Beguiling Influence",
+      "description": "You gain proficiency in the Deception and Persuasion skills.",
+      "prereq": {}
+    },
+    {
+      "id": "devils_sight",
+      "name": "Devil's Sight",
+      "description": "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet.",
+      "prereq": {}
+    },
+    {
+      "id": "eldritch_sight",
+      "name": "Eldritch Sight",
+      "description": "You can cast detect magic at will, without expending a spell slot.",
+      "prereq": {},
+      "grants_spells": [
+        "detect-magic"
+      ]
+    },
+    {
+      "id": "fiendish_vigor",
+      "name": "Fiendish Vigor",
+      "description": "You can cast false life on yourself at will as a 1st-level spell, without expending a spell slot or material components.",
+      "prereq": {},
+      "grants_spells": [
+        "false-life"
+      ]
+    },
+    {
+      "id": "mask_of_many_faces",
+      "name": "Mask of Many Faces",
+      "description": "You can cast disguise self at will, without expending a spell slot.",
+      "prereq": {},
+      "grants_spells": [
+        "disguise-self"
+      ]
+    },
+    {
+      "id": "misty_visions",
+      "name": "Misty Visions",
+      "description": "You can cast silent image at will, without expending a spell slot or material components.",
+      "prereq": {},
+      "grants_spells": [
+        "silent-image"
+      ]
+    },
+    {
+      "id": "thief_of_five_fates",
+      "name": "Thief of Five Fates",
+      "description": "You can cast bane once using a warlock spell slot. You can't do so again until you finish a long rest.",
+      "prereq": {},
+      "grants_spells": [
+        "bane"
+      ]
+    },
+    {
+      "id": "book_of_ancient_secrets",
+      "name": "Book of Ancient Secrets",
+      "description": "You can inscribe magic ritual spells into your Book of Shadows and cast them as rituals.",
+      "prereq": {
+        "requires_pact_boon": "pact_of_the_tome"
+      }
+    },
+    {
+      "id": "voice_of_the_chain_master",
+      "name": "Voice of the Chain Master",
+      "description": "You can communicate telepathically with your familiar and perceive through its senses as long as you are on the same plane.",
+      "prereq": {
+        "requires_pact_boon": "pact_of_the_chain"
+      }
+    },
+    {
+      "id": "thirsting_blade",
+      "name": "Thirsting Blade",
+      "description": "You can attack with your pact weapon twice, instead of once, whenever you take the Attack action on your turn.",
+      "prereq": {
+        "min_warlock_level": 5,
+        "requires_pact_boon": "pact_of_the_blade"
+      }
+    },
+    {
+      "id": "lifedrinker",
+      "name": "Lifedrinker",
+      "description": "When you hit a creature with your pact weapon, it takes extra necrotic damage equal to your Charisma modifier (minimum 1).",
+      "prereq": {
+        "min_warlock_level": 12,
+        "requires_pact_boon": "pact_of_the_blade"
+      }
+    },
+    {
+      "id": "one_with_shadows",
+      "name": "One with Shadows",
+      "description": "When you are in an area of dim light or darkness, you can use your action to become invisible until you move or take an action or reaction.",
+      "prereq": {
+        "min_warlock_level": 5
+      }
+    },
+    {
+      "id": "bewitching_whispers",
+      "name": "Bewitching Whispers",
+      "description": "You can cast compulsion once using a warlock spell slot. You can't do so again until you finish a long rest.",
+      "prereq": {
+        "min_warlock_level": 7
+      },
+      "grants_spells": [
+        "compulsion"
+      ]
+    },
+    {
+      "id": "sculptor_of_flesh",
+      "name": "Sculptor of Flesh",
+      "description": "You can cast polymorph once using a warlock spell slot. You can't do so again until you finish a long rest.",
+      "prereq": {
+        "min_warlock_level": 7
+      },
+      "grants_spells": [
+        "polymorph"
+      ]
+    },
+    {
+      "id": "ascendant_step",
+      "name": "Ascendant Step",
+      "description": "You can cast levitate on yourself at will, without expending a spell slot or material components.",
+      "prereq": {
+        "min_warlock_level": 9
+      },
+      "grants_spells": [
+        "levitate"
+      ]
+    },
+    {
+      "id": "eldritch_mind",
+      "name": "Eldritch Mind",
+      "description": "You have advantage on Constitution saving throws that you make to maintain concentration.",
+      "prereq": {},
+      "edition": "2024"
+    },
+    {
+      "id": "lessons_of_the_first_ones",
+      "name": "Lessons of the First Ones",
+      "description": "You have received esoteric lessons from your patron. You gain one Origin feat of your choice. (This invocation can be taken more than once.)",
+      "prereq": {},
+      "edition": "2024"
+    },
+    {
+      "id": "otherworldly_leap",
+      "name": "Otherworldly Leap",
+      "description": "You always have the jump spell prepared. You can cast it without expending a spell slot.",
+      "prereq": {
+        "min_warlock_level": 5
+      },
+      "grants_spells": [
+        "jump"
+      ],
+      "edition": "2024"
+    },
+    {
+      "id": "investment_of_the_chain_master",
+      "name": "Investment of the Chain Master",
+      "description": "Your Pact of the Chain familiar gains a flying and swimming speed of 40 feet, and its attacks count as magical. As a bonus action you can command it to take the Attack action, and you can give it temporary hit points equal to your Warlock level.",
+      "prereq": {
+        "min_warlock_level": 5,
+        "requires_pact_boon": "pact_of_the_chain"
+      },
+      "edition": "2024"
+    },
+    {
+      "id": "gift_of_the_protectors",
+      "name": "Gift of the Protectors",
+      "description": "When a creature whose name is written in your Book of Shadows is reduced to 0 hit points but not killed outright, that creature instead drops to 1 hit point. Once used, this invocation can't be used again until you finish a long rest.",
+      "prereq": {
+        "min_warlock_level": 9,
+        "requires_pact_boon": "pact_of_the_tome"
+      },
+      "edition": "2024"
+    }
+  ]
+}

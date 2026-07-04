@@ -1,6 +1,46 @@
 package portal
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sqlc-dev/pqtype"
+)
+
+// P5: extractSpells surfaces invocation-granted spells (character_data.
+// granted_spells) alongside the known spells, tagging granted-only entries
+// Source "invocation" and de-duplicating against the known list.
+func TestExtractSpells_IncludesGrantedSpells(t *testing.T) {
+	raw := pqtype.NullRawMessage{
+		RawMessage: []byte(`{"spells":["fire-bolt","disguise-self"],"granted_spells":["disguise-self","mage-armor"]}`),
+		Valid:      true,
+	}
+
+	entries := extractSpells(raw)
+
+	byID := map[string]SpellDisplayEntry{}
+	for _, e := range entries {
+		if _, dup := byID[e.ID]; dup {
+			t.Errorf("duplicate entry for %q", e.ID)
+		}
+		byID[e.ID] = e
+	}
+
+	if _, ok := byID["fire-bolt"]; !ok {
+		t.Error("known spell fire-bolt missing")
+	}
+	mage, ok := byID["mage-armor"]
+	if !ok {
+		t.Fatal("granted-only spell mage-armor missing")
+	}
+	if mage.Source != "invocation" {
+		t.Errorf("mage-armor Source = %q, want invocation", mage.Source)
+	}
+	// disguise-self is in both lists: the known entry wins (no duplicate, not
+	// re-tagged as invocation).
+	if got := byID["disguise-self"]; got.Source == "invocation" {
+		t.Error("disguise-self is a known spell; must not be re-tagged as invocation")
+	}
+}
 
 func TestSpellHeadline(t *testing.T) {
 	tests := []struct {
