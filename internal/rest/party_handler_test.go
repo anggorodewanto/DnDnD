@@ -77,6 +77,143 @@ func newTestCharInfo(name string, id uuid.UUID, discordUserID string) PartyChara
 	}
 }
 
+// fixedRoller returns a roller whose every die shows the given face value,
+// for deterministic hit-die healing assertions.
+func fixedRoller(face int) *dice.Roller {
+	return dice.NewRoller(func(int) int { return face })
+}
+
+// --- TDD: DM spend-hit-dice endpoint (single character, out of combat) ---
+
+func newSpendHitDiceHandler(chars []PartyCharacterInfo, updater *mockCharacterUpdater, notifier *mockNotifier, inCombat bool) *PartyRestHandler {
+	return NewPartyRestHandler(
+		NewService(fixedRoller(5)),
+		&mockCharacterLister{characters: chars},
+		updater,
+		&mockEncounterChecker{active: inCombat},
+		notifier,
+		&mockSummaryPoster{},
+	)
+}
+
+func postSpendHitDice(h *PartyRestHandler, req SpendHitDiceRequest) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(req)
+	r := httptest.NewRequest(http.MethodPost, "/api/campaigns/x/spend-hit-dice", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleSpendHitDice(w, r)
+	return w
+}
+
+func TestPartyRestHandler_SpendHitDice_HealsAndDecrements(t *testing.T) {
+	charID := uuid.New()
+	char := newTestCharInfo("Forge", charID, "user-1") // HP 20/40, CON +2, 5×d10
+	// Rage below max proves features are neither recharged nor wiped.
+	char.FeatureUses = map[string]character.FeatureUse{
+		"rage": {Max: 3, Current: 1, Recharge: "long"},
+	}
+	updater := &mockCharacterUpdater{}
+	notifier := &mockNotifier{}
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, updater, notifier, false)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: charID, CampaignID: uuid.New(), NumDice: 2})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(updater.updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updater.updates))
+	}
+	up := updater.updates[0]
+	if up.HPCurrent != 34 { // 2×(5+2 CON) = 14; 20 -> 34
+		t.Errorf("HPCurrent = %d, want 34", up.HPCurrent)
+	}
+	if up.HitDiceRemaining["d10"] != 3 {
+		t.Errorf("d10 remaining = %d, want 3", up.HitDiceRemaining["d10"])
+	}
+	if got := up.FeatureUses["rage"].Current; got != 1 {
+		t.Errorf("rage current = %d, want 1 (must not recharge or wipe features)", got)
+	}
+	if len(notifier.notifications) != 1 {
+		t.Fatalf("expected 1 notification, got %d", len(notifier.notifications))
+	}
+}
+
+func TestPartyRestHandler_SpendHitDice_CapsAtMaxHP(t *testing.T) {
+	charID := uuid.New()
+	char := newTestCharInfo("Forge", charID, "user-1")
+	char.HPCurrent = 38 // 2 below max 40
+	updater := &mockCharacterUpdater{}
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, updater, &mockNotifier{}, false)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: charID, NumDice: 2})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	up := updater.updates[0]
+	if up.HPCurrent != 40 {
+		t.Errorf("HPCurrent = %d, want 40 (capped)", up.HPCurrent)
+	}
+	if up.HitDiceRemaining["d10"] != 3 { // both dice still consumed
+		t.Errorf("d10 remaining = %d, want 3", up.HitDiceRemaining["d10"])
+	}
+}
+
+func TestPartyRestHandler_SpendHitDice_RejectsDuringCombat(t *testing.T) {
+	charID := uuid.New()
+	char := newTestCharInfo("Forge", charID, "user-1")
+	updater := &mockCharacterUpdater{}
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, updater, &mockNotifier{}, true)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: charID, NumDice: 1})
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+	if len(updater.updates) != 0 {
+		t.Errorf("expected no update in combat, got %d", len(updater.updates))
+	}
+}
+
+func TestPartyRestHandler_SpendHitDice_RejectsMoreThanAvailable(t *testing.T) {
+	charID := uuid.New()
+	char := newTestCharInfo("Forge", charID, "user-1") // 5×d10
+	updater := &mockCharacterUpdater{}
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, updater, &mockNotifier{}, false)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: charID, NumDice: 6})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if len(updater.updates) != 0 {
+		t.Errorf("expected no update on over-spend, got %d", len(updater.updates))
+	}
+}
+
+func TestPartyRestHandler_SpendHitDice_RejectsNonPositiveDice(t *testing.T) {
+	charID := uuid.New()
+	char := newTestCharInfo("Forge", charID, "user-1")
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, &mockCharacterUpdater{}, &mockNotifier{}, false)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: charID, NumDice: 0})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestPartyRestHandler_SpendHitDice_CharacterNotFound(t *testing.T) {
+	char := newTestCharInfo("Forge", uuid.New(), "user-1")
+	h := newSpendHitDiceHandler([]PartyCharacterInfo{char}, &mockCharacterUpdater{}, &mockNotifier{}, false)
+
+	w := postSpendHitDice(h, SpendHitDiceRequest{CharacterID: uuid.New(), NumDice: 1})
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
 // --- TDD Cycle 8: Party long rest applies to all selected characters ---
 
 func TestPartyRestHandler_LongRest_AppliesAll(t *testing.T) {

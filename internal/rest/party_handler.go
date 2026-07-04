@@ -3,7 +3,9 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/inventory"
@@ -264,6 +266,154 @@ func (h *PartyRestHandler) applyCharShortRest(ctx context.Context, c PartyCharac
 	}
 	_ = h.updater.ApplyRestUpdate(ctx, update)
 	return true
+}
+
+// SpendHitDiceRequest is the JSON body for the DM spend-hit-dice endpoint.
+type SpendHitDiceRequest struct {
+	CharacterID uuid.UUID `json:"character_id"`
+	CampaignID  uuid.UUID `json:"campaign_id"`
+	NumDice     int       `json:"num_dice"`
+}
+
+// HandleSpendHitDice lets the DM spend a single character's hit dice out of
+// combat — rolling 1dX + CON each, healing (capped at max HP) and decrementing
+// the dice. It is the DM-side fix for a player who took a short rest but skipped
+// the hit-dice prompt: nothing was consumed, so the dice are still available.
+//
+// It deliberately spends hit dice ONLY — it does not re-recharge short-rest
+// features or pact-magic slots (that would double-dip a character who already
+// rested and has since spent those resources).
+func (h *PartyRestHandler) HandleSpendHitDice(w http.ResponseWriter, r *http.Request) {
+	var req SpendHitDiceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.NumDice < 1 {
+		http.Error(w, "num_dice must be at least 1", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	if h.encounter.HasActiveEncounter(ctx, req.CampaignID) {
+		http.Error(w, "cannot spend hit dice during active combat", http.StatusConflict)
+		return
+	}
+
+	allChars, err := h.lister.ListPartyCharacters(ctx, req.CampaignID)
+	if err != nil {
+		http.Error(w, "failed to list characters", http.StatusInternalServerError)
+		return
+	}
+
+	var target *PartyCharacterInfo
+	for i := range allChars {
+		if allChars[i].ID == req.CharacterID {
+			target = &allChars[i]
+			break
+		}
+	}
+	if target == nil {
+		http.Error(w, "character not found in campaign", http.StatusNotFound)
+		return
+	}
+
+	spend, err := buildHitDiceSpend(target.HitDiceRemaining, req.NumDice)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.spendHitDice(ctx, *target, spend)
+	if err != nil {
+		http.Error(w, "failed to spend hit dice", http.StatusInternalServerError)
+		return
+	}
+
+	_ = h.notifier.NotifyPlayer(ctx, PlayerNotification{
+		DiscordUserID: target.DiscordUserID,
+		CharacterName: target.Name,
+		Message:       FormatShortRestResult(target.Name, result),
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":             "ok",
+		"hp_before":          result.HPBefore,
+		"hp_after":           result.HPAfter,
+		"hp_max":             result.HPMax,
+		"hp_healed":          result.HPHealed,
+		"hit_dice_remaining": result.HitDiceRemaining,
+		"rolls":              result.HitDieRolls,
+	})
+}
+
+// spendHitDice rolls the given hit-dice spend for one character and persists the
+// healed HP + decremented dice, leaving all other resources untouched. It feeds
+// the rest service nil feature/pact inputs so only the hit-dice loop runs, then
+// re-writes the character's existing FeatureUses/PactMagicSlots unchanged so the
+// updater's unconditional marshal cannot null them out.
+func (h *PartyRestHandler) spendHitDice(ctx context.Context, c PartyCharacterInfo, spend map[string]int) (ShortRestResult, error) {
+	result, err := h.restService.ShortRest(ShortRestInput{
+		HPCurrent:        c.HPCurrent,
+		HPMax:            c.HPMax,
+		CONModifier:      c.CONModifier,
+		HitDiceRemaining: c.HitDiceRemaining,
+		HitDiceSpend:     spend,
+	})
+	if err != nil {
+		return ShortRestResult{}, err
+	}
+
+	if err := h.updater.ApplyRestUpdate(ctx, CharacterRestUpdate{
+		CharacterID:      c.ID,
+		HPCurrent:        result.HPAfter,
+		HitDiceRemaining: result.HitDiceRemaining,
+		FeatureUses:      c.FeatureUses,
+		PactMagicSlots:   c.PactMagicSlots,
+		ExhaustionLevel:  c.ExhaustionLevel,
+	}); err != nil {
+		return ShortRestResult{}, err
+	}
+
+	return result, nil
+}
+
+// buildHitDiceSpend allocates numDice hit dice from a character's remaining
+// pools, drawing from the largest die first (best expected healing). It errors
+// when the character has fewer than numDice hit dice available.
+func buildHitDiceSpend(remaining map[string]int, numDice int) (map[string]int, error) {
+	total := 0
+	for _, n := range remaining {
+		total += n
+	}
+	if numDice > total {
+		return nil, fmt.Errorf("cannot spend %d hit dice, only %d remaining", numDice, total)
+	}
+
+	types := make([]string, 0, len(remaining))
+	for dt := range remaining {
+		types = append(types, dt)
+	}
+	sort.Slice(types, func(i, j int) bool {
+		return character.HitDieValue(types[i]) > character.HitDieValue(types[j])
+	})
+
+	spend := map[string]int{}
+	left := numDice
+	for _, dt := range types {
+		if left == 0 {
+			break
+		}
+		take := min(remaining[dt], left)
+		if take > 0 {
+			spend[dt] = take
+			left -= take
+		}
+	}
+	return spend, nil
 }
 
 // RegisterPartyRestRoutes registers party rest API endpoints on the given mux.

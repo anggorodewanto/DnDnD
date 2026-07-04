@@ -156,6 +156,7 @@ func mountPartyRestRoutes(r chi.Router, authMw func(http.Handler) http.Handler, 
 	}
 	r.With(authMw).Post("/api/campaigns/{campaignID}/party-rest", h.HandlePartyRest)
 	r.With(authMw).Post("/api/campaigns/{campaignID}/interrupt-rest", h.HandleInterruptRest)
+	r.With(authMw).Post("/api/campaigns/{campaignID}/spend-hit-dice", h.HandleSpendHitDice)
 }
 
 // --- Party-rest adapters ---
