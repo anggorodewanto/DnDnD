@@ -272,12 +272,12 @@ func (s *Service) InsertSummonIntoInitiative(ctx context.Context, encounterID, c
 		return refdata.Combatant{}, fmt.Errorf("getting creature for initiative: %w", err)
 	}
 
-	dexMod, err := s.getDexModifier(ctx, creature)
+	dexMod, featBonus, err := s.getInitiativeModifiers(ctx, creature)
 	if err != nil {
-		return refdata.Combatant{}, fmt.Errorf("getting dex modifier: %w", err)
+		return refdata.Combatant{}, fmt.Errorf("getting initiative modifiers: %w", err)
 	}
 
-	result, err := roller.RollD20(dexMod, dice.Normal)
+	result, err := roller.RollD20(dexMod+featBonus, dice.Normal)
 	if err != nil {
 		return refdata.Combatant{}, fmt.Errorf("rolling initiative: %w", err)
 	}

@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert slice DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -517,6 +517,25 @@ Tests: `savage_attacker_test.go` (eligibility gate; reroll keeps higher / keeps 
 `ResolveAttack` melee reroll + ranged-no-reroll + already-used-no-reroll; `Service.Attack`
 end-to-end feat→reroll; log tag). Coverage: gates met (90% overall / 85% per-pkg).
 
+**Shipped (Alert slice).** Alert is initiative-wired: a character with the feat gets **+5 to their
+initiative roll** (the seeded 2014 shape). New `combat/alert.go`: `alertInitiativeBonus(featuresJSON)`
+returns 5 when `HasFeatureByName(..., "Alert")` (name-based, GWM/Savage precedent). `getDexModifier`
+was renamed `getInitiativeModifiers` returning `(dexMod, featBonus, err)` from the **same single
+`GetCharacter` fetch** (it previously read DEX and discarded the character); `RollInitiative` and
+`InsertSummonIntoInitiative` add `featBonus` to the `RollD20` modifier. The +5 lands in the roll
+**total** only — `InitiativeEntry.DexMod` stays pure so `SortByInitiative`'s DEX tie-break is
+unaffected (RAW: Alert adds to the result, not to DEX). Creatures carry no features → `featBonus=0`,
+so monster/summon initiative is unchanged. No seed/data change. Tests: `alert_test.go`
+(`alertInitiativeBonus` present/absent/case-insensitive/nil; `RollInitiative` +5 in the recorded roll
+and beating a higher-DEX rogue; `getInitiativeModifiers` creature→0 bonus). Coverage: gates met.
+**Altitude (why no FES):** the Feature Effect System has **no initiative trigger point, no
+`EffectModifyInitiative` type, and no `ProcessEffects` consumer anywhere in the initiative path** —
+Alert is the first feature ever to touch an initiative roll. A call-site helper is the right depth
+(mirrors Savage Attacker); generalize to a `TriggerOnInitiative` lane when a *second* initiative
+modifier is built (the seeded-but-unwired Ranger "Natural Explorer" `advantage_initiative` is the
+next candidate). DEFERRED: Alert's "can't be surprised" + "no advantage from unseen attackers"
+(needs surprise / attacker-visibility tracking); 2024 shape (bonus = proficiency bonus + init-swap).
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -531,7 +550,8 @@ feat (or a wired GWF) needs it.
 - **Off-hand / GWM-bonus reroll already covered** — all three paths share the flag; no extra work.
 
 **Wired today:** GWM, Sharpshooter, Defensive Duelist, Crossbow Expert (partial),
-Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**.
+Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**,
+**Alert (COV-9, +5 initiative)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
@@ -542,8 +562,9 @@ slug in combat):
 | Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` |
 | Shield Master | bonus-action shove; DEX-save damage evasion | mastery push `applyPushEffect`; save rider |
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
-| War Caster | advantage on concentration saves; cast as OA | concentration save hook `concentration.go:324` |
-| Charger / Mobile / Alert / Lucky / Mage Slayer / Heavy Armor Master / Tough | movement / init / reroll / damage-reduction riders | various — scope each |
+| ~~Alert~~ **DONE 2026-07-05** | +5 initiative (2014) | `alert.go` — `alertInitiativeBonus` at the `RollInitiative` roll site (`getInitiativeModifiers`); +5 in the roll total, DexMod tie-break kept pure |
+| War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |
+| Charger / Mobile / Lucky / Mage Slayer / Heavy Armor Master / Tough | movement / reroll / damage-reduction / max-HP riders | various — scope each; HAM needs a magical/non-magical damage flag (absent from `ApplyDamageInput`); Tough threads feats into `CalculateHP` (×4 callers + levelup delta) |
 
 **Also:** Crossbow Expert's **bonus-action hand-crossbow attack** is not wired (only its
 loading-ignore + no-disadvantage-in-melee are).

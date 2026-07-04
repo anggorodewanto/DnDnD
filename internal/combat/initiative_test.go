@@ -768,21 +768,22 @@ func TestService_AdvanceTurn_SkipsDeadCombatants(t *testing.T) {
 	assert.Equal(t, aliveID, turnInfo.CombatantID)
 }
 
-// --- TDD Cycle 11: getDexModifier edge cases ---
+// --- TDD Cycle 11: getInitiativeModifiers edge cases ---
 
-func TestService_getDexModifier_NeitherCharacterNorCreature(t *testing.T) {
+func TestService_getInitiativeModifiers_NeitherCharacterNorCreature(t *testing.T) {
 	store := defaultMockStore()
 	svc := NewService(store)
 	combatant := refdata.Combatant{
 		CharacterID:   uuid.NullUUID{},
 		CreatureRefID: sql.NullString{},
 	}
-	mod, err := svc.getDexModifier(context.Background(), combatant)
+	mod, featBonus, err := svc.getInitiativeModifiers(context.Background(), combatant)
 	require.NoError(t, err)
 	assert.Equal(t, 0, mod)
+	assert.Equal(t, 0, featBonus)
 }
 
-func TestService_getDexModifier_BadCreatureAbilityScores(t *testing.T) {
+func TestService_getInitiativeModifiers_BadCreatureAbilityScores(t *testing.T) {
 	store := defaultMockStore()
 	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
 		return refdata.Creature{AbilityScores: json.RawMessage(`invalid`)}, nil
@@ -791,7 +792,7 @@ func TestService_getDexModifier_BadCreatureAbilityScores(t *testing.T) {
 	combatant := refdata.Combatant{
 		CreatureRefID: sql.NullString{String: "bad", Valid: true},
 	}
-	_, err := svc.getDexModifier(context.Background(), combatant)
+	_, _, err := svc.getInitiativeModifiers(context.Background(), combatant)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing creature ability scores")
 }
@@ -1076,7 +1077,7 @@ func TestFormatInitiativeTracker_NoPCHP(t *testing.T) {
 	assert.NotContains(t, result, "HP")
 }
 
-func TestService_getDexModifier_BadCharacterAbilityScores(t *testing.T) {
+func TestService_getInitiativeModifiers_BadCharacterAbilityScores(t *testing.T) {
 	store := defaultMockStore()
 	charID := uuid.New()
 	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -1086,7 +1087,7 @@ func TestService_getDexModifier_BadCharacterAbilityScores(t *testing.T) {
 	combatant := refdata.Combatant{
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 	}
-	_, err := svc.getDexModifier(context.Background(), combatant)
+	_, _, err := svc.getInitiativeModifiers(context.Background(), combatant)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing character ability scores")
 }

@@ -249,24 +249,32 @@ func dexModFromScores(raw json.RawMessage, label string) (int, error) {
 	return AbilityModifier(scores.Dex), nil
 }
 
-// getDexModifier returns the DEX modifier for a combatant by looking up
-// the character or creature ability scores.
-func (s *Service) getDexModifier(ctx context.Context, c refdata.Combatant) (int, error) {
+// getInitiativeModifiers returns a combatant's initiative modifiers from a
+// single ability-score lookup: dexMod (added to the roll and used for the
+// initiative tie-break) and featBonus (flat feat bonuses added only to the roll
+// total — currently the Alert feat's +5). Creatures carry no feats, so their
+// featBonus is always 0.
+func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatant) (dexMod, featBonus int, err error) {
 	if c.CharacterID.Valid {
 		char, err := s.store.GetCharacter(ctx, c.CharacterID.UUID)
 		if err != nil {
-			return 0, fmt.Errorf("getting character %s: %w", c.CharacterID.UUID, err)
+			return 0, 0, fmt.Errorf("getting character %s: %w", c.CharacterID.UUID, err)
 		}
-		return dexModFromScores(char.AbilityScores, "character")
+		dexMod, err = dexModFromScores(char.AbilityScores, "character")
+		if err != nil {
+			return 0, 0, err
+		}
+		return dexMod, alertInitiativeBonus(char.Features.RawMessage), nil
 	}
 	if c.CreatureRefID.Valid {
 		creature, err := s.store.GetCreature(ctx, c.CreatureRefID.String)
 		if err != nil {
-			return 0, fmt.Errorf("getting creature %s: %w", c.CreatureRefID.String, err)
+			return 0, 0, fmt.Errorf("getting creature %s: %w", c.CreatureRefID.String, err)
 		}
-		return dexModFromScores(creature.AbilityScores, "creature")
+		dexMod, err = dexModFromScores(creature.AbilityScores, "creature")
+		return dexMod, 0, err
 	}
-	return 0, nil
+	return 0, 0, nil
 }
 
 // RollInitiative rolls initiative for all combatants in an encounter, sorts them,
@@ -293,11 +301,11 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 
 	entries := make([]InitiativeEntry, len(rollable))
 	for i, c := range rollable {
-		dexMod, err := s.getDexModifier(ctx, c)
+		dexMod, featBonus, err := s.getInitiativeModifiers(ctx, c)
 		if err != nil {
 			return nil, err
 		}
-		result, err := roller.RollD20(dexMod, dice.Normal)
+		result, err := roller.RollD20(dexMod+featBonus, dice.Normal)
 		if err != nil {
 			return nil, fmt.Errorf("rolling initiative for %s: %w", c.DisplayName, err)
 		}
