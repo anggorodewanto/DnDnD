@@ -82,680 +82,86 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 
 ---
 
+## Recurring gotchas / architecture notes
+
+Durable, non-obvious traps that keep recurring — read before touching combat / state code.
+
+- **`action_log.before_state` / `after_state` are `NOT NULL`.** Every writer must populate
+  both columns or the INSERT crashes. Root cause of ISSUE-018 (enemy-turn crash) and, on the
+  player path, ISSUE-025 (best-effort writes silently dropped); the same NOT-NULL class first
+  bit ISSUE-008 (`languages`). The player path is now guarded by the `rawMessageOrEmptyObject`
+  choke point.
+- **Two HP stores + read-side overlay, no mid-combat write-back.** `characters.hp_current` is the
+  static base sheet; `combatants.hp_current` is the live per-encounter snapshot, seeded at
+  StartCombat and never written back mid-fight. Sheets overlay the live combatant while an
+  encounter is active (ISSUE-020); at End Combat the overlay vanishes, so the boundary carries
+  state back once (ISSUE-038). The same split governs pact slots (ISSUE-022).
+- **Condition-shape mismatch: dashboard vs engine.** The engine stores conditions as objects
+  (`[{condition:"paralyzed",...}]`, read by `parseConditions`); dashboard writers once sent bare
+  string arrays (`["paralyzed"]`) that parse to empty → the condition rendered but its mechanical
+  effects never fired (ISSUE-015). Server-side `reconcileConditionNames` is now the
+  canonical-shape boundary.
+- **"Invisible-to-timeline" class.** Combat outcomes reach the Discord #combat-log via
+  `FormatAttackLog` / `FormatCastLog`, but the DM Console timeline uses the separate
+  `describeAttack` / `describeCast` path — so cleave / graze / spell-outcome / on-hit-rider detail
+  can silently miss the Console. ISSUE-031 (cleave) FIXED is the pattern; still-OPEN 032 (graze),
+  033 (cast outcomes), 034 (attack riders) are the same class.
+
 ## Details
 
-### ISSUE-062 — Off-hand Light-extra had no once-per-turn cap (3 attacks with no feat) (FIXED)
-- **Date:** 2026-07-03
-- **Found by:** DM review of Windreth (Rogue, dagger[Nick] main + shortsword[Vex] off), while resolving the ISSUE-061 loadout note. Sibling of ISSUE-061.
-- **Root cause:** `OffhandAttack` (`internal/combat/attack.go`) gated the two-weapon-fighting off-hand swing on only two things: bonus action available (`ValidateResource(ResourceBonusAction)`) and the Attack action already taken this turn (`AttacksRemaining < maxAttacks`). It had **no once-per-turn cap** on the Light-property extra itself. **Nick** (`nickAbsorbsBonusAction`) makes the first off-hand swing free (bonus action NOT spent), so a second off-hand swing then found the bonus action still available and merely spent it — yielding **main attack + 2 off-hand swings = 3 attacks with no feat**. RAW: the Light-property extra attack is once per turn; a *second* extra requires the **Dual Wielder** feat.
-- **RAW target:** no Dual Wielder → 2 swings max (Attack + one Light extra; Nick only frees the bonus action, it does not grant a 3rd). Dual Wielder + Nick → 3 (Nick folds the extra into the Attack action → the freed bonus action pays the Dual Wielder extra). Dual Wielder *without* Nick → still 2 (the first off-hand spends the bonus action, so the second fails the pre-existing resource gate — falls out naturally, no special handling).
-- **Fix (single method, `OffhandAttack`):** two per-turn keys on the existing `usedEffects` tracker — `offhand_extra` (first Light extra made) and `dw_extra` (Dual Wielder extra made). Cap gate after the char load: if `offhand_extra` is already set this turn, reject unless `HasFeatureByName(char.Features.RawMessage, "Dual Wielder")` (the shape `ApplyFeat` persists — `Feature{Name:"Dual Wielder", Source:"feat"}`); if it *is* set and `dw_extra` is already set, reject with "no off-hand attacks remain". The Dual Wielder second swing costs the bonus action naturally because `nickAbsorbsBonusAction` returns false once `nick` is set (from the first swing). Keys are marked **after** the swing resolves, so a rejected/out-of-range swing never burns the slot (same discipline as the Nick mark).
-- **Tests:** new `internal/combat/twf_cap_test.go` — `TestOffhandAttack_SecondExtraRejectedWithoutDualWielder` (RED before fix: 2nd off-hand rejected re: Dual Wielder, only 1 swing resolves), `TestOffhandAttack_SecondExtraAllowedWithDualWielder` (2nd allowed + costs bonus action; 3rd capped "no off-hand attacks remain"), `TestOffhandAttack_PlainTWFStillOneOffhand` (regression: no Nick/no feat still one off-hand, 2nd fails the resource gate). Updated `cleave_nick_test.go` `TestServiceOffhandAttack_NickOncePerTurn` to grant Dual Wielder (its 2nd swing is now the legit DW extra — same "2nd off-hand costs the bonus action" assertion). Full `./internal/combat/` suite + `make cover-check` (90/85) green.
+### ISSUE-062 — Off-hand Light-extra had no once-per-turn cap (3 attacks with no feat) — RESOLVED · see git log / session-01.md
 
-### ISSUE-061 — Off-hand weapon-mastery on-hit effects never applied (FIXED)
-- **Date:** 2026-07-03
-- **Found by:** Windreth's player — off-hand shortsword (Vex) hit gave no advantage next round.
-- **Root cause:** The on-hit weapon-mastery effects (Vex → `vex_advantage` on attacker, Sap → `sap_disadvantage` on target, Topple → CON-save/Prone, Slow → `slowed`, Push → forced move) are applied by `s.applyMasteryEffects(...)`. Only the **main-hand** `Attack` path called it (`internal/combat/attack.go:1265`, after `applyHitDamage`). `OffhandAttack` correctly resolved the swing — `ResolveAttack` even set `result.MasteryProperty` for a known off-hand mastery — but the method **never called `applyMasteryEffects`**, so the effect was detected and then dropped. **Nick** is the exception: it's an action-economy change handled inline in the off-hand path (`nickAbsorbsBonusAction`, :1544), so it worked.
-- **Why it wasn't caught:** off-hand attacks are a distinct service method sharing `resolveAndPersistAttack` (roll + damage + action_log) but **not** the post-hit mastery/cleave block; the main-hand tests exercised mastery via `Attack`, so the gap sat in `OffhandAttack` only.
-- **Fix:** mirror the main-hand path — call `s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller)` in `OffhandAttack` right after `applyHitDamage` and **before** `consumeHelpAdvantage`. Safe because `consumeHelpAdvantage`/`consumeSapDisadvantage` read the stale passed-in `cmd.Attacker.Conditions` snapshot (pre-attack), not a fresh DB read, so the just-placed grant survives — identical to the working main-hand ordering. (Cleave can't occur off-hand: off-hand weapons must be Light, Cleave weapons are Heavy/two-handed, so no `applyCleaveAttack` call was needed.)
-- **Test:** `internal/combat/mastery_test.go` → `TestOffhandAttack_VexHitAppliesVexAdvantageToAttacker` (main-hand dagger + off-hand Vex shortsword the attacker knows → asserts `vex_advantage` written on the attacker, target-scoped). Red before, green after; full `./internal/combat/` suite green. Redeployed 08:01Z (`docker compose up -d --build app`).
-- **Loadout implication (not a bug):** Windreth's kit is dagger(main, Nick) + shortsword(off-hand, Vex). Nick only benefits a **Light off-hand** attack, so main-hand Nick is inert; and his shortsword Vex only fired once this fix landed. Optimal: **shortsword main-hand** (Vex advantage, always worked via the main path) + **dagger off-hand** (Nick → the extra Light attack rides the Attack action, freeing the bonus action). Offered to the player; his call.
+### ISSUE-061 — Off-hand weapon-mastery on-hit effects never applied — RESOLVED · see git log / session-01.md
 
-### ISSUE-001 — Warlock builder shows only cantrips (Pact Magic not derived)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / spellcasting
-- **Severity:** major — a warlock built via the web builder cannot pick any leveled
-  spell, only cantrips. Renders the class' core mechanic unusable from the UI.
-- **Status:** OPEN
-- **Repro:** Build a single-class warlock (level ≥ 1, observed at level 3) in
-  `/portal/create`. On the Spells step, cantrips (level 0) are selectable but all
-  level 1–2 spells are unselectable/greyed.
-- **Expected:** A level-3 warlock selects 2 cantrips **and** 4 known spells of
-  level ≤ 2 (Pact Magic slot level at L3 = 2).
-- **Actual:** Only cantrips selectable.
-- **Root cause (verified):** Pact Magic is not folded into the builder's max
-  spell level.
-  - `character.CalculateSpellSlots` returns `nil` for a single-class warlock:
-    the "half" branch is skipped (warlock is `"pact"`), then
-    `CalculateCasterLevel` maps `"pact"` → 0 (`internal/character/spellslots.go:68`,
-    `:129-145`).
-  - The builder derives `MaxSpellLevel` solely from those (nil) slots →
-    stays `0` (`internal/portal/derive_stats.go:97-103`).
-  - Frontend: `levelsUpTo(0)` → `[]`, so `SpellPicker.isLevelSelectable` rejects
-    every leveled spell while cantrips pass unconditionally
-    (`portal/svelte/src/lib/spellcasting.js`, `.../spell-picker.js`).
-  - `character.PactMagicSlotsForLevel` (`spellslots.go:112-124`) computes the
-    correct pact slot level but is **never called** on this path.
-- **Not a data bug:** warlock leveled spells are seeded — `SELECT level, count(*)
-  FROM spells WHERE 'warlock' = ANY(classes) GROUP BY level;` → 9 at L1, 12 at L2,
-  14 at L3, …
-- **Fix idea:** Fold pact slot level into `MaxSpellLevel` for pact casters in
-  `derive_stats.go` (consult `PactMagicSlotsForLevel`). Also verify the final
-  character-create path actually persists `pact_magic_slots` so the built warlock
-  can cast in play (separate from the UI gate). TDD + `make cover-check`.
-- **Workaround:** finish the build cantrips-only and inject known spells +
-  `pact_magic_slots` directly in the DB, or just fix it.
-- **FIX (2026-06-24, TDD, on `main` working tree — not yet committed):** wired
-  Pact Magic into the builder.
-  - `internal/portal/derive_stats.go`: added `PactMagicSlots` to `DerivedStats` +
-    a `pactMagicSlotsForClasses` helper; `DeriveStats` now raises `MaxSpellLevel`
-    to the pact slot level (via `character.PactMagicSlotsForLevel`) for pact
-    casters, combining with standard slots via max for multiclass.
-  - `internal/portal/builder_store_adapter.go`: `CreateCharacterRecord` now
-    persists `pact_magic_slots` for pact casters (non-warlocks unaffected).
-  - Tests: 6 new red→green cases in `derive_stats_test.go` +
-    `builder_store_adapter_test.go` (L3 warlock → MaxSpellLevel 2 + slots
-    `{2,2,2}`; warlock/wizard multiclass → 3; non-casters nil; persistence).
-  - `make cover-check` green (overall 90.63%, portal 88.61%). App rebuilt +
-    restarted so the fix is live.
+### ISSUE-001 — Warlock builder shows only cantrips (Pact Magic not derived) — legacy OPEN stub, superseded by ISSUE-060
 
-### ISSUE-002 — Standard-caster spell_slots may not persist at creation (UNCONFIRMED)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / persistence
-- **Severity:** unknown (potentially major if portal-built casters can't cast)
-- **Status:** OPEN — **unconfirmed**, surfaced while fixing ISSUE-001.
-- **Observation:** `BuilderStoreAdapter.CreateCharacterRecord`
-  (`internal/portal/builder_store_adapter.go`) sets `PactMagicSlots` (after the
-  ISSUE-001 fix) but never sets the generated `refdata.CreateCharacterParams.
-  SpellSlots`, even though `DeriveStats` computes `SpellSlots` for full/half
-  casters. Read paths appear to read the stored `spell_slots` column
-  (`cmd/dndnd/dashboard_apis.go:324`).
-- **To confirm:** build a wizard/cleric via the portal, approve, and check
-  whether `/cast` / the sheet shows spell slots. If empty → real bug; fix by
-  persisting `DeriveStats.SpellSlots` in the adapter (mirroring the pact fix). If
-  slots appear → they're derived on read somewhere; close as INFO.
+### ISSUE-002 — Standard-caster spell_slots may not persist at creation (UNCONFIRMED) — legacy stub, superseded by FIXED ISSUE-002 (persistence) below
 
-### ISSUE-004 — Unarmored Defense AC never wired (Barbarian/Monk) (FIXED)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / AC derivation + persistence
-- **Severity:** major — unarmored Barbarian/Monk got AC = 10 + DEX (missing
-  CON/WIS), wrong at creation and at every combat AC recompute.
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** `DeriveStats` called `CalculateAC(..., "")` with an empty
-  formula and `CreateCharacterRecord` never set `ac_formula`; combat
-  `RecalculateAC` (`internal/combat/equip.go:387-419`) reads only `char.AcFormula`
-  for unarmored defense. Only the Discord REST + DDB paths wrote it before.
-- **Contract correction:** the live `ac_formula` value is the token form
-  **`"10 + DEX + CON"` / `"10 + DEX + WIS"`** parsed by `evaluateACFormula`
-  (`internal/character/stats.go:98`, mirrored in `equip.go:450`) — NOT the seed
-  `mechanical_effect` label `ac_10_plus_dex_plus_con` (that label only drives
-  feature definitions). A shield adds +2 unless the formula contains `WIS`
-  (Monk UD voids it) — identical guard in `stats.go:70` and `equip.go:417`.
-- **Fix:** `unarmoredDefenseFormula(classEntries, wornArmor, hasShield)` in
-  `derive_stats.go` returns the CON form for an unarmored barbarian (shield ok),
-  the WIS form for an unarmored, shieldless monk, else `""` (multiclass barb+monk
-  prefers barbarian). `DeriveStats` feeds it to `CalculateAC`; `CreateCharacterRecord`
-  persists it as `sql.NullString` (NULL for armored/non-UD). Tests in
-  `derive_stats_test.go` + `builder_store_adapter_test.go` (barb 15, monk 15,
-  barb+shield 17, armored barb → armor AC, fighter unchanged; persistence cases).
-  `make cover-check` green (portal 89.30%). `DeriveAC` left untouched (no live
-  callers).
+### ISSUE-004 — Unarmored Defense AC never wired (Barbarian/Monk) — RESOLVED · see git log / session-01.md
 
-### ISSUE-003 — EK/AT not recognized as casters in the builder (FIXED)
-- **Date:** 2026-06-24
-- **Area:** portal character builder (frontend gate + Go validation)
-- **Severity:** major — an Eldritch Knight (Fighter) or Arcane Trickster (Rogue)
-  built via the web builder got **no spell picker** (Spells step skipped). Worse
-  than the warlock bug (warlock at least showed cantrips).
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** `CASTER_ABILITY` / `isSpellcaster` (`portal/svelte/src/lib/
-  spellcasting.js`) keyed only on base class → `isCaster` false for fighter/rogue
-  → `builder-steps.js` hid/skipped the Spells step. The Go spell-budget
-  (`internal/portal/spellbudget.go`, used by `validateSpellCount`) likewise
-  returned 0 for fighter/rogue, so even a shown picker would have been rejected on
-  submit. Server `max_spell_level` (via `isThirdCasterSubclass` →
-  `CalculateCasterLevel`) was already correct and untouched.
-- **Fix:** made both sides subclass-aware. JS: `isThirdCaster(subclass, level)`
-  (EK/AT slugs, level ≥ 3 = INT caster), `isSpellcaster`/
-  `spellcastingAbilityForClass`/`cantripsKnown`/`leveledSpellCap` fall through to
-  third-caster tables (EK 2→3 cantrips, AT 3→4, shared spells-known table);
-  threaded subclass + level into `CharacterBuilder.svelte`. Go: mirrored
-  `isThirdCaster` + third-caster tables in `spellbudget.go`; `spellCountCap`
-  (`builder_service.go`) no longer bails for `SlotProgression=="none"` when EK/AT.
-  Tests: Go `spellbudget_test.go` (EK/AT budgets + `validateSpellCount`), JS
-  `spellcasting.test.js` (EK/AT casters, plain fighter/EK-L2 not). `npm test`
-  441/441, `make cover-check` green (portal 89.12%). **Svelte bundle rebuilt**
-  (`vite build`) since `internal/portal/assets/` is git-tracked.
+### ISSUE-003 — EK/AT not recognized as casters in the builder — RESOLVED · see git log / session-01.md
 
-### ISSUE-002 — Full/half-caster spell_slots dropped at creation (FIXED)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / persistence
-- **Severity:** major — portal-built wizard/cleric/sorcerer/druid/bard/paladin/
-  ranger stored with `spell_slots = NULL`; `/cast` rejected them (no slots).
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** `DeriveStats` computes `SpellSlots` but the adapter
-  `CreateCharacterRecord` (`internal/portal/builder_store_adapter.go`) only
-  persisted `pact_magic_slots`, never standard `SpellSlots` → SQL NULL. Read paths
-  (`/cast` → `parseIntKeyedSlots` → `ParseSpellSlots`) trust the stored column.
-- **Fix:** added `spellSlotsForClasses` (`internal/portal/derive_stats.go`) that
-  reuses `character.CalculateSpellSlots` and emits the canonical **string-keyed
-  `{current,max}`** shape (fresh caster starts full, `current==max`); set
-  `SpellSlots` in `CreateCharacterRecord` (NULL for non-casters). 3 red→green
-  tests (Wizard L3, Paladin L2, Fighter L3 non-caster). `make cover-check` green
-  (portal 89.05%, overall 90.66%). Verified the shape matches `ParseSpellSlots`
-  (`combat/divine_smite.go:71`) + the dashboard `map[string]character.SlotInfo`
-  reader, not level-up's incompatible `map[int]int` (→ ISSUE-010).
+### ISSUE-002 — Full/half-caster spell_slots dropped at creation — RESOLVED · see git log / session-01.md
 
-### ISSUE-008 — Portal submit 500s: languages NOT NULL violated (FIXED at write; collection gap OPEN)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / persistence
-- **Severity:** blocker — every portal "submit for DM approval" failed with HTTP 500.
-- **Status:** FIXED (write-side) · underlying language-collection gap OPEN.
-- **Repro:** Build any character in `/portal/create`, submit. Bot/app log:
-  `ERROR creating character error="creating character: ERROR: null value in
-  column "languages" of relation "characters" violates not-null constraint
-  (SQLSTATE 23502)"`.
-- **Root cause:** `db/migrations/20260310120006_create_characters.sql:28` →
-  `languages TEXT[] NOT NULL`. Chain: submission `Languages []string`
-  (`builder_service.go:48`, json `omitempty`) → `CreateCharacterParams.Languages`
-  (`builder_service.go:510`) → adapter `Languages: p.Languages`
-  (`builder_store_adapter.go:178`) → `pq.Array(arg.Languages)`
-  (`refdata/characters.sql.go:105`). The Svelte builder **never collects concrete
-  language strings** — `backgrounds.js` only carries a *count* of bonus languages
-  — so the slice is always nil. `pq.GenericArray.Value()` returns SQL NULL for a
-  nil slice → constraint violation. Guaranteed 500 for all portal builds; only
-  surfaced now because this is the campaign's first portal-built character.
-- **Fix (2026-06-24, TDD, `main` working tree, not committed):** in
-  `CreateCharacterRecord` coerce `nil` → `[]string{}` before the insert
-  (`pq.Array([]string{})` writes `'{}'`, non-null). 2 red→green tests in
-  `builder_store_adapter_test.go` (nil → empty array; provided langs pass
-  through). `make cover-check` green (portal 88.70%). App rebuilt + restarted.
-- **Follow-up:** the builder collects no concrete languages — tracked separately
-  as **ISSUE-009**.
+### ISSUE-008 — Portal submit 500s: languages NOT NULL violated — RESOLVED · see git log / session-01.md
 
-### ISSUE-009 — Builder collects no concrete languages (only a count)
-- **Date:** 2026-06-24
-- **Area:** portal character builder / language selection
-- **Severity:** minor — cosmetic today (languages aren't consumed in combat), but
-  every portal-built character has an empty language list. Surfaced by ISSUE-008.
-- **Status:** OPEN.
-- **Detail:** `portal/svelte/src/lib/backgrounds.js` models bonus languages as an
-  integer *count* (`languages: 2`, rendered via `formatLanguages`) and the builder
-  never turns race base languages or that count into concrete strings.
-  `CharacterSubmission.Languages` (`internal/portal/builder_service.go:48`,
-  json `omitempty`) is therefore always empty, so `characters.languages` persists
-  as `'{}'` (post ISSUE-008 fix; was a 500 before).
-- **FIX (2026-06-25, TDD, `main`, frontend-only):** no Go/API change needed — the
-  races endpoint already returns each race's base `languages` (Title-Cased, from
-  `internal/refdata/seed_races.go` → `RaceInfo.Languages` → `/api/races`), and the
-  persistence path already ships `submission.Languages`. New
-  `portal/svelte/src/lib/languages.js` holds the standard+exotic master list and
-  pure helpers `raceBaseLanguages` / `availableLanguageChoices` (case-insensitive
-  exclusion) / `assembleLanguages` (case-insensitive de-dupe, first-seen order) /
-  `bonusLanguageCount`. `CharacterBuilder.svelte` gained a Languages block in the
-  **Skills step**: the race's base languages render as locked chips, then exactly
-  `bonusLanguageCount(background)` `<select>` slots drawn from
-  `availableLanguageChoices` let the player pick that many distinct bonus
-  languages; `gatherSubmission` sets `languages: assembleLanguages(raceBase,
-  chosenLanguages)`. Draft survival wired (`builder-draft.js` `DRAFT_FIELDS`
-  allow-list + hydrate/snapshot) and a prune `$effect` drops picks that stop
-  being valid when race/background changes. Tests: `languages.test.js` (21 cases).
-  494 vitest green; svelte bundle rebuilt. **Remaining gap:** exotic-language
-  gating (some are normally DM-granted) and class-bonus languages aren't modeled —
-  the picker offers the full list; acceptable for now.
+### ISSUE-009 — Builder collects no concrete languages (only a count) — RESOLVED · see git log / session-01.md
 
-### ISSUE-007 — Multiclass spell count budget used primary class only (FIXED)
-- **Date:** 2026-06-24 (fixed 2026-06-25)
-- **Area:** portal character builder (frontend gate + budget) + server count cap
-- **Severity:** major — confirmed: the builder exposes multiclass (an "add class"
-  button, up to 4 class rows, `CharacterBuilder.svelte:882`).
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** the spell *count* budget was derived from the primary class
-  only on both sides. Frontend: `isCaster` / `cantripCap` / `leveledCap` read
-  `classEntries[0]` (`CharacterBuilder.svelte:520-528`). Server:
-  `spellCountCap` read `primaryClassEntry` (`builder_service.go`). Two symptoms —
-  (a) a multiclass caster (e.g. Wizard 3 / Cleric 1) got a budget too low because
-  the secondary's cantrips/known/prepared were never added; (b) worse, a
-  non-caster *primary* with a caster *secondary* (Fighter 1 / Wizard 3) made
-  `isCaster` false → `builder-steps.js` hid the Spells step entirely.
-- **Not the max spell level:** `DeriveStats` already passes **all** classes to
-  `character.CalculateSpellSlots` (`derive_stats.go:102`), so `max_spell_level` /
-  `spellSelectableLevels` (which spell *levels* are selectable) were already
-  multiclass-correct. Left untouched.
-- **Fix:** sum each class's own budget across **every** caster entry — 5e computes
-  known/prepared/cantrip counts per class (only spell *slots* combine on the
-  shared caster-level table). JS: new `anyCaster`, `multiclassCantripCap`,
-  `multiclassLeveledCap` (`spellcasting.js`); the component's gate + caps now
-  aggregate over `classEntries` and pass a per-ability modifier map so each entry
-  uses its own casting ability. Go: new `multiclassSpellBudget`
-  (`spellbudget.go`) reusing the exact `SlotProgression=="none" && !isThirdCaster`
-  guard; `spellCountCap` delegates to it. Single-class behaviour is the one-term
-  sum, unchanged.
-- **Tests:** JS `spellcasting.test.js` (`anyCaster`, multiclass cantrip/leveled
-  caps incl. non-caster-primary); Go `spellbudget_test.go`
-  (`TestMulticlassSpellBudget`, `TestSpellCountCap_Multiclass`,
-  `TestValidateSpellCount_Multiclass` — a Fighter1/Wizard3 submission at the
-  wizard's budget now passes where the primary-only cap rejected it). 473 vitest +
-  `make cover-check` green (overall 90.67%, portal 89.23%). Svelte bundle rebuilt
-  (`internal/portal/assets/` is git-tracked).
+### ISSUE-007 — Multiclass spell count budget used primary class only — RESOLVED · see git log / session-01.md
 
-### ISSUE-010 — Level-up wrote spell_slots in an unparseable shape (FIXED)
-- **Date:** 2026-06-24 (fixed 2026-06-25)
-- **Area:** level-up persistence vs the `/cast` read path
-- **Severity:** major — any leveled caster that leveled up could no longer cast.
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** `CalculateLevelUp` built `NewSpellSlots` as `map[int]int`
-  (`levelup/levelup.go`) and `service.go` marshaled it raw → `{"1":4,"2":2}`. The
-  canonical reader `combat.ParseSpellSlots` (`combat/divine_smite.go:71`)
-  unmarshals into `map[string]character.SlotInfo`
-  (`{"1":{"current":4,"max":4}}`), so the number-shaped JSON failed with
-  `cannot unmarshal number into Go value of type combat.SlotInfo` and `/cast`
-  rejected the character.
-- **Fix:** changed `LevelUpResult.NewSpellSlots` to
-  `map[string]character.SlotInfo`; added `canonicalSpellSlots(map[int]int)` that
-  string-keys each slot level and sets `Current == Max == count` (full on
-  level-up), returning `nil` for an empty/nil source so `service.go`'s `!= nil`
-  guard still skips the column for non-casters. `service.go` unchanged. Confined
-  to `internal/levelup`.
-- **Tests:** `TestCalculateLevelUp_SpellSlotsParseViaCombat` (RED→GREEN: marshals
-  the wizard 2→3 level-up slots and round-trips them through
-  `combat.ParseSpellSlots`, asserting `{current,max}` == `MulticastSpellSlots(3)`)
-  + `TestCalculateLevelUp_NonCasterSpellSlotsNil`. `make cover-check` green
-  (overall 90.68%, levelup 90.45%).
-- **Simplification:** slots emitted full (current==max); prior `current` not
-  preserved. Acceptable — level-ups conventionally land on a long rest, and the
-  old shape was unusable, so any valid shape is a strict improvement.
+### ISSUE-010 — Level-up wrote spell_slots in an unparseable shape — RESOLVED · see git log / session-01.md
 
-### ISSUE-014 — DM Console does not track player combat actions (action_log gap)
-- **Date:** 2026-06-25
-- **Area:** dm console / action log (player-action service vs `/api/dm/situation`)
-- **Severity:** medium — DM situational-awareness gap. Combat resolves correctly;
-  only the DM Console's after-the-fact timeline was blind to player actions.
-- **Status:** FIXED + DEPLOYED (`main` f1e3aeb, pushed `f29edd4..f1e3aeb`,
-  redeployed ~13:45 UTC).
-- **Detail:** Player spell casts and freeform actions post their results to
-  `#combat-log`, but the player-action service paths never wrote to the `action_log`
-  table. As a result `GET /api/dm/situation` returned a `timeline[]` with nothing for
-  player combat actions — the DM Console looked empty even mid-fight.
-- **Root cause:** the player-action service entry points — `Service.Cast`,
-  `Service.CastAoE`, `Service.FreeformAction`, `Service.Attack`,
-  `Service.OffhandAttack` — never called `CreateActionLog`. Only the DM-side /
-  automated flows (enemy turns, legendary actions, the DM dashboard) write to
-  `action_log`, so the timeline was populated for those but not for anything a player
-  did.
-- **FIX (2026-06-25, TDD, `main` f1e3aeb — committed, pushed, deployed):** a
-  best-effort `recordCombatAction` helper (new file
-  `internal/combat/action_log_record.go`) now writes an `action_log` row at the
-  **success tail** of every player combat path — `Service.Cast`, `CastAoE`,
-  `FreeformAction`, `Attack`, `attackImprovised`, `OffhandAttack`. That table feeds
-  the DM Console `/api/dm/situation` timeline, so player casts/freeform/attacks now
-  appear alongside the automated entries. `make cover-check` green (90%/85% gates);
-  independent code review = ship-ready. Redeployed via
-  `docker compose up -d --build app` ~13:45 UTC — clean boot ("database connected and
-  migrated", no new migration; "discord session opened"; all discord checks passed
-  for guild `1507910398886543532`; server on `:8080`; no panic/error).
-- **Scope note (important):** this is a **DM-SIDE fix only**. Player-facing Discord
-  output is **unchanged** — a spell cast already posted the `✨ {caster} casts {spell}`
-  line to `#combat-log` and that always worked; the fix only adds the DM Console
-  timeline entry, and the Console is behind DM auth (players never see it). The fix
-  does **not** auto-create a `#dm-queue` item for save-spells and does **not**
-  auto-roll an NPC's saving throw — **save adjudication stays a MANUAL DM roll**.
-- **Follow-up (candidate, not yet a numbered issue):** auto-resolving an NPC's
-  saving throw (and/or surfacing a `#dm-queue` prompt) for player save-spells is a
-  worthwhile future enhancement — today it remains a manual DM roll.
+### ISSUE-014 — DM Console does not track player combat actions (action_log gap) — RESOLVED (commit f1e3aeb) · see git log / session-01.md
 
-### ISSUE-015 — Condition shape mismatch: dashboard vs the engine (FIXED — both halves)
-- **Date:** 2026-06-25 (write half fixed 2026-06-26)
-- **Area:** dashboard / combat conditions (Combat Manager render + workspace PATCH +
-  Svelte tracker vs engine `parseConditions`)
-- **Severity:** high — the WRITE half was a **silent mechanical no-op**: a
-  button-added condition showed on the tracker but did nothing in the rules engine.
-- **Status:** **FIXED** — DISPLAY half (`b108bf2`, deployed) · WRITE half (2026-06-26).
-- **Two halves:**
-  - **DISPLAY (the render) — FIXED.** The Combat Manager rendered a combatant's
-    condition as **"[object Object]"** because the engine stores conditions as objects
-    (`{condition:"paralyzed",...}`) but the Svelte UI interpolated each entry directly
-    as a string.
-  - **WRITE (the persisted shape) — OPEN.** The workspace PATCH endpoint
-    `/api/combat/{id}/combatants/{cid}/conditions` (and the Svelte tracker that drives
-    the "add condition" button) still write conditions as a **bare JSON string array**,
-    e.g. `["paralyzed"]`. The combat engine reads conditions via `parseConditions`
-    as an **array of objects keyed by `.condition`**, e.g.
-    `[{"condition":"paralyzed",...}]`.
-- **WRITE-half symptom (still live):** a condition added through the normal dashboard
-  button now *renders* correctly (post-display-fix), but its mechanical effects —
-  auto-crit (melee within 5 ft of a paralyzed target), advantage-to-attackers,
-  auto-fail STR/DEX saves — **do NOT fire**, because `.Condition` parses empty out of
-  the string-array shape.
-- **Only correct WRITE path today:** the DM-Override endpoint POST
-  `/api/combat/{id}/override/combatant/{cid}/conditions` is the lone HTTP path that
-  writes the correct object shape (which is why the wretch's *hold person* paralysis,
-  applied via that override-equivalent path in the object shape, fires correctly — and
-  now also renders correctly — while a button-added condition would render but no-op).
-- **FIX (DISPLAY half, 2026-06-25, `main` `b108bf2`, pushed `0dfa1ec..b108bf2`,
-  deployed ~22:50 UTC):** new `conditionName()` helper
-  (`dashboard/svelte/src/lib/combat.js`) Title-Cases either an object's `.condition`
-  or a bare string; `CombatManager.svelte` now renders `conditionName(cond)` instead of
-  interpolating the raw entry. vitest 64/64, svelte build clean, embedded assets
-  regenerated. **Display-only** — the persisted WRITE shape is untouched.
-- **FIX (WRITE half, 2026-06-26, TDD, `main` working tree):** aligned the PATCH
-  endpoint to the engine object shape, server-side (the canonical-shape boundary), so
-  the API and the Svelte tracker stay simple (they speak condition *names*).
-  - **Server** (`internal/combat/workspace_handler.go`): new
-    `reconcileConditionNames(existing, names)` maps the DM-supplied condition *names*
-    (`updateConditionsRequest.Conditions []string`, unchanged) to the canonical
-    `[]CombatCondition` object array `parseConditions` reads. It **reconciles** against
-    the combatant's existing stored conditions: a name already present keeps its
-    existing object (so a spell-/engine-applied condition's `duration_rounds`,
-    `started_round`, `source_combatant_id`, `expires_on`, `source_spell` survive a
-    re-send of the full set), a new name becomes an indefinite manual condition
-    (`{condition: name}`, matching DM-toggle semantics). Names are lowercased to the
-    engine's canonical keys, blanks skipped, de-duped first-seen. An unparseable
-    existing value (e.g. a legacy bare-string write) is treated as empty, so the next
-    PATCH self-heals the row into the object shape. `UpdateCombatantConditions` now
-    calls it instead of `json.Marshal(req.Conditions)`.
-  - **Frontend** (`dashboard/svelte/src/lib/combat.js` + `CombatManager.svelte`): new
-    `conditionKey(c)` returns the engine's lowercase name for a string **or** object
-    entry; `currentConditions()` maps stored entries through it, and `handleAddCondition`
-    canonicalizes the dropdown value (`conditionKey(conditionToAdd)`), so add/remove/
-    dedup compare consistently and the PATCH body is a clean lowercase name array.
-  - **Tests (red→green):** Go `workspace_handler_test.go` — `WritesEngineObjectShape`
-    (Title-Cased input → object array, lowercase names, `HasCondition` fires),
-    `PreservesExistingObjectMetadata` (duration/source/timing survive a re-send),
-    `DedupesAndDropsRemoved`, `RecoversFromLegacyStringShape`. JS `combat.test.js` —
-    `conditionKey` cases. `make cover-check` green (combat 91.7%); 575 vitest green;
-    Svelte bundle rebuilt (`internal/dashboard/assets/` is git-tracked).
-  - **Not changed:** the engine's `parseConditions` (kept strict — object shape only)
-    and the DM-Override POST path (already correct). Both writers now converge on the
-    one canonical shape.
+### ISSUE-015a — Condition shape mismatch: dashboard vs the engine (both halves) — RESOLVED (commit b108bf2 display half; write half 2026-06-26) · see git log / session-01.md
 
-### ISSUE-016 — `/done` phantom "1 attack" warning after casting a spell with the action (FIXED)
-- **Date:** 2026-06-25
-- **Area:** combat / spellcasting (action economy — `Service.Cast` / `Service.CastAoE`
-  vs the `/done` unused-resource check)
-- **Severity:** medium — misleading UX; a phantom unused-attack warning could cause a
-  player to waste time or a DM to mis-rule the turn.
-- **Status:** FIXED + DEPLOYED (`main` `b108bf2`, pushed `0dfa1ec..b108bf2`, redeployed
-  ~22:50 UTC).
-- **Repro:** A character with **no Extra Attack** (e.g. Warlock 3) casts a spell using
-  their **action** (cantrip or leveled), then runs **`/done`**.
-- **Expected:** No unused-resource warning for a weapon attack — the action was spent on
-  Cast-a-Spell, so there is no Attack action and no weapon attack remaining.
-- **Actual:** `/done` warned **"you still have 1 attack"** and the "Remaining" resource
-  summary listed a phantom attack.
-- **Root cause:** casting a spell is the **Cast-a-Spell action, not the Attack action**,
-  so no weapon attack remains — but `Service.Cast` / `Service.CastAoE` consumed the
-  action while leaving the seeded `attacks_remaining=1` untouched. The `/done`
-  unused-resource check (and the "Remaining" summary) read that stale `attacks_remaining`
-  and reported an attack the caster never had.
-- **FIX (2026-06-25, TDD, `main` `b108bf2`):** zero `turn.AttacksRemaining` when a spell
-  consumes the **action** (cantrip or leveled). **Bonus-action casts are left untouched**
-  — those keep the Attack action and its attacks (e.g. a quickened/bonus-action spell
-  plus a weapon attack is legal). Red/green test
-  `internal/combat/cast_attacks_remaining_test.go`; `make cover-check` passes.
-- **Discovered in live play:** Vale (Warlock 3, no Extra Attack) cast **Hold Person**,
-  then `/done` warned of an attack she never had.
-- **Caveat (live state):** the fix only affects casts made on the **new binary**. Vale's
-  *current* in-flight turn still carries the pre-fix `attacks_remaining=1`, so `/done`
-  will warn **once more** for this turn — she just confirms past it; her **next** cast is
-  clean.
+### ISSUE-016 — /done phantom "1 attack" warning after casting a spell with the action — RESOLVED (commit b108bf2) · see git log / session-01.md
 
-### ISSUE-015 — Crossbow `/attack` falsely reports "No bolts remaining" with a full quiver
-- **Date:** 2026-06-26
-- **Area:** combat / ammunition
-- **Severity:** major
-- **Status:** FIXED (TDD; rebuild + redeploy required to take effect live)
-- **Repro:** A character whose inventory holds crossbow bolts runs `/attack` with a
-  crossbow. The bot rejects the shot with **"No bolts remaining."** despite the bolts
-  being present.
-- **Expected:** the shot fires and one bolt is deducted.
-- **Actual:** every crossbow shot is blocked; the player can never fire.
-- **Root cause:** the ammo check matched too strictly. The character builder seeds a
-  light crossbow's ammo as `{item_id:"crossbow-bolt", name:"crossbow-bolt", type:"gear"}`,
-  but `combat.DeductAmmunition` only matched an item whose **name was exactly "Bolts"**
-  **and** whose **type was exactly "ammunition"** — so the seeded slug never matched and
-  the deduction reported empty. (Same class of slug-vs-display-name drift as ISSUE-013.)
-- **Second bug it would have unmasked:** the ammo write round-tripped the *entire*
-  inventory through a narrow 3-field projection (`{name,quantity,type}`), so once the
-  match was fixed and the write path was reached it would have **silently dropped every
-  other item's `equipped`/magic/charges/`item_id` fields on each shot** (un-equipping
-  the player's gear). Fixed at the same time.
-- **FIX (2026-06-26, TDD, `internal/combat` + `internal/discord` + `cmd/dndnd`):**
-  1. **Tolerant matcher** (`ammoMatches`): a crossbow now matches any non-weapon,
-     non-armor, non-consumable item whose name **or** `item_id` contains the whole word
-     `bolt` (bows → `arrow`) — so `"crossbow-bolt"`, `"Crossbow Bolts"`, `"Bolts"`,
-     `"bolt"` all count, while a `"Lightning Bolt Scroll"` consumable does not. Applied to
-     both `DeductAmmunition` and the post-combat `RecoverAmmunition`.
-  2. **Lossless write:** the ammo path now parses/marshals through the full
-     `character.InventoryItem`, preserving every other item's fields.
-  3. **DM-queue fallback:** a genuinely empty quiver now raises a typed
-     `combat.NoAmmunitionError`; `/attack` posts a `#dm-queue` **freeform action**
-     ("is out of bolts — wants to shoot … anyway (DM may waive ammo)") and tells the
-     player the DM was flagged, instead of a dead-end rejection. The attack resource is
-     **not** consumed on this path, so the player can re-fire once the DM resolves it.
-     DMs commonly hand-wave precise ammo counts — this routes that decision to them.
-- **Tests:** `internal/combat/attack_test.go` (seeded-slug deduct, name variants,
-  lookalike-consumable guard, typed-error, lossless end-to-end), `internal/discord/
-  attack_handler_outofammo_test.go` (dm-queue routing + degraded paths). `go build ./...`,
-  `go vet`, combat + discord + cmd wiring suites green.
-- **Live caveat:** the running stack must be **rebuilt (`make build`) and restarted** for
-  the fix to apply. Existing characters need no data change — the matcher now reads their
-  current inventory correctly.
-- **Follow-up FIXED (2026-06-26, separate commit):** builder ammo seeding corrected.
-  `EquipmentToInventoryWithEquipped` now parses a `:N` quantity suffix (and comma-batched
-  options), classifies SRD ammo IDs (`crossbow-bolt`, `arrow`, …) as `type:"ammunition"`,
-  and gives them a proper display name (`"Crossbow Bolts"`). The Svelte builder no longer
-  strips `:20` on submit (new `lib/equipment-assembly.js` `assembleEquipment` —
-  bare-id list still feeds the equipped pickers; a quantity-preserving list goes to the
-  backend). So a new crossbow user starts with **20 bolts**, typed ammunition, not one
-  `gear` slug. Go + vitest TDD; bundle rebuilt.
-- **Still open:** the same narrow-projection field-drop exists on the spell
-  material-component path (`spellcasting.go`) — unrelated to ammo, left as-is.
+### ISSUE-015b — Crossbow /attack falsely reports "No bolts remaining" with a full quiver — RESOLVED · see git log / session-01.md
 
-### ISSUE-017 — Permanent SSOT item catalog (kills the slug/type/quantity drift class) — SCOPED for a fresh agent
-- **Date:** 2026-06-26
-- **Area:** refdata / item catalog (cross-cutting: refdata, portal builder, combat, dashboard JS)
-- **Severity:** major (tech-debt; each occurrence has been a player-facing bug)
-- **Status:** OPEN — SCOPED (no code yet). This entry is the spec; implement in phases.
-- **Why this exists:** three+ separate live-play bugs share ONE root cause — item/equipment
-  metadata is fragmented with no single source of truth, so any new item id (or a slug
-  rename) silently drifts between layers:
-  - **ISSUE-013** — background→skill/equipment slug drift between two hand-maintained Go maps.
-  - **ISSUE-015 (ammo)** — combat matcher expected name `"Bolts"`/type `"ammunition"`; the
-    builder seeded `{item_id:"crossbow-bolt", type:"gear"}`. Patched with a tolerant matcher.
-  - **builder-ammo follow-up** — ammo had no name/type/quantity anywhere; patched with a local
-    `knownAmmo` map + `:N` parsing. **Explicitly a stopgap.**
-- **The 5 fragmented sources today (grep-verified 2026-06-26):**
-  1. `internal/refdata` seeders (`seeder.go`) — **weapons + armor only**. Ammo
-     (`crossbow-bolt`, `arrow`, `sling-bullet`, `blowgun-needle`) and adventuring gear
-     (packs, tools, torches…) have **no refdata row at all** — they exist only as bare ids
-     inside `internal/portal/starting_equipment.go` strings.
-  2. `internal/portal/builder_store_adapter.go` — hand-maintained `knownWeapons`,
-     `knownArmor`, `knownAmmo` Go maps + `itemDisplayName` + `itemType` + `parseEquipmentEntry`.
-  3. `portal/svelte/src/lib/equip-selection.js` — a PARALLEL JS SRD-id fallback set
-     (`knownWeapons`/`knownArmor` mirrors) used so pickers work before the async catalog loads.
-  4. `internal/combat/attack.go` — `GetAmmunitionName` hardcodes crossbow→`"Bolts"` by
-     substring; `ammoMatches` matches by name/`item_id` keyword because **no weapon→ammo-item
-     link exists in data**.
-  5. `internal/portal/refdata_adapter.go` `ListEquipment` (serves `/api/equipment`) — builds
-     its catalog from `ListWeapons`+`ListArmor` only, so ammo/gear never appear in the API.
-- **Target design — one canonical seeded item catalog:**
-  - A new refdata table (e.g. `items`) or an extension that gives **every** equipment id a row:
-    `id, name, category ("weapon"|"armor"|"ammunition"|"gear"|"tool"|"pack"|…), default_quantity,
-    stackable bool`, plus category-specific metadata. Weapons/armor can stay in their existing
-    tables if the catalog references them, but ammo + gear MUST get rows.
-  - A **weapon→ammo link**: add `ammunition_id` (FK to the ammo item) to weapons with the
-    `ammunition` property (light/hand/heavy-crossbow → `crossbow-bolt`; shortbow/longbow →
-    `arrow`; sling → `sling-bullet`; blowgun → `blowgun-needle`). This replaces the
-    `GetAmmunitionName` substring heuristic AND lets the matcher match by **item id**, not a
-    name keyword (removes the `"Lightning Bolt Scroll"` false-positive risk entirely).
-- **Phased implementation (TDD each phase; keep each independently shippable):**
-  1. **Catalog schema + seed.** New migration + refdata seeder rows for SRD ammo + the
-     adventuring gear / packs / tools referenced by `starting_equipment.go` and
-     `backgrounds_gen.go`. sqlc queries (`ListItems`, `GetItem`). **Migration test hooks:** a
-     new migration breaks `internal/testutil/testdb.go` table lists + the database `MigrateDown`
-     test unless BOTH are updated (see the `project_new_migration_test_hooks` memory).
-  2. **Weapon→ammo FK.** Add `ammunition_id` to the weapon rows; expose via the weapon model.
-     Rewrite `combat.GetAmmunitionName` to read the FK (fallback to current heuristic if null),
-     and switch `ammoMatches` to prefer item-id equality against the weapon's `ammunition_id`,
-     keeping the keyword match only as a legacy fallback. Existing combat ammo tests must stay
-     green.
-  3. **Builder seeds via catalog.** `EquipmentToInventoryWithEquipped` resolves name / type /
-     default_quantity from the catalog instead of `knownWeapons`/`knownArmor`/`knownAmmo` /
-     `itemDisplayName`. Keep `:N` override (explicit quantity wins over default). Retire the
-     three local Go maps once the catalog covers their ids; add a **contract test** that every
-     id in `starting_equipment.go` + `backgrounds_gen.go` resolves to a catalog row (mirrors
-     ISSUE-013's `TestBackground*_AllBuilderBackgrounds`, so future drift fails CI).
-  4. **API + frontend SSOT.** `ListEquipment` serves the full catalog (ammo + gear, with
-     `category` + `default_quantity`). Retire the JS SRD-fallback maps in `equip-selection.js`
-     by **generating** the JS catalog/classifier from the Go source — follow the existing
-     codegen precedent (`portal/svelte/src/lib/backgrounds.json` ← `backgrounds_gen.go` /
-     `generate.go`). One source, both languages, no hand-sync.
-  5. **Cleanup.** Delete the now-dead stopgaps (`knownAmmo`, duplicated maps); update the
-     `project_item_catalog_ssot_gap` memory to RESOLVED.
-- **Acceptance criteria:**
-  - A brand-new portal-built crossbow user has `{item_id:"crossbow-bolt", name:"Crossbow Bolts",
-    type:"ammunition", quantity:20}` sourced from the catalog (no local map).
-  - `combat.GetAmmunitionName`/`ammoMatches` resolve a weapon's ammo via the FK; the substring
-    heuristic is gone from the hot path.
-  - `/api/equipment` lists ammo + gear; `equip-selection.js` no longer hand-maintains SRD ids.
-  - A contract test fails CI if any starting-equipment / background id lacks a catalog row.
-  - `make cover-check` (90%/85%), full vitest, `make sqlc-check`, and a Svelte rebuild all green.
-- **Effort:** ~M–L (new migration + seeder + sqlc + rewiring 4 call sites + codegen + contract
-  tests). Phases 1–3 deliver the bulk of the value (correct seeding + combat); 4–5 remove the
-  remaining duplication. Each phase is independently shippable.
-- **Pointers:** codegen precedent `internal/portal/backgrounds_gen.go` + `generate.go`; current
-  stopgaps `internal/portal/builder_store_adapter.go` (`knownAmmo`/`itemType`/`itemDisplayName`),
-  `internal/combat/attack.go` (`GetAmmunitionName`/`ammoMatches`); catalog source
-  `internal/portal/refdata_adapter.go` `ListEquipment`. Memory: `project_item_catalog_ssot_gap`.
-- **FIX (2026-06-26, TDD, branch `feat/item-catalog-ssot`, 5 phased commits — each independently
-  shippable, `make cover-check` 90%/85% green throughout):**
-  1. **Catalog schema + seed (`df9f339`).** New `items` table (migration
-     `20260626120000_create_items.sql`, sqlc `GetItem`/`ListItems`/`CountItems`/`UpsertItem`) seeded
-     from a new canonical `refdata.ItemCatalog()` (`internal/refdata/item_catalog.go`):
-     `{id, name, category, default_quantity, stackable}`, one row per id. Weapon/armor rows derive
-     their names from the existing seed slices (extracted as `weaponSeeds()`/`armorSeeds()` — names
-     live once); ammunition + adventuring gear (which had **no** refdata row) are authored in
-     `ammoCatalog`/`gearCatalog`. Migration test hooks updated (testdb `ReferenceTables` +
-     `MigrateDown`).
-  2. **Weapon→ammo FK (`33c2dae`).** Added a logical `ammunition_id` column to weapons (migration
-     `..120100`), seeded on all 7 SRD ammunition weapons (crossbow→`crossbow-bolt`,
-     bow→`arrow`, sling→`sling-bullet`, blowgun→`blowgun-needle`). `combat.GetAmmunitionName`
-     now reads the FK → catalog name (sling/blowgun get correct names); `ammoMatches` prefers
-     item-id equality, keyword scan demoted to a legacy fallback. The `"crossbow"→"Bolts"`
-     substring is off the hot path.
-  3. **Builder seeds via catalog (`d58e3f2`).** `EquipmentToInventoryWithEquipped` resolves
-     name/type/default-quantity from `ItemCatalogByID()`; the hand-maintained `knownWeapons`/
-     `knownArmor`/`knownAmmo`/`itemType`/`itemDisplayName` are **deleted**. A bare ammo id now
-     seeds its catalog default bundle (lone `crossbow-bolt` → 20); explicit `:N` still wins.
-  4. **API + JS SSOT (`29c4bdd`).** `/api/equipment` lists ammo + gear (with category +
-     `default_quantity`). `equip-selection.js` classifies weapon/armor from `items-catalog.json`,
-     **generated** from the Go catalog by `scripts/gen_items_catalog` + a `go:generate` directive
-     (`make items-catalog-check` fails CI on drift). The hand-typed JS `KNOWN_WEAPON_IDS`/
-     `KNOWN_ARMOR_IDS` are gone; Svelte bundle rebuilt.
-  5. **Cleanup + docs.** No dead stopgaps remain (absorbed into phases 3–4). Memory
-     `project_item_catalog_ssot_gap` marked RESOLVED.
-- **Acceptance — all met:** a brand-new portal-built crossbow user gets
-  `{item_id:"crossbow-bolt", name:"Crossbow Bolts", type:"ammunition", quantity:20}` from the
-  catalog; combat resolves ammo via the FK; `/api/equipment` lists ammo + gear; the JS no longer
-  hand-maintains SRD ids; **two contract tests** fail CI on re-drift —
-  `TestItemCatalog_CoversAllBuilderEquipmentIDs` (every starting-equipment/background id resolves to
-  a catalog row) and `TestWeaponSeeds_AmmunitionWeaponsLinkAmmoItem` (every ammo weapon links a valid
-  ammunition item). `make cover-check`, full vitest (503), `make sqlc-check`,
-  `make items-catalog-check`, `make backgrounds-check`, and a Svelte rebuild all green.
-- **Live caveat:** unmerged on a feature branch; a running stack must be rebuilt + restarted (and the
-  new migrations applied) to take effect. Existing characters need no data change — the builder reads
-  the catalog at create time; combat reads current inventory via the FK + tolerant fallback.
+### ISSUE-017 — Permanent SSOT item catalog (kills the slug/type/quantity drift class) — FIXED
+- **Why it exists:** three+ live bugs shared ONE root cause — item metadata was fragmented across
+  5 sources (refdata weapon/armor seeders; the builder's hand-maintained `knownWeapons`/`knownArmor`/
+  `knownAmmo` Go maps; a parallel JS SRD-id fallback in `equip-selection.js`; combat's
+  `GetAmmunitionName`/`ammoMatches` substring heuristics; and `ListEquipment`), so any new or renamed
+  item id drifted silently between layers (ISSUE-013 background slugs, ISSUE-015 ammo, the builder-ammo
+  stopgap).
+- **The SSOT:** a canonical seeded `items` table + `refdata.ItemCatalog()`
+  (`internal/refdata/item_catalog.go`) — one row per id `{id, name, category, default_quantity, stackable}`,
+  giving ammo + adventuring gear (which had NO refdata row) real rows. Weapon/armor names live once in the
+  existing seed slices; a weapon→ammo FK (`ammunition_id`) replaces the substring heuristic so combat
+  matches ammo by item id, not a name keyword.
+- **Consumers:** the builder inventory seeder, combat ammo derivation, and `/api/equipment` all read the
+  catalog; the JS classifier is codegen'd from the Go source (no hand-sync). The 5 fragmented sources +
+  hand maps are deleted. Delivered on branch `feat/item-catalog-ssot` in 5 phased commits; two contract
+  tests (`TestItemCatalog_CoversAllBuilderEquipmentIDs`, `TestWeaponSeeds_AmmunitionWeaponsLinkAmmoItem`)
+  fail CI on re-drift. Full history: git log / session-01.md.
 
-### ISSUE-018 — Enemy-turn execution crashes on action_log NOT NULL (before_state/after_state) (FIXED)
-- **Date:** 2026-06-27
-- **Area:** combat / enemy turn (Turn Builder → `ExecuteEnemyTurn` → `action_log`)
-- **Severity:** blocker — **every** enemy turn run through the Turn Builder crashed; combat
-  could not progress past an NPC's turn. Found in live play (Round 1 of "The Cellar": the
-  lead ghoul's first attack on Vale).
-- **Status:** FIXED (TDD) + REDEPLOYED.
-- **Repro:** Start combat with an NPC; right-click the NPC token → **Plan Turn** → **Review**
-  → **Confirm & Post**. The Turn Builder shows:
-  `creating action log: ERROR: null value in column "before_state" of relation "action_log"
-  violates not-null constraint (SQLSTATE 23502)`.
-- **Expected:** the enemy turn applies movement + attack damage, logs an `action_log` row,
-  and advances initiative to the next combatant.
-- **Actual (partial commit — important):** `ApplyDamage` runs **before** the log insert, so
-  the **target's HP was reduced** (Vale 24→19) but the failing INSERT aborted the rest —
-  `UpdateTurnActions` never ran, so the **turn did not advance** and the `enemy_turn_ready`
-  dm-queue item stayed pending. State looked half-done.
-- **Root cause:** `Service.ExecuteEnemyTurn` (`internal/combat/turn_builder_handler.go`,
-  ~line 339) built `CreateActionLogParams` without `BeforeState`/`AfterState`, leaving them
-  nil `json.RawMessage` → SQL NULL. Both columns are **NOT NULL** (`db/migrations/
-  20260312120002_create_encounters.sql:91-92`). Every other action_log writer populates them
-  (`dm_dashboard_handler.go` resolve/move, `dm_dashboard_undo.go`) — only the enemy path
-  didn't, so only it crashed. Postgres names `before_state` first by column order; `after_state`
-  was equally null, so the fix had to set both.
-- **FIX (2026-06-27, TDD, `internal/combat` only — no `.sql` touched):** before the
-  `CreateActionLog` call, capture the actor's pre-turn state from the local `combatant` (never
-  reassigned, so it still holds the pre-movement position) via the existing
-  `snapshotCombatantState` helper, re-fetch the actor with `GetCombatant` for the after-state,
-  and pass both into `CreateActionLogParams`. Marshal errors ignored (matching the move path)
-  so the turn never fails on snapshotting. Red/green test
-  `TestExecuteEnemyTurn_PopulatesBeforeAndAfterState` (mock store mimics the NOT NULL
-  constraint, asserts no error + both states populated + valid JSON + turn advances);
-  confirmed it failed with the exact live error first. `go test ./internal/combat/...` green.
-  Embedded assets + binary rebuilt and redeployed via `docker compose up -d --build app`.
-- **Workaround applied live (before redeploy):** the damage had already landed correctly, so
-  I advanced the turn with a manual **End Turn** (no re-damage) and resolved the dangling
-  `enemy_turn_ready` queue item with a free-text outcome note. See
-  [`sessions/session-01.md`](sessions/session-01.md).
+### ISSUE-018 — Enemy-turn execution crashes on action_log NOT NULL (before_state/after_state) — RESOLVED · see git log / session-01.md
 
-### ISSUE-019 — Turn Builder undiscoverable (right-click only) (FIXED)
-- **Date:** 2026-06-27
-- **Area:** dashboard / combat UX (Combat Manager)
-- **Severity:** minor — no data/mechanics impact, but cost real table time: the DM could not
-  find how to run an NPC's turn.
-- **Status:** FIXED + REDEPLOYED.
-- **Detail:** The combat workspace's visible controls are token drag-to-move, End Turn, Undo,
-  End Combat, and a read-only Action Log filter — **none** hint at running an enemy turn. The
-  Turn Builder is reached **only** by right-clicking the enemy token → "Plan Turn" (the
-  right-click menu also hosts Damage / Heal / Conditions / Remove). With no affordance, the DM
-  had no way to know it existed.
-- **FIX (2026-06-27, `dashboard/svelte/src/CombatManager.svelte`):** added a prominent gold
-  **"⚔ Run Enemy Turn — <name>"** button at the top of the right panel (above the Turn Queue),
-  rendered only when the current-turn combatant is an NPC (`activeTurnCombatant?.is_npc`,
-  derived from `activeEncounter.active_turn_combatant_id`). Extracted a shared
-  `openTurnBuilder(comb)` helper so the new button, the right-click "Plan Turn" item, and the
-  no-map list's "Plan Turn" all use one code path (no duplicate open logic). Right-click menu
-  left intact. vitest `CombatManager.test.js` 7/7 (added 4 cases); full suite 647 green; Svelte
-  bundle rebuilt (`internal/dashboard/assets/` is git-tracked) + redeployed.
+### ISSUE-019 — Turn Builder undiscoverable (right-click only) — RESOLVED · see git log / session-01.md
 
-### ISSUE-020 — Character sheets show stale base HP mid-combat (two HP stores, no overlay) (FIXED)
-- **Date:** 2026-06-27
-- **Area:** character sheet / HP source (portal sheet, Discord `/character`, dashboard Character Overview)
-- **Severity:** medium — no data loss, but confusing/wrong: a player checking their own sheet
-  mid-fight saw full HP and no sign of being bloodied.
-- **Status:** FIXED + REDEPLOYED + VERIFIED LIVE.
-- **Repro:** during the live "Cellar" fight Vale took a 5-damage ghoul bite → `combatants.hp_current`
-  = 19/24 (correct). Open Vale's character sheet (portal, `/character`, or the dashboard Party
-  Overview) → it showed **24/24**.
-- **Root cause — two HP stores that don't reconcile:**
-  - `characters.hp_current` — the static base sheet, set at creation / level-up / out-of-combat DM edit.
-  - `combatants.hp_current` — the live per-encounter snapshot. Combat **seeds** a combatant from the
-    character at `StartCombat` (`combat/domain.go` `CombatantFromCharacter`, `HPCurrent: char.HpCurrent`)
-    and **never writes back** (no write-back at end-of-turn, end-of-combat, or on damage — confirmed:
-    `EndCombat` doesn't sync HP; only the out-of-combat editor's `UpdateCharacterVitals` touches the row).
-  - So during a fight the `characters` row is frozen at its pre-combat value, and **every sheet that
-    reads it shows stale HP**. Only Discord `/status` was already correct (it overlays the combatant).
-  - The crash in [ISSUE-018] did **not** lose the damage: `ApplyDamage` and the (then-failing)
-    `CreateActionLog` are not in one transaction, so the HP write committed independently.
-- **FIX (2026-06-27, TDD, read-side overlay on 3 surfaces — HpCurrent/HpMax/TempHP only):**
-  - **Portal sheet** — `internal/portal/character_sheet_store.go` `hydrateFromCombatant`. It already
-    overlaid the combatant's conditions/exhaustion/concentration ("the combatant is the live source of
-    truth during combat") but **forgot HP**; added the three HP lines. Tests:
-    `..._InCombatOverlaysHP`, `..._OutOfCombatKeepsSheetHP`.
-  - **Discord `/character`** — `internal/discord/character_handler.go`: new optional `SetCombatProvider`
-    wiring (the same `StatusEncounterProvider` + `StatusCombatantLookup` `/status` uses, wired in
-    `cmd/dndnd/discord_handlers.go`), `overlayCombatHP` resolves the owner's active encounter and matches
-    the combatant by `CharacterID == ch.ID` before building the embed. Tests:
-    `..._InCombat_OverlaysLiveCombatantHP`, `..._NotInCombat_KeepsCharacterRowHP`.
-  - **Dashboard Character Overview API** — `internal/characteroverview/store_db.go`
-    `ListApprovedPartyCharacters` now calls `overlayLiveCombatHP` per sheet (reuses the already-wired
-    `GetActiveCombatantByCharacterID` the 409 check uses). Tests: `..._OverlaysLiveCombatHP`,
-    `..._NoCombatKeepsRowHP`.
-  - All overlays are **best-effort / read-only**: no active combatant, `uuid.Nil`, or lookup error →
-    fall back to the character row. The DM out-of-combat status editor's **409-in-combat write path is
-    untouched** (its `UpdateStatus`/409 tests still green).
-  - `#character-cards` Discord embed **excluded** — it's a static posted message; live HP there would
-    require re-posting the card on every damage event (future work if wanted).
-  - `make cover-check` green (characteroverview 94.58%, discord 85.93%, portal 89.76%); redeployed;
-    **verified live** — DM Party Overview now reads **Vale 19/24**.
+### ISSUE-020 — Character sheets show stale base HP mid-combat (two HP stores, no overlay) — RESOLVED · see git log / session-01.md
 
 ### ISSUE-021 — Enemy-turn executor resolves the attack only (no auto-move, no auto-advance)
 - **Date:** 2026-06-27
@@ -784,40 +190,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   move step toward the chosen target when out of reach (reuse the player `/move` pathing) and
   call the turn-advance path after a successful resolve.
 
-### ISSUE-025 — action_log silently dropped every player action (Console timeline blind)
-- **Date:** 2026-06-28
-- **Area:** combat / `action_log` (player-action observability) vs the DM Console timeline
-- **Severity:** major — DM situational-awareness gap. Combat resolved correctly; the
-  `/api/dm/situation` `timeline[]` was blind to **every** player cast/attack/freeform for
-  ~3 days, which forced manual session-logging to compensate (the very thing the DB should make
-  unnecessary). Surfaced while reconciling the live-play state docs.
-- **Status:** FIXED (TDD, `main`).
-- **Root cause:** `action_log.before_state` and `after_state` are **NOT NULL**.
-  `recordCombatAction` (`internal/combat/action_log_record.go`, added for ISSUE-014) builds a
-  `CreateActionLogInput` **without** those fields, so `CreateActionLog` passed `nil` straight
-  through → every player-action insert violated the constraint. The write is intentionally
-  **best-effort** (error swallowed so a logging failure never aborts a resolved cast/attack), so
-  the violation vanished without a trace. Only `ExecuteEnemyTurn` rows persisted — it populates
-  before/after state since the **ISSUE-018** fix. **This is the same bug class as ISSUE-018, on
-  the player path**, which means ISSUE-014 ("FIXED + DEPLOYED + verified") was effectively a
-  no-op in production.
-- **Why it hid:** the combat unit suite uses a mock store (`captureActionLog`) that happily
-  records the nil columns the real Postgres rejects. Every `*_RecordsActionLog` test was green
-  while prod silently dropped the row — a mock-vs-DB divergence. Empirically confirmed against
-  the live DB: the active encounter's `action_log` held **only** `enemy_turn` rows, none of
-  Vale's crossbow / Misty Step / Chill Touch.
-- **Fix (2026-06-28, TDD, `main`):** coerce a nil/empty `before_state`/`after_state` to the JSON
-  empty object `{}` at the single choke point — new `rawMessageOrEmptyObject`
-  (`internal/combat/service.go`) applied in `CreateActionLog`, so **no** service-method caller
-  can silently fail the NOT-NULL constraint again (the requested regression guard). Direct
-  `store.CreateActionLog` callers (condition/override/undo/legendary/turn-builder) already
-  supply real state and are unaffected. `{}` is safe for player-action rows — they are timeline
-  observability, not undo targets (undo reads `before_state` only for DM-override action types).
-  Red/green `TestRecordCombatAction_PopulatesNonNullState` asserts the recorded params carry
-  non-null valid JSON. `make cover-check` green; rebuilt + redeployed.
-- **Follow-up (candidate, not done):** the mock store could enforce the NOT-NULL columns so a
-  future best-effort writer that forgets state fails the unit suite instead of prod. Logged, not
-  implemented — the choke-point coercion already prevents the recurrence.
+### ISSUE-025 — action_log silently dropped every player action (Console timeline blind) — RESOLVED · see git log / session-01.md
 
 ### ISSUE-026 — Spell riders / ongoing effects aren't first-class timed effects
 - **Date:** 2026-06-28
@@ -838,37 +211,7 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Target:** a first-class timed-effect model the combat engine advances per turn and the
   situation payload surfaces; migrate the ad-hoc riders onto it. TDD.
 
-### ISSUE-027 — NPC quick-statblock in the DM Console payload
-- **Date:** 2026-06-28
-- **Area:** dm console / situation payload (`internal/situation` + adapter)
-- **Severity:** medium (enhancement)
-- **Status:** IMPLEMENTED 2026-06-28 (red/green TDD, `make cover-check` green).
-- **Problem:** to run an enemy turn a DM needs the creature's moveset — attacks (name, damage
-  dice, reach), recharge abilities, legendary/lair actions — but the payload returned combatant
-  *state* only, so the DM opened the stat block separately (and the Turn Builder was the only
-  place reach/attacks surfaced).
-- **Fix:** added a per-NPC `creature_summary` to `CombatantView`:
-  - `internal/combat/creature_summary.go` — `BuildCreatureTurnSummary(creature)` reuses the Turn
-    Builder's own parsers (`ParseCreatureAttacksWithSource`, `parseCreatureAbilitiesFromCreature`,
-    `isRechargeAbility`/`parseRechargeMin`, `HasLegendaryActions`/`ParseLegendaryInfo`,
-    `HasLairActions`) → `CreatureTurnSummary{Attacks, RechargeAbilities, HasLegendary,
-    LegendaryBudget, HasLair}`; best-effort (malformed/open5e prose → no structured attacks).
-    `IsEmpty()` lets the adapter omit movesetless creatures.
-  - `internal/situation` — neutral view types `CreatureSummary` / `AttackSummary` /
-    `RechargeSummary` (JSON-tagged, `omitempty`); `CreatureSummary *CreatureSummary` field on
-    both `CombatantRow` (input) and `CombatantView` (output); `buildState` copies it through. The
-    package stays dependency-free (no refdata/combat import).
-  - `cmd/dndnd/situation_adapter.go` (coverage-excluded) — `creatureSummary()` fetches the
-    creature for NPC combatants with a valid `CreatureRefID`, calls the combat builder, maps to
-    the situation view; memoized per ref id so a pack of identical creatures costs one
-    `GetCreature`. PCs / no-ref / GetCreature-miss / empty-moveset all yield nil → field omitted.
-  - Tests: `internal/combat/creature_summary_test.go` (attacks+recharge, legendary+lair, empty,
-    malformed-tolerated, open5e-prose) all 100% covered; `internal/situation` plumbing test
-    `TestBuild_StateSurfacesCreatureSummary` (NPC populated, PC nil).
-- **Deferred by design:** the **ISSUE-021** executor half (auto-move into reach + auto-advance the
-  turn) is intentionally **left OPEN** per DM direction — NPC turns are run manually (Run Enemy
-  Turn → Confirm & Post → manual End Turn); no auto-advance wanted. `creature_summary` gives the
-  DM the moveset to drive that manual turn from the Console.
+### ISSUE-027 — NPC quick-statblock in the DM Console payload — RESOLVED (IMPLEMENTED 2026-06-28) · see git log / session-01.md
 
 ### ISSUE-028 — Player in-character roleplay is invisible to the Console (platform gap)
 - **Date:** 2026-06-28
@@ -897,201 +240,15 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
   `StateView` with explored cells + party position) so the Console is the live view between
   fights too, not only mid-combat.
 
-### ISSUE-030 — AdvanceTurn silently drops an un-executed NPC turn (round skips a live combatant)
-- **Date:** 2026-06-28
-- **Area:** combat / turn advancement (`internal/combat/initiative.go` `AdvanceTurn`)
-- **Severity:** major
-- **Status:** FIXED (TDD) + redeployed.
-- **Repro (live):** R4 order G2(init-1, NPC) → Vale(2, PC) → Forge(3, PC) → G1(4, NPC). Forge's
-  R4 greataxe crit killed G2. Engine advanced Forge→G1 correctly (G1 turn row `status=active`,
-  `enemy_turn_ready` posted). Then a second advance fired (an End-Turn before the enemy executor
-  ran) → G1's R4 turn marked `completed` with `started_at=NULL`, `action_used=false`,
-  `attacks_remaining=1`, **no `action_log` attack**; round rolled to R5/Vale. G1's bite was lost.
-- **Expected:** G1 takes its R4 turn (run the enemy turn, resolve its attack) before the round
-  advances; ending an unrun NPC turn should be refused, not silently completed.
-- **Actual:** `AdvanceTurn` (lines ~399-427) unconditionally `CompleteTurn`s `enc.CurrentTurnID`,
-  then — because G1 now appears in `hadTurn` — finds no R4 candidates, advances the round, and
-  returns the first R5 combatant (Vale). The NPC's whole turn evaporated.
-- **Root cause:** missing guard. No check that an NPC's enemy turn was executed before completing
-  it. The `started_at IS NULL` signal the first investigation suggested is **wrong** — NPC turns
-  always have `started_at=NULL` even when executed (R3 ghoul attacked with NULL `started_at`). The
-  reliable signal is `ExecuteEnemyTurn` setting `turn.ActionUsed=true` (`turn_builder_handler.go:378`,
-  unconditional, even for a no-op plan).
-- **NOT death-related:** simulated `AdvanceTurn` with G2 alive — the R5 candidate rebuild
-  (`initiative.go` ~469-474, filters on `IsAlive` only) returns G2 first; G1's R4 turn is dropped
-  either way. The bug drops whichever combatant is current-but-unexecuted when a premature
-  End-Turn fires; G1 just happened to be last in order, so it read as "the round skipped a ghoul."
-- **Fix:** new sentinel `ErrEnemyTurnNotExecuted`; `AdvanceTurn` returns it (without completing or
-  advancing) when the current turn's combatant `IsNpc && !ActionUsed`. `DMDashboardHandler.AdvanceTurn`
-  maps it to **409** (`errors.Is`), and the dashboard `apiFetch`/`TurnQueue` already surface the
-  body text — so the DM sees "enemy turn must be executed before it can be ended" instead of a
-  silent skip. PCs unaffected (guard is NPC-only). Tests: `TestService_AdvanceTurn_RefusesUnexecutedEnemyTurn`,
-  `_AllowsExecutedEnemyTurn`, `TestAdvanceTurn_UnexecutedEnemyTurnReturns409`. `make cover-check` green.
-- **Live game:** left as-is per DM call — no rewind; G1 acts normally on its R5 turn (the dropped
-  bite is not restored).
-- **Relationship:** inverse of [ISSUE-021] (executor under-does the turn: no auto-move/advance);
-  this was the engine *over*-advancing past an unrun NPC. The dangling `enemy_turn_ready` cleanup
-  is the same ISSUE-021 artifact.
+### ISSUE-030 — AdvanceTurn silently drops an un-executed NPC turn (round skips a live combatant) — RESOLVED · see git log / session-01.md
 
-### ISSUE-038 — End Combat doesn't carry combat HP/conditions back to the sheets (fresh-agent task)
-- **Date:** 2026-06-28
-- **Area:** combat / end-combat state reconciliation (two HP stores)
-- **Severity:** medium — correctness/safety: a downed PC silently reads **full HP** the moment combat
-  ends, erasing the fight's consequences until a DM notices and fixes it by hand.
-- **Status:** FIXED (2026-06-29). `EndCombat` carries each PC's final HP/temp-HP + post-clear
-  conditions + exhaustion back to the `characters` row via `Service.carryOutPCStatus`
-  (`internal/combat/service.go`), run inside the existing condition-clear loop so it reuses the
-  just-computed cleared conditions and the original combatant row (CharacterID/HP/exhaustion intact).
-  It writes through the **shared `UpdateCharacterVitals`** sqlc query — the same write path the
-  out-of-combat status editor uses — plus `rest.CharacterDataWithExhaustion` for the exhaustion merge,
-  so there is a single writer for the `characters` row. PCs only (NPCs skipped); a 0-HP PC carries out
-  `unconscious` (combat-only `prone` is dropped by `ClearCombatConditions`); HP is clamped to `[0, sheet max]`;
-  a write failure bubbles up (consistent with the other post-status-flip DB writes — concentration break,
-  timer pause, ammo recovery — rather than the best-effort Discord/loot fan-outs) so a hiccup is visible
-  rather than silently re-introducing the stale-full-HP bug. Tests:
-  `TestEndCombat_CarriesOutPCStatusToCharacterRow`, `TestEndCombat_CarryOut_GetCharacterError`,
-  `TestEndCombat_CarryOut_UpdateVitalsError`, `TestEndCombat_CarryOut_ClampsHPAndDefaultsConditions`.
-- **Repro:** Run a combat where a PC takes damage / drops to 0. End the fight (Combat Manager →
-  **End Combat → Confirm End**). Open dashboard **Party** (or the portal sheet / Discord `/character`).
-- **Expected:** out of combat each PC reflects how they **left** the fight — bloodied PCs at their
-  combat HP, a downed-but-stabilized PC at 0 HP / unconscious.
-- **Actual:** every PC shows their **pre-combat stored HP** (full, if they started full) with no
-  combat conditions. Observed live at the end of "The Cellar": Forge ended **0/32, unconscious + prone,
-  stabilized** and Vale **7/24**, but the Party page showed **Forge 32/32** and **Vale 24/24**, no
-  conditions. The DM reconciled both by hand via **Party → Edit status**.
-- **Root cause:** the same two-store split as **ISSUE-020** — combat damage lives only on
-  `combatants.hp_current` (seeded from the character at `StartCombat`, `combat/domain.go`
-  `CombatantFromCharacter`), and the engine **never writes back** to `characters.hp_current`. ISSUE-020
-  fixed the *in-combat* display with a **read-side overlay** (portal `hydrateFromCombatant`, Discord
-  `overlayCombatHP`, dashboard `overlayLiveCombatHP`), but the overlay is keyed on an **active
-  encounter** — so the instant End Combat flips the encounter inactive, the overlay disappears and the
-  base row (untouched all fight) shows through. No carry-out step bridges the gap.
-- **Fix idea (TDD):** on the End-Combat path (the service behind the dashboard "End Combat → Confirm
-  End" that flips the encounter status — **locate it**; likely an `EndCombat`/encounter-status method in
-  `internal/combat` + its dashboard handler), **carry out** each **PC** combatant's final state to the
-  `characters` row before/at deactivation: `hp_current`, `temp_hp`, and combat-applied
-  conditions/exhaustion. **Reuse the out-of-combat status-editor write path** ([[project_dm_out_of_combat_status_editor]])
-  — it already knows how to persist HP+conditions to `characters` — rather than a second writer.
-  Handle the **0-HP cases** explicitly: a PC at 0 HP should carry out **unconscious**, and a
-  stabilized/death-save outcome must be preserved (don't resurrect to full, don't re-enter "dying" out
-  of combat). **NPCs are not carried out** (they're encounter-scoped). 
-- **Design caution:** ISSUE-020 **deliberately** chose read-side overlay over write-back to keep one
-  source of truth mid-fight — so confine this write to the **End Combat boundary only** (not
-  end-of-turn / on-damage), PCs only, and don't clobber a value a DM has already edited. Decide whether
-  pre-existing temp HP / concentration also carry out. Red/green test the carry-out + the 0-HP→
-  unconscious + stabilized-preservation cases; `make cover-check`; rebuild + redeploy.
-- **Workaround (current):** after every End Combat, the DM reconciles each PC's HP/conditions by hand
-  via **Party → Edit status** (audit reason logged). Easy to forget — that's the bug.
+### ISSUE-038 — End Combat doesn't carry combat HP/conditions back to the sheets — RESOLVED · see git log / session-01.md
 
-### ISSUE-039 — No DM editor for limited-use resources / rage (FIXED)
-- **Date:** 2026-06-29
-- **Area:** dashboard / combat resources (`characters.feature_uses` JSONB)
-- **Severity:** medium — a character whose rage (or ki / channel divinity / sorcery points / …) `current`
-  was set wrong had **no** in-app correction mid-fight; the only lever (party long rest) resets *every*
-  resource to max and 409s during active combat.
-- **Status:** FIXED (2026-06-29).
-  - **Backend (override):** `POST /api/combat/{encounterID}/override/character/{characterID}/feature-uses`
-    `{feature, current, reason}` → `DMDashboardHandler.OverrideCharacterFeatureUses`
-    (`internal/combat/dm_dashboard_undo.go`), reusing `Service.SetFeaturePool` (preserves the row's
-    **Max + Recharge**) and the slots-override audit path (`logOverride` → `dm_override` row +
-    `#combat-log` ⚠️ DM Correction). Body validated pre-lock (400); unknown feature / `current>max` →
-    400 via `errInvalidFeatureOverride`; **unlimited pools** (`Max<0`, e.g. a level-20 rage) skip the
-    cap. Routes in `RegisterRoutes` + `main.go`; auth + wiring route-lists updated so the new DM
-    mutation is verified behind `dmAuthMw`.
-  - **Backend (read/prefill):** `GET /api/character-overview/{id}/feature-uses` → `Handler.GetFeatureUses`
-    (`internal/characteroverview/handler.go`); `SlotsContext` now also carries the raw `feature_uses`
-    (works in **and** out of combat — it's a read). Empty/NULL renders `{}`, not `null`.
-  - **Frontend:** `FeatureUsesEditor.svelte` mounted in the Combat workspace **Manual Override** panel
-    (Feature Uses fieldset, **PCs only** — gated on `character_id`, NPCs have none); api helpers
-    `getCharacterFeatureUses` / `overrideCharacterFeatureUses`; CombatManager wiring; bundle rebuilt.
-- **Found live:** the AI DM manually set Forge's character values during setup, leaving rage
-  `{current:1, max:3}` — should have been **2** after one rage this fight. No dashboard path to bump it.
-- **Rest command (audited en route):** **correct** — long rest sets every `recharge ∈ {short,long,dawn,daily}`
-  feature `current=max` so rage (recharge `"long"`) restores to max (`internal/rest/rest.go`); short rest
-  matches only `recharge=="short"`, so rage is untouched (RAW). L3 rage-max formula = 3. The bug was the
-  **missing editor**, not the rest logic.
-- **Tests:** 15 combat handler cases (`TestOverrideCharacterFeatureUses_*`, incl. the unlimited-pool
-  branch) + 7 character-overview GET cases (`TestGetFeatureUses_*`) + a `featureUsesValue` round-trip; 724
-  svelte tests pass; `make cover-check` green.
-- **Used live:** set Forge rage **1→2** through the new editor (Combat → select FO token → Manual Override
-  → Feature Uses → Edit Feature Uses); DB + the `dm_override` before/after audit row both confirm.
-- **Known gaps:** (1) out-of-combat editing → **fixed in ISSUE-040** (2026-06-30). (2) rage **Max** is seeded only
-  at character creation (`InitFeatureUses`, `internal/portal/init_feature_uses.go`), **not** re-derived on
-  level-up — a barbarian leveling into a new rage tier (L3/L6/…) could carry a stale Max; didn't affect
-  Forge (his Max was already 3). Unfiled — flag if it bites.
+### ISSUE-039 — No DM editor for limited-use resources / rage — RESOLVED · see git log / session-01.md
 
-### ISSUE-040 — No out-of-combat editor for feature uses (FIXED)
-- **Date:** 2026-06-30
-- **Area:** dashboard / character overview (`characters.feature_uses`)
-- **Severity:** minor — workaround existed (edit during combat via ISSUE-039, or run a long rest); only
-  bit **between** fights.
-- **Status:** FIXED (TDD, 2026-06-30).
-- **Repro:** out of combat, open dashboard **Party → Character Overview** for a Barbarian (or any
-  limited-use class — Monk ki, Cleric/Paladin channel divinity, Sorcerer points, …). HP/conditions +
-  spell/pact-slot editors are present; there is **no** feature-uses editor.
-- **Expected:** a DM can view + set a character's rage/ki/channel-divinity/… remaining uses **between
-  fights** (award a short-rest-recovered resource, or correct a bad value) without starting combat or
-  forcing a full long rest.
-- **Actual:** the only feature-uses editor (ISSUE-039) is the **in-combat** override in the Combat
-  workspace, gated on an active turn. Out of combat the sole lever is a party long rest, which resets
-  *all* resources to max.
-- **Fix idea (TDD):** add `POST /api/character-overview/{characterID}/feature-uses` mirroring
-  `Handler.UpdateSlots` (`internal/characteroverview/handler.go`) — DM-authorized, **409 during active
-  combat** (defer to the in-combat override, same split as the slots/HP editors), validate
-  feature-present + `current ∈ [0, max]` (unlimited when `max<0`), persist via the
-  `characters.feature_uses` write path. **Reuse** the existing read `GET .../feature-uses` and the
-  already-built `FeatureUsesEditor.svelte` — mount it on `CharacterOverview.svelte`, wiring `onSave` to
-  the new overview endpoint (the parent picks in- vs out-of-combat, exactly like `SlotEditor`). Red/green
-  + `make cover-check` + rebuild.
-- **Fix (TDD, 2026-06-30):** new `Service.ApplyFeatureUses` + `Store.UpdateCharacterFeatureUses`
-  (`internal/characteroverview/feature_uses.go`, `store_db.go`) reusing the already-generated
-  `refdata.UpdateCharacterFeatureUses` query — no schema/sqlc change. `Handler.UpdateFeatureUses`
-  (`handler.go`) parses id → decodes body → loads `GetSlotsContext` (404/500) → `authorizeDM` (403) →
-  **409 if `InActiveCombat`** → `ApplyFeatureUses` (per-feature `current ∈ [0,max]`, `max<0` =
-  unlimited, only features already on the row are editable; `ErrInvalidInput` → 400). Auto-mounts via
-  `RegisterRoutes` (already inside `dmAuthMw`). Frontend: `saveCharacterFeatureUses` in `lib/api.js`;
-  `CharacterOverview.svelte` mounts `FeatureUsesEditor` with `openFeatureEditor` (fetch-on-open via the
-  read GET) / `saveFeatures` / `closeFeatureEditor`, mirroring the slot editor. Body is the editor's
-  `{changes:[{feature,current}], reason}` shape (batch, applied atomically). Tests: service
-  (`feature_uses_test.go`), handler + store (`handler_test.go`, `store_db_test.go`), api
-  (`api.test.js`); `make cover-check` green, 726 vitest green.
-- **Notes:** the editor component + the read endpoint already existed from ISSUE-039, so this was mostly a
-  second handler + a parent mount. The level-up rage-**Max** re-derive gap noted under ISSUE-039 is still
-  unfiled and unaffected by this change.
+### ISSUE-040 — No out-of-combat editor for feature uses — RESOLVED · see git log / session-01.md
 
-### ISSUE-041 — Rage lapses silently (no #combat-log / no DM timeline) (FIXED)
-- **Date:** 2026-06-30
-- **Area:** combat / rage end-of-turn auto-expiry (`internal/combat/rage.go`)
-- **Severity:** medium — not a state bug (the drop is correct RAW), but an **observability** hole that
-  misleads play: a player keeps acting as if raging (resistance + advantage) when the engine no longer
-  treats them as raging, and the DM has no timeline signal it happened.
-- **Status:** FIXED (TDD, 2026-06-30).
-- **Found live (Cold Vault, Round 1):** Forge moved up and **raged** (bonus action) but ended his turn
-  **without attacking** (the keeper was still out of reach) and took no damage. By RAW rage ends if, by the
-  end of your turn, you haven't attacked a hostile or taken damage — so the engine's `maybeEndRageOnTurnEnd`
-  correctly cleared `is_raging` (the schema even tracks `rage_attacked_this_round` / `rage_took_damage_this_round`
-  for exactly this). **But the only rage line ever posted was "🔥 Forge enters a Rage!" — nothing when it
-  dropped.** Next turn the keeper's longsword hit for **7 slashing, applied in full** (Forge 32→25); had rage
-  held it would have been halved to **3**. The 4-HP swing — and the fact that Forge was no longer raging at
-  all — was invisible to both player and DM.
-- **Root cause:** `maybeEndRageOnTurnEnd` (rage.go) cleared + persisted rage state but emitted nothing. The two
-  observability surfaces that exist for other combat events — Discord **#combat-log** (`CombatLogNotifier`) and
-  the **action_log** DM-Console timeline — were never touched on expiry. (Rage *entry* posts to #combat-log via
-  the Discord bonus handler; rage *exit* had no equivalent.)
-- **Fix (TDD, 2026-06-30):** added `Service.notifyRageExpired`, called from `maybeEndRageOnTurnEnd` right after
-  the rage clear, **mirroring `notifyDroppedToZero`** (the drop-to-0 dual-surface precedent): it posts
-  `FormatRageEnd(name, "no attack or damage this round")` to #combat-log via `postCombatLog`, then writes a
-  **`rage_expired`** action_log row (new `actionTypeRageExpired` const) parented to the encounter's current
-  turn — which, at the `AdvanceTurn` end-hook (`initiative.go:442`, before `CompleteTurn`), is still the
-  rager's own turn, so the timeline row sits under the turn that ended it. Pure observability + best-effort:
-  nil notifier / `GetEncounter` failure / missing turn are all swallowed so turn-advance never blocks. Reused
-  the existing `FormatRageEnd` formatter (no new message function). Red/green
-  `TestMaybeEndRageOnTurnEnd_Lapsed_LogsRageExpired` (asserts the #combat-log post + the `rage_expired` row's
-  turn/encounter/actor) + `..._AttackedThisRound_NoLog` (rage holds → no clear, no logs); full `internal/combat`
-  suite + `make cover-check` green; redeployed.
-- **Not addressed (separate, still open/unfiled):** rage **Max** isn't re-derived on level-up (noted under
-  ISSUE-039); and rage end on **unconsciousness** (`maybeEndRageOnUnconscious`) is already implied by the
-  drop-to-0 line so it was left as-is.
+### ISSUE-041 — Rage lapses silently (no #combat-log / no DM timeline) — RESOLVED · see git log / session-01.md
 
 ### ISSUE-060 — Builder never surfaces Warlock pact boon / eldritch invocations (systemic `choose_*` gap)
 - **Date:** 2026-07-03
@@ -1123,4 +280,3 @@ Status: `OPEN` · `WORKAROUND` · `FIXED` · `WONTFIX` · `INFO` (not a bug, jus
 - **Workaround:** if any.
 - **Notes / fix idea:** code pointer if known.
 -->
-</content>

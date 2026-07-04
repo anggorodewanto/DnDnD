@@ -11,7 +11,8 @@
   and no pending approvals, so the new author "Winfroz" acting in-character maps to
   Windreth by elimination). Watch for his actions under `Winfroz` in #in-character.
 - **Character id:** `b2c436da-6762-458f-8016-3fe8f18e35e6`
-- **High-Elf Rogue 3** (Roguish Archetype: **Thief**), **urchin** background.
+- **High-Elf Rogue 4** (Roguish Archetype: **Thief**), **urchin** background. _(Approved at
+  L3 07-02; **milestone L4 applied 07-03** — Defensive Duelist, below.)_
 - **APPROVED** 2026-07-02 via the dashboard approvals page
   (`POST /dashboard/api/approvals/…/approve → 200`; reviewed first — clean, legal
   L3 build). Character card auto-posted to #character-cards on approval; bot
@@ -22,10 +23,10 @@
 | | |
 | --- | --- |
 | HP | **24/24** |
-| AC | **14** (leather + DEX +3) |
+| AC | **15** (leather + DEX +4) |
 | Speed | 30 |
 | Prof bonus | +2 |
-| Abilities | STR 8 (−1) · **DEX 17 (+3)** · CON 14 (+2) · INT 11 · WIS 14 (+2) · CHA 10 |
+| Abilities | STR 8 (−1) · **DEX 18 (+4)** · CON 14 (+2) · INT 11 · WIS 14 (+2) · CHA 10 |
 | Saves | DEX, INT |
 | Skills | acrobatics, athletics, insight, perception, sleight-of-hand, **investigation, stealth** |
 | Expertise | **investigation, stealth** (double proficiency) |
@@ -39,6 +40,9 @@
   target), **Cunning Action** (Dash/Disengage/Hide as a bonus action), Thieves'
   Cant, Thief archetype (fast hands / second-story work — engine-tagged).
 - **Weapon masteries:** dagger, shortsword.
+- **Feat (L4): Defensive Duelist** — 2024 half-feat: **+1 DEX → 18** (so AC 14→15);
+  **reaction:** add proficiency bonus to AC vs a melee hit while wielding a finesse
+  weapon. Applied 07-03.
 - **Kit:** shortbow + arrows, shortsword, dagger, small knife, leather armor,
   **thieves' tools**, burglar's pack, common clothes; urchin trinkets — **map of a
   city**, **pet mouse**, **token of remembrance**.
@@ -54,21 +58,6 @@
   in **investigation + stealth** makes him the natural examine/scout lead
   (Vale + Forge already read the shard; Windreth is built to out-read both).
   Sneak Attack + Cunning Action make him the mobile burst-damage PC in a fight.
-- **First scene action** 2026-07-02 (~12:32 PM, as `Winfroz`): *"looking around."* DM
-  gave the plain scout/darkvision read for free (rank-on-rank faceless bowed dead, the
-  drag-scar road, the one sentinel still turned to the light, the heart past even
-  elf-sight) and offered a `/check perception` or `/check investigation` to dig past it
-  (hidden way / trap / safe path / weakness). He rolled it — see next bullet.
-- **First roll** 2026-07-02 (~1:05 PM, as `Winfroz`): `/check perception` = **17**
-  (secret tiered DC ≈15, high). Resolved as his scout's read of the gallery crowd — most
-  of the bowed dead are only dead, but the sentinel that tracked the lantern + a knot
-  nearest the heart are **tensed, angled toward Vale** (out alone 40 ft up the road); the
-  drag-scar is the only clear lane; if it sours *those* wake first. A real tactical edge,
-  no enemy numbers. He's now the party's early-warning, positioned at the mouth beside
-  Forge while Vale touches the heart. Awaiting his next move (`/check stealth` to
-  reposition / ready vs the tensed dead / move up).
-- **Woven in** 2026-07-02 at the mouth of the Buried Gallery of the Faceless God
-  as a traveler who followed the cold down through the clawed-open Ashfall cellar
-  (per [`../world.md`](../world.md) fold-in). Per-PC hook seeded on arrival: a
-  thief's/elf's read of the pried niche, the carved-then-silenced name, and the
-  shard's wrongness. No backstory imposed — motive left to the player.
+- **Joined the fiction** as a traveler who followed the cold down through Ashfall (per
+  [`../world.md`](../world.md) fold-in) — **no backstory imposed, motive left to the
+  player.** Play-by-play beats now live in [`../sessions/session-01.md`](../sessions/session-01.md).

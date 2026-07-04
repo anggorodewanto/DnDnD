@@ -7,7 +7,8 @@
 
 - **Player:** the DM's friend — **remote 2nd player**, in via the ngrok
   tunnel (see [`../runbook.md`](../runbook.md) "Remote players").
-- **Hill-Dwarf Barbarian 3** (Path of the Berserker), guild-artisan background.
+- **Hill-Dwarf Barbarian 4** (Path of the Berserker), guild-artisan background. _(L4 feat:
+  **Great Weapon Master**, applied 07-03.)_
 - **APPROVED** 2026-06-25 (after the ISSUE-013 slug-drift fix went live — see
   [`../issues.md`](../issues.md)). Character card auto-posted to #character-cards
   on approval.
@@ -21,11 +22,17 @@
 | Speed | 25 (dwarf) |
 | Skills | athletics, intimidation (class) + insight, persuasion (guild-artisan bg) |
 
+## Kit & features (durable)
+
+- **Weapon:** **greataxe** (heavy, two-handed — his Great Weapon Master weapon).
+- **Rage** — resist bludgeoning / piercing / slashing; **Berserker Frenzy**. **Reckless
+  Attack** (advantage on melee STR attacks; foes get advantage back).
+- **Feat (L4): Great Weapon Master** — 2024: on a **crit or a kill** with a melee weapon, a
+  **bonus-action** melee swing; may take **−5 to hit for +10 damage** with a heavy weapon.
+  Applied 07-03.
+
 ## Live notes
 
 - **Player-controlled** — narrate his *arrival / world*, never his choices or
   dialogue. (Standing rule, see [`../dm-rules.md`](../dm-rules.md).)
-- Dropped the first cellar wretch with **auto-crit dual handaxes** vs a paralyzed target:
-  an unraged barbarian's 2d6+2 crits took **two rounds** to finish a 15-HP foe, so **Rage is a
-  real damage lever** if a fight runs long. (Current weapon / rage state live in roster.md /
-  the DM Console.)
+- Live weapon / rage state comes from the **DM Console** / `/character`, not this file.

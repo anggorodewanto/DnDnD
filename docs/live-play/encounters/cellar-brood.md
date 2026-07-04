@@ -1,10 +1,10 @@
-# Encounter — Cellar: the brood (PRE-BUILT, one click to run)
+# Encounter — Cellar: the brood (ARCHIVED design reference)
 
-> Design-intent card. The encounter, enemies, map, and all mechanical stat lines
-> (AC / HP / Multiattack / placement) are **live in the dashboard combat builder** —
-> open it there, don't hand-copy it here (numbers drift). This file holds only the
-> non-derivable DM design. Lore: [`../world.md`](../world.md); Start Combat:
-> [`../runbook.md`](../runbook.md) §4.
+> **✅ COMPLETED & ARCHIVED** — this fight is resolved (see [`../sessions/session-01.md`](../sessions/session-01.md) + game-state.md "Active encounter"). Kept for design reference / reusable nuggets only.
+
+> Design-intent card. All mechanical stat lines (AC / HP / Multiattack / placement) were
+> live in the dashboard combat builder, never hand-copied here (numbers drift). This file
+> holds only the non-derivable DM design. Lore: [`../world.md`](../world.md).
 
 - **Encounter (template) id:** `0a54efd4-a3a2-47b5-ac7f-0030a9cb22d1` (durable
   reference — DM name "Cellar — the brood", player-facing "The Cellar").
@@ -26,9 +26,3 @@
   [`../big-party.md`](../big-party.md) "Encounter scaling."
 - **Reserve mechanic:** a wretch can claw up from the deeper shaft mid-fight if the
   fight is too easy (mirrors the upstairs "2nd wretch from the pit" reserve).
-
-## To run
-
-Players decide to descend (await them in #in-character — **don't act for them**),
-then open "Cellar — the brood" → **Start Combat**; adjudicate surprise live. The
-board auto-posts to #combat-map on Start. Full how-to: [`../runbook.md`](../runbook.md) §4 / §7.

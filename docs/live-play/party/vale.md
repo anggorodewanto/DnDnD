@@ -8,7 +8,7 @@
 
 - **Player:** the user (DM's primary).
 - **Character id:** `b6ca7f49-c173-4290-8c80-6fb785fbe733`
-- **Tiefling Warlock 3** (patron: **the Fiend**), entertainer background.
+- **Tiefling Warlock 4** (patron: **the Fiend**), entertainer background. _L4 ASI: **+2 CHA → 18**._
 - **APPROVED** 2026-06-25 (first portal character; built clean after the
   ISSUE-001 / 008 fixes went live — see [`../issues.md`](../issues.md)).
 
@@ -20,14 +20,14 @@
 | AC | **10** (DEX +0, no armor equipped — leather sits in the pack; equip → **AC 11**) |
 | Speed | 30 |
 | Prof bonus | +2 |
-| Abilities | STR 10 · DEX 10 · CON 15 (+2) · INT 14 · **CHA 16 (+3)** · WIS 10 |
+| Abilities | STR 10 · DEX 10 · CON 15 (+2) · INT 14 · **CHA 18 (+4)** · WIS 10 |
 | Saves | WIS, CHA |
 | Skills | acrobatics, performance, deception, history |
 
 ## Spellcasting — Pact Magic
 
 - **2 slots @ slot level 2** (`pact_magic_slots {current:2, max:2, slot_level:2}`).
-- Spell save **DC 13**, spell atk **+5** (CHA).
+- Spell save **DC 14**, spell atk **+6** (CHA).
 - **Cantrips:** chill touch, mage hand (+ thaumaturgy from Infernal Legacy).
 - **Known spells:** hellish rebuke (L1) · hold person, shatter, misty step (L2).
 - Infernal Legacy also grants **1/day hellish rebuke @ L2** (free, CHA).
@@ -57,8 +57,11 @@ DB can't derive; see [`../game-state.md`](../game-state.md) + [`../sessions/`](.
   her palm, humming like a struck bell; *"a story with the name still folded inside."*
   A story-vessel, almost certainly another of the god's scattered clues. Lifted with
   Mage Hand from the god's own offering.
-- **GEAS — owe the god the telling** *(struck 07-02)* — the price of taking the shard:
-  carry the god's tale, tell it TRUE, un-forget it — *"a debt no god forgives."*
-  **Struck on a Deception (her 21)** — a truth-taster paid in a lie; the geas holds
-  only while she tells the tale true / the bluff never surfaces. **Latent hook, not
-  resolved.**
+- **GEAS — DISCHARGED / arc resolved 07-03** — the debt to carry the god's tale and
+  tell it TRUE was **paid**: Vale told the god its true story (**Performance 21**, backed
+  by two recovered name-scraps), a truth-taster tasted no lie, and the god was
+  **un-forgotten and released** (see [`../world.md`](../world.md) "The Faceless God — arc
+  RESOLVED"). She still carries the god's items out of the gallery — the **cold-iron token**
+  (its mark, *"a key that likes to open forgotten things"*), the **ashen face-shard**, and
+  the **name-scraps** of the un-rememberable name (the campaign's long thread, now pointing
+  OUTWARD). Live inventory: her `/character` sheet / the DM Console.
