@@ -231,15 +231,25 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 	}
 
 	// F-22: Pre-roll attacks so the DM can see and fudge rolls in the review UI.
+	// 5b: surface a targeted PC's available reactions so the DM can pick one in
+	// the Turn Builder before executing (the choice raises the target's AC).
 	for i := range plan.Steps {
 		step := &plan.Steps[i]
-		if step.Type == StepTypeAttack && step.Attack != nil && step.Attack.RollResult == nil {
-			target, terr := s.store.GetCombatant(ctx, step.Attack.TargetID)
-			if terr != nil {
-				continue
-			}
+		if step.Type != StepTypeAttack || step.Attack == nil {
+			continue
+		}
+		target, terr := s.store.GetCombatant(ctx, step.Attack.TargetID)
+		if terr != nil {
+			continue
+		}
+		if step.Attack.RollResult == nil {
 			result := RollAttack(*step.Attack, int(target.Ac), roller)
 			step.Attack.RollResult = &result
+		}
+		if target.CharacterID.Valid {
+			if opts, oerr := s.AvailableReactions(ctx, target, encounterID); oerr == nil {
+				step.Attack.AvailableReactions = opts
+			}
 		}
 	}
 
@@ -295,14 +305,39 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 			if step.Attack == nil {
 				continue
 			}
+			// 5b: honor a DM-chosen pre-roll reaction only if the target still has
+			// it available this round. A separate enemy earlier in the round (its
+			// own ExecuteEnemyTurn) — or an earlier attack in this multiattack —
+			// may have already spent it; drop a stale/duplicate choice so it can't
+			// apply twice.
+			if step.Attack.ChosenReaction != nil {
+				if free, ferr := s.CanDeclareReaction(ctx, encounterID, step.Attack.TargetID); ferr != nil || !free {
+					step.Attack.ChosenReaction = nil
+				}
+			}
+			// A DM-chosen pre-roll reaction raises the target's AC. Fold its bonus
+			// into the hit check — either at roll time (no pre-roll) or by
+			// recomputing the pre-rolled hit against the boosted AC.
+			acBonus := 0
+			if step.Attack.ChosenReaction != nil {
+				acBonus = step.Attack.ChosenReaction.ACBonus
+			}
 			// If no roll result provided, roll it now
 			if step.Attack.RollResult == nil {
 				target, err := s.store.GetCombatant(ctx, step.Attack.TargetID)
 				if err != nil {
 					continue
 				}
-				result := RollAttack(*step.Attack, int(target.Ac), roller)
+				result := RollAttack(*step.Attack, int(target.Ac)+acBonus, roller)
 				step.Attack.RollResult = &result
+			} else if step.Attack.ChosenReaction != nil {
+				if target, err := s.store.GetCombatant(ctx, step.Attack.TargetID); err == nil {
+					applyReactionToRoll(step.Attack.RollResult, int(target.Ac), acBonus)
+				}
+			}
+			// Record the spent reaction so the PC can't react again this round.
+			if step.Attack.ChosenReaction != nil {
+				_ = s.markPCReactionUsed(ctx, encounterID, step.Attack.TargetID, *step.Attack.ChosenReaction)
 			}
 			// Queue damage if hit, preserving per-attack damage type so the
 			// ApplyDamage R/I/V resolution can match correctly.

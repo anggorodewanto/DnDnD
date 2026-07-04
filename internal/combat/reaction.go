@@ -155,6 +155,18 @@ func (s *Service) CanDeclareReaction(ctx context.Context, encounterID, combatant
 		return false, fmt.Errorf("getting active turn: %w", err)
 	}
 
+	// Authoritative "reaction spent this round" check via the used declaration.
+	// Unlike the turn-row flag below, this works even when the combatant has no
+	// turn row yet this round (they act later in initiative), so a reaction spent
+	// against an early attacker stays spent for every later attacker.
+	spent, err := s.hasUsedReactionThisRound(ctx, encounterID, combatantID, activeTurn.RoundNumber)
+	if err != nil {
+		return false, err
+	}
+	if spent {
+		return false, nil
+	}
+
 	turns, err := s.store.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
 		EncounterID: encounterID,
 		RoundNumber: activeTurn.RoundNumber,
@@ -170,6 +182,27 @@ func (s *Service) CanDeclareReaction(ctx context.Context, encounterID, combatant
 		return !t.ReactionUsed, nil
 	}
 	return true, nil
+}
+
+// hasUsedReactionThisRound reports whether the combatant already resolved a
+// reaction during the given round. This is the round-scoped source of truth for
+// "reaction spent": a used declaration carries used_on_round independent of any
+// turn row, so it correctly blocks a second reaction even when several enemies
+// attack the same PC before that PC has taken a turn this round.
+func (s *Service) hasUsedReactionThisRound(ctx context.Context, encounterID, combatantID uuid.UUID, round int32) (bool, error) {
+	decls, err := s.store.ListReactionDeclarationsByCombatant(ctx, refdata.ListReactionDeclarationsByCombatantParams{
+		CombatantID: combatantID,
+		EncounterID: encounterID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("listing reaction declarations: %w", err)
+	}
+	for _, d := range decls {
+		if d.Status == "used" && d.UsedOnRound.Valid && d.UsedOnRound.Int32 == round {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // CancelReaction cancels a specific reaction declaration by ID.

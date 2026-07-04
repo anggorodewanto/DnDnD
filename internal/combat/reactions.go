@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -15,10 +16,10 @@ import (
 // ReactionACBonus so nothing is resolved retroactively. Modelled as a list so
 // future reactions (Shield, etc.) drop in as additional options.
 type ReactionOption struct {
-	ID      string // stable slug, e.g. "defensive-duelist"
-	Label   string // button label, e.g. "Defensive Duelist (+3 AC)"
-	ACBonus int    // AC added against the incoming attack if chosen
-	Reason  string // short reason for the combat log, e.g. "Defensive Duelist"
+	ID      string `json:"id"`       // stable slug, e.g. "defensive-duelist"
+	Label   string `json:"label"`    // button label, e.g. "Defensive Duelist (+3 AC)"
+	ACBonus int    `json:"ac_bonus"` // AC added against the incoming attack if chosen
+	Reason  string `json:"reason"`   // short reason for the combat log, e.g. "Defensive Duelist"
 }
 
 // defensiveDuelistReaction returns the Defensive Duelist option when the target
@@ -80,4 +81,47 @@ func (s *Service) AvailableReactions(ctx context.Context, target refdata.Combata
 // is rolled.
 func FormatReactionDeclared(defenderName string, opt ReactionOption) string {
 	return fmt.Sprintf("🛡️ %s uses %s — +%d AC", defenderName, opt.Reason, opt.ACBonus)
+}
+
+// applyReactionToRoll re-evaluates a pre-rolled attack result against a
+// reaction-boosted AC. The enemy-turn plan pre-rolls each attack at the target's
+// base AC; when the DM applies a +AC reaction at execute time we recompute the
+// hit against baseAC+acBonus. A reaction only raises AC, so the only possible
+// transition is hit→miss — damage is left untouched (the execute loop simply
+// skips damage when Hit is false). A natural 20 always hits and a natural 1
+// always misses, matching RollAttack.
+func applyReactionToRoll(r *AttackRollResult, baseAC, acBonus int) {
+	if r.Critical {
+		r.Hit = true
+		return
+	}
+	if r.ToHitRoll == 1 {
+		r.Hit = false
+		return
+	}
+	r.Hit = r.ToHitTotal >= baseAC+acBonus
+}
+
+// markPCReactionUsed records that a targeted PC spent a reaction during an enemy
+// turn by writing a used declaration stamped with the current round. It does NOT
+// go through ResolveReaction (which requires the PC to have a turn row this
+// round) so it works no matter where the PC sits in initiative — the used_on_round
+// stamp is what CanDeclareReaction/AvailableReactions read to block a second
+// reaction against a later attacker in the same round.
+func (s *Service) markPCReactionUsed(ctx context.Context, encounterID, targetID uuid.UUID, opt ReactionOption) error {
+	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err != nil {
+		return fmt.Errorf("getting active turn: %w", err)
+	}
+	decl, err := s.DeclareReaction(ctx, encounterID, targetID, opt.Reason)
+	if err != nil {
+		return fmt.Errorf("declaring reaction: %w", err)
+	}
+	if _, err := s.store.UpdateReactionDeclarationStatusUsed(ctx, refdata.UpdateReactionDeclarationStatusUsedParams{
+		ID:          decl.ID,
+		UsedOnRound: sql.NullInt32{Int32: activeTurn.RoundNumber, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("marking reaction used: %w", err)
+	}
+	return nil
 }

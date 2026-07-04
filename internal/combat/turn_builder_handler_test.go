@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sqlc-dev/pqtype"
+
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
@@ -930,4 +932,221 @@ func TestGenerateEnemyTurnPlan_F22_AttackStepsHaveRollResult(t *testing.T) {
 		}
 	}
 	assert.Greater(t, attackSteps, 0, "plan should contain at least one attack step")
+}
+
+// --- 5b: enemy-turn reaction window via Turn Builder ---
+
+// GenerateEnemyTurnPlan surfaces a targeted PC's available reactions on the
+// attack step so the DM can pick one before executing.
+func TestGenerateEnemyTurnPlan_SurfacesReactionsForPCTarget(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+	charID := uuid.New()
+
+	feats, _ := json.Marshal([]CharacterFeature{{Name: "Defensive Duelist"}})
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{
+				ID: npcID, EncounterID: encounterID, DisplayName: "Goblin",
+				PositionCol: "C", PositionRow: 3, IsNpc: true, IsAlive: true, HpCurrent: 10,
+				CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+				Conditions:    json.RawMessage(`[]`),
+			}, nil
+		}
+		return refdata.Combatant{
+			ID: pcID, EncounterID: encounterID, DisplayName: "Windreth",
+			PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, _ string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID: "goblin", Name: "Goblin", Size: "Small",
+			Speed:         json.RawMessage(`{"walk":30}`),
+			Attacks:       json.RawMessage(`[{"name":"Scimitar","to_hit":4,"damage":"1d6+2","damage_type":"slashing","reach_ft":5}]`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: npcID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 3, IsNpc: true, IsAlive: true, HpCurrent: 10},
+			{ID: pcID, DisplayName: "Windreth", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: charID, ProficiencyBonus: 3,
+			Features:         pqtype.NullRawMessage{RawMessage: feats, Valid: true},
+			EquippedMainHand: sql.NullString{String: "rapier", Valid: true},
+		}, nil
+	}
+	store.getWeaponFn = func(_ context.Context, _ string) (refdata.Weapon, error) { return finesseWeapon(), nil }
+	// No active turn → the PC's reaction is free.
+	store.getActiveTurnByEncounterIDFn = func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{}, sql.ErrNoRows
+	}
+
+	svc := NewService(store)
+	roller := dice.NewRoller(func(int) int { return 10 })
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID, roller)
+	require.NoError(t, err)
+
+	var found bool
+	for _, step := range plan.Steps {
+		if step.Type == StepTypeAttack && step.Attack != nil && step.Attack.TargetID == pcID {
+			require.Len(t, step.Attack.AvailableReactions, 1)
+			assert.Equal(t, "defensive-duelist", step.Attack.AvailableReactions[0].ID)
+			assert.Equal(t, 3, step.Attack.AvailableReactions[0].ACBonus)
+			found = true
+		}
+	}
+	assert.True(t, found, "the attack on the Defensive-Duelist PC should surface its reaction option")
+}
+
+// ExecuteEnemyTurn: a chosen reaction raises the target's AC so a pre-rolled hit
+// becomes a miss, the reaction is marked used (declared+resolved), and the
+// combat log announces it before the attack line.
+func TestExecuteEnemyTurn_ChosenReactionFlipsHitAndMarksUsed(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	declared, resolved := false, false
+	declID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, EncounterID: encounterID, DisplayName: "Goblin", IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{
+			ID: targetID, EncounterID: encounterID, DisplayName: "Windreth", IsNpc: false, IsAlive: true,
+			HpCurrent: 30, Ac: 15, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(_ context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID, RoundNumber: 1}, nil
+	}
+	store.createReactionDeclarationFn = func(_ context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		declared = true
+		return refdata.ReactionDeclaration{ID: declID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Status: "active"}, nil
+	}
+	store.getReactionDeclarationFn = func(_ context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: id, EncounterID: encounterID, CombatantID: targetID, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{{ID: uuid.New(), CombatantID: targetID, RoundNumber: 1}}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(_ context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		resolved = true
+		return refdata.ReactionDeclaration{ID: arg.ID, Status: "used"}, nil
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, newDeterministicRoller(12, 4, 3))
+	r := chi.NewRouter()
+	handler.RegisterEnemyTurnRoutes(r)
+
+	// Pre-rolled at base AC 15: d20=12 +4 = 16 ≥ 15 → hit. Chosen DD +3 → AC 18 → miss.
+	body := `{
+		"combatant_id": "` + npcID.String() + `",
+		"steps": [{
+			"type": "attack",
+			"attack": {
+				"weapon_name": "Scimitar", "to_hit": 4, "damage_dice": "1d6+2",
+				"damage_type": "slashing", "reach_ft": 5,
+				"target_id": "` + targetID.String() + `", "target_name": "Windreth",
+				"roll_result": {"to_hit_roll": 12, "to_hit_total": 16, "hit": true},
+				"chosen_reaction": {"id": "defensive-duelist", "label": "Defensive Duelist (+3 AC)", "ac_bonus": 3, "reason": "Defensive Duelist"}
+			}
+		}]
+	}`
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/enemy-turn", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp executeEnemyTurnResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	assert.Contains(t, resp.CombatLog, "Defensive Duelist", "combat log should announce the reaction")
+	assert.Contains(t, resp.CombatLog, "Miss", "the +3 reaction should turn the hit into a miss")
+	assert.True(t, declared, "reaction should be declared")
+	assert.True(t, resolved, "reaction should be resolved (marked used) so the PC can't react twice")
+}
+
+// A second NPC's plan may carry a stale chosen_reaction the PC already spent
+// against an earlier attacker this round. ExecuteEnemyTurn must drop it: no AC
+// boost, no combat-log call-out, and no fresh declaration written.
+func TestExecuteEnemyTurn_DropsChosenReactionAlreadySpentThisRound(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	charID := uuid.New()
+
+	declaredAgain := false
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, EncounterID: encounterID, DisplayName: "Goblin B", IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{
+			ID: targetID, EncounterID: encounterID, DisplayName: "Windreth", IsNpc: false, IsAlive: true,
+			HpCurrent: 30, Ac: 15, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(_ context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: eid, CombatantID: npcID, RoundNumber: 1}, nil
+	}
+	// The PC already spent their reaction this round (against goblin A).
+	store.listReactionDeclarationsByCombatantFn = func(_ context.Context, _ refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+		return []refdata.ReactionDeclaration{{Status: "used", UsedOnRound: sql.NullInt32{Int32: 1, Valid: true}}}, nil
+	}
+	store.createReactionDeclarationFn = func(_ context.Context, _ refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		declaredAgain = true
+		return refdata.ReactionDeclaration{ID: uuid.New(), Status: "active"}, nil
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, newDeterministicRoller(12, 4, 3))
+	r := chi.NewRouter()
+	handler.RegisterEnemyTurnRoutes(r)
+
+	// Pre-rolled at base AC 15: d20=12 +4 = 16 ≥ 15 → hit. The stale +3 reaction
+	// must NOT apply, so the hit stands.
+	body := `{
+		"combatant_id": "` + npcID.String() + `",
+		"steps": [{
+			"type": "attack",
+			"attack": {
+				"weapon_name": "Scimitar", "to_hit": 4, "damage_dice": "1d6+2",
+				"damage_type": "slashing", "reach_ft": 5,
+				"target_id": "` + targetID.String() + `", "target_name": "Windreth",
+				"roll_result": {"to_hit_roll": 12, "to_hit_total": 16, "hit": true},
+				"chosen_reaction": {"id": "defensive-duelist", "label": "Defensive Duelist (+3 AC)", "ac_bonus": 3, "reason": "Defensive Duelist"}
+			}
+		}]
+	}`
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/enemy-turn", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp executeEnemyTurnResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	assert.NotContains(t, resp.CombatLog, "Defensive Duelist", "a spent reaction must not be re-announced")
+	assert.Contains(t, resp.CombatLog, "Hit", "the hit stands because the stale reaction was dropped")
+	assert.False(t, declaredAgain, "no second reaction declaration should be written for an already-spent reaction")
 }

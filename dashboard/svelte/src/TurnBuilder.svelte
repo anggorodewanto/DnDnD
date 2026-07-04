@@ -1,3 +1,15 @@
+<script module>
+  // resolveChosenReaction maps a DM's selection in the Turn Builder to the
+  // reaction option the server surfaced (by stable id). Returns null for the
+  // "None" selection or an unknown id so the execute payload omits it. Pure and
+  // exported for direct unit testing (the vitest harness has no DOM).
+  export function resolveChosenReaction(availableReactions, reactionId) {
+    if (!reactionId) return null;
+    const opts = availableReactions || [];
+    return opts.find((o) => o.id === reactionId) || null;
+  }
+</script>
+
 <script>
   import { getEnemyTurnPlan, executeEnemyTurn } from './lib/api.js';
 
@@ -65,6 +77,16 @@
     const step = plan.steps[stepIndex];
     if (!step.attack?.roll_result) return;
     step.attack.roll_result[field] = parseInt(value) || 0;
+  }
+
+  // 5b: pick a targeted PC's pre-roll reaction. The chosen option travels back
+  // in the execute payload (step.attack.chosen_reaction); the server folds its
+  // AC bonus into the hit check before rolling.
+  function chooseReaction(stepIndex, reactionId) {
+    if (!plan) return;
+    const step = plan.steps[stepIndex];
+    if (!step.attack) return;
+    step.attack.chosen_reaction = resolveChosenReaction(step.attack.available_reactions, reactionId);
   }
 
   async function confirmAndPost() {
@@ -151,6 +173,19 @@
               <p><strong>{step.attack.weapon_name}</strong> vs {step.attack.target_name}</p>
               <p>To Hit: +{step.attack.to_hit} | Damage: {step.attack.damage_dice} {step.attack.damage_type}</p>
               <p>Reach: {step.attack.reach_ft}ft</p>
+              {#if step.attack.available_reactions && step.attack.available_reactions.length > 0}
+                <div class="step-reaction">
+                  <label>
+                    🛡️ {step.attack.target_name}'s reaction:
+                    <select onchange={(e) => chooseReaction(currentStep, e.target.value)}>
+                      <option value="" selected={!step.attack.chosen_reaction}>None</option>
+                      {#each step.attack.available_reactions as opt}
+                        <option value={opt.id} selected={step.attack.chosen_reaction?.id === opt.id}>{opt.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+                </div>
+              {/if}
             </div>
           {/if}
 
@@ -200,6 +235,9 @@
             {/if}
             {#if step.type === 'attack' && step.attack}
               <span>{step.attack.weapon_name} vs {step.attack.target_name} (+{step.attack.to_hit})</span>
+              {#if step.attack.chosen_reaction}
+                <span class="review-reaction">🛡️ {step.attack.chosen_reaction.label}</span>
+              {/if}
               {#if step.attack.roll_result}
                 <div class="roll-fudge">
                   <label>To Hit: <input type="number" value={step.attack.roll_result.to_hit_total} onchange={(e) => updateRoll(i, 'to_hit_total', e.target.value)} /></label>
@@ -326,6 +364,28 @@
   .recharge-note {
     color: #ffaa00;
     font-weight: bold;
+  }
+
+  .step-reaction {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #0f3460;
+    font-size: 0.85rem;
+    color: #ffd166;
+  }
+
+  .step-reaction select {
+    margin-left: 0.35rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+  }
+
+  .review-reaction {
+    color: #ffd166;
+    font-size: 0.8rem;
   }
 
   .step-actions {

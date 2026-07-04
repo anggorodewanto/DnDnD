@@ -59,6 +59,15 @@ type AttackStep struct {
 	TargetID   uuid.UUID         `json:"target_id"`
 	TargetName string            `json:"target_name"`
 	RollResult *AttackRollResult `json:"roll_result,omitempty"`
+	// AvailableReactions lists the pre-roll reactions the PC target may use
+	// against this attack. Populated by GenerateEnemyTurnPlan only when the
+	// target is a PC with a free, qualifying reaction; the DM picks one in the
+	// Turn Builder.
+	AvailableReactions []ReactionOption `json:"available_reactions,omitempty"`
+	// ChosenReaction is the reaction the DM applied to this attack at execute
+	// time (nil = none). Its ACBonus is folded into the target's AC before the
+	// hit is (re)evaluated, mirroring the pre-declared /attack reaction window.
+	ChosenReaction *ReactionOption `json:"chosen_reaction,omitempty"`
 }
 
 // AttackRollResult holds the results of an attack roll.
@@ -602,6 +611,12 @@ func FormatCombatLog(plan TurnPlan) string {
 }
 
 func formatAttackLog(b *strings.Builder, attack *AttackStep) {
+	// 5b: announce a DM-chosen pre-roll reaction before the attack line, so both
+	// #combat-log and the DM action log show e.g. "🛡️ Windreth uses Defensive
+	// Duelist — +3 AC" ahead of the swing it turned into a miss.
+	if attack.ChosenReaction != nil {
+		fmt.Fprintf(b, "%s\n", FormatReactionDeclared(attack.TargetName, *attack.ChosenReaction))
+	}
 	r := attack.RollResult
 	dmg := attackDamagePhrase(attack)
 	if r.Critical {
