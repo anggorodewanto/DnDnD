@@ -464,10 +464,10 @@ type AttackResult struct {
 	Reckless            bool
 	// ReactionACBonus / ReactionReason echo a pre-roll reaction that raised the
 	// target's AC for this attack (e.g. Defensive Duelist), so the log can note it.
-	ReactionACBonus     int
-	ReactionReason      string
-	AttackerRevealed    bool // True if a hidden attacker was revealed by this attack
-	InvisibilityBroken  bool // True if standard Invisibility condition was broken by this attack
+	ReactionACBonus    int
+	ReactionReason     string
+	AttackerRevealed   bool // True if a hidden attacker was revealed by this attack
+	InvisibilityBroken bool // True if standard Invisibility condition was broken by this attack
 
 	// Class-feature post-hit prompt eligibility hints (D-46/D-48b/D-49/D-51).
 	// The combat service surfaces these flags so the Discord layer can fire
@@ -480,6 +480,19 @@ type AttackResult struct {
 	PromptDivineSmiteSlots          []int  // sorted ascending list of available slot levels
 	PromptBardicInspirationEligible bool   // Attacker holds an un-expired Bardic Inspiration die
 	PromptBardicInspirationDie      string // die expression (d6/d8/d10/d12)
+
+	// TODO 3 — 2024 Great Weapon Master bonus attack.
+	//   - WeaponIsHeavy is set at roll time (ResolveAttack) from the weapon's
+	//     Heavy property; combined with IsMelee it identifies a heavy-melee swing.
+	//   - TargetDroppedToZero is set by Service.Attack after damage resolves
+	//     (from ApplyDamageResult.DroppedToZero) — the above-0 → 0 HP transition.
+	//   - PromptGWMBonusAttackEligible is set in populatePostHitPrompts when the
+	//     attacker holds the GWM feat and either crit or dropped the target to 0
+	//     with a heavy melee weapon. The Discord layer reads it to offer a
+	//     bonus-action swing with the same weapon (Service.GWMBonusAttack).
+	WeaponIsHeavy                bool
+	TargetDroppedToZero          bool
+	PromptGWMBonusAttackEligible bool
 
 	// SR-010: list of EffectType strings whose conditions included
 	// OncePerTurn:true and which actually fired (passed condition filtering)
@@ -551,21 +564,21 @@ type AttackCommand struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
-	TwoHanded           bool               // Use versatile two-handed grip
-	IsImprovised        bool               // Improvised weapon attack
-	ImprovisedThrown    bool               // Improvised weapon thrown
-	Thrown              bool               // Throw a melee weapon with "thrown" property
-	GWM                 bool               // Great Weapon Master 2014 flag (-5 hit / +10 damage)
-	GWM2024             bool               // Great Weapon Master 2024: +proficiency bonus damage (heavy melee, 1/turn)
-	Sharpshooter        bool               // Sharpshooter flag
-	Reckless            bool               // Reckless Attack flag
+	TwoHanded           bool // Use versatile two-handed grip
+	IsImprovised        bool // Improvised weapon attack
+	ImprovisedThrown    bool // Improvised weapon thrown
+	Thrown              bool // Throw a melee weapon with "thrown" property
+	GWM                 bool // Great Weapon Master 2014 flag (-5 hit / +10 damage)
+	GWM2024             bool // Great Weapon Master 2024: +proficiency bonus damage (heavy melee, 1/turn)
+	Sharpshooter        bool // Sharpshooter flag
+	Reckless            bool // Reckless Attack flag
 	// ReactionACBonus is AC the targeted PC gains against THIS attack from a
 	// reaction declared in the pre-roll window (e.g. Defensive Duelist +PB).
 	// ReactionReason names it for the log. Baked into effectiveAC by ResolveAttack.
 	ReactionACBonus int
 	ReactionReason  string
-	AttackerVision      VisionCapabilities // Vision capabilities of the attacker
-	TargetVision        VisionCapabilities // Vision capabilities of the target
+	AttackerVision  VisionCapabilities // Vision capabilities of the attacker
+	TargetVision    VisionCapabilities // Vision capabilities of the target
 	// Walls are encounter-map wall segments used to compute attacker→target
 	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
 	// creature-granted cover still applies via the encounter's combatant list.
@@ -683,16 +696,17 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	result := AttackResult{
-		AttackerName:   input.AttackerName,
-		TargetName:     input.TargetName,
-		WeaponName:     input.Weapon.Name,
-		DistanceFt:     input.DistanceFt,
-		IsMelee:        isMelee,
-		IsWeaponAttack: true,
-		EffectiveAC:    effectiveAC,
-		DamageType:     input.Weapon.DamageType,
-		Cover:          input.Cover,
-		InLongRange:    resolveInLongRange(input),
+		AttackerName:    input.AttackerName,
+		TargetName:      input.TargetName,
+		WeaponName:      input.Weapon.Name,
+		DistanceFt:      input.DistanceFt,
+		IsMelee:         isMelee,
+		WeaponIsHeavy:   HasProperty(input.Weapon, "heavy"),
+		IsWeaponAttack:  true,
+		EffectiveAC:     effectiveAC,
+		DamageType:      input.Weapon.DamageType,
+		Cover:           input.Cover,
+		InLongRange:     resolveInLongRange(input),
 		GWM:             input.GWM,
 		Sharpshooter:    input.Sharpshooter,
 		Reckless:        input.Reckless,
@@ -1161,9 +1175,9 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 // that land multiple strikes on one target in a single command (Flurry of
 // Blows) can thread the reduced HP into the next strike; on a no-op the target
 // is returned unchanged.
-func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result AttackResult) (refdata.Combatant, error) {
+func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result AttackResult) (refdata.Combatant, ApplyDamageResult, error) {
 	if !result.Hit || result.DamageTotal <= 0 {
-		return target, nil
+		return target, ApplyDamageResult{}, nil
 	}
 	out, err := s.ApplyDamage(ctx, ApplyDamageInput{
 		EncounterID: encounterID,
@@ -1173,9 +1187,9 @@ func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, tar
 		IsCritical:  result.CriticalHit,
 	})
 	if err != nil {
-		return target, fmt.Errorf("applying attack damage: %w", err)
+		return target, ApplyDamageResult{}, fmt.Errorf("applying attack damage: %w", err)
 	}
-	return out.Updated, nil
+	return out.Updated, out, nil
 }
 
 // Attack is the service-level method that orchestrates a full attack:
@@ -1345,9 +1359,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return result, err
 	}
 
-	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	_, dmgOut, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result)
+	if err != nil {
 		return result, err
 	}
+	// TODO 3 — carry the above-0 → 0 HP transition (computed once inside
+	// ApplyDamage) onto the result so populatePostHitPrompts can gate the GWM
+	// bonus attack. The no-op path returns a zero-value result (false).
+	result.TargetDroppedToZero = dmgOut.DroppedToZero
 
 	// 2024 Weapon Mastery — apply the target-side effect that fired:
 	//   - Graze: a miss deals the ability-modifier damage to the target HP.
@@ -1507,7 +1526,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	if err != nil {
 		return result, err
 	}
-	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 	// SR-010 — mirror Service.Attack: improvised hits that produce a
@@ -1690,7 +1709,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if err != nil {
 		return result, err
 	}
-	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 
@@ -1747,6 +1766,139 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 			return result, fmt.Errorf("clearing thrown off-hand weapon: %w", equipErr)
 		}
 	}
+
+	return result, nil
+}
+
+// GWMBonusAttackCommand holds the inputs for the 2024 Great Weapon Master
+// bonus-action attack: one swing with the same Heavy melee weapon at the full
+// ability modifier, offered after a crit or a drop-to-0 with that weapon.
+type GWMBonusAttackCommand struct {
+	Attacker            refdata.Combatant
+	Target              refdata.Combatant
+	Turn                refdata.Turn
+	HostileNearAttacker bool
+	AttackerSize        string
+	DMAdvantage         bool
+	DMDisadvantage      bool
+	AttackerVision      VisionCapabilities
+	TargetVision        VisionCapabilities
+	// Walls are encounter-map wall segments used to compute attacker→target
+	// cover, mirroring OffhandAttack. A nil/empty slice degrades to "no wall
+	// cover"; creature-granted cover still applies via the combatant list.
+	Walls []renderer.WallSegment
+}
+
+// GWMBonusAttack makes the 2024 Great Weapon Master bonus-action swing. Unlike
+// the off-hand (two-weapon-fighting) attack, it uses the attacker's equipped
+// MAIN-HAND Heavy weapon at the full ability modifier — the whole point of the
+// feat's rider. Eligibility (crit or drop-to-0) is decided at the triggering
+// attack (PromptGWMBonusAttackEligible); here we re-validate the durable
+// prerequisites (character, feat, Heavy melee main weapon, bonus action free)
+// so a stale prompt or a direct call can't produce an illegal swing.
+func (s *Service) GWMBonusAttack(ctx context.Context, cmd GWMBonusAttackCommand, roller *dice.Roller) (AttackResult, error) {
+	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
+		return AttackResult{}, err
+	}
+
+	// C-40: a charmed combatant cannot attack the source of its charm.
+	if err := validateCharmedAttack(cmd.Attacker, cmd.Target); err != nil {
+		return AttackResult{}, err
+	}
+
+	if !cmd.Attacker.CharacterID.Valid {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master bonus attack requires a character (not NPC)")
+	}
+
+	char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("getting character: %w", err)
+	}
+
+	if !HasFeatureByName(char.Features.RawMessage, "Great Weapon Master") {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master bonus attack requires the feat")
+	}
+
+	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master bonus attack requires a heavy melee weapon in your main hand")
+	}
+	weapon, err := s.store.GetWeapon(ctx, char.EquippedMainHand.String)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("getting main hand weapon: %w", err)
+	}
+	if IsRangedWeapon(weapon) || !HasProperty(weapon, "heavy") {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master bonus attack requires a heavy melee weapon")
+	}
+
+	parsed, err := ParseAbilityScores(char.AbilityScores)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
+	}
+	// SR-022: wild-shaped attackers use the beast's merged scores; a failed
+	// beast lookup degrades to the character's own scores.
+	scores := ResolveAttackerScores(ctx, s.store, cmd.Attacker, parsed)
+
+	// Phase 33 / C-33: cover gate runs BEFORE consuming the bonus action so a
+	// total-cover swing doesn't burn the resource.
+	coverLevel, err := s.resolveAttackCover(ctx, cmd.Attacker, cmd.Target, cmd.Walls)
+	if err != nil {
+		return AttackResult{}, err
+	}
+
+	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
+	}
+
+	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
+	input := buildAttackInput(
+		cmd.Attacker, cmd.Target, weapon, scores, int(char.ProficiencyBonus), distFt,
+		cmd.HostileNearAttacker, cmd.AttackerSize,
+		dmAdv, dmDisadv, nil, // nil dmgMod → full ability modifier (the GWM benefit)
+	)
+	s.populateAttackContext(ctx, &input, cmd.Attacker)
+	input.TwoHanded = true // heavy weapons are swung two-handed
+	input.Cover = coverLevel
+	if char.CharacterData.Valid {
+		input.WeaponMasteries = parseWeaponMasteries(char.CharacterData.RawMessage)
+	}
+
+	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd.Attacker.EncounterID, cmd.Attacker, cmd.Target, cmd.AttackerVision, cmd.TargetVision)
+	if err != nil {
+		return AttackResult{}, err
+	}
+	input.AttackerObscurement = attackerObs
+	input.TargetObscurement = targetObs
+
+	// Wire FES so class/style riders (Rage, magic items) and the once-per-turn
+	// tracker apply to the bonus swing too. A minimal AttackCommand carries the
+	// only fields populateAttackFES reads; GWM2024 is intentionally left false so
+	// the +PB damage rider stays opt-in on the main /attack and can't double-dip.
+	fesCmd := AttackCommand{Attacker: cmd.Attacker, Target: cmd.Target, Turn: updatedTurn}
+	if err := s.populateAttackFES(ctx, &input, fesCmd, &char, weapon, scores); err != nil {
+		return AttackResult{}, err
+	}
+
+	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	if err != nil {
+		return result, err
+	}
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+		return result, err
+	}
+
+	// 2024 Weapon Mastery — apply any on-hit effect that fired (Topple/Cleave etc.),
+	// mirroring the main Attack path.
+	if err := s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
+		return result, err
+	}
+	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
+	s.markRageAttacked(ctx, cmd.Attacker)
+
+	// ISSUE-014: persist to action_log for the DM Console timeline.
+	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
 
 	return result, nil
 }

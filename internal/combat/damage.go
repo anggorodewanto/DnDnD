@@ -158,6 +158,12 @@ type ApplyDamageResult struct {
 	// InstantDeath is true when overflow damage >= max HP killed the target
 	// outright (PHB instant-death rule). Implies Killed and !IsAlive.
 	InstantDeath bool
+	// DroppedToZero is true when this damage event reduced the target from
+	// above 0 to 0 (or below) HP — the same above-0 → 0 transition that gates
+	// notifyDroppedToZero. Distinct from Killed/IsAlive: a downed PC is dropped
+	// to 0 yet still "alive" (dying). False on Override, wild-shape, and every
+	// no-op / early return. Read by the GWM 2024 bonus-attack eligibility.
+	DroppedToZero bool
 	// DeathSaveOutcome carries the optional outcome from a Phase 43
 	// drop-to-0 or damage-at-0-HP routing. Nil when no death-save event
 	// fired (e.g. target survived above 0 HP, NPC corpse path).
@@ -302,7 +308,8 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	// the DM Console timeline and #combat-log. Excludes: DM HP overrides &
 	// undo (Override), wild-shape reverts (the druid is not dying), damage-at-0
 	// ticks (prevHP already 0), and survivals (newHP > 0).
-	if !input.Override && !isWildShaped && target.HpCurrent > 0 && newHP <= 0 {
+	droppedToZero := !input.Override && !isWildShaped && target.HpCurrent > 0 && newHP <= 0
+	if droppedToZero {
 		s.notifyDroppedToZero(ctx, input.EncounterID, target, dsRouting.instantDeath)
 	}
 
@@ -316,6 +323,7 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		Reason:           reason,
 		Killed:           !isAlive,
 		InstantDeath:     dsRouting.instantDeath,
+		DroppedToZero:    droppedToZero,
 		DeathSaveOutcome: dsRouting.outcome,
 	}, nil
 }

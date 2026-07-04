@@ -170,6 +170,34 @@ func (p *ClassFeaturePromptPoster) PromptBardicInspiration(args BardicInspiratio
 	})
 }
 
+// GWMBonusAttackPromptArgs are the per-invocation inputs for the 2024 Great
+// Weapon Master bonus-attack prompt (TODO 3).
+type GWMBonusAttackPromptArgs struct {
+	ChannelID    string
+	AttackerName string
+	TargetName   string
+	WeaponName   string
+}
+
+// GWMBonusAttackPromptResult — Attack true means make the bonus-action swing.
+type GWMBonusAttackPromptResult struct {
+	Attack    bool
+	Forfeited bool
+}
+
+// PromptGWMBonusAttack posts [Bonus Attack] / [Skip] after a Great Weapon
+// Master feat-holder crits or drops a target to 0 HP with a Heavy melee weapon.
+func (p *ClassFeaturePromptPoster) PromptGWMBonusAttack(args GWMBonusAttackPromptArgs, onResolved func(GWMBonusAttackPromptResult)) error {
+	buttons := []ReactionPromptButton{
+		{Label: "Bonus Attack", Choice: "attack"},
+		{Label: "Skip", Choice: "skip", Style: discordgo.SecondaryButton},
+	}
+	content := fmt.Sprintf("🪓 **Great Weapon Master!** %s may make a bonus-action attack with %s against %s. Swing?", args.AttackerName, args.WeaponName, args.TargetName)
+	return p.postBinary(args.ChannelID, content, buttons, func(choice string, forfeit bool) {
+		onResolved(GWMBonusAttackPromptResult{Attack: choice == "attack", Forfeited: forfeit})
+	})
+}
+
 // postBinary is the shared two-button post + callback shape.
 func (p *ClassFeaturePromptPoster) postBinary(channelID, content string, buttons []ReactionPromptButton, onResolved func(choice string, forfeit bool)) error {
 	_, err := p.prompts.Post(ReactionPromptPostArgs{

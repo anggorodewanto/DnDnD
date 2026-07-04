@@ -17,6 +17,9 @@ import (
 //   - D-48b Stunning Strike — monk melee hit, ki available
 //   - D-49 Bardic Inspiration — holder makes an attack with an un-expired die
 //   - D-51 Divine Smite — paladin melee hit, at least one slot available
+//   - TODO 3 GWM bonus attack — feat-holder crit OR drop-to-0 with a Heavy
+//     melee weapon (both signals ride on the AttackResult: WeaponIsHeavy set
+//     at roll time, TargetDroppedToZero set after damage resolves)
 //
 // Best-effort: lookup or parse errors leave the prompt fields false / empty
 // so a transient store failure never breaks the attack pipeline.
@@ -64,6 +67,18 @@ func (s *Service) populatePostHitPrompts(_ context.Context, result *AttackResult
 				result.PromptDivineSmiteSlots = available
 			}
 		}
+	}
+
+	// TODO 3 — 2024 Great Weapon Master bonus attack. A GWM feat-holder who
+	// scores a critical hit OR drops the target to 0 HP with a Heavy melee
+	// weapon may make a bonus-action swing with that weapon. Both facts ride on
+	// the result (WeaponIsHeavy at roll time, TargetDroppedToZero post-damage).
+	// Name-based feat detection matches the gwm2024 damage rider (slug matching
+	// misses level-up feats whose mechanical_effect is a JSON array).
+	if result.IsMelee && result.WeaponIsHeavy &&
+		(result.CriticalHit || result.TargetDroppedToZero) &&
+		HasFeatureByName(char.Features.RawMessage, "Great Weapon Master") {
+		result.PromptGWMBonusAttackEligible = true
 	}
 }
 

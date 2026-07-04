@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,12 +18,16 @@ import (
 // --- Mocks for /attack ---
 
 type mockAttackCombatService struct {
-	attackCalls   []combat.AttackCommand
-	offhandCalls  []combat.OffhandAttackCommand
-	attackResult  combat.AttackResult
-	offhandResult combat.AttackResult
-	attackErr     error
-	offhandErr    error
+	mu             sync.Mutex
+	attackCalls    []combat.AttackCommand
+	offhandCalls   []combat.OffhandAttackCommand
+	gwmBonusCalls  []combat.GWMBonusAttackCommand
+	attackResult   combat.AttackResult
+	offhandResult  combat.AttackResult
+	gwmBonusResult combat.AttackResult
+	attackErr      error
+	offhandErr     error
+	gwmBonusErr    error
 }
 
 func (m *mockAttackCombatService) Attack(_ context.Context, cmd combat.AttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
@@ -33,6 +38,13 @@ func (m *mockAttackCombatService) Attack(_ context.Context, cmd combat.AttackCom
 func (m *mockAttackCombatService) OffhandAttack(_ context.Context, cmd combat.OffhandAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
 	m.offhandCalls = append(m.offhandCalls, cmd)
 	return m.offhandResult, m.offhandErr
+}
+
+func (m *mockAttackCombatService) GWMBonusAttack(_ context.Context, cmd combat.GWMBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.gwmBonusCalls = append(m.gwmBonusCalls, cmd)
+	return m.gwmBonusResult, m.gwmBonusErr
 }
 
 type mockAttackProvider struct {

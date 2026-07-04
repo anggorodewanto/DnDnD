@@ -21,6 +21,9 @@ import (
 type AttackCombatService interface {
 	Attack(ctx context.Context, cmd combat.AttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	OffhandAttack(ctx context.Context, cmd combat.OffhandAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
+	// TODO 3 — 2024 Great Weapon Master bonus-action swing, offered after a
+	// crit or drop-to-0 with a Heavy melee weapon.
+	GWMBonusAttack(ctx context.Context, cmd combat.GWMBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 }
 
 // AttackEncounterProvider is the lookup surface /attack needs.
@@ -501,6 +504,54 @@ func (h *AttackHandler) postClassFeaturePrompts(
 			}
 		})
 	}
+
+	// TODO 3 — 2024 Great Weapon Master bonus attack. On [Bonus Attack] the
+	// handler re-fetches the attacker's live turn (the triggering hit persisted
+	// its resource state) and, only while it is still the attacker's turn,
+	// spends the bonus action on a swing with the same Heavy weapon.
+	if result.PromptGWMBonusAttackEligible {
+		_ = h.classFeaturePrompts.PromptGWMBonusAttack(GWMBonusAttackPromptArgs{
+			ChannelID:    channelID,
+			AttackerName: attacker.DisplayName,
+			TargetName:   target.DisplayName,
+			WeaponName:   result.WeaponName,
+		}, func(res GWMBonusAttackPromptResult) {
+			if res.Forfeited || !res.Attack {
+				return
+			}
+			turn, ok := h.currentTurnFor(ctx, encounter, attacker)
+			if !ok {
+				return
+			}
+			gwmResult, err := h.combatService.GWMBonusAttack(ctx, combat.GWMBonusAttackCommand{
+				Attacker: attacker,
+				Target:   target,
+				Turn:     turn,
+			}, h.roller)
+			if err != nil {
+				return
+			}
+			h.postCombatLog(ctx, encounterID, combat.FormatAttackLog(gwmResult))
+		})
+	}
+}
+
+// currentTurnFor loads the encounter's active turn and returns it only when it
+// still belongs to `attacker`. This guards the async GWM bonus-attack choice
+// from spending a different combatant's bonus action if initiative advanced
+// while the prompt was open. Returns ok=false on any lookup miss or mismatch.
+func (h *AttackHandler) currentTurnFor(ctx context.Context, encounter refdata.Encounter, attacker refdata.Combatant) (refdata.Turn, bool) {
+	if !encounter.CurrentTurnID.Valid {
+		return refdata.Turn{}, false
+	}
+	turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+	if err != nil {
+		return refdata.Turn{}, false
+	}
+	if turn.CombatantID != attacker.ID {
+		return refdata.Turn{}, false
+	}
+	return turn, true
 }
 
 // resolvePromptChannel picks a Discord channel to render post-hit class-

@@ -89,7 +89,7 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 		return result, err
 	}
 
-	if _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
 
@@ -175,7 +175,7 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 		}
 		attacks = append(attacks, result)
 
-		dmgTarget, err = s.applyHitDamage(ctx, cmd.Attacker.EncounterID, dmgTarget, result)
+		dmgTarget, _, err = s.applyHitDamage(ctx, cmd.Attacker.EncounterID, dmgTarget, result)
 		if err != nil {
 			return FlurryOfBlowsResult{}, fmt.Errorf("applying flurry attack %d damage: %w", i+1, err)
 		}
