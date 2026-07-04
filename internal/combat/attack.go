@@ -426,7 +426,8 @@ type AttackInput struct {
 	WearingArmor       bool                // Attacker is wearing armor (Defense fighting style)
 	OneHandedMeleeOnly bool                // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
 	AllyWithinFt       int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
-	AbilityUsed        string              // "str" or "dex" — which ability mod was chosen for this attack
+	AbilityUsed        string              // "str", "dex", or "cha" — which ability mod was chosen for this attack
+	PactBladeCHA       bool                // COV-7: warlock Pact of the Blade — use CHA (if higher) for a pact weapon's attack + damage
 	UsedThisTurn       map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
 	WeaponMasteries    []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
 	// ReactionACBonus / ReactionReason carry a pre-roll reaction's AC boost
@@ -688,6 +689,19 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		dmgMod = *input.OverrideDmgMod
 	}
 
+	// COV-7 Pact of the Blade: a warlock bonded to a pact weapon may use CHA for
+	// its attack and damage rolls. effectiveAbilityMod substitutes CHA when it is
+	// the higher choice; shift atkMod by the delta (it also carries profBonus) and
+	// replace dmgMod unless an explicit OverrideDmgMod already governs damage.
+	if input.PactBladeCHA {
+		base := abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
+		eff := effectiveAbilityMod(input)
+		atkMod += eff - base
+		if input.OverrideDmgMod == nil {
+			dmgMod = eff
+		}
+	}
+
 	// GWM / Sharpshooter: -5 to hit, +10 to damage
 	gwmSharpshooterBonus := 0
 	if input.GWM || input.Sharpshooter {
@@ -797,7 +811,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		// (Topple / Vex / Sap / Slow / Push, plus melee-only Cleave) fire here
 		// just as they do on a rolled hit. Graze is miss-only and never reached.
 		recordOnHitMastery(&result, onHitMastery(input, isMelee),
-			8+profBonus+abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel))
+			8+profBonus+effectiveAbilityMod(input))
 		return result, nil
 	}
 
@@ -850,7 +864,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	// All gated behind masteryActive (via onHitMastery) so non-mastery hits are
 	// unchanged. Graze is handled separately on the miss path above.
 	recordOnHitMastery(&result, onHitMastery(input, isMelee),
-		8+profBonus+abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel))
+		8+profBonus+effectiveAbilityMod(input))
 
 	return result, nil
 }
@@ -2325,10 +2339,16 @@ func colToIndex(col string) int {
 }
 
 // attackAbilityUsed mirrors abilityModForWeapon's selection logic and reports
-// the human-readable ability label ("str" or "dex") that was used for the
-// attack roll. Used to populate EffectContext.AbilityUsed so FES filters
+// the human-readable ability label ("str", "dex", or "cha") that was used for
+// the attack roll. Used to populate EffectContext.AbilityUsed so FES filters
 // like Rage's `ability_used: str` actually evaluate correctly.
-func attackAbilityUsed(scores AbilityScores, weapon refdata.Weapon, monkLevel int, isRaging bool) string {
+func attackAbilityUsed(scores AbilityScores, weapon refdata.Weapon, monkLevel int, isRaging, pactBladeCHA bool) string {
+	// COV-7 Pact of the Blade: CHA replaces the weapon's normal ability when it
+	// is the higher choice (see effectiveAbilityMod), so the label must report
+	// "cha" — otherwise Rage's melee-STR filter would misfire on a CHA attack.
+	if pactBladeCHA && AbilityModifier(scores.Cha) > abilityModForWeapon(scores, weapon, monkLevel) {
+		return "cha"
+	}
 	strMod := AbilityModifier(scores.Str)
 	dexMod := AbilityModifier(scores.Dex)
 
@@ -2405,7 +2425,16 @@ func nearestAllyDistanceFt(attacker, target refdata.Combatant, all []refdata.Com
 // fields (IsRaging, ally distance) are populated and Features stays empty.
 func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd AttackCommand, char *refdata.Character, weapon refdata.Weapon, scores AbilityScores) error {
 	input.IsRaging = cmd.Attacker.IsRaging
-	input.AbilityUsed = attackAbilityUsed(scores, weapon, input.MonkLevel, input.IsRaging)
+	// COV-7 Pact of the Blade: a warlock bonded to a pact weapon may use CHA for
+	// its attack and damage rolls. Decide eligibility once (guarding the nil char
+	// for NPC attackers) so both the value-substitution flag and the AbilityUsed
+	// label flow from a single decision. Improvised weapons and unarmed strikes
+	// are never pact weapons; the CHA value substitution itself lives in
+	// ResolveAttack via effectiveAbilityMod.
+	input.PactBladeCHA = char != nil &&
+		HasInvocation(char.Features, pactOfTheBladeEffectID) &&
+		!input.IsImprovised && weapon.ID != "unarmed-strike"
+	input.AbilityUsed = attackAbilityUsed(scores, weapon, input.MonkLevel, input.IsRaging, input.PactBladeCHA)
 	input.OneHandedMeleeOnly = !IsRangedWeapon(weapon) &&
 		!HasProperty(weapon, "two-handed") &&
 		!input.TwoHanded &&

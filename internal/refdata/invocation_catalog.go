@@ -42,8 +42,9 @@ const (
 )
 
 // PactBoon is one of the four gifts a patron can bestow at warlock level 3.
-// Pact boons have no mechanical combat consumer yet (they are inert until a
-// reader is written), but they gate several invocations via RequiresPactBoon.
+// Pact of the Blade is combat-wired (COV-7): a bonded pact weapon uses CHA for
+// attack + damage rolls (internal/combat/pact_blade.go). Chain and Tome have no
+// mechanical combat consumer yet. All boons gate invocations via RequiresPactBoon.
 type PactBoon struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`

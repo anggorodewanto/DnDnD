@@ -83,6 +83,8 @@ The combat effect engine is the spine most of these items plug into.
   `spellcasting.go:1276-1375`.
 - **GWM 2024**: −5/+10 + prof rider (once/turn) + bonus-action swing on crit/kill. `c8cea2b`.
 - **Warlock builder**: pact boon + invocation + expertise picker (ISSUE-060, `baaf206`).
+- **Pact of the Blade** (COV-7): a warlock bonded to a pact weapon uses CHA (if higher) for its
+  attack + damage rolls, via `effectiveAbilityMod` over the `abilityModForWeapon` chokepoint.
 - **Evasion** (Rogue 7+) wired on the DEX save-for-half chokepoint (`ResolveAoESaves` →
   `ApplyEvasion`): made save = no damage, failed = half. Applies to single-target (COV-1)
   and AoE casts. `evasion` seeded at Rogue L7 (COV-3).
@@ -385,8 +387,8 @@ with it; `FormatCastLog` push line). Coverage: combat 91.5%.
 
 **Deferred follow-ups (blocked / new COV items when picked up):**
 - **`lifedrinker` (+CHA necrotic) and `thirsting_blade` (extra attack)** — BOTH ride a
-  **Pact-of-the-Blade weapon attack**, which has no combat consumer yet (**COV-7**). They
-  cannot be wired until pact-weapon attacks exist; wiring them belongs to that item. When a
+  **Pact-of-the-Blade weapon attack**. That consumer now exists (**COV-7 DONE**), so these are
+  **unblocked** — see the COV-7 deferred list for the wiring sketch. When a
   third spell on-hit rider lands, extract an `applySpellOnHitRiders` switch (analogous to
   `applyMasteryEffects`) so `Cast` stops accreting numbered inline rider blocks — premature at
   n=2 (Agonizing Blast is also inline today).
@@ -408,17 +410,46 @@ reads the invocation off the character and modifies EB resolution.
 ---
 
 ### COV-7 — Pact Boons have no combat consumer
-**Status:** OPEN · **Severity:** low · **Pkg:** `internal/combat`
+**Status:** DONE (Pact of the Blade slice) 2026-07-04 · **Severity:** low · **Pkg:** `internal/combat`
 
-**Problem.** Pact boons are builder-pickable but inert — `invocation_catalog.go:45`:
-"Pact boons have no mechanical combat consumer yet." Pact of the Blade (summon/attack with
-pact weapon, use CHA), Pact of the Chain (familiar), Pact of the Tome (extra cantrips).
+**Shipped.** Pact of the Blade is combat-wired: a warlock carrying the `pact_of_the_blade`
+boon uses **Charisma for a pact weapon's attack AND damage rolls**, taken player-optimally
+as `max(weapon's normal ability, CHA)` (2024 "can use Charisma"). The boon already persisted
+as `Feature{MechanicalEffect:"pact_of_the_blade"}` (builder, `portal/invocations.go`), so
+**no seed/data change was needed** — only the missing consumer. New `combat/pact_blade.go`:
+`effectiveAbilityMod(input)` centralizes the substitution over the single ability chokepoint
+`abilityModForWeapon`. `Service.Attack`→`populateAttackFES` decides eligibility once
+(`HasInvocation(char.Features, "pact_of_the_blade") && !IsImprovised && weapon != unarmed`),
+setting a new `AttackInput.PactBladeCHA bool`; `ResolveAttack` then swaps CHA into `atkMod`,
+`dmgMod`, and both mastery-DC sites via `effectiveAbilityMod`. The `attackAbilityUsed` label
+authority gained a `pactBladeCHA` param (mirrors its existing `isRaging` bool) so a CHA swing
+reports `ability_used:"cha"` — Rage's melee-STR filter correctly won't misfire on it. The
+`PactBladeCHA` flag rides `AttackInput`, so it propagates through the struct-copy in Cleave's
+secondary attack for free. Tests: `pact_blade_test.go` (`effectiveAbilityMod` CHA-higher /
+weapon-higher / no-boon; `ResolveAttack` end-to-end both directions; `Service.Attack` Blade→CHA
+positive + Tome→STR negative control). Coverage: combat 91.5%, gates met.
 
-**Mirror.** Blade's CHA-based attack ≈ existing attack path with an ability override; Tome's
-extra cantrips ≈ builder grant already done for invocations. Scope per-boon.
+**Deferred follow-ups (new COV items when picked up):**
+- **`thirsting_blade` (extra attack) + `lifedrinker` (+CHA necrotic on hit)** — the two
+  Pact-of-the-Blade-gated invocations from **COV-6**. Their blocker ("no pact-weapon attack
+  consumer") is now **cleared** — a warlock's weapon attack exists and uses CHA. Wiring them is
+  the natural next slice: `lifedrinker` mirrors the Hex/Hunter's-Mark on-hit rider
+  (`FeatureDefinition`, gated by `HasInvocation(...,"lifedrinker")`); `thirsting_blade` grants a
+  second attack (mirror Extra Attack / the GWM bonus-attack grant). Both are additive riders on
+  the now-live path, no new primitive needed.
+- **Off-hand / thrown-off-hand pact-weapon attacks** — `PactBladeCHA` is set only in
+  `populateAttackFES` (main `Attack` + GWM bonus, incl. main-hand thrown). `OffhandAttack`
+  (`attack.go`) builds its input via `populateAttackContext` and never sets the flag, so a TWF
+  pact-weapon build's off-hand swing still uses STR/DEX. One-liner to close (set the flag in the
+  off-hand builder) — niche 2024 corner, left for when TWF-warlock comes up.
+- **Pact of the Chain (familiar) / Pact of the Tome (extra cantrips)** — still builder-only,
+  no combat consumer. Chain needs a familiar/summon model; Tome's extra cantrips ≈ the
+  invocation grant-spell path already done (ISSUE-060) but not yet materialized for boons.
 
-**Acceptance.** At minimum Pact of the Blade lets the warlock attack with the pact weapon
-using CHA. Chain/Tome may be builder-only + noted.
+**Original problem (for reference).** Pact boons were builder-pickable but inert —
+`invocation_catalog.go:45`: "Pact boons have no mechanical combat consumer yet." Pact of the
+Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of the Tome
+(extra cantrips). Mirror: existing attack path + Monk's `MonkLevel` ability-override precedent.
 
 ---
 
@@ -608,7 +639,10 @@ make sqlc-check    # if you touched .sql queries
    mirror (`spell_marker.go` shared helpers); free-cast pool deferred inline.
 4b. ~~**COV-6** (invocations, EB-rider slice)~~ **DONE 2026-07-04** — Repelling Blast (push via
    `applyPushEffect`) + Eldritch Spear (300 ft range) wired as EB-cantrip riders
-   (`eldritch_blast_invocations.go`). `lifedrinker` + `thirsting_blade` blocked on **COV-7**
-   (pact-weapon attacks); per-beam push blocked on **COV-14**. **COV-9** (top feats), **COV-16**
-   (Uncanny Dodge) still parallelizable, each mirrors a wired template.
+   (`eldritch_blast_invocations.go`). Per-beam push blocked on **COV-14**. **COV-9** (top feats),
+   **COV-16** (Uncanny Dodge) still parallelizable, each mirrors a wired template.
+4c. ~~**COV-7** (Pact of the Blade)~~ **DONE 2026-07-04** — pact-weapon attacks use CHA
+   (`pact_blade.go`, `effectiveAbilityMod`); no seed change (boon slug already persisted). This
+   **unblocks COV-6's `lifedrinker` + `thirsting_blade`** (pact-weapon on-hit rider + extra
+   attack) — the highest-value next slice. Chain/Tome + off-hand path deferred inline.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
