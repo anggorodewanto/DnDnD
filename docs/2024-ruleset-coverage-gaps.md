@@ -495,10 +495,43 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
+
+**Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
+feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
+(the seeded 2014 shape — melee-only). New `combat/savage_attacker.go`: `rollWeaponDamageSavage`
+wraps the existing `resolveWeaponDamage` (identical return signature), rolling it a second time
+and keeping the higher total when eligible; `savageAttackerEligible` gates on the feat +
+melee + not-yet-used-this-turn. `populateAttackFES` sets the new `AttackInput.SavageAttacker`
+flag via a name scan of the already-parsed `feats` slice (`featsHaveName`, no extra
+`json.Unmarshal`) — name-based detection mirrors the GWM 2024 precedent, dodging the
+`mechanical_effect` JSON-array shape slug matching misses. Both `ResolveAttack` damage sites
+(auto-crit + normal hit) call the wrapper and, on a reroll, set `AttackResult.SavageAttackerUsed`
+and append `savageAttackerUsedEffect` to `OncePerTurnEffectsFired` — so the existing
+`markUsedEffects` machinery (Attack / OffhandAttack / GWMBonusAttack) spends the once-per-turn
+lock with **zero new service plumbing**, exactly like Sneak Attack / Cleave / Nick. Because all
+three attack paths funnel through `populateAttackFES`, off-hand (TWF) and GWM-bonus melee swings
+share the flag and the once-per-turn snapshot for free. `savageAttackerTag` adds a 🎲 combat-log
+tag (mirrors `sneakAttackTag`). No seed/data change (the feat was already seeded + builder-pickable).
+Tests: `savage_attacker_test.go` (eligibility gate; reroll keeps higher / keeps original when worse;
+`ResolveAttack` melee reroll + ranged-no-reroll + already-used-no-reroll; `Service.Attack`
+end-to-end feat→reroll; log tag). Coverage: gates met (90% overall / 85% per-pkg).
+
+**Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
+weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
+express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
+has **no production consumer** — so there is no working transform machinery to generalize toward. A
+dedicated call-site helper is the correct depth; build the shared lane when a *second* transform
+feat (or a wired GWF) needs it.
+
+**Deferred follow-ups (new COV items when picked up):**
+- **2024 shape** — 2024 Savage Attacker drops the melee restriction (any weapon) and applies to
+  the Attack action. The seed carries the 2014 melee-only text; re-seed + relax the `isMelee` gate
+  when the 2024 pass reaches feats (sibling of COV-12).
+- **Off-hand / GWM-bonus reroll already covered** — all three paths share the flag; no extra work.
 
 **Wired today:** GWM, Sharpshooter, Defensive Duelist, Crossbow Expert (partial),
-Tavern Brawler, Dual Wielder.
+Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
@@ -508,7 +541,7 @@ slug in combat):
 | Polearm Master | butt-end bonus attack + reach opportunity attack | GWM bonus-attack prompt (`class_feature_prompt.go`); reach OA needs new trigger |
 | Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` |
 | Shield Master | bonus-action shove; DEX-save damage evasion | mastery push `applyPushEffect`; save rider |
-| Savage Attacker | reroll weapon damage once/turn | once/turn damage rider in `populateAttackFES` |
+| ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
 | War Caster | advantage on concentration saves; cast as OA | concentration save hook `concentration.go:324` |
 | Charger / Mobile / Alert / Lucky / Mage Slayer / Heavy Armor Master / Tough | movement / init / reroll / damage-reduction riders | various — scope each |
 

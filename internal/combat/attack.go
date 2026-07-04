@@ -428,6 +428,7 @@ type AttackInput struct {
 	AllyWithinFt       int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
 	AbilityUsed        string              // "str", "dex", or "cha" — which ability mod was chosen for this attack
 	PactBladeCHA       bool                // COV-7: warlock Pact of the Blade — use CHA (if higher) for a pact weapon's attack + damage
+	SavageAttacker     bool                // COV-9: attacker has the Savage Attacker feat — reroll a melee weapon's damage dice once per turn, keep the higher total
 	UsedThisTurn       map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
 	WeaponMasteries    []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
 	// ReactionACBonus / ReactionReason carry a pre-roll reaction's AC boost
@@ -510,6 +511,13 @@ type AttackResult struct {
 	// dice. The engine's trigger logic never consults this field — populating
 	// it does not change when any effect fires.
 	OncePerTurnEffectNames []string
+
+	// SavageAttackerUsed reports that Savage Attacker rerolled this attack's
+	// weapon damage (the higher of two rolls was kept). Set only on the melee
+	// weapon attack that spent the once-per-turn reroll; drives the combat-log
+	// tag, and its once-per-turn key rides OncePerTurnEffectsFired so Service.*
+	// marks it used.
+	SavageAttackerUsed bool
 
 	// DamageBreakdown decomposes DamageTotal into per-rider contributions
 	// (Feature Effect System extra dice + flat damage mods such as GWM's +PB,
@@ -801,7 +809,12 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.CriticalHit = true
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
-		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller, input.MonkLevel)
+		savage := savageAttackerEligible(input, isMelee)
+		dmg, damageDice, dmgRoll := rollWeaponDamageSavage(savage, input.Weapon, dmgMod, true, input.TwoHanded, roller, input.MonkLevel)
+		if savage {
+			result.SavageAttackerUsed = true
+			result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, savageAttackerUsedEffect)
+		}
 		extra, comps := buildFESDamageBreakdown(fesDamageEffects, true, roller)
 		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 		result.DamageBreakdown = comps
@@ -844,8 +857,14 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		return result, nil
 	}
 
-	// Roll damage
-	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller, input.MonkLevel)
+	// Roll damage. Savage Attacker (COV-9): a melee weapon attacker with the feat
+	// rerolls the weapon's damage dice once per turn and keeps the higher total.
+	savage := savageAttackerEligible(input, isMelee)
+	dmg, damageDice, dmgRoll := rollWeaponDamageSavage(savage, input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller, input.MonkLevel)
+	if savage {
+		result.SavageAttackerUsed = true
+		result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, savageAttackerUsedEffect)
+	}
 	extra, comps := buildFESDamageBreakdown(fesDamageEffects, result.CriticalHit, roller)
 	result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 	result.DamageBreakdown = comps
@@ -1105,7 +1124,7 @@ func FormatAttackLog(result AttackResult) string {
 
 	if result.AutoCrit {
 		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
-		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)%s", result.DamageTotal, result.DamageType, result.DamageDice, sneakAttackTag(result))
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)%s%s", result.DamageTotal, result.DamageType, result.DamageDice, sneakAttackTag(result), savageAttackerTag(result))
 		writeDamageBreakdown(&b, result)
 		return b.String()
 	}
@@ -1126,7 +1145,7 @@ func FormatAttackLog(result AttackResult) string {
 		if result.CriticalHit {
 			diceLabel = "doubled dice: " + result.DamageDice
 		}
-		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)%s", result.DamageTotal, result.DamageType, diceLabel, sneakAttackTag(result))
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)%s%s", result.DamageTotal, result.DamageType, diceLabel, sneakAttackTag(result), savageAttackerTag(result))
 		writeDamageBreakdown(&b, result)
 	}
 
@@ -2488,6 +2507,16 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	if cmd.GWM2024 && HasFeatureByName(char.Features.RawMessage, "Great Weapon Master") {
 		input.Features = append(input.Features, GreatWeaponMasterFeature(int(char.ProficiencyBonus)))
 	}
+
+	// COV-9 Savage Attacker: a character with the feat rerolls a melee weapon's
+	// damage dice once per turn and keeps the higher total. Name-based detection
+	// mirrors GWM (dodges the mechanical_effect JSON-array shape slug matching
+	// misses). The melee gate and once-per-turn spend live in ResolveAttack
+	// (savageAttackerEligible), so every attack path through populateAttackFES —
+	// Attack, OffhandAttack, GWMBonusAttack — shares this one flag. Scans the
+	// already-parsed `feats` slice (not a fresh json.Unmarshal) to avoid re-parsing
+	// char.Features on the attack hot path.
+	input.SavageAttacker = featsHaveName(feats, "Savage Attacker")
 
 	// Hex: when the target carries this attacker's source-tagged Hex marker,
 	// every hit adds 1d6 necrotic (5e Hex). Gating by the marker means only the
