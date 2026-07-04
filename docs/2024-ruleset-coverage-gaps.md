@@ -85,6 +85,8 @@ The combat effect engine is the spine most of these items plug into.
 - **Warlock builder**: pact boon + invocation + expertise picker (ISSUE-060, `baaf206`).
 - **Pact of the Blade** (COV-7): a warlock bonded to a pact weapon uses CHA (if higher) for its
   attack + damage rolls, via `effectiveAbilityMod` over the `abilityModForWeapon` chokepoint.
+  Its riders **Lifedrinker** (+CHA necrotic on hit) and **Thirsting Blade** (2 attacks) are also
+  wired (COV-6).
 - **Evasion** (Rogue 7+) wired on the DEX save-for-half chokepoint (`ResolveAoESaves` →
   `ApplyEvasion`): made save = no damage, failed = half. Applies to single-target (COV-1)
   and AoE casts. `evasion` seeded at Rogue L7 (COV-3).
@@ -365,10 +367,30 @@ end) + `HexFeature` + cast branch.
 ---
 
 ### COV-6 — Warlock invocations beyond Agonizing Blast are inert
-**Status:** DONE (Eldritch-Blast-rider slice) 2026-07-04 · **Severity:** medium · **Pkg:** `internal/combat`
+**Status:** DONE (EB-rider + pact-weapon-rider slices) 2026-07-04 · **Severity:** medium · **Pkg:** `internal/combat`
 
-**Shipped.** The two Eldritch-Blast-cantrip riders that ride already-live machinery are now
-wired end-to-end, mirroring `agonizing_blast.go` (new `combat/eldritch_blast_invocations.go`):
+**Shipped (pact-weapon riders, once COV-7 landed the pact-weapon attack).** The two
+Pact-of-the-Blade-gated invocations are now wired:
+- **Lifedrinker** (Warlock L12) — every pact-weapon **hit** adds a flat **CHA modifier (min 1)
+  necrotic**. New `LifedrinkerFeature(chaMod)` (`feature_integration.go`) is a flat
+  `EffectModifyDamageRoll` (not dice, so never crit-doubled — RAW), injected in
+  `populateAttackFES` alongside the Hex/Hunter's Mark riders and gated on the same COV-7
+  pact-weapon eligibility (`input.PactBladeCHA && HasInvocation(...,"lifedrinker")`). It rides
+  the existing `ProcessEffects(TriggerOnDamageRoll)` pipeline and shows as a typed necrotic
+  `DamageComponent` in the log.
+- **Thirsting Blade** (Warlock L5) — grants a **second attack** with the Attack action. One
+  branch in the shared `resolveAttacksPerAction` (`turnresources.go`):
+  `HasInvocation(pact_of_the_blade) && HasInvocation(thirsting_blade) → bestAttacks = max(_, 2)`.
+  `max` never stacks with a real Extra Attack; the branch (not the class `attacks_per_action`
+  seed map) is the only layer that can see an invocation. Weapon-agnostic, matching COV-7's
+  "any non-improvised weapon is the pact weapon" scope. Slugs `lifedrinkerEffectID` /
+  `thirstingBladeEffectID` added to `pact_blade.go`. Tests: `lifedrinker_test.go`
+  (feature shape; +CHA-necrotic on pact-weapon hit with breakdown component; no-pact-blade →
+  no rider) + `thirsting_blade_test.go` (both invocations → 2 attacks; either alone → 1).
+
+**Shipped (Eldritch-Blast-rider slice).** The two Eldritch-Blast-cantrip riders that ride
+already-live machinery are wired end-to-end, mirroring `agonizing_blast.go` (new
+`combat/eldritch_blast_invocations.go`):
 - **Repelling Blast** — on an EB **hit** by a warlock carrying the `repelling_blast`
   invocation, the target is pushed 10 ft straight away via the shared `applyPushEffect`
   (`mastery.go`, the same forced-movement machinery the Push mastery and `/shove` use).
@@ -386,10 +408,9 @@ target to E8 / no-invocation no push; 150 ft cast rejected without Eldritch Spea
 with it; `FormatCastLog` push line). Coverage: combat 91.5%.
 
 **Deferred follow-ups (blocked / new COV items when picked up):**
-- **`lifedrinker` (+CHA necrotic) and `thirsting_blade` (extra attack)** — BOTH ride a
-  **Pact-of-the-Blade weapon attack**. That consumer now exists (**COV-7 DONE**), so these are
-  **unblocked** — see the COV-7 deferred list for the wiring sketch. When a
-  third spell on-hit rider lands, extract an `applySpellOnHitRiders` switch (analogous to
+- ~~**`lifedrinker` + `thirsting_blade`**~~ **DONE 2026-07-04** (see the pact-weapon-rider
+  slice above) — unblocked once COV-7 landed the pact-weapon attack. If a future EB/spell
+  on-hit rider lands, extract an `applySpellOnHitRiders` switch (analogous to
   `applyMasteryEffects`) so `Cast` stops accreting numbered inline rider blocks — premature at
   n=2 (Agonizing Blast is also inline today).
 - **Per-beam Repelling Blast** — the current push is one shove per EB **cast-hit**. True
@@ -430,13 +451,10 @@ weapon-higher / no-boon; `ResolveAttack` end-to-end both directions; `Service.At
 positive + Tome→STR negative control). Coverage: combat 91.5%, gates met.
 
 **Deferred follow-ups (new COV items when picked up):**
-- **`thirsting_blade` (extra attack) + `lifedrinker` (+CHA necrotic on hit)** — the two
-  Pact-of-the-Blade-gated invocations from **COV-6**. Their blocker ("no pact-weapon attack
-  consumer") is now **cleared** — a warlock's weapon attack exists and uses CHA. Wiring them is
-  the natural next slice: `lifedrinker` mirrors the Hex/Hunter's-Mark on-hit rider
-  (`FeatureDefinition`, gated by `HasInvocation(...,"lifedrinker")`); `thirsting_blade` grants a
-  second attack (mirror Extra Attack / the GWM bonus-attack grant). Both are additive riders on
-  the now-live path, no new primitive needed.
+- ~~**`thirsting_blade` + `lifedrinker`**~~ **DONE 2026-07-04** (COV-6 pact-weapon-rider slice)
+  — the pact-weapon attack from this item unblocked both; `lifedrinker` is a flat
+  `EffectModifyDamageRoll` rider in `populateAttackFES`, `thirsting_blade` a `max(_,2)` branch
+  in `resolveAttacksPerAction`.
 - **Off-hand / thrown-off-hand pact-weapon attacks** — `PactBladeCHA` is set only in
   `populateAttackFES` (main `Attack` + GWM bonus, incl. main-hand thrown). `OffhandAttack`
   (`attack.go`) builds its input via `populateAttackContext` and never sets the flag, so a TWF
@@ -642,7 +660,9 @@ make sqlc-check    # if you touched .sql queries
    (`eldritch_blast_invocations.go`). Per-beam push blocked on **COV-14**. **COV-9** (top feats),
    **COV-16** (Uncanny Dodge) still parallelizable, each mirrors a wired template.
 4c. ~~**COV-7** (Pact of the Blade)~~ **DONE 2026-07-04** — pact-weapon attacks use CHA
-   (`pact_blade.go`, `effectiveAbilityMod`); no seed change (boon slug already persisted). This
-   **unblocks COV-6's `lifedrinker` + `thirsting_blade`** (pact-weapon on-hit rider + extra
-   attack) — the highest-value next slice. Chain/Tome + off-hand path deferred inline.
+   (`pact_blade.go`, `effectiveAbilityMod`); no seed change (boon slug already persisted).
+4d. ~~**COV-6 `lifedrinker` + `thirsting_blade`**~~ **DONE 2026-07-04** — unblocked by COV-7:
+   Lifedrinker = flat +CHA necrotic on-hit rider (`LifedrinkerFeature`), Thirsting Blade = 2nd
+   attack (`max(_,2)` in `resolveAttacksPerAction`). Chain/Tome boons + off-hand pact-weapon path
+   still deferred. Remaining open mirrors: **COV-9** (top feats), **COV-16** (Uncanny Dodge).
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.

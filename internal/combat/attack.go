@@ -2504,5 +2504,14 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 		input.Features = append(input.Features, HuntersMarkFeature())
 	}
 
+	// COV-6 Lifedrinker: a warlock bonded to a pact weapon with this invocation
+	// adds its Charisma modifier (min 1) as necrotic damage on every pact-weapon
+	// hit (2024). Gated on the same pact-weapon eligibility as the CHA
+	// substitution (PactBladeCHA), so it rides only the warlock's pact-weapon
+	// attacks. A flat modifier rider, unlike the dice-based Hex/Hunter's Mark.
+	if input.PactBladeCHA && HasInvocation(char.Features, lifedrinkerEffectID) {
+		input.Features = append(input.Features, LifedrinkerFeature(max(AbilityModifier(scores.Cha), 1)))
+	}
+
 	return nil
 }

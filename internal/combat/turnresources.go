@@ -315,6 +315,14 @@ func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Char
 		}
 	}
 
+	// COV-6 Thirsting Blade: a warlock bonded to a pact weapon with this invocation
+	// attacks twice with the Attack action (2024 pact-weapon Extra Attack). Presence
+	// of the invocation implies Warlock 5+ (builder-enforced prereq). max keeps the
+	// higher, so it never stacks with a real Extra Attack from a martial multiclass.
+	if HasInvocation(char.Features, pactOfTheBladeEffectID) && HasInvocation(char.Features, thirstingBladeEffectID) {
+		bestAttacks = max(bestAttacks, 2)
+	}
+
 	return bestAttacks
 }
 

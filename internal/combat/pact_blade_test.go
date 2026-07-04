@@ -112,16 +112,16 @@ func TestResolveAttack_PactBladeKeepsWeaponAbilityWhenHigher(t *testing.T) {
 }
 
 // pactBladeAttackFixture builds a level-5 warlock (STR 8/-1, CHA 18/+4) wielding
-// a club (non-finesse melee) and attacking a goblin, carrying the given boon
-// feature slug. It exercises the real Service.Attack → populateAttackFES set-site
-// so the pact-blade gate is proven end-to-end (not just the ResolveAttack flag).
-func pactBladeAttackFixture(t *testing.T, boonSlug, boonName string) (*Service, AttackCommand, *dice.Roller) {
+// a club (non-finesse melee) and attacking a goblin, carrying the given feature
+// slugs (pact boon and/or invocations). It exercises the real Service.Attack →
+// populateAttackFES set-site so the pact-blade gate is proven end-to-end (not just
+// the ResolveAttack flag).
+func pactBladeAttackFixture(t *testing.T, feats ...CharacterFeature) (*Service, AttackCommand, *dice.Roller) {
 	t.Helper()
 	charID := uuid.New()
 	attackerID := uuid.New()
 	encounterID := uuid.New()
 
-	feats := []CharacterFeature{{Name: boonName, MechanicalEffect: boonSlug}}
 	classes := []CharacterClass{{Class: "Warlock", Level: 5}}
 	char := makeCharacterWithFeats(8, 8, 3, "club", feats, classes)
 	char.ID = charID
@@ -151,7 +151,7 @@ func pactBladeAttackFixture(t *testing.T, boonSlug, boonName string) (*Service, 
 }
 
 func TestServiceAttack_PactOfTheBlade_UsesCHA(t *testing.T) {
-	svc, cmd, roller := pactBladeAttackFixture(t, "pact_of_the_blade", "Pact of the Blade")
+	svc, cmd, roller := pactBladeAttackFixture(t, CharacterFeature{Name: "Pact of the Blade", MechanicalEffect: "pact_of_the_blade"})
 	result, err := svc.Attack(context.Background(), cmd, roller)
 	require.NoError(t, err)
 	require.True(t, result.Hit)
@@ -164,7 +164,7 @@ func TestServiceAttack_PactOfTheBlade_UsesCHA(t *testing.T) {
 func TestServiceAttack_PactOfTheTome_NoCHAOverride(t *testing.T) {
 	// Negative control: a non-Blade boon must not trigger the CHA substitution;
 	// the club falls back to STR (-1).
-	svc, cmd, roller := pactBladeAttackFixture(t, "pact_of_the_tome", "Pact of the Tome")
+	svc, cmd, roller := pactBladeAttackFixture(t, CharacterFeature{Name: "Pact of the Tome", MechanicalEffect: "pact_of_the_tome"})
 	result, err := svc.Attack(context.Background(), cmd, roller)
 	require.NoError(t, err)
 	require.True(t, result.Hit)

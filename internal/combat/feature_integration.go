@@ -375,6 +375,27 @@ func HuntersMarkFeature() FeatureDefinition {
 	}
 }
 
+// LifedrinkerFeature returns the FeatureDefinition for the Lifedrinker warlock
+// invocation's on-hit rider (COV-6): a pact-weapon hit deals extra necrotic damage
+// equal to the warlock's Charisma modifier (minimum 1, applied at the call site).
+// Unlike Hex/Hunter's Mark this is a FLAT modifier, not dice — it folds into the
+// damage modifier and is never crit-doubled (RAW). populateAttackFES injects it
+// only when the attacker has Pact of the Blade + the invocation.
+func LifedrinkerFeature(chaMod int) FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Lifedrinker",
+		Source: "invocation",
+		Effects: []Effect{
+			{
+				Type:        EffectModifyDamageRoll,
+				Trigger:     TriggerOnDamageRoll,
+				Modifier:    chaMod,
+				DamageTypes: []string{"necrotic"},
+			},
+		},
+	}
+}
+
 // PackTacticsFeature returns the FeatureDefinition for Pack Tactics.
 // Creature feature: advantage on attack when ally within 5ft of target.
 func PackTacticsFeature() FeatureDefinition {
