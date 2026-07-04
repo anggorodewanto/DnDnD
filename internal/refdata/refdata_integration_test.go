@@ -3,6 +3,7 @@ package refdata_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"testing"
 
 	"github.com/ab/dndnd/internal/refdata"
@@ -232,5 +233,45 @@ func TestIntegration_SeedCreaturesAndMagicItems(t *testing.T) {
 	}
 	if len(weaponItems) == 0 {
 		t.Error("expected at least one weapon magic item")
+	}
+}
+
+// TestIntegration_SeedRogueEvasionFeature locks the COV-3 seed→present link: the
+// seeded Rogue must carry the `evasion` mechanical_effect at level 7 so the
+// level-gated feature derivation grants it, which is what makes the wired
+// ResolveAoESaves→ApplyEvasion consumer actually fire. A future seed reshuffle
+// that drops this key would silently make Evasion dead again (the original bug).
+func TestIntegration_SeedRogueEvasionFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	rogue, err := refdata.New(db).GetClass(ctx, "rogue")
+	if err != nil {
+		t.Fatalf("GetClass(rogue) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(rogue.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["7"] {
+		if f.MechanicalEffect == "evasion" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Rogue L7 must seed the `evasion` mechanical_effect; got %+v", byLevel["7"])
 	}
 }

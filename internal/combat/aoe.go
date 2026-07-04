@@ -1017,6 +1017,10 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 		if spell.SaveEffect.Valid {
 			saveEffect = spell.SaveEffect.String
 		}
+		saveAbility := ""
+		if spell.SaveAbility.Valid {
+			saveAbility = spell.SaveAbility.String
+		}
 		saveResults := make([]SaveResult, 0, len(toApply))
 		for _, r := range toApply {
 			success := r.Success.Valid && r.Success.Bool
@@ -1037,6 +1041,7 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 			DamageDice:       scaledDice,
 			DamageType:       dmgInfo.DamageType,
 			SaveEffect:       saveEffect,
+			SaveAbility:      saveAbility,
 			SaveResults:      saveResults,
 			EmpoweredRerolls: empoweredRerolls, // SR-025
 		}
@@ -1183,6 +1188,9 @@ type AoEDamageInput struct {
 	DamageDice  string // e.g., "8d6"
 	DamageType  string // e.g., "fire"
 	SaveEffect  string // "half_damage", "no_effect", "special"
+	// SaveAbility is the save ability slug (e.g. "dex"). Used to gate Evasion
+	// (Rogue 7+), which upgrades only DEX save-for-half outcomes. COV-3.
+	SaveAbility string
 	SaveResults []SaveResult
 	// SR-025: when > 0, ResolveAoESaves re-rolls the N lowest damage dice
 	// once after the initial roll (Empowered Spell metamagic). The reroll
@@ -1270,11 +1278,17 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			return AoEDamageResult{}, fmt.Errorf("getting combatant %s: %w", sr.CombatantID, err)
 		}
 
-		// 3. Apply save multiplier
+		// 3. Apply save multiplier. Evasion (Rogue 7+) upgrades a DEX
+		// save-for-half outcome: no damage on a made save, half on a failed one
+		// (2024). COV-3. Every other target/save keeps the normal multiplier.
 		multiplier := ApplySaveResult(sr.Success, input.SaveEffect)
 		damage := max(int(float64(baseDamage)*multiplier),
 			// special case: DM resolution needed
 			0)
+		if input.SaveEffect == "half_damage" && strings.EqualFold(input.SaveAbility, "dex") &&
+			s.combatantHasEvasion(ctx, combatant) {
+			damage = ApplyEvasion(baseDamage, sr.Success)
+		}
 
 		// 4. Route through ApplyDamage so Phase 42 (R/I/V, temp HP,
 		// exhaustion HP-halving / level-6 death) applies before the
@@ -1308,4 +1322,20 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 		Targets:     targets,
 		TotalDamage: totalDamage,
 	}, nil
+}
+
+// combatantHasEvasion reports whether the target combatant is backed by a PC
+// that has the Evasion class feature (Rogue 7+). Best-effort: a missing/invalid
+// character row or a features-JSON parse error degrades to false, matching the
+// collectFESResistances convention of "drop the bonus rather than fail the
+// application". COV-3.
+func (s *Service) combatantHasEvasion(ctx context.Context, target refdata.Combatant) bool {
+	if !target.CharacterID.Valid {
+		return false
+	}
+	char, err := s.store.GetCharacter(ctx, target.CharacterID.UUID)
+	if err != nil {
+		return false
+	}
+	return hasFeatureEffect(char.Features, "evasion")
 }

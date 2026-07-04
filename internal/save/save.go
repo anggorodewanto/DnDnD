@@ -82,6 +82,16 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 		result.FeatureBonus = pr.FlatModifier
 		featureMode = pr.RollMode
 		for _, ae := range pr.AppliedEffects {
+			// A zero flat-modifier save effect contributes nothing to the roll —
+			// e.g. the Evasion marker (EffectModifySave{Modifier:0}), whose real
+			// mechanic is the post-save damage upgrade applied in
+			// combat.ResolveAoESaves (COV-3), not a d20 bonus. Emitting
+			// "Evasion: +0" here is noise, so skip it. Advantage-granting effects
+			// are EffectConditionalAdvantage (not EffectModifySave) and are
+			// unaffected.
+			if ae.Effect.Type == combat.EffectModifySave && ae.Effect.Modifier == 0 {
+				continue
+			}
 			result.FeatureReasons = append(result.FeatureReasons, fmt.Sprintf("%s: +%d", ae.FeatureName, ae.Effect.Modifier))
 		}
 	}

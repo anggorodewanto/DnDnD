@@ -83,6 +83,9 @@ The combat effect engine is the spine most of these items plug into.
   `spellcasting.go:1276-1375`.
 - **GWM 2024**: −5/+10 + prof rider (once/turn) + bonus-action swing on crit/kill. `c8cea2b`.
 - **Warlock builder**: pact boon + invocation + expertise picker (ISSUE-060, `baaf206`).
+- **Evasion** (Rogue 7+) wired on the DEX save-for-half chokepoint (`ResolveAoESaves` →
+  `ApplyEvasion`): made save = no damage, failed = half. Applies to single-target (COV-1)
+  and AoE casts. `evasion` seeded at Rogue L7 (COV-3).
 - Wired spell effects: spell-attack damage, single-target + AoE save damage (COV-1),
   **save-or-suck conditions via the generic `conditions_applied` array (COV-2)**, healing,
   teleport (self / self+creature), agonizing-blast EB, Invisibility, Hex, Fly, Spare the
@@ -231,23 +234,53 @@ follow-ups rather than expanding scope here.
 
 ## Tier 2 — Cheap wins (machinery already wired, small surface)
 
-### COV-3 — Evasion / Uncanny Dodge never emitted (near-free)
-**Status:** OPEN · **Severity:** low · **Pkg:** `internal/refdata` (seed) + verify combat
+### COV-3 — Evasion / Uncanny Dodge never emitted
+**Status:** DONE (Evasion slice) 2026-07-04 · Uncanny Dodge split to **COV-16** · **Severity:** low · **Pkg:** `internal/combat` + `internal/refdata`
 
-**Problem.** `FeatureDefinition`s for both are **already coded**
-(`feature_integration.go:110` Evasion, `:139` Uncanny Dodge) but never fire, because
-`seed_classes.go` only populates Rogue features for levels 1–3, so the `evasion` /
-`uncanny_dodge` `mechanical_effect` slugs are never present on a character.
+**Reality check (the doc's original premise was wrong).** The `FeatureDefinition`s for
+both are coded (`feature_integration.go:110`/`:139`), but "engine side already works" was
+**false** — neither had an end-to-end consumer:
+- `EvasionFeature()` emitted `EffectModifySave{On:"evasion", Modifier:0}`, which
+  `ProcessEffects` collected but never acted on (adds a zero modifier). The AoE DEX-save
+  damage path computed its half/none multiplier purely from the spell, ignoring the
+  target's Evasion. `ApplyEvasion` had zero production callers.
+- `UncannyDodgeFeature()` emitted `EffectReactionTrigger{On:"uncanny_dodge"}` into
+  `ReactionTriggers`, a slice with **no production reader**. `ApplyUncannyDodge` was
+  test-only.
 
-**Fix.** Add the slugs to Rogue's `features_by_level` at the correct levels (Evasion L7,
-Uncanny Dodge L5 in 2024) in `seed_classes.go`. Engine side already works.
+So COV-3 was two unequal halves, not a seed edit.
 
-**Acceptance.** A L7 rogue takes half/none on a made DEX-save AoE (Evasion); a L5 rogue
-halves one attack's damage via reaction (Uncanny Dodge). Red test: seed → feature present
-→ effect fires.
+**Shipped (Evasion).** Evasion is now wired end-to-end. `ResolveAoESaves` (`aoe.go`) — the
+single chokepoint reached by both single-target save casts (COV-1 enqueue) and real AoE
+casts — now overrides the per-target multiplier with `ApplyEvasion(baseDamage, success)`
+when the save is a DEX **save-for-half** (`SaveEffect=="half_damage"`, new
+`AoEDamageInput.SaveAbility=="dex"`) **and** the target is a PC with the `evasion` feature
+(new best-effort `combatantHasEvasion` helper, mirrors `collectFESResistances`). Result:
+made DEX save → no damage, failed → half. Seed: Rogue `features_by_level["7"]` now carries
+`{mechanical_effect:"evasion"}` (2024 L7); level-gating (`derive_stats.go:223`,
+`lvl<=c.Level`) keeps it off under-level rogues. Tests:
+`TestResolveAoESaves_EvasionUpgradesDexSaveForHalf`,
+`TestResolveAoESaves_EvasionOnlyAppliesToDexSaves` (ability gate),
+`TestIntegration_SeedRogueEvasionFeature` (seed→present link, guards a future reshuffle
+from silently making it dead again).
 
-**Risk.** Needs the L1–3-only `features_by_level` limitation addressed at least for these
-two levels (see COV-10). Small.
+**Known dead scaffolding (follow-up).** `EvasionFeature()` + its `case "evasion"` in
+`BuildFeatureDefinitions` emit an inert `EffectModifySave{On:"evasion", Modifier:0}` on
+`TriggerOnSave` — the real Evasion mechanic now lives in `ResolveAoESaves`, so that FES def
+has **no functional consumer** (nothing reads `On:"evasion"` to reduce damage; the `/save`
+path only rolls). It's left in place because 5 tests across `combat`+`discord` assert it,
+and it's a plausible anchor if the effect engine ever generalizes save-damage transforms
+(the correct trigger to generalize is the *second* such feature, e.g. Improved Evasion).
+Its only live side effect — a cosmetic `Evasion: +0` line on the `/save` breakdown — is
+suppressed at the render site (`internal/save/save.go` skips zero-modifier
+`EffectModifySave` reasons; `TestSave_ZeroModifierSaveEffectSuppressed`).
+
+**Split out.** Uncanny Dodge is a **post-hit damage-halving reaction**, a different shape
+from the existing pre-roll **+AC** reaction model in `reactions.go` (which only recomputes
+hit→miss). It needs a new reaction flavor across combat + Turn Builder + Discord and must
+respect the pre-declare / no-heal-back rule. Promoted to **COV-16** with its own plan;
+`uncanny_dodge` is intentionally **not** seeded until that consumer lands (seeding it now
+would re-create the dead-data anti-pattern this item exposed).
 
 ---
 
@@ -369,6 +402,54 @@ loading-ignore + no-disadvantage-in-melee are).
 
 ---
 
+### COV-16 — Uncanny Dodge: post-hit damage-halving reaction (split from COV-3)
+**Status:** OPEN · **Severity:** low-medium · **Pkg:** `internal/combat` + `internal/discord` (+ seed)
+
+**Problem.** `UncannyDodgeFeature()` (`feature_integration.go:139`) emits
+`EffectReactionTrigger{On:"uncanny_dodge"}` into `ProcessorResult.ReactionTriggers`
+(`effect.go:393`), a slice with **no production reader**. `ApplyUncannyDodge`
+(`feature_integration.go:154`, `dmg/2`) has zero live callers. So a Rogue 5+ never halves
+an incoming hit. The `uncanny_dodge` slug is also **not seeded** (deliberately — see COV-3).
+
+**Why it isn't COV-3's shape.** The wired reaction system (`reactions.go`) models only
+**pre-roll +AC** reactions: `ReactionOption{ACBonus}` folded into the attack, re-evaluated
+via `applyReactionToRoll` (hit→miss only, damage untouched). Uncanny Dodge is a **post-hit
+damage halving** — it triggers *after* a hit is confirmed and reduces that attack's damage.
+There is no damage-reduction reaction slot today.
+
+**Constraint (memory `feedback_reaction_predeclare_no_retroactive`).** No retroactive
+resolution / no post-hit heal-back. The halving must reduce damage **before** it is written
+to HP — not apply full then refund. The enemy-turn plan already **pre-rolls** each attack
+and applies damage at execute time (Turn Builder), so halving the pre-rolled damage at
+execute (before the HP write) is compliant; a mid-attack interactive prompt during a live
+`/attack` would need the post-hit prompt pattern (`class_feature_prompt.go`) with the same
+"halve before write" ordering.
+
+**Sketch.**
+1. Seed `uncanny_dodge` into Rogue `features_by_level["5"]` (2024 L5) — mirror the COV-3
+   Evasion seed; gated by `derive_stats.go:223`.
+2. Add a damage-reduction reaction flavor: either extend `ReactionOption` with a
+   `DamageMultiplier`/`Halve` field, or a parallel `AvailableDefensiveReactions` for
+   post-hit reactions. Gate: PC target, Rogue 5+ (`uncanny_dodge` feature present), reaction
+   free (`CanDeclareReaction`), attacker visible.
+3. Consume it in the enemy-turn execute loop (halve the pre-rolled damage of the chosen
+   attack before `ApplyDamage`) and mark the reaction used (`markPCReactionUsed`). For live
+   `/attack`, offer via the post-hit prompt and halve before the HP write.
+4. Discord: reaction prompt for the targeted PC (mirror the Defensive Duelist / Turn Builder
+   reaction UX).
+
+**Mirror.** `ApplyUncannyDodge` (the math, already coded + unit-tested), Defensive Duelist
+reaction plumbing (`reactions.go`, `turn_builder_handler.go:308-320`), post-hit prompt
+pattern (`class_feature_prompt.go` + `discord/attack_handler.go:444-537`). Reuse the COV-3
+`combatantHasEvasion` shape for a `combatantHasUncannyDodge` feature lookup.
+
+**Acceptance.** A Rogue 5+ hit by a visible attacker may declare Uncanny Dodge; the
+triggering attack's damage is halved once per round; the reaction is consumed; no
+heal-back (damage written already halved). Red test first: reaction offered → chosen →
+damage halved before HP write.
+
+---
+
 ## Tier 4 — Stale 2024 data (rules drift, no engine change)
 
 ### COV-10 — `features_by_level` only seeds levels 1–3
@@ -446,8 +527,11 @@ make sqlc-check    # if you touched .sql queries
 1. ~~**COV-1 + COV-2** (Tier 1) — makes ~20 save/condition spells actually do something.~~
    **DONE 2026-07-04.** Save damage + save-or-suck conditions both land through the shared
    resolver. Follow-ups (per-turn re-saves, condition riders) noted inline under COV-2.
-2. **COV-3** (Evasion/Uncanny Dodge) + **COV-4** (Second Wind) — near-free, engine ready.
+2. ~~**COV-3** Evasion~~ **DONE 2026-07-04** — wired end-to-end (the "engine already works"
+   premise was false; it needed a real `ResolveAoESaves`→`ApplyEvasion` consumer). Uncanny
+   Dodge split to **COV-16** (needs a new post-hit damage-halving reaction). Next near-free:
+   **COV-4** (Second Wind) — pool seeded, mirror Lay on Hands.
 3. **COV-10** — unblocks COV-8; seed the levels you need as you wire each martial rider.
-4. **COV-5** (Hunter's Mark), **COV-6** (invocations), **COV-9** (top feats) — parallelizable,
-   each mirrors a wired template.
+4. **COV-5** (Hunter's Mark), **COV-6** (invocations), **COV-9** (top feats), **COV-16**
+   (Uncanny Dodge) — parallelizable, each mirrors a wired template.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.

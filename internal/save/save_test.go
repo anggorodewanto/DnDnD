@@ -215,6 +215,47 @@ func TestSave_FeatureEffectAuraOfProtection(t *testing.T) {
 	}
 }
 
+// TestSave_ZeroModifierSaveEffectSuppressed proves the Evasion marker
+// (EffectModifySave{Modifier:0}, whose real mechanic is the post-save damage
+// upgrade in combat.ResolveAoESaves, not a d20 bonus) does not emit a noise
+// "Evasion: +0" reason line on the /save breakdown. COV-3.
+func TestSave_ZeroModifierSaveEffectSuppressed(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+
+	result, err := svc.Save(SaveInput{
+		Scores:    character.AbilityScores{DEX: 14}, // +2 mod
+		Ability:   "dex",
+		ProfBonus: 3,
+		EffectCtx: combat.EffectContext{AbilityUsed: "dex"},
+		FeatureEffects: []combat.FeatureDefinition{
+			{
+				Name: "Evasion",
+				Effects: []combat.Effect{
+					{
+						Type:       combat.EffectModifySave,
+						Trigger:    combat.TriggerOnSave,
+						On:         "evasion",
+						Conditions: combat.EffectConditions{AbilityUsed: "dex"},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// d20=10, DEX mod=2, no roll bonus from the marker => total=12.
+	if result.Total != 12 {
+		t.Errorf("expected total 12 (marker adds no d20 bonus), got %d", result.Total)
+	}
+	if result.FeatureBonus != 0 {
+		t.Errorf("expected feature bonus 0, got %d", result.FeatureBonus)
+	}
+	if len(result.FeatureReasons) != 0 {
+		t.Errorf("expected no feature reasons (Evasion: +0 suppressed), got %v", result.FeatureReasons)
+	}
+}
+
 func TestSave_PlayerAdvPlusConditionDisadvCancel(t *testing.T) {
 	svc := NewService(fixedRoller(10))
 
