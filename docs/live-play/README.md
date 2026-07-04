@@ -40,6 +40,9 @@ folder is for *actually playing*.
   observe, onboard players, the tunnel, teardown). Reference, not a cover-to-cover read.
 - **[`big-party.md`](big-party.md)** — running 5-6 PCs (onboarding, spotlight,
   combat at scale, encounter scaling).
+- **[`campaign-arc.md`](campaign-arc.md)** — **DM-SECRET** campaign spine (secret truth,
+  antagonist, clock, per-PC threads, destination cores) — load before narrating the
+  post-Ashfall arc. Never paste into Discord.
 - **[`world.md`](world.md)** — Ashfall lore / NPCs / rulings — when narrating.
 - **`party/<name>.md`** — a PC's full sheet — when you need their kit.
 - **[`encounters/`](encounters/)** — pre-built encounters — when a fight starts.
@@ -119,6 +122,7 @@ The hard constraints that govern every one of these steps are in
 | [`game-state.md`](game-state.md) | Save file — durable IDs, ops, scene, **Next action** (intent). Live mechanics → DM Console. | On scene / intent change. |
 | [`party/roster.md`](party/roster.md) | Party durable identity + kit + onboarding slots. Live HP/pos → Console. | On level-up / new PC / kit change. |
 | [`party/`](party/)`<name>.md` | Per-PC durable sheets. | On level-up / kit change. |
+| [`campaign-arc.md`](campaign-arc.md) | **DM-SECRET** arc spine: secret truth, antagonist, clock, per-PC threads, destination cores. | On arc turn / reveal. |
 | [`world.md`](world.md) | Ashfall lore, NPCs, rulings. | When the world grows. |
 | [`encounters/`](encounters/) | Pre-built encounter specs. | When prepping fights. |
 | [`sessions/`](sessions/) | Per-session play-by-play (append-only). | **Every beat.** |
