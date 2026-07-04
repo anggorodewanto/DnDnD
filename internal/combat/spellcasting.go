@@ -185,6 +185,9 @@ type CastResult struct {
 	InvisibilityBroken    bool   // true if standard Invisibility was broken by casting
 	InvisibilityApplied   bool   // true if this cast applied the invisible condition to a target
 	InvisibilityTargetID  string // combatant that received the invisible condition (if any)
+	// RepellingBlastPushed is true when an Eldritch Blast hit pushed the target
+	// 10 ft straight away via the Repelling Blast invocation (COV-6).
+	RepellingBlastPushed bool
 	// SR-017: when /cast spare-the-dying lands on a dying creature, the
 	// stabilize log line surfaces here so handlers / FormatCastLog can mirror
 	// the 🩹 outcome alongside the cast header. Empty when the spell was cast
@@ -288,6 +291,11 @@ func FormatCastLog(result CastResult) string {
 		if result.Teleport.AdditionalEffects != "" {
 			fmt.Fprintf(&b, "\u26a1 %s\n", result.Teleport.AdditionalEffects)
 		}
+	}
+
+	// Repelling Blast forced movement (COV-6).
+	if result.RepellingBlastPushed {
+		fmt.Fprintf(&b, "\U0001f4a8 Repelling Blast: %s pushed 10 ft\n", result.TargetName)
 	}
 
 	// Metamagic effects
@@ -579,7 +587,10 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 
 		distFt := combatantDistance(caster, target)
-		if err := ValidateSpellRange(spell, distFt); err != nil {
+		// Eldritch Spear extends Eldritch Blast's range to 300 ft (COV-6); for
+		// every other spell/caster applyEldritchSpearRange returns the spell
+		// unchanged, so the base range still applies.
+		if err := ValidateSpellRange(applyEldritchSpearRange(spell, char), distFt); err != nil {
 			return CastResult{}, err
 		}
 
@@ -701,6 +712,17 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		if err != nil {
 			return CastResult{}, fmt.Errorf("applying spell damage: %w", err)
 		}
+	}
+
+	// 12α-i. Repelling Blast: an Eldritch Blast hit from a warlock with the
+	// Repelling Blast invocation pushes the target 10 ft straight away (COV-6).
+	// Reuses the shared push machinery (Push mastery / /shove) and is
+	// auto-applied on a hit, mirroring the auto-resolved Push mastery.
+	if result.Hit && hasTarget && castTriggersRepellingBlast(spell, char) {
+		if err := s.applyPushEffect(ctx, caster, target); err != nil {
+			return CastResult{}, fmt.Errorf("applying repelling blast push: %w", err)
+		}
+		result.RepellingBlastPushed = true
 	}
 
 	// 12β. Roll healing dice and apply to target HP.

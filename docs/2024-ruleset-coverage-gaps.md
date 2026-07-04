@@ -363,22 +363,47 @@ end) + `HexFeature` + cast branch.
 ---
 
 ### COV-6 — Warlock invocations beyond Agonizing Blast are inert
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/combat`
+**Status:** DONE (Eldritch-Blast-rider slice) 2026-07-04 · **Severity:** medium · **Pkg:** `internal/combat`
 
-**Problem.** 29 invocations are catalog-defined (`refdata/invocation_catalog.go`) and
-builder-pickable (ISSUE-060), but **only `agonizing_blast` is combat-wired**
-(`combat/agonizing_blast.go`). `repelling_blast` (push on EB hit), `lifedrinker` (+necrotic),
-`eldritch_spear` (range), `thirsting_blade` (extra attack) are inert.
+**Shipped.** The two Eldritch-Blast-cantrip riders that ride already-live machinery are now
+wired end-to-end, mirroring `agonizing_blast.go` (new `combat/eldritch_blast_invocations.go`):
+- **Repelling Blast** — on an EB **hit** by a warlock carrying the `repelling_blast`
+  invocation, the target is pushed 10 ft straight away via the shared `applyPushEffect`
+  (`mastery.go`, the same forced-movement machinery the Push mastery and `/shove` use).
+  Auto-applied on hit (mirrors the auto-resolved Push mastery), gated by
+  `castTriggersRepellingBlast` (spell is EB **and** caster has the invocation).
+  `CastResult.RepellingBlastPushed` signals it; `FormatCastLog` prints a 💨 push line.
+- **Eldritch Spear** — `applyEldritchSpearRange` extends EB's effective range to 300 ft (from
+  120) at the **live** `ValidateSpellRange` chokepoint, so a caster with `eldritch_spear` can
+  reach a target the base range would reject. For every other spell/caster it returns the
+  spell unchanged.
 
-**Mirror.** `agonizing_blast.go` (reads the invocation off the character, modifies the EB
-resolution). Repelling Blast reuses `applyPushEffect` (`mastery.go:191`). Thirsting Blade
-reuses the extra-attack path.
+Both gate on the clean-slug `Feature{MechanicalEffect:<id>}` via `HasInvocation`, exactly like
+Agonizing Blast. Tests: `eldritch_blast_invocations_test.go` (gate helpers; EB hit pushes
+target to E8 / no-invocation no push; 150 ft cast rejected without Eldritch Spear, accepted
+with it; `FormatCastLog` push line). Coverage: combat 91.5%.
 
-**Depends on:** `repelling_blast` per-beam push needs COV-9 (multi-beam EB) to target beams
-individually; the others don't.
+**Deferred follow-ups (blocked / new COV items when picked up):**
+- **`lifedrinker` (+CHA necrotic) and `thirsting_blade` (extra attack)** — BOTH ride a
+  **Pact-of-the-Blade weapon attack**, which has no combat consumer yet (**COV-7**). They
+  cannot be wired until pact-weapon attacks exist; wiring them belongs to that item. When a
+  third spell on-hit rider lands, extract an `applySpellOnHitRiders` switch (analogous to
+  `applyMasteryEffects`) so `Cast` stops accreting numbered inline rider blocks — premature at
+  n=2 (Agonizing Blast is also inline today).
+- **Per-beam Repelling Blast** — the current push is one shove per EB **cast-hit**. True
+  per-beam push (shove on each of the 2/3/4 beams independently, potentially different
+  targets) needs multi-beam EB (**COV-14**). The single-beam behavior shipped here is the
+  correct degradation until then.
+- **Eldritch Spear vs Distant Spell inconsistency (note only)** — Eldritch Spear is the first
+  *functional* range modifier at `ValidateSpellRange`; the Distant Spell metamagic's range
+  extension is still **display-only** (`ApplyDistantSpell` returns a string). Generalizing to
+  one "effective spell range (invocation + metamagic)" seam is a Tier-4 cleanup, not wired here.
 
-**Acceptance.** Each newly-wired invocation changes EB/attack resolution as written; red
-test per invocation.
+**Original problem (for reference).** 29 invocations are catalog-defined
+(`refdata/invocation_catalog.go`) and builder-pickable (ISSUE-060), but **only
+`agonizing_blast` was combat-wired** (`combat/agonizing_blast.go`). `repelling_blast`,
+`lifedrinker`, `eldritch_spear`, `thirsting_blade` were inert. Mirror: `agonizing_blast.go`
+reads the invocation off the character and modifies EB resolution.
 
 ---
 
@@ -580,7 +605,10 @@ make sqlc-check    # if you touched .sql queries
    scaling (2/3/4 per 2024) deferred inline under COV-4.
 3. **COV-10** — unblocks COV-8; seed the levels you need as you wire each martial rider.
 4. ~~**COV-5** (Hunter's Mark)~~ **DONE 2026-07-04** — on-hit 1d6-force rider wired as a Hex
-   mirror (`spell_marker.go` shared helpers); free-cast pool deferred inline. **COV-6**
-   (invocations), **COV-9** (top feats), **COV-16** (Uncanny Dodge) — parallelizable, each
-   mirrors a wired template.
+   mirror (`spell_marker.go` shared helpers); free-cast pool deferred inline.
+4b. ~~**COV-6** (invocations, EB-rider slice)~~ **DONE 2026-07-04** — Repelling Blast (push via
+   `applyPushEffect`) + Eldritch Spear (300 ft range) wired as EB-cantrip riders
+   (`eldritch_blast_invocations.go`). `lifedrinker` + `thirsting_blade` blocked on **COV-7**
+   (pact-weapon attacks); per-beam push blocked on **COV-14**. **COV-9** (top feats), **COV-16**
+   (Uncanny Dodge) still parallelizable, each mirrors a wired template.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
