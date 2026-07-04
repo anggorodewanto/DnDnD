@@ -24,6 +24,7 @@
     saveCharacterSlots,
     getCharacterFeatureUses,
     saveCharacterFeatureUses,
+    deleteCharacter,
   } from './lib/api.js';
 
   let { campaignId } = $props();
@@ -68,6 +69,27 @@
   let featuresData = $state(null);
   let featuresSaving = $state(false);
   let featuresError = $state('');
+
+  // Delete-character state. A two-step inline confirm (no native window.confirm,
+  // which would block the page): the first click arms `confirmingDeleteId`, the
+  // second click removes. Refused (409) during active combat — end combat first.
+  let confirmingDeleteId = $state(null);
+  let deleting = $state(false);
+  let deleteError = $state('');
+
+  async function removeCharacter(characterId) {
+    deleting = true;
+    deleteError = '';
+    try {
+      await deleteCharacter(characterId);
+      confirmingDeleteId = null;
+      await load();
+    } catch (e) {
+      deleteError = e.message || 'Failed to delete character';
+    } finally {
+      deleting = false;
+    }
+  }
 
   async function load() {
     if (!campaignId) {
@@ -293,6 +315,32 @@
             target="_blank"
             rel="noopener"
           >Edit character</a>
+          {#if confirmingDeleteId === c.character_id}
+            <div class="delete-confirm" data-testid="character-delete-confirm-{c.character_id}">
+              <span class="delete-warn">Permanently delete {c.name}?</span>
+              <button
+                class="delete-yes"
+                data-testid="character-delete-yes-{c.character_id}"
+                disabled={deleting}
+                onclick={() => removeCharacter(c.character_id)}
+              >{deleting ? 'Deleting…' : 'Delete'}</button>
+              <button
+                class="delete-cancel"
+                data-testid="character-delete-cancel-{c.character_id}"
+                disabled={deleting}
+                onclick={() => { confirmingDeleteId = null; deleteError = ''; }}
+              >Cancel</button>
+            </div>
+            {#if deleteError}
+              <p class="delete-error" data-testid="character-delete-error-{c.character_id}">{deleteError}</p>
+            {/if}
+          {:else}
+            <button
+              class="delete-toggle"
+              data-testid="character-delete-{c.character_id}"
+              onclick={() => { confirmingDeleteId = c.character_id; deleteError = ''; }}
+            >Delete character</button>
+          {/if}
           <button
             class="msg-toggle"
             data-testid="character-message-toggle-{c.character_id}"
@@ -548,6 +596,61 @@
   }
   .msg-embed {
     margin-top: 0.5rem;
+  }
+  .delete-toggle {
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: transparent;
+    color: #d98a8a;
+    border: 1px solid #5a2a2a;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .delete-toggle:hover {
+    background: #3e1a1a;
+    color: #ff8a8a;
+  }
+  .delete-confirm {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .delete-warn {
+    font-size: 0.85rem;
+    color: #e9a545;
+  }
+  .delete-yes {
+    padding: 0.3rem 0.6rem;
+    background: #a12a2a;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .delete-yes:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .delete-cancel {
+    padding: 0.3rem 0.6rem;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .delete-error {
+    background: #3e1a1a;
+    color: #ff6b6b;
+    padding: 0.4rem 0.5rem;
+    border-radius: 4px;
+    margin: 0.4rem 0 0;
+    font-size: 0.85rem;
   }
   .status-editor {
     margin-top: 0.5rem;

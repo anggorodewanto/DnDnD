@@ -1245,6 +1245,18 @@ export async function saveCharacterFeatureUses(characterId, payload) {
 }
 
 /**
+ * Permanently delete a character from the campaign (DM-only).
+ *   DELETE /api/character-overview/{characterID}
+ * Resolves on 204. apiFetch throws Error(serverText) on any non-2xx so callers
+ * can surface the backend's explanation verbatim (e.g. the 409 "end combat
+ * before deleting" message during active combat).
+ * @param {string} characterId
+ */
+export async function deleteCharacter(characterId) {
+  await apiFetch(`/api/character-overview/${characterId}`, { method: 'DELETE' });
+}
+
+/**
  * Manually override a single character feature's remaining uses in combat
  * (requires an active turn). One feature per request; apiFetch throws the
  * server's response text on error (e.g. 400 unknown feature / current>max,

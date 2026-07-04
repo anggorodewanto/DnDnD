@@ -34,6 +34,10 @@ type fakeRefdata struct {
 	// feature-uses-edit fakes
 	featureUsesArg refdata.UpdateCharacterFeatureUsesParams
 	featureUsesErr error
+
+	// delete fakes
+	deletedID *uuid.UUID
+	deleteErr error
 }
 
 func (f *fakeRefdata) ListPlayerCharactersByStatus(ctx context.Context, arg refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
@@ -74,6 +78,22 @@ func (f *fakeRefdata) UpdateCharacterPactMagicSlots(_ context.Context, arg refda
 func (f *fakeRefdata) UpdateCharacterFeatureUses(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
 	f.featureUsesArg = arg
 	return refdata.Character{}, f.featureUsesErr
+}
+
+func (f *fakeRefdata) DeleteCharacter(_ context.Context, id uuid.UUID) error {
+	f.deletedID = &id
+	return f.deleteErr
+}
+
+func TestDBStore_DeleteCharacter_ForwardsID(t *testing.T) {
+	id := uuid.New()
+	fake := &fakeRefdata{}
+	if err := NewDBStore(fake).DeleteCharacter(context.Background(), id); err != nil {
+		t.Fatalf("DeleteCharacter: %v", err)
+	}
+	if fake.deletedID == nil || *fake.deletedID != id {
+		t.Fatalf("forwarded id = %v, want %s", fake.deletedID, id)
+	}
 }
 
 func TestDBStore_ListApprovedPartyCharacters_MapsRows(t *testing.T) {

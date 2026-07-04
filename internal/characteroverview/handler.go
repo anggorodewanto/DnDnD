@@ -50,6 +50,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/character-overview/{characterID}/slots", h.UpdateSlots)
 	r.Get("/api/character-overview/{characterID}/feature-uses", h.GetFeatureUses)
 	r.Post("/api/character-overview/{characterID}/feature-uses", h.UpdateFeatureUses)
+	r.Delete("/api/character-overview/{characterID}", h.Delete)
 }
 
 // authorizeDM reports whether the request's Discord user owns the given campaign.
@@ -61,6 +62,50 @@ func (h *Handler) authorizeDM(ctx context.Context, campaignID uuid.UUID) bool {
 	userID, _ := auth.DiscordUserIDFromContext(ctx)
 	owns, err := h.campaignVerifier.IsCampaignDM(ctx, userID, campaignID.String())
 	return err == nil && owns
+}
+
+// Delete permanently removes a character from the campaign. DM-only; refused
+// (409) while the character is in an active combat (end combat first), mirroring
+// the out-of-combat status editor. Returns 204 on success, 404 when the
+// character is absent.
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	characterID, err := uuid.Parse(chi.URLParam(r, "characterID"))
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	sctx, err := h.svc.GetStatusContext(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrCharacterNotFound) {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load character", http.StatusInternalServerError)
+		return
+	}
+
+	if h.campaignVerifier != nil {
+		userID, _ := auth.DiscordUserIDFromContext(ctx)
+		owns, err := h.campaignVerifier.IsCampaignDM(ctx, userID, sctx.CampaignID.String())
+		if err != nil || !owns {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	if sctx.InActiveCombat {
+		http.Error(w, "character is in an active combat; end combat before deleting", http.StatusConflict)
+		return
+	}
+
+	if err := h.svc.DeleteCharacter(ctx, characterID); err != nil {
+		http.Error(w, "failed to delete character", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // statusRequest is the JSON body for an out-of-combat status edit.

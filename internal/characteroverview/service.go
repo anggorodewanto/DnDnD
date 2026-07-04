@@ -185,6 +185,8 @@ type Store interface {
 	// UpdateCharacterFeatureUses persists a resolved feature_uses edit (the whole
 	// feature_uses map, already encoded).
 	UpdateCharacterFeatureUses(ctx context.Context, params PersistFeatureUsesParams) error
+	// DeleteCharacter permanently removes a character row by id.
+	DeleteCharacter(ctx context.Context, characterID uuid.UUID) error
 }
 
 // Service exposes character-overview read queries and the party-languages
@@ -196,6 +198,13 @@ type Service struct {
 // NewService constructs a character-overview service.
 func NewService(store Store) *Service {
 	return &Service{store: store}
+}
+
+// DeleteCharacter permanently removes a character. Authorization (campaign DM)
+// and the in-combat guard are enforced by the caller (Handler.Delete) via the
+// status context; the service is a thin passthrough to the store.
+func (s *Service) DeleteCharacter(ctx context.Context, characterID uuid.UUID) error {
+	return s.store.DeleteCharacter(ctx, characterID)
 }
 
 // ListPartyCharacters returns the approved player characters of a campaign

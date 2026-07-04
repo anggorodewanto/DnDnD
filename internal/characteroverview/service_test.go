@@ -29,6 +29,10 @@ type fakeStore struct {
 	// feature-uses-edit fakes
 	persistedFeatureUses  *PersistFeatureUsesParams
 	persistFeatureUsesErr error
+
+	// delete fakes
+	deletedID *uuid.UUID
+	deleteErr error
 }
 
 func (f *fakeStore) ListApprovedPartyCharacters(ctx context.Context, campaignID uuid.UUID) ([]CharacterSheet, error) {
@@ -66,6 +70,14 @@ func (f *fakeStore) UpdateCharacterSlots(_ context.Context, p PersistSlotsParams
 func (f *fakeStore) UpdateCharacterFeatureUses(_ context.Context, p PersistFeatureUsesParams) error {
 	f.persistedFeatureUses = &p
 	return f.persistFeatureUsesErr
+}
+
+func (f *fakeStore) DeleteCharacter(_ context.Context, id uuid.UUID) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deletedID = &id
+	return nil
 }
 
 func TestPartyLanguages_Empty(t *testing.T) {

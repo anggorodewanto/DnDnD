@@ -28,6 +28,7 @@ type RefdataQueries interface {
 	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
 	UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
 	UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
+	DeleteCharacter(ctx context.Context, id uuid.UUID) error
 }
 
 // DBStore is a Store implementation backed by sqlc-generated refdata queries.
@@ -200,6 +201,11 @@ func (s *DBStore) UpdateCharacterFeatureUses(ctx context.Context, p PersistFeatu
 		FeatureUses: pqtype.NullRawMessage{RawMessage: p.FeatureUses, Valid: len(p.FeatureUses) > 0},
 	})
 	return err
+}
+
+// DeleteCharacter permanently removes the character row.
+func (s *DBStore) DeleteCharacter(ctx context.Context, id uuid.UUID) error {
+	return s.q.DeleteCharacter(ctx, id)
 }
 
 // parseSpellSlotsContext parses stored spell slots into an int-keyed map. A
