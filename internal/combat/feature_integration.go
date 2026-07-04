@@ -354,6 +354,27 @@ func HexFeature() FeatureDefinition {
 	}
 }
 
+// HuntersMarkFeature returns the FeatureDefinition for the Hunter's Mark spell's
+// on-hit rider: while the ranger concentrates on Hunter's Mark, every weapon hit
+// against the marked target deals an extra 1d6 force (2024). populateAttackFES
+// injects it only when the target carries this attacker's mark
+// (targetHuntersMarkedBy), so the effect needs no further condition gating here.
+// Mirrors HexFeature.
+func HuntersMarkFeature() FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Hunter's Mark",
+		Source: "spell",
+		Effects: []Effect{
+			{
+				Type:        EffectExtraDamageDice,
+				Trigger:     TriggerOnDamageRoll,
+				Dice:        "1d6",
+				DamageTypes: []string{"force"},
+			},
+		},
+	}
+}
+
 // PackTacticsFeature returns the FeatureDefinition for Pack Tactics.
 // Creature feature: advantage on attack when ally within 5ft of target.
 func PackTacticsFeature() FeatureDefinition {

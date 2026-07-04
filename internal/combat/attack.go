@@ -2467,5 +2467,13 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 		input.Features = append(input.Features, HexFeature())
 	}
 
+	// Hunter's Mark: when the target carries this attacker's source-tagged mark,
+	// every weapon hit adds 1d6 force (2024 Hunter's Mark). Gating by the marker
+	// means only the ranger concentrating on Hunter's Mark against this target
+	// gets the rider. Mirrors the Hex block above.
+	if targetHuntersMarkedBy(cmd.Target.Conditions, cmd.Attacker.ID) {
+		input.Features = append(input.Features, HuntersMarkFeature())
+	}
+
 	return nil
 }

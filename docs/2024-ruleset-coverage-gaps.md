@@ -88,7 +88,8 @@ The combat effect engine is the spine most of these items plug into.
   and AoE casts. `evasion` seeded at Rogue L7 (COV-3).
 - Wired spell effects: spell-attack damage, single-target + AoE save damage (COV-1),
   **save-or-suck conditions via the generic `conditions_applied` array (COV-2)**, healing,
-  teleport (self / self+creature), agonizing-blast EB, Invisibility, Hex, Fly, Spare the
+  teleport (self / self+creature), agonizing-blast EB, Invisibility, Hex, Hunter's Mark
+  (on-hit 1d6-force rider, COV-5), Fly, Spare the
   Dying, zone spells (Spirit Guardians, Wall of Fire, Fog Cloud, Darkness, Silence,
   Moonbeam…), Counterspell, Divine Smite.
 
@@ -327,19 +328,37 @@ consumer anywhere in `internal/combat/`. Mirror was `lay_on_hands.go` / `action_
 ---
 
 ### COV-5 — Ranger free Hunter's Mark (2024 Favored Enemy)
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/combat` (+ seed)
+**Status:** DONE (on-hit rider slice) 2026-07-04 · **Severity:** medium · **Pkg:** `internal/combat` (+ seed)
 
-**Problem.** 2024 Favored Enemy = a number of free Hunter's Mark casts. Seed still carries
-the 2014 text (`seed_classes.go:271` "advantage on tracking"). Hunter's Mark exists as a
-spell seed but has **no on-hit rider and no free-cast**, unlike Hex which is fully wired.
+**Shipped.** Hunter's Mark's on-hit rider is now wired end-to-end as a direct Hex mirror.
+Casting it (`spell.ID == huntersMarkSpellID`, `spellcasting.go`) marks the target with a
+source-tagged `hunters_mark` condition (`applyHuntersMarkConditionFromCast`); every weapon hit
+the caster lands on that marked target then adds an extra **1d6 force** (2024 damage type) via
+`HuntersMarkFeature` (`feature_integration.go`), injected in `populateAttackFES` (`attack.go`)
+only when `targetHuntersMarkedBy` matches this attacker — so only the ranger who cast it gets
+the rider, and only against that target. The marker is torn down for free on concentration end
+through the generic `RemoveSpellSourcedConditions` (matched on caster ID + `spell.ID`) — zero
+new cleanup code. During `/simplify` the byte-identical Hex/Hunter's-Mark leaf helpers (marker
+match + condition apply) were collapsed into shared `targetMarkedBySpell` /
+`applySpellMarkerCondition` (`spell_marker.go`); each spell keeps its own constants + rider
+`FeatureDefinition` and forwards the drift-prone logic there. Seed: Ranger Favored Enemy text
+updated 2014→2024 (always-prepared Hunter's Mark), and the spell's damage type `weapon`→`force`.
+Tests: `hunters_mark_test.go` (`HuntersMarkFeature` shape; marked-target +1d6 force; not-marked
+/ marked-by-someone-else no-bonus; cast marks target; no-target no-op). Coverage: gates met.
 
-**Mirror.** Hex is a near-exact template: `internal/combat/hex.go` (on-hit +1d6 rider,
-source-scoped `hexed` tag, cleared on concentration end) + `HexFeature`
-(`feature_integration.go:341`) + cast branch (`spellcasting.go:830`). Hunter's Mark is the
-same shape with a `hunters_mark` tag and 1d6 rider; add the free-cast pool for Favored Enemy.
+**Deferred follow-up (new COV item when picked up):**
+- **Free-cast pool (Favored Enemy N/day).** 2024 Favored Enemy grants a number of slot-free
+  Hunter's Mark casts (regained on a Long Rest). Not wired — casting still spends a spell slot.
+  Needs a new limited-use pool seeded for rangers (mirror `init_feature_uses.go`) **plus
+  slot-vs-pool substitution in `Service.Cast`'s deduction step**, a genuinely separate (and
+  riskier) surface than the on-hit rider; the seed text describes the feature but the free-cast
+  machinery is intentionally not yet consumed.
 
-**Acceptance.** Ranger casts Hunter's Mark; subsequent weapon hits on the marked target add
-1d6; concentration end clears it; Favored Enemy grants N free casts/day.
+**Original problem (for reference).** 2024 Favored Enemy = a number of free Hunter's Mark casts.
+Seed carried the 2014 text (`seed_classes.go:271` "advantage on tracking"). Hunter's Mark had a
+spell seed but **no on-hit rider and no free-cast**, unlike Hex which is fully wired. Mirror was
+`internal/combat/hex.go` (on-hit +1d6 rider, source-scoped `hexed` tag, cleared on concentration
+end) + `HexFeature` + cast branch.
 
 ---
 
@@ -560,6 +579,8 @@ make sqlc-check    # if you touched .sql queries
    `1d10 + level`, mirrors Lay on Hands; also fixed the L1-vs-L2 seed gate. Use-count
    scaling (2/3/4 per 2024) deferred inline under COV-4.
 3. **COV-10** — unblocks COV-8; seed the levels you need as you wire each martial rider.
-4. **COV-5** (Hunter's Mark), **COV-6** (invocations), **COV-9** (top feats), **COV-16**
-   (Uncanny Dodge) — parallelizable, each mirrors a wired template.
+4. ~~**COV-5** (Hunter's Mark)~~ **DONE 2026-07-04** — on-hit 1d6-force rider wired as a Hex
+   mirror (`spell_marker.go` shared helpers); free-cast pool deferred inline. **COV-6**
+   (invocations), **COV-9** (top feats), **COV-16** (Uncanny Dodge) — parallelizable, each
+   mirrors a wired template.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.

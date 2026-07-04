@@ -873,6 +873,16 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
+	// Hunter's Mark: mark the target with a source-tagged "hunters_mark" condition
+	// so the ranger's weapon attacks add 1d6 force while concentrating (consumed
+	// by targetHuntersMarkedBy / HuntersMarkFeature). Cleared automatically when
+	// concentration ends via RemoveSpellSourcedConditions (matched on spell.ID).
+	if spell.ID == huntersMarkSpellID {
+		if err := s.applyHuntersMarkConditionFromCast(ctx, spell, caster, cmd.TargetID); err != nil {
+			return CastResult{}, err
+		}
+	}
+
 	// 17a. SR-017: /cast spare-the-dying on a dying creature stabilizes them
 	// per SRD ("a living creature that has 0 hit points ... becomes stable").
 	// Skipped silently when the target is not dying — the spell still spends
@@ -1140,22 +1150,19 @@ func (s *Service) applyInvisibilityConditionFromCast(ctx context.Context, spell 
 
 // applyHexConditionFromCast marks the target with a source-tagged "hexed"
 // condition so the caster's subsequent attacks add Hex's 1d6 necrotic while
-// they concentrate (consumed by targetHexedBy / HexFeature). No-op without an
-// explicit creature target. The marker is removed when concentration ends via
-// RemoveSpellSourcedConditions (matched on caster ID + spell.ID).
+// they concentrate (consumed by targetHexedBy / HexFeature). Shared marker logic
+// lives in applySpellMarkerCondition (spell_marker.go).
 func (s *Service) applyHexConditionFromCast(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, targetID uuid.UUID) error {
-	if targetID == uuid.Nil {
-		return nil
-	}
-	cond := CombatCondition{
-		Condition:         hexConditionName,
-		SourceCombatantID: caster.ID.String(),
-		SourceSpell:       spell.ID,
-	}
-	if _, _, err := s.ApplyCondition(ctx, targetID, cond); err != nil {
-		return fmt.Errorf("applying hex condition: %w", err)
-	}
-	return nil
+	return s.applySpellMarkerCondition(ctx, hexConditionName, spell, caster, targetID)
+}
+
+// applyHuntersMarkConditionFromCast marks the target with a source-tagged
+// "hunters_mark" condition so the ranger's subsequent weapon attacks add Hunter's
+// Mark's 1d6 force while they concentrate (consumed by targetHuntersMarkedBy /
+// HuntersMarkFeature). Shared marker logic lives in applySpellMarkerCondition
+// (spell_marker.go).
+func (s *Service) applyHuntersMarkConditionFromCast(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, targetID uuid.UUID) error {
+	return s.applySpellMarkerCondition(ctx, huntersMarkConditionName, spell, caster, targetID)
 }
 
 func (s *Service) applyFlySpeedConditionFromCast(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, targetID uuid.UUID) error {

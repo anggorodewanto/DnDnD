@@ -268,7 +268,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 			Spellcasting:        optJSON(map[string]string{"ability": "wis", "slot_progression": "half"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
-					{"name": "Favored Enemy", "description": "You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy.", "mechanical_effect": "advantage_survival_tracking,advantage_int_checks_about_favored_enemy"},
+					{"name": "Favored Enemy", "description": "You always have the Hunter's Mark spell prepared, and you can cast it a number of times without expending a spell slot (regaining all uses on a Long Rest). While concentrating on it, your weapon hits against the marked target deal an extra 1d6 Force damage.", "mechanical_effect": "always_prepared_hunters_mark,free_hunters_mark_casts"},
 					{"name": "Natural Explorer", "description": "You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions.", "mechanical_effect": "difficult_terrain_no_penalty,advantage_initiative,advantage_first_turn_attacks"},
 				},
 				"2": []map[string]string{
