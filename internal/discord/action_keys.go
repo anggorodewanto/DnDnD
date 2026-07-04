@@ -32,7 +32,7 @@ var actionSubcommandAliases = map[string]string{
 var bonusSubcommandKeys = []string{
 	"offhand", "rage", "end-rage", "martial-arts", "step-of-the-wind",
 	"patient-defense", "font-of-magic", "lay-on-hands", "bardic-inspiration",
-	"wild-shape", "revert-wild-shape", "flurry", "cunning-action",
+	"second-wind", "wild-shape", "revert-wild-shape", "flurry", "cunning-action",
 	"drag", "release-drag",
 }
 

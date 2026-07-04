@@ -151,6 +151,8 @@ var actionCatalog = []ActionCatalogEntry{
 		Summary: "Give an ally a Bardic Inspiration die to add to a later roll."},
 	{Key: "wild-shape", Name: "Wild Shape", Economy: EconomyBonusAction, Command: "/bonus wild-shape <beast>", Classes: []string{"druid"}, MinLevel: 2,
 		Summary: "Transform into a beast you have seen before."},
+	{Key: "second-wind", Name: "Second Wind", Economy: EconomyBonusAction, Command: "/bonus second-wind", Classes: []string{"fighter"}, MinLevel: 1,
+		Summary: "Regain 1d10 + your fighter level HP as a bonus action (once per short rest)."},
 }
 
 // ActionCount is the number of rows in the canonical action catalog. Derived so

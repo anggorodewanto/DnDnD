@@ -285,18 +285,44 @@ would re-create the dead-data anti-pattern this item exposed).
 ---
 
 ### COV-4 — Second Wind: pool seeded, no spend command
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/combat`
+**Status:** DONE 2026-07-04 · **Severity:** medium · **Pkg:** `internal/combat` (+ `discord`/`refdata`/`portal`)
 
-**Problem.** The Second Wind use-pool is seeded and rest-recharged
-(`init_feature_uses.go:43`) but there is **no combat command to spend it** — no
-`second-wind` consumer anywhere in `internal/combat/`.
+**Shipped.** New `Service.SecondWind` (`internal/combat/second_wind.go`) mirrors Lay on
+Hands / Action Surge / Martial Arts: as a **bonus action** the fighter self-heals
+`1d10 + fighter level` (`SecondWindHealDice`), spending one use from the `second-wind`
+pool via the shared `ParseFeatureUses`/`DeductFeatureUse` machinery. Gate order: bonus
+action available (`ValidateResource(ResourceBonusAction)`) → is a character (not NPC) →
+Fighter L1+ → pool `Current > 0`. HP write reuses the inline `min()`-cap +
+`UpdateCombatantHP` + `MaybeResetDeathSavesOnHeal` pattern (no shared heal helper exists).
+Recharge needs no new plumbing — the existing rest path already refills any `Recharge:
+"short"` key.
 
-**Mirror.** `internal/combat/lay_on_hands.go` (spend a pool, heal, as a bonus action) and
-`action_surge.go`. Copy the Lay on Hands command shape: bonus action, spend one use, heal
-`1d10 + fighter level`.
+Wired through all four registries a bonus action needs: `/bonus second-wind` dispatch +
+`BonusCombatService` interface (`bonus_handler.go`), `bonusSubcommandKeys`
+(`action_keys.go`), the action catalog row (fighter L1, `action_catalog.go` — pinned by
+`TestActionCatalog_MatchesDiscordDispatch`), and `/help bonus` (`help_content.go`). New
+`FeatureKeySecondWind` constant replaces the bare literal in `init_feature_uses.go`.
 
-**Acceptance.** `/second-wind` (or Turn-Builder bonus action) heals 1d10+level once per
-short rest, decrements the pool, blocked when pool empty / not a bonus action available.
+**Seed fix (found during `/simplify` altitude review).** Second Wind is a Fighter **L1**
+feature but was seeded only inside the Action Surge `ce.Level >= 2` gate, so a L1 fighter
+would see the command + catalog entry but hit "no uses remaining". `init_feature_uses.go`
+now gives Second Wind its own `ce.Level >= 1` gate (mirrors the Paladin case's nested Lay
+on Hands gate); the L2 builder test still passes.
+
+**Tests.** `second_wind_test.go` (happy path, HP cap, empty pool, bonus-action-used,
+not-a-fighter, NPC, `SecondWindHealDice`); `TestBonusHandler_SecondWind` (dispatch routes
+to the service, public response). Coverage: combat 91.47%.
+
+**Deferred follow-ups (new COV items when picked up):**
+- **2024 use scaling** — 2024 Second Wind is 2 uses at L1, 3 at L4, 4 at L10 (regain 1 on
+  short rest, all on long). The pool is still seeded at a flat `{1,1}`; scale
+  `Current/Max` by level and split short-rest partial recharge from long-rest full.
+- **Turn Builder entry** — offered only via `/bonus second-wind`, not yet a Turn Builder
+  bonus-action button (mirror the existing bonus-action UX).
+
+**Original problem (for reference).** The Second Wind use-pool was seeded and rest-recharged
+(`init_feature_uses.go`) but had **no combat command to spend it** — no `second-wind`
+consumer anywhere in `internal/combat/`. Mirror was `lay_on_hands.go` / `action_surge.go`.
 
 ---
 
@@ -529,8 +555,10 @@ make sqlc-check    # if you touched .sql queries
    resolver. Follow-ups (per-turn re-saves, condition riders) noted inline under COV-2.
 2. ~~**COV-3** Evasion~~ **DONE 2026-07-04** — wired end-to-end (the "engine already works"
    premise was false; it needed a real `ResolveAoESaves`→`ApplyEvasion` consumer). Uncanny
-   Dodge split to **COV-16** (needs a new post-hit damage-halving reaction). Next near-free:
-   **COV-4** (Second Wind) — pool seeded, mirror Lay on Hands.
+   Dodge split to **COV-16** (needs a new post-hit damage-halving reaction).
+2b. ~~**COV-4** (Second Wind)~~ **DONE 2026-07-04** — `/bonus second-wind` self-heal
+   `1d10 + level`, mirrors Lay on Hands; also fixed the L1-vs-L2 seed gate. Use-count
+   scaling (2/3/4 per 2024) deferred inline under COV-4.
 3. **COV-10** — unblocks COV-8; seed the levels you need as you wire each martial rider.
 4. **COV-5** (Hunter's Mark), **COV-6** (invocations), **COV-9** (top feats), **COV-16**
    (Uncanny Dodge) — parallelizable, each mirrors a wired template.

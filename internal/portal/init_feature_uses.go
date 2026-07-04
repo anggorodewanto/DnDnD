@@ -37,10 +37,15 @@ func InitFeatureUses(classes []character.ClassEntry, scores character.AbilitySco
 			recharge := combat.BardicInspirationRechargeType(ce.Level)
 			uses[combat.FeatureKeyBardicInspiration] = character.FeatureUse{Current: max, Max: max, Recharge: recharge}
 		case "fighter":
+			// Second Wind is a level-1 fighter feature; Action Surge is level 2.
+			// Gate them separately so a L1 fighter still gets a usable Second Wind
+			// pool (mirrors the Paladin case's nested Lay on Hands gate).
+			if ce.Level >= 1 {
+				uses[combat.FeatureKeySecondWind] = character.FeatureUse{Current: 1, Max: 1, Recharge: "short"}
+			}
 			if ce.Level >= 2 {
 				surgeMax := combat.ActionSurgeMaxUses(ce.Level)
 				uses[combat.FeatureKeyActionSurge] = character.FeatureUse{Current: surgeMax, Max: surgeMax, Recharge: "short"}
-				uses["second-wind"] = character.FeatureUse{Current: 1, Max: 1, Recharge: "short"}
 			}
 		case "druid":
 			if ce.Level >= 2 {

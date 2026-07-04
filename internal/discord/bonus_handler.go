@@ -31,6 +31,9 @@ type BonusCombatService interface {
 	LayOnHands(ctx context.Context, cmd combat.LayOnHandsCommand) (combat.LayOnHandsResult, error)
 	GrantBardicInspiration(ctx context.Context, cmd combat.BardicInspirationCommand) (combat.BardicInspirationResult, error)
 
+	// COV-4: Second Wind (fighter self-heal bonus action).
+	SecondWind(ctx context.Context, cmd combat.SecondWindCommand, roller *dice.Roller) (combat.SecondWindResult, error)
+
 	// D-47 / Phase 47: Wild Shape activate / revert.
 	ActivateWildShape(ctx context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error)
 	RevertWildShapeService(ctx context.Context, cmd combat.RevertWildShapeCommand) (combat.RevertWildShapeResult, error)
@@ -177,6 +180,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchLayOnHands(ctx, interaction, bctx, args)
 		case "bardic-inspiration", "bardicinspiration":
 			h.dispatchBardicInspiration(ctx, interaction, bctx, args)
+		case "second-wind", "secondwind":
+			h.dispatchSecondWind(ctx, interaction, bctx)
 		case "wild-shape", "wildshape":
 			h.dispatchWildShape(ctx, interaction, bctx, args)
 		case "revert-wild-shape", "revertwildshape":
@@ -443,6 +448,22 @@ func (h *BonusHandler) dispatchBardicInspiration(ctx context.Context, interactio
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Bardic Inspiration failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchSecondWind wires /bonus second-wind (COV-4). The fighter regains
+// 1d10 + fighter level HP as a bonus action (self-heal). h.roller is always
+// wired by NewBonusHandler, matching the other roller dispatchers (offhand,
+// martial-arts, flurry), so no nil guard is needed.
+func (h *BonusHandler) dispatchSecondWind(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext) {
+	result, err := h.combatService.SecondWind(ctx, combat.SecondWindCommand{
+		Fighter: bctx.actor,
+		Turn:    bctx.turn,
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Second Wind failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)

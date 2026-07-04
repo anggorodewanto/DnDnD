@@ -28,6 +28,7 @@ type mockBonusCombatService struct {
 	fomCreateCalls  []combat.FontOfMagicCommand
 	layCalls        []combat.LayOnHandsCommand
 	bardicCalls     []combat.BardicInspirationCommand
+	secondWindCalls []combat.SecondWindCommand
 
 	rageResult    combat.RageResult
 	endRageResult combat.RageResult
@@ -36,8 +37,9 @@ type mockBonusCombatService struct {
 	stepResult    combat.KiAbilityResult
 	patientResult combat.KiAbilityResult
 	fomResult     combat.FontOfMagicResult
-	layResult     combat.LayOnHandsResult
-	bardicResult  combat.BardicInspirationResult
+	layResult        combat.LayOnHandsResult
+	bardicResult     combat.BardicInspirationResult
+	secondWindResult combat.SecondWindResult
 
 	// D-47 / D-48b / D-54-cunning / D-56 / D-57 recordings + canned results.
 	wsActivateCalls  []combat.WildShapeCommand
@@ -107,6 +109,11 @@ func (m *mockBonusCombatService) LayOnHands(_ context.Context, cmd combat.LayOnH
 func (m *mockBonusCombatService) GrantBardicInspiration(_ context.Context, cmd combat.BardicInspirationCommand) (combat.BardicInspirationResult, error) {
 	m.bardicCalls = append(m.bardicCalls, cmd)
 	return m.bardicResult, nil
+}
+
+func (m *mockBonusCombatService) SecondWind(_ context.Context, cmd combat.SecondWindCommand, _ *dice.Roller) (combat.SecondWindResult, error) {
+	m.secondWindCalls = append(m.secondWindCalls, cmd)
+	return m.secondWindResult, nil
 }
 
 func (m *mockBonusCombatService) ActivateWildShape(_ context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error) {
@@ -235,8 +242,9 @@ func setupBonusHandler() (*BonusHandler, *mockMoveSession, *mockBonusCombatServi
 		stepResult:    combat.KiAbilityResult{CombatLog: "💨 Aria uses Step of the Wind (dash)"},
 		patientResult: combat.KiAbilityResult{CombatLog: "🛡️ Aria uses Patient Defense"},
 		fomResult:     combat.FontOfMagicResult{CombatLog: "🔮 Font of Magic resolved"},
-		layResult:     combat.LayOnHandsResult{CombatLog: "💛 Aria heals Orc"},
-		bardicResult:  combat.BardicInspirationResult{CombatLog: "🎵 Aria inspires Orc"},
+		layResult:        combat.LayOnHandsResult{CombatLog: "💛 Aria heals Orc"},
+		bardicResult:     combat.BardicInspirationResult{CombatLog: "🎵 Aria inspires Orc"},
+		secondWindResult: combat.SecondWindResult{CombatLog: "💪 Aria uses Second Wind — regains 12 HP"},
 	}
 	sess := &mockMoveSession{}
 	h := NewBonusHandler(sess, combatSvc, provider, dice.NewRoller(func(_ int) int { return 10 }))
@@ -706,6 +714,23 @@ func TestBonusHandler_BardicInspiration(t *testing.T) {
 	}
 	if svc.bardicCalls[0].Target.ShortID != "OS" {
 		t.Errorf("expected target OS, got %s", svc.bardicCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_SecondWind(t *testing.T) {
+	h, sess, svc, provider := setupBonusHandler()
+	h.Handle(makeBonusInteraction("second-wind", ""))
+	if len(svc.secondWindCalls) != 1 {
+		t.Fatalf("expected 1 second-wind call, got %d", len(svc.secondWindCalls))
+	}
+	if svc.secondWindCalls[0].Fighter.ID != provider.actor.ID {
+		t.Errorf("expected fighter %s, got %s", provider.actor.ID, svc.secondWindCalls[0].Fighter.ID)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Second Wind") {
+		t.Errorf("expected second-wind log, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected second-wind result to be public, got flags %d", sess.lastResponse.Data.Flags)
 	}
 }
 

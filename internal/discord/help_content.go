@@ -501,6 +501,7 @@ Class actions:
   /bonus step-of-the-wind dash        Monk: dash or disengage (1 ki)
   /bonus patient-defense              Monk: dodge as a bonus action (1 ki)
   /bonus rage                         Barbarian: enter rage (end-rage to stop)
+  /bonus second-wind                  Fighter: self-heal 1d10 + level (1/short rest)
   /bonus font-of-magic convert 2      Sorcerer: convert/create a slot at [level]
   /bonus lay-on-hands [target] 10     Paladin: heal target by 10 hp
   /bonus bardic-inspiration [target]  Bard: grant an inspiration die

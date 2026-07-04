@@ -19,6 +19,7 @@ const (
 	FeatureKeyBardicInspiration = "bardic-inspiration"
 	FeatureKeyLayOnHands        = "lay-on-hands"
 	FeatureKeyActionSurge       = "action-surge"
+	FeatureKeySecondWind        = "second-wind"
 	FeatureKeySorceryPoints     = "sorcery-points"
 )
 
