@@ -73,6 +73,21 @@ func (s *Service) hasEquippedShield(ctx context.Context, char refdata.Character)
 	return err == nil && a.ArmorType == "shield"
 }
 
+// equippedShieldACBonus returns the AC bonus of the shield in the character's
+// off-hand slot (a normal shield is +2; a magic shield may be higher), or 0 when
+// no shield is equipped. Shield Master adds this value to certain DEX saving
+// throws (COV-9).
+func (s *Service) equippedShieldACBonus(ctx context.Context, char refdata.Character) int {
+	if !slotOccupied(char.EquippedOffHand) {
+		return 0
+	}
+	a, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
+	if err != nil || a.ArmorType != "shield" {
+		return 0
+	}
+	return int(a.AcBase)
+}
+
 // lookupBodyArmor returns the equipped body armor (non-shield), or nil if none.
 func (s *Service) lookupBodyArmor(ctx context.Context, char refdata.Character) *refdata.Armor {
 	if !slotOccupied(char.EquippedArmor) {

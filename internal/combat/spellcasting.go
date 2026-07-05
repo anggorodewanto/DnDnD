@@ -855,14 +855,19 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	if hasTarget && hasSavingThrow(spell) && (hasDamage(spell) || hasConditions(spell)) && !result.IsAttack &&
 		spell.ResolutionMode == "auto" && !hasAreaOfEffect(spell) {
 		source := AoEPendingSaveSourceFull(spell.ID, effectiveSlotLevel, int(char.Level), result.EmpoweredRerolls)
+		ability := strings.ToLower(spell.SaveAbility.String)
 		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
 			EncounterID: target.EncounterID,
 			CombatantID: target.ID,
-			Ability:     strings.ToLower(spell.SaveAbility.String),
+			Ability:     ability,
 			Dc:          int32(result.SaveDC),
 			Source:      source,
-			// CoverBonus 0: single-target cover-vs-DEX-save is a follow-up; the
-			// AoE path computes per-tile cover, the single-target path does not yet.
+			// CoverBonus is the persisted per-target bonus added to the save total
+			// (RecordAoEPendingSaveRoll: total + CoverBonus >= DC). Here it carries
+			// Shield Master's shield-AC bonus for a PC's DEX save (COV-9). Single-
+			// target cover isn't computed yet; when it lands it must ADD here, not
+			// overwrite.
+			CoverBonus: int32(s.shieldMasterDexSaveBonus(ctx, target, ability)),
 		}); err != nil {
 			return CastResult{}, fmt.Errorf("creating pending save: %w", err)
 		}

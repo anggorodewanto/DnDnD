@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield + Shield-Master-shield-AC-save slices DONE 2026-07-05, Shield Master COMPLETE) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -674,11 +674,39 @@ duplicate `GetCharacter` across the two detectors (cold DM-triggered path; fix w
 COV-3 sibling). Applied: rename `ShieldMasterEvasion`→`InterposeShield` (it isn't the Evasion class
 feature) + the reaction-vs-passive disclosure comment.
 
-**Deferred (Shield Master's third half + new items):**
-- **+shield-AC to single-target DEX saves** — "add your shield's AC bonus to any DEX save vs a spell/effect
-  that targets **only you**." A save-**roll** bonus (no reaction), but scoping to single-target effects and
-  threading the bonus into the save roll (`RecordAoEPendingSaveRoll` / the AoE batch roll) is a separate slice.
+**Shipped (Shield Master +shield-AC-to-DEX-saves slice — the THIRD and final half).** "If you aren't
+incapacitated, add your shield's AC bonus to any DEX save vs a spell/effect that targets **only you**"
+is now wired at the single-target save-spell **enqueue** (`spellcasting.go` COV-1 branch, the one place
+that knows the effect is single-target — `!hasAreaOfEffect`). The bonus rides the pending save's existing
+`CoverBonus` field — the persisted per-target additive bonus `RecordAoEPendingSaveRoll` already adds to
+the roll total (`total + CoverBonus >= DC`) — so **zero new resolution plumbing**: the /save path and the
+DM path both pick it up for free. New `shieldMasterDexSaveBonus(ctx, target, ability)` (`shield_master.go`)
+returns the equipped shield's AC bonus (via new `equippedShieldACBonus`, reading real `AcBase` — a magic
+shield gives its full bonus, unlike `RecalculateAC`'s hardcoded +2) gated on dex-save → **not incapacitated**
+(`IsIncapacitatedRaw`) → PC → `HasFeatureByName "Shield Master"` → shield equipped. Tests:
+`shield_master_save_test.go` (`equippedShieldACBonus` 5 branches; `shieldMasterDexSaveBonus` 7 branches incl.
+case-insensitive, non-dex, no-feat, no-shield, incapacitated, monster-target; + two end-to-end `Cast` tests
+asserting CoverBonus threads through as 2 / 0). No seed change.
+
+*Reachability (verified via subagent).* Both `Cast`/`CastAoE` are **PC-caster-gated** and enemies have **no
+spellcasting entry point** — so a PC makes a single-target DEX save only when another PC casts a single-target
+DEX-save spell at them (friendly fire). Same rare-but-real trigger class as COV-3 Evasion and the Interpose
+half above (both ride PC DEX saves that only fire on friendly-fire casts today); all three are integration-
+tested by seeding the scenario, not by live play. Correct + complete when an enemy-cast path lands.
+
+*Deferred rename debt (from `/simplify` altitude Q1).* `CoverBonus` is semantically the generic "per-target
+additive save-total bonus" at the resolution layer (cover is merely producer #1), but the **name lies** at the
+DB column (`cover_bonus`) / DM-dashboard JSON / svelte layer. A rename to `save_bonus` is **disproportionate for
+this slice** (DB migration + regenerated sqlc + two JSON contracts + `dashboard/svelte/api.js` + ~7 test files),
+so it's deferred and tracked HERE: whoever adds single-target cover must **ADD** to `CoverBonus`, not overwrite
+(one writer today: the enqueue), and the rename rides that work. The `/save` Discord UI does **not** surface
+`cover_bonus` (bonus folded in silently server-side) so there's no player-facing mislabel — only the DM view.
+
+**Shield Master COMPLETE** (all 3 halves shipped: `/bonus shield` bonus-action shove + Interpose Shield DEX-save
+damage evasion + this +shield-AC-to-DEX-saves rider). **Deferred:**
 - **Interpose reaction economy** — see the RAW simplification above (save-path reaction lane).
+- **RAW incapacitation on the OTHER halves** — this slice added the incapacitation guard only to the save-bonus
+  rider; the bonus-shove already gates on `CanActRaw`, and Interpose's reaction cost is itself deferred.
 
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
@@ -699,7 +727,7 @@ no-long-range-disadvantage riders)**, Defensive Duelist,
 hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
 **Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**,
-**Shield Master (COV-9, `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion; +shield-AC-to-DEX-saves rider deferred)**.
+**Shield Master (COV-9 COMPLETE — `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion + `shieldMasterDexSaveBonus` +shield-AC-to-single-target-DEX-saves rider)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
