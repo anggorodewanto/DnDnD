@@ -168,6 +168,8 @@ var actionCatalog = []ActionCatalogEntry{
 		Summary: "After you Attack with a glaive/halberd/quarterstaff/spear, strike with the opposite (blunt) end for 1d4 bludgeoning as a bonus action."},
 	{Key: "crossbow", Name: "Crossbow Expert", Economy: EconomyBonusAction, Command: "/bonus crossbow <target>", Feats: []string{"crossbow-expert"},
 		Summary: "After you Attack with a one-handed weapon, fire a hand crossbow you're holding as a bonus action (spends a bolt)."},
+	{Key: "shield", Name: "Shield Master", Economy: EconomyBonusAction, Command: "/bonus shield <target> [push|prone]", Feats: []string{"shield-master"},
+		Summary: "After you take the Attack action, shove a creature within 5 ft with your shield as a bonus action (knock prone or push 5 ft)."},
 }
 
 // ActionCount is the number of rows in the canonical action catalog. Derived so

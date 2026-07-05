@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -613,6 +613,36 @@ weapon" clause is not enforced (no weapon-of-Attack-action tracking — same sim
 OffhandAttack's TWF prereq); (2) feat-gated catalog rows still not surfaced on the sheet (shared with
 the Polearm deferral); (3) 2024 Crossbow Expert shape nuances.
 
+**Shipped (Shield Master bonus-shove slice).** The first (bonus-action) of Shield Master's three
+halves is now wired as `/bonus shield <target> [push|prone]`. After taking the Attack action, a
+character with the Shield Master feat who is holding a shield may shove a creature within 5 ft as a
+**bonus action** — knock it prone or push it 5 ft — using the same contested check as `/shove`. The
+whole contested-check body was **reused, not duplicated**: the resource-agnostic core of `Service.Shove`
+was extracted into `resolveShove(ctx, cmd, roller, resource ResourceType)` (`grapple_shove.go`), and the
+two callers differ only in which resource they spend — `Shove` passes `ResourceAction`, the new
+`Service.ShieldMasterShove` (`shield_master.go`) passes `ResourceBonusAction`. The resource is still spent
+only after the read-only size/adjacency/push-occupancy pre-checks, so a failed pre-check burns neither the
+action nor the bonus action (behavior-parity of `/shove` verified: no pre-check dropped, reordered, or
+duplicated). Gate order: `CanActRaw` → bonus-action → character (not NPC) → `HasFeatureByName "Shield
+Master"` → **attack made this turn** (`AttacksRemaining >= resolveAttacksPerAction`, the same
+cast-a-spell-excluding basis as Crossbow Expert, not Polearm's `Turn.ActionUsed`) → **shield equipped**
+(`hasEquippedShield`, off-hand slot is `ArmorType == "shield"`). No seed change (slug `shield-master`
+already seeded). Discord/catalog wiring symmetric with polearm/crossbow, except the dispatcher posts
+`ShoveResult.CombatLog` directly (a shove is not an attack, so no `FormatAttackLog`) and parses an optional
+`push|prone` mode token (default push): `BonusCombatService` method + `dispatchShieldMaster` + `case
+"shield"` + `bonusSubcommandKeys` + catalog `Feats:["shield-master"]` row + `help_content.go`. Tests:
+`shield_master_test.go` (prone + push happy paths asserting **BonusActionUsed and NOT ActionUsed**;
+feat / shield / attack-made / NPC / bonus-used gates) + `bonus_handler_test.go` dispatch (default-push,
+prone-mode, missing-target). Coverage: gates met (combat 91.4%, discord 86.0%, refdata 97.92%).
+DEFERRED (all reaction/save work — the other two halves of the feat): (1) **DEX-save damage evasion**
+(reaction: take no damage on a successful DEX save-for-half); (2) **+shield-AC to DEX saves vs
+single-target effects** (a save rider); (3) the "one-handed weapon" clause is not enforced for shove
+either, but shove has no weapon so it's moot; (4) feat-gated catalog rows still not surfaced on the sheet
+(shared with Polearm/Crossbow). **/simplify** left the slice unchanged: the shared `resolveShove` seam was
+confirmed a clean, parity-safe generalization; the flagged consolidations (the feat-gate prologue now
+copied across attack.go/crossbow/shield, and the cold-path double `GetCharacter`) are a cross-file cleanup
+best done as one dedicated pass, not piecemeal here.
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -631,7 +661,8 @@ no-long-range-disadvantage riders)**, Defensive Duelist,
 **Crossbow Expert (COV-9: loading-ignore + no-melee-disadvantage passives + `/bonus crossbow`
 hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
 **Savage Attacker (COV-9, once/turn melee damage reroll)**,
-**Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**.
+**Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**,
+**Shield Master (COV-9, `/bonus shield` bonus-action shove; DEX-save evasion + save-AC riders deferred)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
@@ -640,7 +671,7 @@ slug in combat):
 | --- | --- | --- |
 | Polearm Master | ~~butt-end bonus attack~~ **DONE 2026-07-05** (`/bonus polearm`, `polearm_master.go`); reach OA still deferred (needs reaction/OA trigger) | monk `MartialArtsBonusAttack` template + weapon clone |
 | Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` |
-| Shield Master | bonus-action shove; DEX-save damage evasion | mastery push `applyPushEffect`; save rider |
+| Shield Master | ~~bonus-action shove~~ **DONE 2026-07-05** (`/bonus shield`, `shield_master.go` — reuses `resolveShove` extracted from `Shove`); DEX-save damage evasion (reaction) + shield-AC-to-DEX-saves rider still deferred (reaction/save work) | shared `resolveShove` core (contested check) + bonus-action dispatch |
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
 | ~~Alert~~ **DONE 2026-07-05** | +5 initiative (2014) | `alert.go` — `alertInitiativeBonus` at the `RollInitiative` roll site (`getInitiativeModifiers`); +5 in the roll total, DexMod tie-break kept pure |
 | War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |

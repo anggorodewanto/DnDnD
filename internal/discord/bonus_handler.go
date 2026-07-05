@@ -32,6 +32,10 @@ type BonusCombatService interface {
 	// COV-9: Crossbow Expert bonus-action hand-crossbow attack (after attacking
 	// with a one-handed weapon; spends a bolt).
 	CrossbowExpertBonusAttack(ctx context.Context, cmd combat.CrossbowExpertBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
+
+	// COV-9: Shield Master bonus-action shove (knock prone or push 5 ft after the
+	// Attack action; requires a shield equipped).
+	ShieldMasterShove(ctx context.Context, cmd combat.ShoveCommand, roller *dice.Roller) (combat.ShoveResult, error)
 	StepOfTheWind(ctx context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error)
 	PatientDefense(ctx context.Context, cmd combat.KiAbilityCommand) (combat.KiAbilityResult, error)
 	FontOfMagicConvertSlot(ctx context.Context, cmd combat.FontOfMagicCommand) (combat.FontOfMagicResult, error)
@@ -182,6 +186,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchPolearm(ctx, interaction, bctx, args)
 		case "crossbow", "crossbow-expert", "crossbowexpert":
 			h.dispatchCrossbowExpert(ctx, interaction, bctx, args)
+		case "shield", "shield-master", "shieldmaster":
+			h.dispatchShieldMaster(ctx, interaction, bctx, args)
 		case "step-of-the-wind", "stepofthewind":
 			h.dispatchStepOfTheWind(ctx, interaction, bctx, args)
 		case "patient-defense", "patientdefense":
@@ -378,6 +384,35 @@ func (h *BonusHandler) dispatchCrossbowExpert(ctx context.Context, interaction *
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))
+}
+
+// dispatchShieldMaster wires /bonus shield <target> [push|prone] (COV-9). After
+// the Attack action, a Shield Master feat-holder with a shield equipped shoves a
+// creature within 5 ft as a bonus action — push (default) or knock prone. All
+// gates (feat, shield, attack-made) are enforced inside the service. The service
+// builds the human-readable line into ShoveResult.CombatLog, so it is posted
+// directly (no FormatAttackLog — a shove is not an attack).
+func (h *BonusHandler) dispatchShieldMaster(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "shield <target> [push|prone]")
+	if !ok {
+		return
+	}
+	mode := combat.ShovePush
+	if tokens := strings.Fields(args); len(tokens) > 1 && strings.ToLower(tokens[1]) == "prone" {
+		mode = combat.ShoveProne
+	}
+	result, err := h.combatService.ShieldMasterShove(ctx, combat.ShoveCommand{
+		Shover:    bctx.actor,
+		Target:    *target,
+		Turn:      bctx.turn,
+		Encounter: bctx.encounter,
+		Mode:      mode,
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Shield Master failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
 }
 
 func (h *BonusHandler) dispatchStepOfTheWind(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {

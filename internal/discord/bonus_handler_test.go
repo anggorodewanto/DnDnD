@@ -24,6 +24,7 @@ type mockBonusCombatService struct {
 	martialCalls    []combat.MartialArtsBonusAttackCommand
 	polearmCalls    []combat.PolearmMasterBonusAttackCommand
 	crossbowCalls   []combat.CrossbowExpertBonusAttackCommand
+	shieldCalls     []combat.ShoveCommand
 	stepCalls       []combat.StepOfTheWindCommand
 	patientCalls    []combat.KiAbilityCommand
 	fomConvertCalls []combat.FontOfMagicCommand
@@ -38,6 +39,7 @@ type mockBonusCombatService struct {
 	martialResult    combat.AttackResult
 	polearmResult    combat.AttackResult
 	crossbowResult   combat.AttackResult
+	shieldResult     combat.ShoveResult
 	stepResult       combat.KiAbilityResult
 	patientResult    combat.KiAbilityResult
 	fomResult        combat.FontOfMagicResult
@@ -93,6 +95,11 @@ func (m *mockBonusCombatService) PolearmMasterBonusAttack(_ context.Context, cmd
 func (m *mockBonusCombatService) CrossbowExpertBonusAttack(_ context.Context, cmd combat.CrossbowExpertBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
 	m.crossbowCalls = append(m.crossbowCalls, cmd)
 	return m.crossbowResult, nil
+}
+
+func (m *mockBonusCombatService) ShieldMasterShove(_ context.Context, cmd combat.ShoveCommand, _ *dice.Roller) (combat.ShoveResult, error) {
+	m.shieldCalls = append(m.shieldCalls, cmd)
+	return m.shieldResult, nil
 }
 
 func (m *mockBonusCombatService) StepOfTheWind(_ context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error) {
@@ -654,6 +661,43 @@ func TestBonusHandler_CrossbowExpert_MissingTarget(t *testing.T) {
 	h, sess, svc, _ := setupBonusHandler()
 	h.Handle(makeBonusInteraction("crossbow", ""))
 	if len(svc.crossbowCalls) != 0 {
+		t.Error("expected no service call without target")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
+		t.Errorf("expected missing-target rejection, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestBonusHandler_ShieldMaster(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	// No explicit mode → defaults to push.
+	h.Handle(makeBonusInteraction("shield", "OS"))
+	if len(svc.shieldCalls) != 1 {
+		t.Fatalf("expected 1 shield call, got %d", len(svc.shieldCalls))
+	}
+	if svc.shieldCalls[0].Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", svc.shieldCalls[0].Target.ShortID)
+	}
+	if svc.shieldCalls[0].Mode != combat.ShovePush {
+		t.Errorf("expected default push mode, got %q", svc.shieldCalls[0].Mode)
+	}
+}
+
+func TestBonusHandler_ShieldMaster_ProneMode(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("shield", "OS prone"))
+	if len(svc.shieldCalls) != 1 {
+		t.Fatalf("expected 1 shield call, got %d", len(svc.shieldCalls))
+	}
+	if svc.shieldCalls[0].Mode != combat.ShoveProne {
+		t.Errorf("expected prone mode, got %q", svc.shieldCalls[0].Mode)
+	}
+}
+
+func TestBonusHandler_ShieldMaster_MissingTarget(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("shield", ""))
+	if len(svc.shieldCalls) != 0 {
 		t.Error("expected no service call without target")
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {

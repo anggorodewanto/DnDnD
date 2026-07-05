@@ -504,6 +504,7 @@ Class actions:
   /bonus second-wind                  Fighter: self-heal 1d10 + level (1/short rest)
   /bonus polearm [target]             Polearm Master feat: butt strike (1d4) after Attack
   /bonus crossbow [target]            Crossbow Expert feat: hand-crossbow bonus shot (spends a bolt)
+  /bonus shield [target] [push|prone] Shield Master feat: shield shove (push/prone) after Attack
   /bonus font-of-magic convert 2      Sorcerer: convert/create a slot at [level]
   /bonus lay-on-hands [target] 10     Paladin: heal target by 10 hp
   /bonus bardic-inspiration [target]  Bard: grant an inspiration die

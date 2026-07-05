@@ -180,7 +180,18 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 	if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
 		return ShoveResult{}, err
 	}
+	return s.resolveShove(ctx, cmd, roller, ResourceAction)
+}
 
+// resolveShove runs the resource-agnostic core of a shove: the size / adjacency /
+// push-destination pre-checks, the contested Athletics-vs-(Athletics/Acrobatics)
+// roll, and the prone/push application. The caller validates entry conditions
+// (CanAct, and for the feat variant the Shield Master feat + shield gates) and
+// passes the resource to spend — ResourceAction for the /shove action,
+// ResourceBonusAction for the Shield Master bonus shove (COV-9). The resource is
+// spent only AFTER the read-only pre-checks pass, so a failed pre-check never
+// burns the shover's action or bonus action.
+func (s *Service) resolveShove(ctx context.Context, cmd ShoveCommand, roller *dice.Roller, resource ResourceType) (ShoveResult, error) {
 	// Size check
 	targetSize, err := s.resolveCombatantSize(ctx, cmd.Target)
 	if err != nil {
@@ -240,8 +251,9 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 		return ShoveResult{}, err
 	}
 
-	// Use action
-	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
+	// Spend the caller's resource (action for /shove, bonus action for the
+	// Shield Master shove).
+	updatedTurn, err := UseResource(cmd.Turn, resource)
 	if err != nil {
 		return ShoveResult{}, err
 	}
