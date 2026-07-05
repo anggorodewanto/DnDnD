@@ -243,3 +243,48 @@ func TestApplyReactionToRoll_Nat1AlwaysMisses(t *testing.T) {
 	applyReactionToRoll(r, 3, 0)
 	assert.False(t, r.Hit, "a natural 1 misses regardless")
 }
+
+// --- COV-16: Uncanny Dodge (post-hit damage-halving reaction) ---
+
+func TestUncannyDodgeReaction_OfferedWithFeature(t *testing.T) {
+	feats, _ := json.Marshal([]CharacterFeature{{Name: "Uncanny Dodge", MechanicalEffect: "uncanny_dodge"}})
+	opt, ok := uncannyDodgeReaction(pqtype.NullRawMessage{RawMessage: feats, Valid: true})
+	require.True(t, ok)
+	assert.Equal(t, "uncanny-dodge", opt.ID)
+	assert.True(t, opt.HalveDamage)
+	assert.Zero(t, opt.ACBonus, "Uncanny Dodge halves damage; it is not a +AC reaction")
+	assert.Equal(t, "Uncanny Dodge", opt.Reason)
+}
+
+func TestUncannyDodgeReaction_NoneWithoutFeature(t *testing.T) {
+	feats, _ := json.Marshal([]CharacterFeature{{Name: "Evasion", MechanicalEffect: "evasion"}})
+	_, ok := uncannyDodgeReaction(pqtype.NullRawMessage{RawMessage: feats, Valid: true})
+	assert.False(t, ok)
+}
+
+func TestAvailableReactions_IncludesUncannyDodgeForRogue(t *testing.T) {
+	charID := uuid.New()
+	feats, _ := json.Marshal([]CharacterFeature{{Name: "Uncanny Dodge", MechanicalEffect: "uncanny_dodge"}})
+	char := refdata.Character{
+		ID: charID, ProficiencyBonus: 3,
+		Features: pqtype.NullRawMessage{RawMessage: feats, Valid: true},
+	}
+	target := refdata.Combatant{
+		ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Vex", Conditions: json.RawMessage(`[]`),
+	}
+	svc := NewService(availReactionStore(t, target, char, refdata.Weapon{}))
+
+	opts, err := svc.AvailableReactions(context.Background(), target, uuid.New())
+	require.NoError(t, err)
+	require.Len(t, opts, 1)
+	assert.Equal(t, "uncanny-dodge", opts[0].ID)
+	assert.True(t, opts[0].HalveDamage)
+}
+
+func TestFormatReactionDeclared_HalveDamageNotACBonus(t *testing.T) {
+	line := FormatReactionDeclared("Vex", ReactionOption{ID: "uncanny-dodge", HalveDamage: true, Reason: "Uncanny Dodge"})
+	assert.Contains(t, line, "Vex")
+	assert.Contains(t, line, "Uncanny Dodge")
+	assert.NotContains(t, line, "AC", "a damage-halving reaction must not render an AC bonus line")
+}

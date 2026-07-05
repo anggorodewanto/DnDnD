@@ -474,6 +474,135 @@ func TestExecuteEnemyTurn_LogShowsResistedDamage(t *testing.T) {
 		"combat log must show the halved (post-resistance) damage")
 }
 
+// COV-16: a Rogue 5+ hit by a visible attacker may declare Uncanny Dodge; the
+// pre-rolled damage is halved BEFORE it is written to HP (no retroactive
+// heal-back), the reaction is consumed, and the halved amount is what lands.
+func TestExecuteEnemyTurn_UncannyDodgeHalvesDamageBeforeWrite(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	declared, resolved := false, false
+	var hpWritten int32 = -1
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, EncounterID: encounterID, DisplayName: "Goblin", IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{
+			ID: targetID, EncounterID: encounterID, DisplayName: "Vex", IsNpc: false, IsAlive: true,
+			HpCurrent: 30, Ac: 15, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(_ context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID, RoundNumber: 1}, nil
+	}
+	store.createReactionDeclarationFn = func(_ context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		declared = true
+		return refdata.ReactionDeclaration{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Status: "active"}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(_ context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		resolved = true
+		return refdata.ReactionDeclaration{ID: arg.ID, Status: "used"}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpWritten = arg.HpCurrent
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+	}
+
+	svc := NewService(store)
+
+	// Pre-rolled hit for 8 raw slashing; Uncanny Dodge halves it to 4 before the HP write.
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Scimitar", ToHit: 4, DamageDice: "1d6+2",
+					DamageType: "slashing", ReachFt: 5,
+					TargetID: targetID, TargetName: "Vex",
+					RollResult:     &AttackRollResult{ToHitRoll: 12, ToHitTotal: 16, Hit: true, DamageTotal: 8},
+					ChosenReaction: &ReactionOption{ID: "uncanny-dodge", Label: "Uncanny Dodge (halve damage)", HalveDamage: true, Reason: "Uncanny Dodge"},
+				},
+			},
+		},
+	}
+
+	result, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, newDeterministicRoller(12, 4))
+	require.NoError(t, err)
+	assert.Equal(t, int32(4), result.DamageApplied[targetID], "8 raw damage halved by Uncanny Dodge = 4 applied")
+	assert.Equal(t, int32(26), hpWritten, "HP 30 − 4 (already halved) = 26 written; no full-damage-then-heal-back")
+	assert.True(t, declared, "the Uncanny Dodge reaction must be declared")
+	assert.True(t, resolved, "the reaction must be marked used so it can't fire twice this round")
+	assert.Contains(t, result.CombatLog, "Uncanny Dodge", "combat log announces the reaction")
+}
+
+// COV-16: Uncanny Dodge triggers only "when an attacker hits you" — a declared
+// halving reaction against an attack that MISSES must not be consumed (the
+// reaction stays available) nor announced (no misleading log line). This is the
+// post-hit reaction's key difference from a +AC reaction, which is spent
+// regardless because it was applied to decide the hit.
+func TestExecuteEnemyTurn_UncannyDodgeNotConsumedOnMiss(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	charID := uuid.New()
+
+	declared, resolved := false, false
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == npcID {
+			return refdata.Combatant{ID: npcID, EncounterID: encounterID, DisplayName: "Goblin", IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+		}
+		return refdata.Combatant{
+			ID: targetID, EncounterID: encounterID, DisplayName: "Vex", IsNpc: false, IsAlive: true,
+			HpCurrent: 30, Ac: 15, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(_ context.Context, eid uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: eid, CombatantID: npcID, RoundNumber: 1}, nil
+	}
+	store.createReactionDeclarationFn = func(_ context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		declared = true
+		return refdata.ReactionDeclaration{ID: uuid.New(), Status: "active"}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(_ context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		resolved = true
+		return refdata.ReactionDeclaration{ID: arg.ID, Status: "used"}, nil
+	}
+
+	svc := NewService(store)
+
+	// Pre-rolled MISS (10 vs AC 15); the declared Uncanny Dodge must not fire.
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeAttack,
+				Attack: &AttackStep{
+					WeaponName: "Scimitar", ToHit: 4, DamageDice: "1d6+2",
+					DamageType: "slashing", ReachFt: 5,
+					TargetID: targetID, TargetName: "Vex",
+					RollResult:     &AttackRollResult{ToHitRoll: 6, ToHitTotal: 10, Hit: false, DamageTotal: 8},
+					ChosenReaction: &ReactionOption{ID: "uncanny-dodge", Label: "Uncanny Dodge (halve damage)", HalveDamage: true, Reason: "Uncanny Dodge"},
+				},
+			},
+		},
+	}
+
+	result, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, newDeterministicRoller(6, 4))
+	require.NoError(t, err)
+	assert.Zero(t, result.DamageApplied[targetID], "a missed attack deals no damage")
+	assert.False(t, declared, "an untriggered post-hit reaction must not be declared")
+	assert.False(t, resolved, "an untriggered post-hit reaction must not be consumed — it stays available")
+	assert.NotContains(t, result.CombatLog, "Uncanny Dodge", "a missed attack must not announce a halving reaction")
+}
+
 // --- TDD Cycle 13: indexToColLabel ---
 
 func TestIndexToColLabel(t *testing.T) {

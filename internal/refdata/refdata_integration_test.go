@@ -275,3 +275,43 @@ func TestIntegration_SeedRogueEvasionFeature(t *testing.T) {
 		t.Errorf("Rogue L7 must seed the `evasion` mechanical_effect; got %+v", byLevel["7"])
 	}
 }
+
+// TestIntegration_SeedRogueUncannyDodgeFeature locks the COV-16 seed→present link:
+// the seeded Rogue must carry the `uncanny_dodge` mechanical_effect at level 5 so the
+// level-gated derivation grants it, which is what makes the wired
+// AvailableReactions→ExecuteEnemyTurn damage-halving reaction actually fire. A seed
+// reshuffle that drops this key would silently make Uncanny Dodge dead again.
+func TestIntegration_SeedRogueUncannyDodgeFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	rogue, err := refdata.New(db).GetClass(ctx, "rogue")
+	if err != nil {
+		t.Fatalf("GetClass(rogue) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(rogue.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["5"] {
+		if f.MechanicalEffect == "uncanny_dodge" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Rogue L5 must seed the `uncanny_dodge` mechanical_effect; got %+v", byLevel["5"])
+	}
+}

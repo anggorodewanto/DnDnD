@@ -335,6 +335,15 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 					applyReactionToRoll(step.Attack.RollResult, int(target.Ac), acBonus)
 				}
 			}
+			// A post-hit damage-halving reaction (Uncanny Dodge) only triggers
+			// "when an attacker hits you" — so on a miss it is neither consumed
+			// nor announced. Drop it before the consume/log below. A +AC reaction
+			// is left in place regardless: it was applied at roll time and is
+			// spent whatever outcome it produced.
+			if step.Attack.ChosenReaction != nil && step.Attack.ChosenReaction.HalveDamage &&
+				(step.Attack.RollResult == nil || !step.Attack.RollResult.Hit) {
+				step.Attack.ChosenReaction = nil
+			}
 			// Record the spent reaction so the PC can't react again this round.
 			if step.Attack.ChosenReaction != nil {
 				_ = s.markPCReactionUsed(ctx, encounterID, step.Attack.TargetID, *step.Attack.ChosenReaction)
@@ -342,9 +351,16 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 			// Queue damage if hit, preserving per-attack damage type so the
 			// ApplyDamage R/I/V resolution can match correctly.
 			if step.Attack.RollResult != nil && step.Attack.RollResult.Hit {
+				dmg := step.Attack.RollResult.DamageTotal
+				// A damage-halving reaction reduces the pre-rolled damage BEFORE
+				// it is written to HP, so nothing is resolved retroactively (no
+				// full-damage-then-heal-back).
+				if step.Attack.ChosenReaction != nil && step.Attack.ChosenReaction.HalveDamage {
+					dmg = ApplyUncannyDodge(dmg)
+				}
 				hits = append(hits, pendingHit{
 					targetID:   step.Attack.TargetID,
-					amount:     int32(step.Attack.RollResult.DamageTotal),
+					amount:     int32(dmg),
 					damageType: step.Attack.DamageType,
 					attack:     step.Attack,
 				})

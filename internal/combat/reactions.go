@@ -6,20 +6,28 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// ReactionOption is a single reaction a targeted PC may declare in the pre-roll
-// reaction window. The DM/bot presents these before the attacker rolls; the
-// chosen option's ACBonus is folded into the attack via AttackCommand.
-// ReactionACBonus so nothing is resolved retroactively. Modelled as a list so
-// future reactions (Shield, etc.) drop in as additional options.
+// ReactionOption is a single reaction a targeted PC may declare against an
+// incoming attack. The DM/bot presents these in the Turn Builder before executing.
+// There are two flavors, distinguished by when they resolve — both forward-only,
+// nothing retroactive:
+//   - +AC reactions (Defensive Duelist): resolve at roll time — ACBonus is folded
+//     into the hit check, so the only transition is hit→miss (damage untouched).
+//   - damage-halving reactions (Uncanny Dodge): resolve post-hit — HalveDamage
+//     halves the pre-rolled damage before it is written to HP, and (being tied to
+//     a hit) is only consumed when the attack lands.
+//
+// Modelled as a list so future reactions drop in as additional options.
 type ReactionOption struct {
-	ID      string `json:"id"`       // stable slug, e.g. "defensive-duelist"
-	Label   string `json:"label"`    // button label, e.g. "Defensive Duelist (+3 AC)"
-	ACBonus int    `json:"ac_bonus"` // AC added against the incoming attack if chosen
-	Reason  string `json:"reason"`   // short reason for the combat log, e.g. "Defensive Duelist"
+	ID          string `json:"id"`                     // stable slug, e.g. "defensive-duelist"
+	Label       string `json:"label"`                  // button label, e.g. "Defensive Duelist (+3 AC)"
+	ACBonus     int    `json:"ac_bonus"`               // AC added against the incoming attack if chosen (+AC reactions)
+	HalveDamage bool   `json:"halve_damage,omitempty"` // halve the incoming attack's damage (Uncanny Dodge); ACBonus is 0
+	Reason      string `json:"reason"`                 // short reason for the combat log, e.g. "Defensive Duelist"
 }
 
 // defensiveDuelistReaction returns the Defensive Duelist option when the target
@@ -41,10 +49,27 @@ func defensiveDuelistReaction(featuresJSON []byte, mainHand refdata.Weapon, prof
 	}, true
 }
 
-// AvailableReactions returns the reaction options a targeted PC may use against
-// an incoming attack, for the pre-roll reaction window. Returns empty for NPC
-// targets, for PCs whose reaction is already spent this round, and for PCs with
-// no qualifying reaction. Built to be extended with more +AC reactions later.
+// uncannyDodgeReaction returns the Uncanny Dodge option when the target has the
+// feature (Rogue 5+, seeded as the `uncanny_dodge` mechanical effect). Unlike a
+// +AC reaction it does not change hit/miss; it halves the incoming attack's damage
+// at execute time, before the damage is written to HP (no retroactive heal-back).
+// Pure: reaction availability (a free reaction) is gated by the caller.
+func uncannyDodgeReaction(features pqtype.NullRawMessage) (ReactionOption, bool) {
+	if !hasFeatureEffect(features, "uncanny_dodge") {
+		return ReactionOption{}, false
+	}
+	return ReactionOption{
+		ID:          "uncanny-dodge",
+		Label:       "Uncanny Dodge (halve damage)",
+		HalveDamage: true,
+		Reason:      "Uncanny Dodge",
+	}, true
+}
+
+// AvailableReactions returns the reaction options a targeted PC may declare
+// against an incoming attack. Returns empty for NPC targets, for PCs whose
+// reaction is already spent this round, and for PCs with no qualifying reaction.
+// Built to be extended with more reactions later.
 func (s *Service) AvailableReactions(ctx context.Context, target refdata.Combatant, encounterID uuid.UUID) ([]ReactionOption, error) {
 	if !target.CharacterID.Valid {
 		return nil, nil
@@ -73,13 +98,18 @@ func (s *Service) AvailableReactions(ctx context.Context, target refdata.Combata
 	if dd, ok := defensiveDuelistReaction(char.Features.RawMessage, mainHand, int(char.ProficiencyBonus)); ok {
 		opts = append(opts, dd)
 	}
+	if ud, ok := uncannyDodgeReaction(char.Features); ok {
+		opts = append(opts, ud)
+	}
 	return opts, nil
 }
 
 // FormatReactionDeclared renders the #combat-log / DM-timeline line announcing
-// that a targeted PC used a reaction in the pre-roll window, before the attack
-// is rolled.
+// that a targeted PC used a reaction against an incoming attack.
 func FormatReactionDeclared(defenderName string, opt ReactionOption) string {
+	if opt.HalveDamage {
+		return fmt.Sprintf("🛡️ %s uses %s — halves the damage", defenderName, opt.Reason)
+	}
 	return fmt.Sprintf("🛡️ %s uses %s — +%d AC", defenderName, opt.Reason, opt.ACBonus)
 }
 

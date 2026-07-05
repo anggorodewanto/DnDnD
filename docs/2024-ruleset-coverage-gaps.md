@@ -670,8 +670,8 @@ slug in combat):
 | Feat | Effect to wire | Mirror |
 | --- | --- | --- |
 | Polearm Master | ~~butt-end bonus attack~~ **DONE 2026-07-05** (`/bonus polearm`, `polearm_master.go`); reach OA still deferred (needs reaction/OA trigger) | monk `MartialArtsBonusAttack` template + weapon clone |
-| Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` |
-| Shield Master | ~~bonus-action shove~~ **DONE 2026-07-05** (`/bonus shield`, `shield_master.go` — reuses `resolveShove` extracted from `Shove`); DEX-save damage evasion (reaction) + shield-AC-to-DEX-saves rider still deferred (reaction/save work) | shared `resolveShove` core (contested check) + bonus-action dispatch |
+| Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` (needs a movement/OA trigger — not yet built) |
+| Shield Master | ~~bonus-action shove~~ **DONE 2026-07-05** (`/bonus shield`, `shield_master.go` — reuses `resolveShove` extracted from `Shove`); DEX-save damage evasion (reaction) + shield-AC-to-DEX-saves rider still deferred | evasion half now mirrors the **COV-16 `HalveDamage` reaction foundation** (post-hit reduce-before-write); trigger differs (DEX save vs hit) |
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
 | ~~Alert~~ **DONE 2026-07-05** | +5 initiative (2014) | `alert.go` — `alertInitiativeBonus` at the `RollInitiative` roll site (`getInitiativeModifiers`); +5 in the roll total, DexMod tie-break kept pure |
 | War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |
@@ -687,7 +687,59 @@ slug in combat):
 ---
 
 ### COV-16 — Uncanny Dodge: post-hit damage-halving reaction (split from COV-3)
-**Status:** OPEN · **Severity:** low-medium · **Pkg:** `internal/combat` + `internal/discord` (+ seed)
+**Status:** DONE (enemy-turn Turn Builder slice) 2026-07-05 · **Severity:** low-medium · **Pkg:** `internal/combat` + `internal/refdata`
+
+**Shipped.** Uncanny Dodge is wired end-to-end as the **first post-hit damage-halving
+reaction**, on the enemy-turn Turn Builder path. It reuses the existing reaction plumbing
+rather than adding a parallel system: `ReactionOption` gained a `HalveDamage bool` flag (the
++AC flavor keeps `ACBonus`), and a new pure `uncannyDodgeReaction(char.Features)` builder
+(slug-detected via `hasFeatureEffect(features, "uncanny_dodge")`, exactly mirroring COV-3's
+`combatantHasEvasion`) is appended in `AvailableReactions` alongside `defensiveDuelistReaction`.
+Because both flavors flow through the **one** `AvailableReactions` list → single
+`AttackStep.ChosenReaction` slot → `CanDeclareReaction` free-reaction gate → `markPCReactionUsed`
+consumption, the one-reaction-per-round economy is enforced for free (a PC can't stack Defensive
+Duelist *and* Uncanny Dodge on the same attack). Consumed in `ExecuteEnemyTurn`
+(`turn_builder_handler.go`): when the chosen reaction is `HalveDamage`, the pre-rolled damage is
+halved via the already-unit-tested `ApplyUncannyDodge` (`feature_integration.go`, `dmg/2`) **before**
+it is staged into `pendingHit`/written to HP — forward-only, no full-damage-then-heal-back (honors
+`feedback_reaction_predeclare_no_retroactive`). Seed: `uncanny_dodge` added to Rogue
+`features_by_level["5"]` (2024 L5), mirroring the COV-3 Evasion seed at L7; level-gated by
+`derive_stats`, no migration/test-hook change (Go-literal seed). The new `HalveDamage` field rides
+the plan JSON, so the dashboard Turn Builder renders the button and the execute request
+deserializes it with **zero new Discord/dashboard code**.
+
+**RAW correctness (found during `/simplify` altitude review).** Uncanny Dodge triggers only "when
+an attacker hits you," so a declared halving reaction against an attack that **misses** is now
+dropped in `ExecuteEnemyTurn` before the consume/announce step — it is neither spent (stays
+available) nor written to the combat log. A +AC reaction is still consumed regardless, since it was
+applied at roll time to decide the hit. The `ReactionOption` doc comments were also de-leaked from
+"pre-roll reaction window" to "declared against an incoming attack" (the two flavors resolve at
+different times: +AC at roll time, halving post-hit).
+
+Tests: `reactions_test.go` (builder present/absent; `AvailableReactions` includes it for a
+feature-carrying PC; `FormatReactionDeclared` halve-line, no `+AC`), `turn_builder_handler_test.go`
+(execute halves 8→4 **before** the HP write + marks used; **not** consumed/announced on a miss),
+`refdata_integration_test.go` (`TestIntegration_SeedRogueUncannyDodgeFeature` locks the L5 seed→present
+link, mirroring the Evasion guard). Coverage: gates met (combat 91.4%, discord 86.0%, refdata 97.92%).
+
+**Deferred follow-ups (new items when picked up):**
+- **Live `/attack` defender prompt** — the mid-`/attack` interactive path is not wired. Every
+  currently-wired `populatePostHitPrompts` hook (Divine Smite, GWM, Stunning Strike) is *attacker*-side;
+  there is no general *defender*-post-hit-prompt mechanism yet (the `UncannyDodgePromptArgs`/
+  `PromptUncannyDodge` scaffold in `internal/discord/class_feature_prompt.go` is unwired). When that
+  defender-prompt lane is built, it calls the **same** `ApplyUncannyDodge` + `HalveDamage` consumption,
+  halving before its own HP write. Enemy-turn-first was the right order; this slice leaves the math +
+  consumption reusable for it.
+- **Shield Master's DEX-save damage-evasion half (COV-9)** is the same post-hit damage-reduction shape
+  and can now mirror this `HalveDamage`/reaction-list foundation (its trigger is a DEX save rather than
+  a hit, but the reduce-before-write plumbing is shared).
+- **Offered on a pre-rolled miss** — `AvailableReactions` still surfaces Uncanny Dodge roll-agnostically
+  (its signature doesn't see the roll), same as Defensive Duelist; harmless now that execute drops an
+  untriggered one, but gating the *offer* on the pre-rolled hit would tidy the Turn Builder UI.
+
+---
+
+**Original problem (for reference):**
 
 **Problem.** `UncannyDodgeFeature()` (`feature_integration.go:139`) emits
 `EffectReactionTrigger{On:"uncanny_dodge"}` into `ProcessorResult.ReactionTriggers`
@@ -822,12 +874,16 @@ make sqlc-check    # if you touched .sql queries
    mirror (`spell_marker.go` shared helpers); free-cast pool deferred inline.
 4b. ~~**COV-6** (invocations, EB-rider slice)~~ **DONE 2026-07-04** — Repelling Blast (push via
    `applyPushEffect`) + Eldritch Spear (300 ft range) wired as EB-cantrip riders
-   (`eldritch_blast_invocations.go`). Per-beam push blocked on **COV-14**. **COV-9** (top feats),
-   **COV-16** (Uncanny Dodge) still parallelizable, each mirrors a wired template.
+   (`eldritch_blast_invocations.go`). Per-beam push blocked on **COV-14**. **COV-9** (top feats)
+   still parallelizable, each mirrors a wired template.
 4c. ~~**COV-7** (Pact of the Blade)~~ **DONE 2026-07-04** — pact-weapon attacks use CHA
    (`pact_blade.go`, `effectiveAbilityMod`); no seed change (boon slug already persisted).
 4d. ~~**COV-6 `lifedrinker` + `thirsting_blade`**~~ **DONE 2026-07-04** — unblocked by COV-7:
    Lifedrinker = flat +CHA necrotic on-hit rider (`LifedrinkerFeature`), Thirsting Blade = 2nd
    attack (`max(_,2)` in `resolveAttacksPerAction`). Chain/Tome boons + off-hand pact-weapon path
-   still deferred. Remaining open mirrors: **COV-9** (top feats), **COV-16** (Uncanny Dodge).
+   still deferred. Remaining open mirrors: **COV-9** (top feats).
+4e. ~~**COV-16** (Uncanny Dodge)~~ **DONE 2026-07-05** — first post-hit damage-halving reaction on the
+   enemy-turn Turn Builder path: `ReactionOption.HalveDamage` + `uncannyDodgeReaction` builder +
+   `ExecuteEnemyTurn` halve-before-write over the existing `ApplyUncannyDodge`; Rogue L5 seed. Live
+   `/attack` defender-prompt path deferred (no defender-post-hit-prompt lane yet).
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.

@@ -312,11 +312,17 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{
 					{"name": "Roguish Archetype", "description": "You choose an archetype that you emulate in the exercise of your rogue abilities.", "mechanical_effect": "subclass_choice"},
 				},
+				// COV-16: Uncanny Dodge (2024 Rogue L5). Wired end-to-end as a
+				// post-hit damage-halving reaction (AvailableReactions →
+				// ExecuteEnemyTurn): a Rogue 5+ hit by a visible attacker may halve
+				// that attack's damage before it is written to HP. Level-gated by
+				// derive_stats so under-level rogues don't get it.
+				"5": []map[string]string{
+					{"name": "Uncanny Dodge", "description": "When an attacker you can see hits you with an attack, you can use your reaction to halve the attack's damage against you.", "mechanical_effect": "uncanny_dodge"},
+				},
 				// COV-3: Evasion (2024 Rogue L7). Wired end-to-end in combat
 				// (ResolveAoESaves → ApplyEvasion): a made DEX save-for-half takes
-				// no damage, a failed one takes half. Uncanny Dodge (L5) is
-				// intentionally NOT seeded yet — its combat consumer is deferred to
-				// COV-16, and seeding it early would re-create dead data.
+				// no damage, a failed one takes half.
 				"7": []map[string]string{
 					{"name": "Evasion", "description": "When you're subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the save, and only half damage if you fail.", "mechanical_effect": "evasion"},
 				},
