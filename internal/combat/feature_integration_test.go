@@ -139,6 +139,21 @@ func TestApplyEvasion_OddDamage(t *testing.T) {
 	}
 }
 
+func TestApplyInterposeShield_SaveSuccess(t *testing.T) {
+	// Interpose Shield on a made DEX save-for-half: the shield negates ALL damage.
+	if got := ApplyInterposeShield(20, true); got != 0 {
+		t.Errorf("ApplyInterposeShield(20, success=true) = %d, want 0", got)
+	}
+}
+
+func TestApplyInterposeShield_SaveFail(t *testing.T) {
+	// Interpose Shield never helps a failed save: full damage, unchanged
+	// (unlike Evasion, which halves a failed save).
+	if got := ApplyInterposeShield(20, false); got != 20 {
+		t.Errorf("ApplyInterposeShield(20, success=false) = %d, want 20", got)
+	}
+}
+
 func TestUncannyDodgeFeature(t *testing.T) {
 	fd := UncannyDodgeFeature()
 

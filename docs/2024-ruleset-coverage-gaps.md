@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -643,6 +643,43 @@ confirmed a clean, parity-safe generalization; the flagged consolidations (the f
 copied across attack.go/crossbow/shield, and the cold-path double `GetCharacter`) are a cross-file cleanup
 best done as one dedicated pass, not piecemeal here.
 
+**Shipped (Shield Master Interpose Shield slice).** The second of Shield Master's three halves is
+now wired: **Interpose Shield** — a character with the feat holding a shield takes **no damage** on a
+made DEX save-for-half (upgrading the normal half→none). It mirrors the **COV-3 Evasion** wiring at
+the same `ResolveAoESaves` chokepoint (single edit covers both single-target COV-1 casts and real AoE
+casts, since both funnel through it). New pure `ApplyInterposeShield(damage, saveSuccess)` next to
+`ApplyEvasion` (success→0, fail→**full**/unchanged — unlike Evasion it never helps a failed save) and
+detector `combatantHasInterposeShield` next to `combatantHasEvasion` (reuses `HasFeatureByName "Shield
+Master"` + `hasEquippedShield`). The prior single `if combatantHasEvasion` became a priority `switch`:
+**Evasion is checked first because it strictly dominates** (both zero a made save, but Evasion halves a
+failed one where Interpose gives full), so a PC with both gets the better fail outcome. The Interpose
+case is gated on `sr.Success` first, so its shield lookup only runs for made-save targets. No seed
+change (the `shield-master` feat is already seeded, name-detected). Tests: `feature_integration_test.go`
+(`ApplyInterposeShield` both branches), `shield_master_evasion_test.go` (made+shield→0, failed+shield→full,
+feat-without-shield→normal half, no-feat→normal half, and Evasion-beats-Interpose precedence on a failed
+save). Coverage: gates met (combat 91.4%, discord 86.0%, refdata 97.92%).
+
+**RAW simplification (documented, from `/simplify` altitude).** Interpose Shield is RAW a **reaction**
+(costs the character's reaction, one-per-round, a player choice), whereas Evasion beside it is a genuine
+passive. This auto-applies Interpose for **free** at the save chokepoint like Evasion — the reaction
+COST, the one-per-round economy, and a pre-declare prompt are **not** charged. The save-resolution path
+has no reaction surface (unlike the enemy-turn Turn Builder where Uncanny Dodge, COV-16, pays the cost),
+and per `feedback_reaction_predeclare_no_retroactive` a reaction must be declared *before* the roll —
+charging it post-save would be a retroactive spend. So the reaction economy is **deferred to a future
+save-path reaction lane** (the same lane COV-1's PC-auto-prompt and COV-16's `/attack` defender-prompt
+await); when built, Interpose moves **out** of the Evasion `switch` into that reaction machinery, leaving
+only genuine passives (Evasion, Improved Evasion) there. `/simplify` also **skipped**: charging the
+reaction here (would violate pre-declare + fragile in the async batch path — hence the deferral) and the
+duplicate `GetCharacter` across the two detectors (cold DM-triggered path; fix would re-signature the
+COV-3 sibling). Applied: rename `ShieldMasterEvasion`→`InterposeShield` (it isn't the Evasion class
+feature) + the reaction-vs-passive disclosure comment.
+
+**Deferred (Shield Master's third half + new items):**
+- **+shield-AC to single-target DEX saves** — "add your shield's AC bonus to any DEX save vs a spell/effect
+  that targets **only you**." A save-**roll** bonus (no reaction), but scoping to single-target effects and
+  threading the bonus into the save roll (`RecordAoEPendingSaveRoll` / the AoE batch roll) is a separate slice.
+- **Interpose reaction economy** — see the RAW simplification above (save-path reaction lane).
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -662,7 +699,7 @@ no-long-range-disadvantage riders)**, Defensive Duelist,
 hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
 **Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**,
-**Shield Master (COV-9, `/bonus shield` bonus-action shove; DEX-save evasion + save-AC riders deferred)**.
+**Shield Master (COV-9, `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion; +shield-AC-to-DEX-saves rider deferred)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
@@ -671,7 +708,7 @@ slug in combat):
 | --- | --- | --- |
 | Polearm Master | ~~butt-end bonus attack~~ **DONE 2026-07-05** (`/bonus polearm`, `polearm_master.go`); reach OA still deferred (needs reaction/OA trigger) | monk `MartialArtsBonusAttack` template + weapon clone |
 | Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` (needs a movement/OA trigger — not yet built) |
-| Shield Master | ~~bonus-action shove~~ **DONE 2026-07-05** (`/bonus shield`, `shield_master.go` — reuses `resolveShove` extracted from `Shove`); DEX-save damage evasion (reaction) + shield-AC-to-DEX-saves rider still deferred | evasion half now mirrors the **COV-16 `HalveDamage` reaction foundation** (post-hit reduce-before-write); trigger differs (DEX save vs hit) |
+| Shield Master | ~~bonus-action shove~~ **DONE 2026-07-05** (`/bonus shield`); ~~DEX-save damage evasion~~ **DONE 2026-07-05** (`ApplyInterposeShield` in `ResolveAoESaves`, mirrors COV-3 Evasion; reaction economy auto-simplified/deferred); shield-AC-to-DEX-saves rider still deferred | Interpose = COV-3 Evasion mirror (`ApplyEvasion`/`combatantHasEvasion` at the save chokepoint), NOT the COV-16 attack-path reaction |
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
 | ~~Alert~~ **DONE 2026-07-05** | +5 initiative (2014) | `alert.go` — `alertInitiativeBonus` at the `RollInitiative` roll site (`getInitiativeModifiers`); +5 in the roll total, DexMod tie-break kept pure |
 | War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |
@@ -730,9 +767,12 @@ link, mirroring the Evasion guard). Coverage: gates met (combat 91.4%, discord 8
   defender-prompt lane is built, it calls the **same** `ApplyUncannyDodge` + `HalveDamage` consumption,
   halving before its own HP write. Enemy-turn-first was the right order; this slice leaves the math +
   consumption reusable for it.
-- **Shield Master's DEX-save damage-evasion half (COV-9)** is the same post-hit damage-reduction shape
-  and can now mirror this `HalveDamage`/reaction-list foundation (its trigger is a DEX save rather than
-  a hit, but the reduce-before-write plumbing is shared).
+- **Shield Master's DEX-save damage-evasion half (COV-9)** — **DONE 2026-07-05**, but it ended up
+  mirroring **COV-3 Evasion** (`ApplyInterposeShield`/`combatantHasInterposeShield` at the
+  `ResolveAoESaves` save chokepoint), NOT this `HalveDamage` attack-path reaction: its trigger is a DEX
+  save, which lives on the save-resolution path (no reaction surface), so the passive-style auto-apply
+  fit there. Its RAW reaction cost is deferred to the same future save-path reaction lane this item's
+  live-`/attack` prompt awaits.
 - **Offered on a pre-rolled miss** — `AvailableReactions` still surfaces Uncanny Dodge roll-agnostically
   (its signature doesn't see the roll), same as Defensive Duelist; harmless now that execute drops an
   untriggered one, but gating the *offer* on the pre-rolled hit would tidy the Turn Builder UI.
@@ -886,4 +926,9 @@ make sqlc-check    # if you touched .sql queries
    enemy-turn Turn Builder path: `ReactionOption.HalveDamage` + `uncannyDodgeReaction` builder +
    `ExecuteEnemyTurn` halve-before-write over the existing `ApplyUncannyDodge`; Rogue L5 seed. Live
    `/attack` defender-prompt path deferred (no defender-post-hit-prompt lane yet).
+4f. ~~**COV-9 Shield Master Interpose Shield**~~ **DONE 2026-07-05** — DEX-save damage evasion (take no
+   damage on a made DEX save-for-half + shield) wired as a **COV-3 Evasion mirror** at `ResolveAoESaves`
+   (`ApplyInterposeShield` + `combatantHasInterposeShield`, priority `switch` with Evasion dominating).
+   RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
+   Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.

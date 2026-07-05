@@ -135,6 +135,18 @@ func ApplyEvasion(damage int, saveSuccess bool) int {
 	return damage / 2
 }
 
+// ApplyInterposeShield applies Shield Master's Interpose Shield to damage from a
+// DEX save-for-half effect. On save success: the shield negates ALL damage (0). On
+// save failure: full damage, unchanged — unlike Evasion, Interpose never helps a
+// failed save. RAW this costs the character's reaction; the save chokepoint has no
+// reaction economy, so ResolveAoESaves auto-applies it for free (see there). COV-9.
+func ApplyInterposeShield(damage int, saveSuccess bool) int {
+	if saveSuccess {
+		return 0
+	}
+	return damage
+}
+
 // UncannyDodgeFeature returns the FeatureDefinition for Uncanny Dodge (Rogue 5+).
 // Reaction: halve damage from one visible attacker.
 func UncannyDodgeFeature() FeatureDefinition {

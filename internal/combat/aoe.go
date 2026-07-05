@@ -1278,16 +1278,37 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			return AoEDamageResult{}, fmt.Errorf("getting combatant %s: %w", sr.CombatantID, err)
 		}
 
-		// 3. Apply save multiplier. Evasion (Rogue 7+) upgrades a DEX
-		// save-for-half outcome: no damage on a made save, half on a failed one
-		// (2024). COV-3. Every other target/save keeps the normal multiplier.
+		// 3. Apply save multiplier, then upgrade DEX save-for-half outcomes for
+		// targets with a damage-reduction feature.
+		//   - Evasion (Rogue 7+, COV-3) is a PASSIVE: no damage on a made save,
+		//     half on a failed one.
+		//   - Shield Master's Interpose Shield (COV-9) is RAW a REACTION: no damage
+		//     on a made save (with a shield), full on a failed one.
+		// Evasion is checked first because it strictly dominates — both zero a made
+		// save, but Evasion halves a failed one where Interpose gives full. The
+		// Interpose lookup is gated on sr.Success so its shield check only runs for
+		// the made saves where it can matter. Every other target keeps the multiplier.
+		//
+		// SIMPLIFICATION (deferred): Interpose is auto-applied for free here, like
+		// the passive Evasion beside it — its RAW reaction COST, the one-per-round
+		// economy, and a pre-declare prompt are NOT charged. The save-resolution path
+		// has no reaction surface (unlike the enemy-turn Turn Builder where Uncanny
+		// Dodge, COV-16, does pay), and per the pre-declare rule a reaction must be
+		// declared BEFORE the roll, not auto-resolved after it. Charging it here would
+		// be a retroactive spend, so it waits for a real save-path reaction lane (the
+		// same lane COV-1's PC-auto-prompt and COV-16's /attack defender-prompt await);
+		// when built, Interpose moves OUT of this switch into that reaction machinery.
 		multiplier := ApplySaveResult(sr.Success, input.SaveEffect)
 		damage := max(int(float64(baseDamage)*multiplier),
 			// special case: DM resolution needed
 			0)
-		if input.SaveEffect == "half_damage" && strings.EqualFold(input.SaveAbility, "dex") &&
-			s.combatantHasEvasion(ctx, combatant) {
-			damage = ApplyEvasion(baseDamage, sr.Success)
+		if input.SaveEffect == "half_damage" && strings.EqualFold(input.SaveAbility, "dex") {
+			switch {
+			case s.combatantHasEvasion(ctx, combatant):
+				damage = ApplyEvasion(baseDamage, sr.Success)
+			case sr.Success && s.combatantHasInterposeShield(ctx, combatant):
+				damage = ApplyInterposeShield(baseDamage, sr.Success)
+			}
 		}
 
 		// 4. Route through ApplyDamage so Phase 42 (R/I/V, temp HP,
@@ -1338,4 +1359,20 @@ func (s *Service) combatantHasEvasion(ctx context.Context, target refdata.Combat
 		return false
 	}
 	return hasFeatureEffect(char.Features, "evasion")
+}
+
+// combatantHasInterposeShield reports whether the target combatant is a PC with
+// the Shield Master feat AND a shield equipped — the two prerequisites for
+// Interpose Shield (take no damage on a successful DEX save-for-half). Best-effort:
+// a missing/invalid character row degrades to false, matching combatantHasEvasion.
+// COV-9.
+func (s *Service) combatantHasInterposeShield(ctx context.Context, target refdata.Combatant) bool {
+	if !target.CharacterID.Valid {
+		return false
+	}
+	char, err := s.store.GetCharacter(ctx, target.CharacterID.UUID)
+	if err != nil {
+		return false
+	}
+	return HasFeatureByName(char.Features.RawMessage, "Shield Master") && s.hasEquippedShield(ctx, char)
 }
