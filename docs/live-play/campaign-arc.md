@@ -105,6 +105,36 @@ answer, and that's the point. Never resolve it *for* them.
   encounter with something (a scrap, a lead), so the chase has a spine across
   Palewatch → the next destinations. Scale the actual statblock live per
   [`big-party.md`](big-party.md) when a fight lands.
+- **▶ DELIVERED ON-SCREEN (07-04, #the-story 6:00/6:04 PM — Ashfall→Palewatch wayhouse):**
+  rungs 1–2 hit + rung 3 primed. The party found a wayhouse with a forgotten guest
+  (rung 1 = the method's wake); **Vale's token (Arcana 22) opened the keeper's scraped
+  memory** (rung 2 = a name/guest that won't hold, the token partially countering the
+  erasure) and showed the renegade in the flesh: **grey cloak, a defaced Pale-Watch
+  warden's disc** (ex-warden signalled without naming the three-way secret), *took* the
+  guest, left the ledger-tick tally-cut, headed **up the road to the Palewatch, 3 nights
+  ahead** (clock lit). **His face stayed scraped** (kept for rung 4 / face-to-face).
+  **Rung 3 DELIVERED (07-04, #the-story 8:18 PM — wayhouse supper):** Windreth answered Vale
+  IC (*"he knows me... a faceless man walks to Palewatch with mine in his mouth"*) then rolled
+  **Insight 17** — adjudicated through his ex-false-name-dealer's eye: he **recognizes the
+  method** (a collector's craft, not a killer's — took the name clean like a clerk closing a
+  ledger line), reads the renegade as **delivering, not fleeing** (unhurried, sure of a welcome
+  ahead), and reframes his own stolen name as **inventory, not a personal vendetta**. The keeper
+  read as a harmless victim of the ongoing erasure ("a thin place," safe to rest). Still held:
+  the renegade's identity/face, the ex-warden link, and *why* he's sure of his welcome (the
+  Order's right-to-refuse / whether he *was* one of the wardens Palewatch hides) — kept for
+  rung 4 / face-to-face.
+  **Rung 4 PROBED but HELD (07-05, #the-story dawn beat ~04:53Z — wayhouse morning, party rested):**
+  Windreth's `/check history` on the **defaced Pale-Watch disc** came up **8** (raw d20, no
+  proficiency) → a *thin* recall: he places the Palewatch's **surface reputation** (a forgetting-
+  order that hoards on purpose; the scratch is a deliberate unmaking) but the deep — **why** a warden
+  defaces his own sign, whether the Order casts out or hunts its own — **would not come**. So the
+  **ex-warden link + right-to-refuse stay locked** (rung 4 intact); the miss was narrated as an *open
+  question dangled*, with the Palewatch itself flagged as where that reading lives. Alongside it,
+  **Forge's `/check investigation` → 18** on his unreadable scrap advanced the **clock/stakes** (not
+  the reveal): his smith-eye reads scrap + wayhouse tally-cut as **one maker / one tool**, so the
+  party carries the **same name-stock the renegade collects** (a collector would want theirs too) —
+  **but the letters still won't resolve** (decipherment kept for the Palewatch, per the withheld-payoff
+  policy below). Both checks table-public; rung 4 un-spent.
 
 ---
 
