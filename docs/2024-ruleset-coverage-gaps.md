@@ -766,10 +766,11 @@ the gap preserved and persists the new CON; odd CON bump leaves HP flat; non-CON
 Coverage: gates met (levelup 89.2%). No seed/data change.
 
 **Deferred follow-ups (new COV items when picked up):**
-- **Builder-rebuild loss.** Like the feat itself, Tough's HP (and a CON-feat's HP) does **not** survive a portal builder edit:
-  `CollectFeatures` regenerates only class/subclass/racial features, dropping ASI-applied feats (affects
-  ALL feats, pre-existing). Needs an ASI-feat preservation merge (sibling of the spell-slot preserve at
-  `builder_store_adapter.go`), then a HP re-add.
+- **Builder-rebuild loss → now formalized as COV-17 (Tier 5).** A portal builder edit drops **all**
+  `Source:"feat"` features (not just Tough's HP) — `CollectFeatures` regenerates class/subclass/racial
+  only — silently disabling every feat rider. COV-17 scopes the fix as three slices at the shared
+  `UpdateCharacterRecord` preserve seam: S1 feat-feature preservation, S2 flat-feat-HP re-add, S3
+  expended feature-uses preservation. (CON-feat HP already survives via preserved ability scores.)
 - **Parameterize the magnitude.** The `+2` is hardcoded in Go while the slug encodes only the type; the
   seed precedent (`bonus_initiative` carries `"value":"5"`) shows the pattern — re-seed as
   `effect_type:"hp_per_level"` + `value:"2"` and parse it, generalizing to any "HP per level" feat.
@@ -965,6 +966,94 @@ pact-boon/invocation/expertise picks; add fighting-style + metamagic picks the s
 
 ---
 
+## Tier 5 — Builder-rebuild drops persisted overlays (live state reset on edit)
+
+### COV-17 — A builder edit silently wipes feats, feat-HP, and expended feature-uses
+**Status:** OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
+
+**Problem.** Any builder edit runs `UpdateCharacterRecord`
+(`builder_store_adapter.go:344`), which **rebuilds the character from a fresh derivation**
+and overwrites most columns. It preserves *some* live state by reading the `existing` row —
+HPCurrent (capped), TempHP, spell slots, pact slots, gold, attunements (`:361-392`) — but
+several persisted overlays are **regenerated fresh and lost**:
+1. **ASI-applied feats** — `Features` (`:384`) is overwritten with `CollectFeatures` output,
+   which regenerates **class/subclass/racial only** (`derive_stats.go:210`). Every feature the
+   level-up ASI flow wrote with `Source:"feat"` (`levelup/service.go:437`) — Durable, Tough,
+   Alert, Savage Attacker, Sharpshooter, Polearm/Crossbow/Shield Master, … — **vanishes**,
+   silently disabling every combat rider keyed on `HasFeatureByName`. This quietly guts the
+   entire COV-9 feat effort the instant a player re-saves the builder.
+2. **Tough's flat +2/level HP** — `HPMax` (`:370`) is the pure `CalculateHP` derivation, which
+   is feats-agnostic; there is no post-pass re-adding flat feat HP. (Note: **CON-feat HP is
+   fine** — ability scores are preserved via `submissionFromCharacter` `:543-547`, so the
+   rebuilt `CalculateHP` uses the bumped CON. Only the *flat* feat bonus is lost.)
+3. **Expended feature-uses** — `FeatureUses` (`:383`) is `InitFeatureUses(...)` fresh at max
+   (`:161`), with **no expended-preservation merge** — so a builder edit refills rage / ki /
+   channel-divinity / lay-on-hands / bardic / action-surge / second-wind / sorcery / wild-shape
+   pools to full, erasing what was spent this day.
+
+**Verified.**
+- `CollectFeatures` (`derive_stats.go:210`) reads only class/subclass/racial ref data; never the
+  persisted row. `submissionFromCharacter` (`builder_store_adapter.go:560`) restores **only**
+  pact-boon/invocation picks (`classFeatureChoicesFromFeatures`), dropping all other feats.
+- `CharacterSubmission` (`builder_service.go:39-70`) has **no** feat field.
+- Pact/invocation features carry `Source:"invocation"` / `"pact_boon"` (`invocations.go:17-18`),
+  **not** `"feat"` — so a `Source=="feat"` filter is safe and won't double-add them (they are
+  regenerated via the submission path).
+
+**Mirror (shared by all three slices).** `preserveExpendedSlots` / `preserveExpendedPactSlots`
+(`builder_store_adapter.go:402/434`): read `existing`, merge the live delta into the fresh value
+at persist time, one helper called at the `UpdateCharacterRecord` write. The store adapter already
+holds `existing.Features` / `existing.FeatureUses` (`:349`). This single chokepoint catches **all**
+rebuild paths — no submission-schema or service-layer change needed. Preservation tests to mirror:
+`TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesLiveState` (`:1500`),
+`…_PreservesExpendedPactSlots` (`:1541`), `…_CapsHPToNewMax` (`:1578`).
+
+---
+
+**Slice S1 — Preserve `Source:"feat"` features (do first; this is the real severity).**
+- New `preservePersistedFeats(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage`:
+  unmarshal both, append every `existing` entry with `Source == "feat"` to the fresh list
+  (de-dup by `Name`), re-marshal. Call it at `builder_store_adapter.go:384`
+  (`Features: preservePersistedFeats(existing.Features, c.featuresMsg)`).
+- Idempotent: `CollectFeatures` never emits feats, so fresh has none → append-once per rebuild,
+  no accumulation. Carries each feat's full struct incl. `MechanicalEffect`, so combat riders
+  survive verbatim.
+- **Acceptance.** Seed a character with a `Source:"feat"` feature (e.g. Durable/Alert), run
+  `UpdateCharacterRecord` with a fresh submission, assert the feat entry survives AND no
+  class/racial feature is duplicated. Red test first (mirror `PreservesLiveState`).
+- **Scope:** 1 helper + 1 call site + 1 test, all in `internal/portal`. Self-contained.
+
+**Slice S2 — Re-add flat feat HP on rebuild (depends on S1; smaller).**
+- After feats are preserved, `HPMax` (`:370`) still misses Tough's +2/level. Re-add the flat feat
+  HP bonus computed from the preserved `Source:"feat"` features.
+- **Cross-package SSOT move (the right depth):** the flat-HP slug detection
+  (`hp_plus_2_per_level`) is today unexported in `levelup` (`featMaxHPBonus`, `feat_hp.go`). Lift a
+  shared `character.FeatFlatHPBonus(features, totalLevel)` into `internal/character` next to
+  `CalculateHP`, and call it from **both** `levelup.ApplyFeat` (replacing `featMaxHPBonus`) and the
+  portal rebuild. Generalizes the mechanism instead of duplicating the slug check.
+- **Acceptance.** A Tough-bearing character keeps `HPMax = derivation + 2×level` across a builder
+  edit; a non-Tough character is unchanged. HPCurrent still caps to the (now-higher) new max.
+- **Risk.** Touches shipped `levelup` Tough code — re-run its tests. Keep it a pure additive
+  helper; do not fold the CON-delta path (that already works via preserved scores).
+
+**Slice S3 — Preserve expended feature-uses on rebuild.**
+- New `preserveExpendedFeatureUses(existing, fresh)`: same shape as `preserveExpendedSlots` — for
+  each pool present in both, carry the spent delta (`spent = max(oldMax-oldCurrent,0)`;
+  `newCurrent = max(newMax-spent,0)`) onto the freshly-`InitFeatureUses`'d max. Call at
+  `builder_store_adapter.go:383`.
+- **Acceptance.** A character who spent 1 of 2 rage uses keeps 1 remaining after a builder edit
+  (not refilled to 2); a pool whose max changed (level-up-shaped) re-applies the spend against the
+  new max. Red test mirrors `PreservesExpendedPactSlots`.
+- **Risk.** Pools that legitimately *should* refill on a structural change (e.g. a class swap that
+  removes then re-adds a pool) — the delta merge only touches pools present in both old and new, so
+  a newly-granted pool starts full, which is correct.
+
+**Relationship.** All three share the one persist-time seam and the `preserveExpended*` mirror; a
+fresh agent can pick any slice independently. S1 is the priority (silent feat-wipe). S2 depends on
+S1 (needs the feats present to sum their HP). S3 is independent of S1/S2.
+
+---
+
 ## Quick verification commands
 
 ```sh
@@ -1016,3 +1105,6 @@ make sqlc-check    # if you touched .sql queries
    RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
    Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
+6. **COV-17 S1 (Tier 5) — feat-feature preservation on builder rebuild.** High value / bounded:
+   without it every ASI-applied feat (all COV-9 work) silently dies on a builder edit. Then S3
+   (feature-uses preservation) and S2 (flat-feat-HP re-add) as follow-ups.
