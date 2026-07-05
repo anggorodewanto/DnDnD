@@ -380,7 +380,7 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		SpellSlots:       preserveExpendedSlots(existing.SpellSlots, c.spellSlotsMsg),
 		PactMagicSlots:   preserveExpendedPactSlots(existing.PactMagicSlots, c.pactMagicMsg),
 		HitDiceRemaining: c.hitDiceJSON,
-		FeatureUses:      c.featureUsesMsg,
+		FeatureUses:      preserveExpendedFeatureUses(existing.FeatureUses, c.featureUsesMsg),
 		Features:         preservePersistedFeats(existing.Features, c.featuresMsg),
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
 		Gold:             existing.Gold,
@@ -420,6 +420,42 @@ func preserveExpendedSlots(existing, fresh pqtype.NullRawMessage) pqtype.NullRaw
 		newSlots[level] = ns
 	}
 	merged, err := json.Marshal(newSlots)
+	if err != nil {
+		return fresh
+	}
+	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// preserveExpendedFeatureUses carries forward limited-use feature pools already
+// spent before an edit — rage, ki, channel divinity, lay on hands, bardic
+// inspiration, action surge, second wind, wild shape, sorcery points. The fresh
+// build re-inits every pool to {current=max} (InitFeatureUses); for any pool that
+// existed before, the number expended (oldMax-oldCurrent) is re-applied against
+// the new max so a mid-day edit does not silently refill it. Recharge and max
+// come from the fresh derivation; a pool newly granted by the edit starts full.
+// Falls back to the freshly-derived uses when either side is absent or
+// unparseable. Mirrors preserveExpendedSlots. COV-17 S3.
+func preserveExpendedFeatureUses(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage {
+	if !fresh.Valid || !existing.Valid {
+		return fresh
+	}
+	var oldUses, newUses map[string]character.FeatureUse
+	if err := json.Unmarshal(existing.RawMessage, &oldUses); err != nil {
+		return fresh
+	}
+	if err := json.Unmarshal(fresh.RawMessage, &newUses); err != nil {
+		return fresh
+	}
+	for key, nu := range newUses {
+		ou, ok := oldUses[key]
+		if !ok {
+			continue
+		}
+		expended := max(ou.Max-ou.Current, 0)
+		nu.Current = max(nu.Max-expended, 0)
+		newUses[key] = nu
+	}
+	merged, err := json.Marshal(newUses)
 	if err != nil {
 		return fresh
 	}

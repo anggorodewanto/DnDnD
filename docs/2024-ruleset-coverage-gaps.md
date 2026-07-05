@@ -969,7 +969,7 @@ pact-boon/invocation/expertise picks; add fighting-style + metamagic picks the s
 ## Tier 5 — Builder-rebuild drops persisted overlays (live state reset on edit)
 
 ### COV-17 — A builder edit silently wipes feats, feat-HP, and expended feature-uses
-**Status:** S1 DONE 2026-07-05 · S2/S3 OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
+**Status:** S1 + S3 DONE 2026-07-05 · S2 OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
 
 **Problem.** Any builder edit runs `UpdateCharacterRecord`
 (`builder_store_adapter.go:344`), which **rebuilds the character from a fresh derivation**
@@ -1039,21 +1039,30 @@ rebuild paths — no submission-schema or service-layer change needed. Preservat
 - **Risk.** Touches shipped `levelup` Tough code — re-run its tests. Keep it a pure additive
   helper; do not fold the CON-delta path (that already works via preserved scores).
 
-**Slice S3 — Preserve expended feature-uses on rebuild.**
-- New `preserveExpendedFeatureUses(existing, fresh)`: same shape as `preserveExpendedSlots` — for
-  each pool present in both, carry the spent delta (`spent = max(oldMax-oldCurrent,0)`;
-  `newCurrent = max(newMax-spent,0)`) onto the freshly-`InitFeatureUses`'d max. Call at
-  `builder_store_adapter.go:383`.
-- **Acceptance.** A character who spent 1 of 2 rage uses keeps 1 remaining after a builder edit
-  (not refilled to 2); a pool whose max changed (level-up-shaped) re-applies the spend against the
-  new max. Red test mirrors `PreservesExpendedPactSlots`.
-- **Risk.** Pools that legitimately *should* refill on a structural change (e.g. a class swap that
-  removes then re-adds a pool) — the delta merge only touches pools present in both old and new, so
-  a newly-granted pool starts full, which is correct.
+**Slice S3 — Preserve expended feature-uses on rebuild. ✅ DONE 2026-07-05.**
+- Shipped `preserveExpendedFeatureUses(existing, fresh)` — a line-for-line mirror of
+  `preserveExpendedSlots` over `map[string]character.FeatureUse`: for each pool present in both, carry
+  the spent delta (`expended = max(oldMax-oldCurrent,0)`; `newCurrent = max(newMax-expended,0)`) onto
+  the freshly-`InitFeatureUses`'d max, `Recharge`/`Max` taken from the fresh derivation. Wired at the
+  `FeatureUses:` field of `UpdateCharacter`.
+- Covers rage / ki / channel-divinity / lay-on-hands / bardic / action-surge / second-wind /
+  wild-shape / sorcery-points — all previously refilled to full on any builder edit.
+- Test `…_PreservesExpendedFeatureUses` (red first): barbarian who spent 1 of 2 rage uses keeps 1
+  after a non-mechanical edit (not 2). Shape-change edge (rage 2→3 on level-up → keeps the burned use,
+  grants the new headroom = "3 max, 2 left") is the same semantics the slot sibling already applies.
+- `/simplify` (4 agents): all CLEAN. Generic `preserveExpended*` extraction **decisively rejected** —
+  rule-of-three is a false positive (the pact sibling is a *scalar*, not a `map[string]T`, so only two
+  true instances), and Go's lack of structural typing means a `preserveExpendedMap[T]` needs
+  getter/setter closures at each call site that cost more than the ~12 duplicated lines. Triple
+  duplication is the correct altitude; revisit only if a 4th map-shaped pool appears.
+- **Pre-existing, NOT this slice (noted by altitude agent):** `InitFeatureUses` multiclass Cleric+Paladin
+  both write the same `FeatureKeyChannelDivinity` map key → one overwrites the other. The merge
+  faithfully mirrors whatever `InitFeatureUses` emits and does not worsen it. Flag separately if
+  multiclass Channel Divinity ever matters.
 
 **Relationship.** All three share the one persist-time seam and the `preserveExpended*` mirror; a
-fresh agent can pick any slice independently. S1 is the priority (silent feat-wipe). S2 depends on
-S1 (needs the feats present to sum their HP). S3 is independent of S1/S2.
+fresh agent can pick any slice independently. S1 (silent feat-wipe) and S3 (feature-use refill) are
+DONE. **S2 is the only remainder** — depends on S1 (needs the feats present to sum their HP).
 
 ---
 
@@ -1108,6 +1117,7 @@ make sqlc-check    # if you touched .sql queries
    RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
    Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
-6. ~~**COV-17 S1 (Tier 5) — feat-feature preservation on builder rebuild.**~~ **DONE 2026-07-05** —
-   ASI-applied feats now survive a builder edit (`preservePersistedFeats`). Next: **S3**
-   (feature-uses preservation, independent) then **S2** (flat-feat-HP re-add, depends on S1).
+6. ~~**COV-17 S1 + S3 (Tier 5) — builder-rebuild overlay preservation.**~~ **DONE 2026-07-05** —
+   ASI-applied feats (`preservePersistedFeats`) and expended feature-use pools
+   (`preserveExpendedFeatureUses`) now survive a builder edit. **Only S2 left** (Tough flat-feat-HP
+   re-add, depends on S1) — low severity; CON-feat HP already survives via preserved ability scores.

@@ -1630,6 +1630,42 @@ func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesFeatFeatures(t *test
 	}
 }
 
+func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesExpendedFeatureUses(t *testing.T) {
+	charID := uuid.New()
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			ID:         charID,
+			CampaignID: uuid.New(),
+			HpCurrent:  12,
+			// Level-1 barbarian who has raged once today (1 of 2 rage uses left).
+			FeatureUses: pqtype.NullRawMessage{RawMessage: []byte(`{"rage":{"current":1,"max":2,"recharge":"long"}}`), Valid: true},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	// A non-mechanical edit re-runs the fresh build, which derives full 2/2 rage uses.
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Grog",
+		Race:          "Half-Orc",
+		Class:         "barbarian",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 15, INT: 8, WIS: 10, CHA: 12},
+		HPMax:         14,
+		AC:            14,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "barbarian", Level: 1}},
+	}
+	require.NoError(t, adapter.UpdateCharacterRecord(context.Background(), charID.String(), params))
+
+	// The rage already spent today stays spent (current 1, not refilled to 2).
+	require.True(t, creator.capturedUpdate.FeatureUses.Valid)
+	var uses map[string]character.FeatureUse
+	require.NoError(t, json.Unmarshal(creator.capturedUpdate.FeatureUses.RawMessage, &uses))
+	assert.Equal(t, character.FeatureUse{Current: 1, Max: 2, Recharge: "long"}, uses["rage"],
+		"a character edit must not refill an expended feature-use pool")
+}
+
 func TestBuilderStoreAdapter_UpdateCharacterRecord_CapsHPToNewMax(t *testing.T) {
 	charID := uuid.New()
 	creator := &captureCharacterCreator{
