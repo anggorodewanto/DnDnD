@@ -68,6 +68,15 @@ type ActionCatalogEntry struct {
 	// level across the listed classes; display gating is guidance, not a precise
 	// per-class gate.
 	MinLevel int `json:"min_level,omitempty"`
+	// Feats lists the lower-case feat slugs (matching the seed feat IDs in
+	// seed_feats.go, e.g. "polearm-master") that grant this action. A feat-gated
+	// entry carries no Classes and is not Universal. It lives in the catalog so
+	// the /bonus drift guard (TestActionCatalog_MatchesDiscordDispatch) stays
+	// honest — the bot accepts the command and the SSOT records it — but
+	// AvailableActions does not yet surface feat-granted actions on the character
+	// sheet (it gates by class only). Threading the character's feats into the
+	// sheet is a deliberate follow-up.
+	Feats []string `json:"feats,omitempty"`
 }
 
 // actionCatalog is the canonical, ordered list. Declaration order is the
@@ -153,6 +162,10 @@ var actionCatalog = []ActionCatalogEntry{
 		Summary: "Transform into a beast you have seen before."},
 	{Key: "second-wind", Name: "Second Wind", Economy: EconomyBonusAction, Command: "/bonus second-wind", Classes: []string{"fighter"}, MinLevel: 1,
 		Summary: "Regain 1d10 + your fighter level HP as a bonus action (once per short rest)."},
+
+	// --- Feat bonus actions (gated by a feat, not a class) ---
+	{Key: "polearm", Name: "Polearm Master", Economy: EconomyBonusAction, Command: "/bonus polearm <target>", Feats: []string{"polearm-master"},
+		Summary: "After you Attack with a glaive/halberd/quarterstaff/spear, strike with the opposite (blunt) end for 1d4 bludgeoning as a bonus action."},
 }
 
 // ActionCount is the number of rows in the canonical action catalog. Derived so

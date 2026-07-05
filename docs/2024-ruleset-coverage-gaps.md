@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -558,6 +558,31 @@ hand-placed guards sit at the one layer where cover→AC and adv/disadv resolve,
 `HasCrossbowExpert` and the Alert conclusion. DEFERRED: Crossbow-Expert-style bonus-action attack is a
 separate feat; 2024 Sharpshooter shape nuances.
 
+**Shipped (Polearm Master butt-strike slice).** The bonus-action half of Polearm Master is now
+wired as `/bonus polearm <target>`. After the Attack action, a character with the feat holding a
+**glaive/halberd/quarterstaff/spear** strikes with the opposite (blunt) end: one melee attack at
+the same ability mod, damage die overridden to **1d4 bludgeoning**. New `Service.PolearmMasterBonusAttack`
+(`polearm_master.go`) mirrors the lightweight monk `MartialArtsBonusAttack` template — bonus-action
+gate → feat gate (`HasFeatureByName(..., "Polearm Master")`) → `Turn.ActionUsed` gate → main-hand
+weapon gate (`IsPolearmButtWeapon`, an ID allow-list; **pike deliberately excluded** — it grants only
+the OA half) → `buildAttackInput` → `resolveAndPersistAttack` → `applyHitDamage` → `markRageAttacked`
+→ `populatePostHitPrompts`. The butt weapon is a **value-clone of the equipped polearm** with only
+`Damage`/`DamageType` overridden, so proficiency, the STR/DEX choice, the heavy-weapon small-creature
+penalty, name, and mastery carry over faithfully (vs. a from-scratch `ImprovisedWeapon`, which would
+re-derive them). Discord wiring is symmetric with martial-arts: `BonusCombatService` method +
+`dispatchPolearm` + `case "polearm"` + `bonusSubcommandKeys`/`help_content.go` entries. No seed change
+(slug `polearm-master` already seeded). **Catalog:** a new **feat-gating axis** — `ActionCatalogEntry.Feats []string`
+— was added so the `/bonus` drift-guard (`TestActionCatalog_MatchesDiscordDispatch`) stays honest for a
+feat-gated key; `TestActionCatalog_EntriesWellFormed` now accepts a feat gate alongside class/Universal.
+Tests: `polearm_master_test.go` (happy path 1d4 bludgeoning not 1d10 slashing; feat/Attack-action/polearm
+gates; NPC; bonus-action-used) + `IsPolearmButtWeapon` unit + `bonus_handler_test.go` dispatch. Coverage:
+gates met (combat 91.46%, discord 86.24%, refdata 97.92%). DEFERRED (new COV items): (1) **reach
+opportunity-attack half** — needs the reaction/OA trigger system, a separate slice; (2) **feat-gated
+catalog rows are not yet surfaced on the character sheet** — `AvailableActions`/`buildActionGroups`
+(`portal/character_sheet.go`) gate by class only, so the polearm row is honest-but-invisible until feats
+are threaded into the sheet; (3) **magic-weapon bonus** (+1 glaive) does not apply to the butt-strike
+because FES is skipped (monk-tier parity; more visible here since the clone is a real weapon).
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -574,14 +599,14 @@ feat (or a wired GWF) needs it.
 **Wired today:** GWM, **Sharpshooter (COV-9: −5/+10 toggle + passive ignore-half/¾-cover &
 no-long-range-disadvantage riders)**, Defensive Duelist, Crossbow Expert (partial),
 Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**,
-**Alert (COV-9, +5 initiative)**.
+**Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
 
 | Feat | Effect to wire | Mirror |
 | --- | --- | --- |
-| Polearm Master | butt-end bonus attack + reach opportunity attack | GWM bonus-attack prompt (`class_feature_prompt.go`); reach OA needs new trigger |
+| Polearm Master | ~~butt-end bonus attack~~ **DONE 2026-07-05** (`/bonus polearm`, `polearm_master.go`); reach OA still deferred (needs reaction/OA trigger) | monk `MartialArtsBonusAttack` template + weapon clone |
 | Sentinel | OA on disengage/attack-others; hit sets speed 0 | reaction window `reactions.go` |
 | Shield Master | bonus-action shove; DEX-save damage evasion | mastery push `applyPushEffect`; save rider |
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |

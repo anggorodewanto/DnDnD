@@ -24,6 +24,10 @@ type BonusCombatService interface {
 	EndRage(ctx context.Context, cmd combat.RageCommand) (combat.RageResult, error)
 	OffhandAttack(ctx context.Context, cmd combat.OffhandAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	MartialArtsBonusAttack(ctx context.Context, cmd combat.MartialArtsBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
+
+	// COV-9: Polearm Master butt-strike (bonus-action d4 with the opposite end
+	// of a glaive/halberd/quarterstaff/spear, after the Attack action).
+	PolearmMasterBonusAttack(ctx context.Context, cmd combat.PolearmMasterBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	StepOfTheWind(ctx context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error)
 	PatientDefense(ctx context.Context, cmd combat.KiAbilityCommand) (combat.KiAbilityResult, error)
 	FontOfMagicConvertSlot(ctx context.Context, cmd combat.FontOfMagicCommand) (combat.FontOfMagicResult, error)
@@ -170,6 +174,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchOffhand(ctx, interaction, bctx, args)
 		case "martial-arts", "martialarts":
 			h.dispatchMartialArts(ctx, interaction, bctx, args)
+		case "polearm", "polearm-master", "polearmmaster":
+			h.dispatchPolearm(ctx, interaction, bctx, args)
 		case "step-of-the-wind", "stepofthewind":
 			h.dispatchStepOfTheWind(ctx, interaction, bctx, args)
 		case "patient-defense", "patientdefense":
@@ -321,6 +327,26 @@ func (h *BonusHandler) dispatchMartialArts(ctx context.Context, interaction *dis
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Martial Arts failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))
+}
+
+// dispatchPolearm wires /bonus polearm <target> (COV-9). Requires the Polearm
+// Master feat, a polearm in the main hand, and the Attack action to have been
+// used this turn — all enforced inside the service.
+func (h *BonusHandler) dispatchPolearm(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "polearm <target>")
+	if !ok {
+		return
+	}
+	result, err := h.combatService.PolearmMasterBonusAttack(ctx, combat.PolearmMasterBonusAttackCommand{
+		Attacker: bctx.actor,
+		Target:   *target,
+		Turn:     bctx.turn,
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Polearm Master failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))

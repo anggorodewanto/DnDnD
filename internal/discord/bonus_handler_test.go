@@ -22,6 +22,7 @@ type mockBonusCombatService struct {
 	endRageCalls    []combat.RageCommand
 	offhandCalls    []combat.OffhandAttackCommand
 	martialCalls    []combat.MartialArtsBonusAttackCommand
+	polearmCalls    []combat.PolearmMasterBonusAttackCommand
 	stepCalls       []combat.StepOfTheWindCommand
 	patientCalls    []combat.KiAbilityCommand
 	fomConvertCalls []combat.FontOfMagicCommand
@@ -30,13 +31,14 @@ type mockBonusCombatService struct {
 	bardicCalls     []combat.BardicInspirationCommand
 	secondWindCalls []combat.SecondWindCommand
 
-	rageResult    combat.RageResult
-	endRageResult combat.RageResult
-	offhandResult combat.AttackResult
-	martialResult combat.AttackResult
-	stepResult    combat.KiAbilityResult
-	patientResult combat.KiAbilityResult
-	fomResult     combat.FontOfMagicResult
+	rageResult       combat.RageResult
+	endRageResult    combat.RageResult
+	offhandResult    combat.AttackResult
+	martialResult    combat.AttackResult
+	polearmResult    combat.AttackResult
+	stepResult       combat.KiAbilityResult
+	patientResult    combat.KiAbilityResult
+	fomResult        combat.FontOfMagicResult
 	layResult        combat.LayOnHandsResult
 	bardicResult     combat.BardicInspirationResult
 	secondWindResult combat.SecondWindResult
@@ -79,6 +81,11 @@ func (m *mockBonusCombatService) OffhandAttack(_ context.Context, cmd combat.Off
 func (m *mockBonusCombatService) MartialArtsBonusAttack(_ context.Context, cmd combat.MartialArtsBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
 	m.martialCalls = append(m.martialCalls, cmd)
 	return m.martialResult, nil
+}
+
+func (m *mockBonusCombatService) PolearmMasterBonusAttack(_ context.Context, cmd combat.PolearmMasterBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
+	m.polearmCalls = append(m.polearmCalls, cmd)
+	return m.polearmResult, nil
 }
 
 func (m *mockBonusCombatService) StepOfTheWind(_ context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error) {
@@ -238,10 +245,10 @@ func setupBonusHandler() (*BonusHandler, *mockMoveSession, *mockBonusCombatServi
 			DistanceFt:   5,
 			DamageTotal:  3,
 		},
-		martialResult: combat.AttackResult{AttackerName: "Aria", TargetName: "Orc", WeaponName: "unarmed", Hit: true, IsMelee: true},
-		stepResult:    combat.KiAbilityResult{CombatLog: "💨 Aria uses Step of the Wind (dash)"},
-		patientResult: combat.KiAbilityResult{CombatLog: "🛡️ Aria uses Patient Defense"},
-		fomResult:     combat.FontOfMagicResult{CombatLog: "🔮 Font of Magic resolved"},
+		martialResult:    combat.AttackResult{AttackerName: "Aria", TargetName: "Orc", WeaponName: "unarmed", Hit: true, IsMelee: true},
+		stepResult:       combat.KiAbilityResult{CombatLog: "💨 Aria uses Step of the Wind (dash)"},
+		patientResult:    combat.KiAbilityResult{CombatLog: "🛡️ Aria uses Patient Defense"},
+		fomResult:        combat.FontOfMagicResult{CombatLog: "🔮 Font of Magic resolved"},
 		layResult:        combat.LayOnHandsResult{CombatLog: "💛 Aria heals Orc"},
 		bardicResult:     combat.BardicInspirationResult{CombatLog: "🎵 Aria inspires Orc"},
 		secondWindResult: combat.SecondWindResult{CombatLog: "💪 Aria uses Second Wind — regains 12 HP"},
@@ -600,6 +607,28 @@ func TestBonusHandler_MartialArts(t *testing.T) {
 	}
 	if svc.martialCalls[0].Target.ShortID != "OS" {
 		t.Errorf("expected target OS, got %s", svc.martialCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_Polearm(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("polearm", "OS"))
+	if len(svc.polearmCalls) != 1 {
+		t.Fatalf("expected 1 polearm call, got %d", len(svc.polearmCalls))
+	}
+	if svc.polearmCalls[0].Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", svc.polearmCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_Polearm_MissingTarget(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("polearm", ""))
+	if len(svc.polearmCalls) != 0 {
+		t.Error("expected no service call without target")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
+		t.Errorf("expected missing-target rejection, got %q", sess.lastResponse.Data.Content)
 	}
 }
 
