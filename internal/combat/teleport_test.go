@@ -45,6 +45,15 @@ func TestParseTeleportInfo_WithAdditionalEffects(t *testing.T) {
 	assert.Equal(t, "3d10 thunder to creatures within 10ft of departure", info.AdditionalEffects)
 }
 
+// COV-13: Thunder Step's departure boom radius is structured data on the
+// teleport JSON (not parsed from the free-text additional_effects string).
+func TestParseTeleportInfo_DepartureSaveRadius(t *testing.T) {
+	raw := json.RawMessage(`{"target": "self+creature", "departure_save_radius_ft": 10}`)
+	info, err := ParseTeleportInfo(raw)
+	require.NoError(t, err)
+	assert.Equal(t, 10, info.DepartureSaveRadiusFt)
+}
+
 func TestParseTeleportInfo_GroupTarget(t *testing.T) {
 	raw := json.RawMessage(`{"target": "group"}`)
 	info, err := ParseTeleportInfo(raw)
@@ -316,6 +325,22 @@ func TestFormatCastLog_TeleportAdditionalEffects(t *testing.T) {
 	assert.Contains(t, log, "3d10 thunder")
 }
 
+// COV-13: the departure boom log line names each creature that must save, so
+// players/DM know who the pending saves belong to.
+func TestFormatCastLog_DepartureSaves(t *testing.T) {
+	result := CastResult{
+		CasterName:           "Gandalf",
+		SpellName:            "Thunder Step",
+		SpellLevel:           3,
+		Teleport:             &TeleportResult{CasterMoved: true, CasterDestCol: "I", CasterDestRow: 9},
+		DepartureSaveTargets: []string{"Goblin", "Ogre"},
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "Goblin")
+	assert.Contains(t, log, "Ogre")
+	assert.Contains(t, log, "must save")
+}
+
 func makeMistyStepWithTeleport() refdata.Spell {
 	return refdata.Spell{
 		ID:             "misty-step",
@@ -375,8 +400,11 @@ func makeThunderStepWithTeleport() refdata.Spell {
 		RangeFt:        sql.NullInt32{Int32: 90, Valid: true},
 		ResolutionMode: "auto",
 		Concentration:  sql.NullBool{Bool: false, Valid: true},
+		Damage:         pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"3d10","type":"thunder","higher_level_dice":"1d10"}`), Valid: true},
+		SaveAbility:    sql.NullString{String: "con", Valid: true},
+		SaveEffect:     sql.NullString{String: "half_damage", Valid: true},
 		Teleport: pqtype.NullRawMessage{
-			RawMessage: json.RawMessage(`{"target":"self+creature","range_ft":90,"requires_sight":true,"companion_range_ft":5,"additional_effects":"3d10 thunder to creatures within 10ft of departure"}`),
+			RawMessage: json.RawMessage(`{"target":"self+creature","range_ft":90,"requires_sight":true,"companion_range_ft":5,"departure_save_radius_ft":10,"additional_effects":"3d10 thunder to creatures within 10ft of departure"}`),
 			Valid:      true,
 		},
 	}
@@ -854,6 +882,97 @@ func TestCast_TeleportWithAdditionalEffects(t *testing.T) {
 	require.NotNil(t, result.Teleport)
 	assert.True(t, result.Teleport.CasterMoved)
 	assert.Equal(t, "3d10 thunder to creatures within 10ft of departure", result.Teleport.AdditionalEffects)
+}
+
+// COV-13: Thunder Step's departure boom deals 3d10 thunder (CON save for half)
+// to each creature within 10 ft of the space the caster LEFT. The caster and the
+// willing companion teleport away and are unharmed; a bystander outside 10 ft is
+// untouched. The saves are enqueued into the shared AoE pending-save pipeline
+// (source aoe:thunder-step) so /save and the DM dashboard resolve them via the
+// existing ResolveAoEPendingSaves off the spell's top-level damage — no new
+// resolution plumbing.
+func TestCast_ThunderStepDepartureEnqueuesAoESaves(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacterWithHighSlots(charID)
+	caster := makeSpellCaster(charID) // E5
+	companion := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Frodo", PositionCol: "E", PositionRow: 6, // 5 ft from origin
+		IsAlive: true, Conditions: json.RawMessage(`[]`),
+	}
+	nearFoe := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin", PositionCol: "F", PositionRow: 6, // ~7 ft from origin
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	farFoe := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Ogre", PositionCol: "K", PositionRow: 10, // ~35 ft — outside 10 ft
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	turnID := uuid.New()
+
+	var pendingSaves []refdata.CreatePendingSaveParams
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeThunderStepWithTeleport(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		switch id {
+		case caster.ID:
+			return caster, nil
+		case companion.ID:
+			return companion, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("unknown combatant %s", id)
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, companion, nearFoe, farFoe}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: true, ActionSpellCast: true}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCombatantPositionFn = func(_ context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		pendingSaves = append(pendingSaves, arg)
+		return refdata.PendingSafe{ID: uuid.New(), CombatantID: arg.CombatantID, Status: "pending"}, nil
+	}
+
+	svc := NewService(store)
+	// Thunder Step requires sight; make the caster's landing square (I9) visible.
+	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
+	fow.States[8*10+8] = renderer.Visible // I9 (col=8, row=8)
+	cmd := CastCommand{
+		SpellID:          "thunder-step",
+		CasterID:         caster.ID,
+		Turn:             refdata.Turn{ID: turnID, CombatantID: caster.ID},
+		EncounterID:      caster.EncounterID,
+		TeleportDestCol:  "I",
+		TeleportDestRow:  9,
+		CompanionID:      companion.ID,
+		CompanionDestCol: "I",
+		CompanionDestRow: 8,
+		FogOfWar:         fow,
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	require.NotNil(t, result.Teleport)
+	assert.True(t, result.Teleport.CasterMoved)
+
+	// Exactly one departure save: the near foe. Caster + companion teleported
+	// away; the far foe is outside 10 ft.
+	require.Len(t, pendingSaves, 1)
+	ps := pendingSaves[0]
+	assert.Equal(t, nearFoe.ID, ps.CombatantID)
+	assert.Equal(t, "con", ps.Ability)
+	assert.True(t, IsAoEPendingSaveSource(ps.Source))
+	assert.Equal(t, "thunder-step", SpellIDFromAoEPendingSaveSource(ps.Source))
+	assert.Greater(t, ps.Dc, int32(0))
+	assert.Equal(t, []string{"Goblin"}, result.DepartureSaveTargets)
 }
 
 // TDD Cycle 15: Cast integration — companion too far for Dimension Door

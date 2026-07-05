@@ -23,6 +23,11 @@ type TeleportInfo struct {
 	RequiresSight     bool   `json:"requires_sight"`
 	CompanionRangeFt  int    `json:"companion_range_ft"`
 	AdditionalEffects string `json:"additional_effects"`
+	// DepartureSaveRadiusFt, when > 0, makes the teleport resolve a saving-throw
+	// burst centered on the space the caster LEFT — Thunder Step's thunderous
+	// boom. The damage/save come from the spell's top-level Damage/SaveAbility/
+	// SaveEffect; this field only carries the radius. COV-13.
+	DepartureSaveRadiusFt int `json:"departure_save_radius_ft"`
 }
 
 // ParseTeleportInfo parses the teleport JSONB field from a spell into a typed struct.

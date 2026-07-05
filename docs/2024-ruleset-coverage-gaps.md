@@ -939,12 +939,37 @@ also carries `concentration:true`). 2024 True Strike is a **weapon-attack cantri
 scales radiant damage and uses the spellcasting ability. Re-seed to 2024 shape.
 
 ### COV-13 — Thunder Step departure damage is a string, not resolved
-**Status:** OPEN · **Severity:** low · **Pkg:** `internal/combat`
+**Status:** ✅ DONE 2026-07-05 · **Severity:** low · **Pkg:** `internal/combat` (+ seed)
 
-Thunder Step's `additional_effects:"3d10 thunder to creatures within 10ft of departure"`
-(`seed_spells_3.go:46`) is printed (`spellcasting.go:279`) but **no saves/damage** are
-applied to bystanders, even though the spell's top-level `damage` (carried to the
-destination) *is* rolled. Resolve the departure-point AoE.
+**Shipped.** Thunder Step's departure boom now deals its 3d10 thunder. Before, the cast
+teleported and *printed* the `additional_effects` string while applying zero damage
+(`hasTarget`/`Hit` both false → the inline damage block and the COV-1 single-target enqueue
+were both skipped). The fix composes the **existing AoE save pipeline** — no new resolution
+plumbing. New structured field `TeleportInfo.DepartureSaveRadiusFt` (`teleport.go`, seeded
+`departure_save_radius_ft:10` on Thunder Step — deliberately a data field, **not** a
+`spell.ID=="thunder-step"` branch, so any future teleport-with-departure-burst works for
+free). After `resolveTeleport` moves the caster, new `Service.enqueueDepartureSaves`
+(`spellcasting.go`) centers a `SphereAffectedTiles` burst on the caster's **origin** tile
+(the local `caster` still holds its pre-teleport position — `resolveTeleport` takes it by
+value), runs `FindAffectedCombatants` + `CalculateAoECover`, and enqueues one pending save
+per caught creature with the `aoe:<spell-id>` source tag — so `/save`, the DM dashboard, and
+the existing `ResolveAoEPendingSaves` roll each save and apply the spell's top-level damage
+save-for-half. The caster and the willing companion (who teleported away) are excluded by ID;
+the burst gates on `hasDamage && hasSavingThrow && DepartureSaveRadiusFt>0`, so Misty Step /
+Dimension Door (teleport, no departure burst) enqueue nothing. New `CastResult.DepartureSaveTargets`
++ a "Departure boom: … must save" log line; the now-redundant `additional_effects` flavor line
+is suppressed when the mechanical line supersedes it (still shown when the boom caught no one).
+Tests: `TestCast_ThunderStepDepartureEnqueuesAoESaves` (caster+companion excluded, near foe
+enqueued with `aoe:thunder-step` source, far foe outside 10 ft skipped), `TestParseTeleportInfo_DepartureSaveRadius`,
+`TestFormatCastLog_DepartureSaves`. Coverage gates met (combat ≥85%; the `radius<=0` early
+return is covered by the existing Misty Step / Dimension Door Cast tests, which now route
+through the helper). `/simplify`: 4 agents — core design affirmed (structured field is the
+right altitude, matching the repo's data-vs-bespoke line; five AoE primitives correctly reused;
+mirror-not-extract is correct given CastAoE's careful/heightened entanglement). One fix applied
+(the double-⚡ log line). Deferred (noted, not this slice): the free-text `additional_effects`
+field is now n=1 scaffolding fully superseded by structured data + real mechanics — a future
+tidy can delete the field + its 3 pre-existing tests for a single source of truth; and the
+optional `enqueueSphereSaves` extraction shared with `CastAoE`.
 
 ### COV-14 — Eldritch Blast modeled as single projectile, not multi-beam
 **Status:** OPEN · **Severity:** low-medium · **Pkg:** `internal/combat`

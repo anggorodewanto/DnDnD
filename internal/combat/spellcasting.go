@@ -154,7 +154,11 @@ type CastResult struct {
 	// (COV-1): the target must roll /save (PC) or the DM resolves it from the
 	// dashboard, and damage/effects land through the shared pending-save
 	// resolver rather than inline at cast time.
-	SavePending            bool
+	SavePending bool
+	// DepartureSaveTargets names each creature caught in a teleport's departure
+	// burst (Thunder Step) that now has a pending saving throw enqueued. Empty
+	// for non-teleport casts and teleports with no nearby creatures. COV-13.
+	DepartureSaveTargets   []string
 	Concentration          ConcentrationResult
 	ResolutionMode         string
 	SlotUsed               int
@@ -288,9 +292,19 @@ func FormatCastLog(result CastResult) string {
 		if result.Teleport.CompanionMoved {
 			fmt.Fprintf(&b, "\U0001f300 %s teleports to %s%d\n", result.Teleport.CompanionName, result.Teleport.CompanionDestCol, result.Teleport.CompanionDestRow)
 		}
-		if result.Teleport.AdditionalEffects != "" {
+		// The additional_effects flavor line is a pre-mechanics stand-in for the
+		// departure boom; once COV-13 enqueues real saves it is superseded by the
+		// "Departure boom: \u2026" line below, so suppress it to avoid double-printing
+		// the same event. It still shows when the boom caught no one (flavor only).
+		if result.Teleport.AdditionalEffects != "" && len(result.DepartureSaveTargets) == 0 {
 			fmt.Fprintf(&b, "\u26a1 %s\n", result.Teleport.AdditionalEffects)
 		}
+	}
+
+	// Departure-burst pending saves (COV-13): name who must roll.
+	if len(result.DepartureSaveTargets) > 0 {
+		fmt.Fprintf(&b, "\u26a1 Departure boom: %s must save (roll /save, or resolve on the dashboard)\n",
+			strings.Join(result.DepartureSaveTargets, ", "))
 	}
 
 	// Repelling Blast forced movement (COV-6).
@@ -753,6 +767,20 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.Teleport = teleResult
 		if teleResult.DMQueueRouted {
 			result.ResolutionMode = "dm_required"
+		}
+
+		// 12a-ii. COV-13: a teleport carrying a departure burst (Thunder Step)
+		// resolves an AoE save centered on the space the caster LEFT. The local
+		// `caster` still holds its pre-teleport tile (resolveTeleport took it by
+		// value), so it is the burst origin. Reuses the AoE pending-save pipeline
+		// so the same /save + DM-dashboard + ResolveAoEPendingSaves flow applies
+		// the spell's top-level damage save-for-half — no new resolution plumbing.
+		if teleResult.CasterMoved {
+			names, err := s.enqueueDepartureSaves(ctx, spell, caster, char, effectiveSlotLevel, result.EmpoweredRerolls, spellAbilityScore, cmd)
+			if err != nil {
+				return CastResult{}, err
+			}
+			result.DepartureSaveTargets = names
 		}
 	}
 
@@ -1546,6 +1574,64 @@ func (s *Service) resolveTeleport(ctx context.Context, raw json.RawMessage, cast
 	}
 
 	return result, nil
+}
+
+// enqueueDepartureSaves resolves a teleport's departure-point burst (COV-13):
+// each creature within the spell's departure radius of the caster's ORIGIN tile
+// (the space they left) gets a pending saving throw enqueued against the spell's
+// top-level damage. It mirrors CastAoE's target-and-enqueue loop but centers the
+// sphere on the origin and excludes the caster and any willing companion, who
+// teleported away. Returns nil for teleports without a structured departure
+// radius or without top-level save-damage (Misty Step, Dimension Door). The
+// saves carry the "aoe:<spell-id>" source tag so ResolveAoEPendingSaves resolves
+// them exactly like an AoE cast.
+func (s *Service) enqueueDepartureSaves(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, char refdata.Character, effectiveSlotLevel, empoweredRerolls, spellAbilityScore int, cmd CastCommand) ([]string, error) {
+	info, err := ParseTeleportInfo(spell.Teleport.RawMessage)
+	if err != nil {
+		return nil, fmt.Errorf("parsing teleport info: %w", err)
+	}
+	if info.DepartureSaveRadiusFt <= 0 || !hasDamage(spell) || !hasSavingThrow(spell) {
+		return nil, nil
+	}
+
+	allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, caster.EncounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing combatants for departure burst: %w", err)
+	}
+
+	originCol := colToIndex(caster.PositionCol)
+	originRow := int(caster.PositionRow) - 1
+	tiles := SphereAffectedTiles(originCol, originRow, info.DepartureSaveRadiusFt)
+	affected := FindAffectedCombatants(tiles, allCombatants)
+
+	saveDC := SpellSaveDC(int(char.ProficiencyBonus), spellAbilityScore)
+	saveAbility := spell.SaveAbility.String
+	source := AoEPendingSaveSourceFull(spell.ID, effectiveSlotLevel, int(char.Level), empoweredRerolls)
+
+	var names []string
+	for _, c := range affected {
+		// The caster and the willing companion teleported away — the boom sounds
+		// at the space they LEFT, so they are unaffected.
+		if c.ID == caster.ID || c.ID == cmd.CompanionID {
+			continue
+		}
+		ps := CalculateAoECover(originCol, originRow, c, saveAbility, saveDC, cmd.Walls)
+		if ps.FullCover {
+			continue
+		}
+		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
+			EncounterID: caster.EncounterID,
+			CombatantID: ps.CombatantID,
+			Ability:     ps.SaveAbility,
+			Dc:          int32(ps.DC),
+			Source:      source,
+			CoverBonus:  int32(ps.CoverBonus),
+		}); err != nil {
+			return nil, fmt.Errorf("creating departure save for %s: %w", ps.CombatantID, err)
+		}
+		names = append(names, c.DisplayName)
+	}
+	return names, nil
 }
 
 // CastMaterialComponentInfo holds material component information returned from Cast.
