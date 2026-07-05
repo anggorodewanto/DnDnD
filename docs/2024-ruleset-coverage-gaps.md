@@ -472,7 +472,7 @@ Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of 
 ---
 
 ### COV-8 — Cunning Strike / Brutal Strike / Tactical Master / Steady Aim
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
+**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
 
 Four 2024 martial riders that each sit on already-wired machinery. Each is its own small
 item; split if picked up separately.
@@ -484,11 +484,40 @@ item; split if picked up separately.
   on-hit pipeline (`mastery.go`).
 - **Tactical Master (Fighter L9):** swap in push/sap/slow on any mastery weapon. Sits
   directly on `onHitMastery` (`attack.go:602`) / `mastery.go`.
-- **Steady Aim (Rogue):** grant advantage this turn (speed 0). Mirrors the reckless /
-  `vex_advantage` single-shot grant (`applyRecklessMarker`, `mastery.go:302`, `attack.go:1407`).
+- ~~**Steady Aim (Rogue):** grant advantage this turn (speed 0).~~ **DONE 2026-07-05.**
 
-**Blocker for all four:** the level's feature must exist in seed data — see COV-10
-(`features_by_level` only 1–3 today).
+**Shipped (Steady Aim).** Wired as `/bonus steady-aim`: a bonus-action self-advantage on the
+rogue's attack this turn. New `Service.SteadyAim` (`steady_aim.go`, gate/spend shape mirrors
+`second_wind.go`) writes a transient `steady_aim_advantage` condition (`DurationRounds:1`,
+`ExpiresOn:"start_of_turn"`, `SourceCombatantID` — the same shape as the reckless/vex markers)
+via the shared `ApplyCondition`, then spends the bonus action. A new
+`case steadyAimAdvantageCondition` in `DetectAdvantage` (`advantage.go`) appends an
+**unconditional** "Steady Aim" advantage reason — deliberately a distinct condition rather than
+reusing `reckless` (melee-STR only, and grants advantage to *incoming* attacks) or
+`vex_advantage`/`help_advantage` (both hard-require a `TargetCombatantID` — Steady Aim is
+any-target). The marker auto-clears via the generic name-agnostic `start_of_turn` expiry
+(`processExpiredConditions`) — **no new consume path**. Modeling "advantage this turn" instead
+of RAW "your *next* attack" is safe: a Rogue has no Extra Attack and, having spent the bonus
+action here, can't also make a TWF off-hand swing → one attack/turn (consistent with reckless's
+own "attacks 2+ this turn" altitude). Gate is `HasFeatureByName(char.Features, "Steady Aim")`
+(NOT a class-level gate like Cunning Action/Second Wind) because Steady Aim is an **optional**
+feature — not every Rogue L2 has it. Seed: added to Rogue `features_by_level["2"]` (with Cunning
+Action, which enables it) — **within the existing 1–3 range, so no COV-10 dependency** (the one
+COV-8 rider that dodges the seed-level blocker). Discord/catalog symmetric with `/bonus
+second-wind` (interface method + `dispatchSteadyAim` + `case "steady-aim"` + `bonusSubcommandKeys`
++ catalog `Classes:["rogue"]` row → surfaces on the sheet + `help_content`). Tests:
+`steady_aim_test.go` (happy path applies marker + spends bonus action; no-feature / bonus-used /
+NPC gates; `DetectAdvantage` grants advantage) + `bonus_handler_test.go` dispatch. `/simplify`:
+2 agents, all 4 axes CLEAN — direct `ApplyCondition` correct (surfaces errors the reckless helper
+swallows), distinct condition is minimum-viable, `HasFeatureByName` gate correct for an optional
+feature. **DEFERRED:** the RAW speed-0 downside + "only if you haven't moved" precondition — no
+per-turn movement-budget gate exists to enforce them (the same infra gap that defers Sentinel /
+Polearm-OA); disclosed in the combat log, code comment, seed comment, catalog summary, and help
+text so the table honors it. Coverage gates met (combat 91.37%, discord 86.22%, refdata 97.9%).
+
+**Blocker for the remaining three:** the level's feature must exist in seed data — see COV-10
+(`features_by_level` only 1–3 today; Cunning L5 / Brutal L9 / Tactical L9 all need higher levels
+seeded, unlike Steady Aim which fit at L2).
 
 ---
 

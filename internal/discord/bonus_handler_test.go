@@ -32,6 +32,7 @@ type mockBonusCombatService struct {
 	layCalls        []combat.LayOnHandsCommand
 	bardicCalls     []combat.BardicInspirationCommand
 	secondWindCalls []combat.SecondWindCommand
+	steadyAimCalls  []combat.SteadyAimCommand
 
 	rageResult       combat.RageResult
 	endRageResult    combat.RageResult
@@ -46,6 +47,7 @@ type mockBonusCombatService struct {
 	layResult        combat.LayOnHandsResult
 	bardicResult     combat.BardicInspirationResult
 	secondWindResult combat.SecondWindResult
+	steadyAimResult  combat.SteadyAimResult
 
 	// D-47 / D-48b / D-54-cunning / D-56 / D-57 recordings + canned results.
 	wsActivateCalls  []combat.WildShapeCommand
@@ -135,6 +137,11 @@ func (m *mockBonusCombatService) GrantBardicInspiration(_ context.Context, cmd c
 func (m *mockBonusCombatService) SecondWind(_ context.Context, cmd combat.SecondWindCommand, _ *dice.Roller) (combat.SecondWindResult, error) {
 	m.secondWindCalls = append(m.secondWindCalls, cmd)
 	return m.secondWindResult, nil
+}
+
+func (m *mockBonusCombatService) SteadyAim(_ context.Context, cmd combat.SteadyAimCommand) (combat.SteadyAimResult, error) {
+	m.steadyAimCalls = append(m.steadyAimCalls, cmd)
+	return m.steadyAimResult, nil
 }
 
 func (m *mockBonusCombatService) ActivateWildShape(_ context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error) {
@@ -266,6 +273,7 @@ func setupBonusHandler() (*BonusHandler, *mockMoveSession, *mockBonusCombatServi
 		layResult:        combat.LayOnHandsResult{CombatLog: "💛 Aria heals Orc"},
 		bardicResult:     combat.BardicInspirationResult{CombatLog: "🎵 Aria inspires Orc"},
 		secondWindResult: combat.SecondWindResult{CombatLog: "💪 Aria uses Second Wind — regains 12 HP"},
+		steadyAimResult:  combat.SteadyAimResult{CombatLog: "🎯 Aria takes Steady Aim — advantage on their attack this turn"},
 	}
 	sess := &mockMoveSession{}
 	h := NewBonusHandler(sess, combatSvc, provider, dice.NewRoller(func(_ int) int { return 10 }))
@@ -833,6 +841,23 @@ func TestBonusHandler_SecondWind(t *testing.T) {
 	}
 	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
 		t.Errorf("expected second-wind result to be public, got flags %d", sess.lastResponse.Data.Flags)
+	}
+}
+
+func TestBonusHandler_SteadyAim(t *testing.T) {
+	h, sess, svc, provider := setupBonusHandler()
+	h.Handle(makeBonusInteraction("steady-aim", ""))
+	if len(svc.steadyAimCalls) != 1 {
+		t.Fatalf("expected 1 steady-aim call, got %d", len(svc.steadyAimCalls))
+	}
+	if svc.steadyAimCalls[0].Rogue.ID != provider.actor.ID {
+		t.Errorf("expected rogue %s, got %s", provider.actor.ID, svc.steadyAimCalls[0].Rogue.ID)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Steady Aim") {
+		t.Errorf("expected steady-aim log, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected steady-aim result to be public, got flags %d", sess.lastResponse.Data.Flags)
 	}
 }
 

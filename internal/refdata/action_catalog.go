@@ -146,6 +146,8 @@ var actionCatalog = []ActionCatalogEntry{
 		Summary: "Enter a rage: bonus melee damage and resistance to bludgeoning/piercing/slashing."},
 	{Key: "cunning-action", Name: "Cunning Action", Economy: EconomyBonusAction, Command: "/bonus cunning-action <dash|disengage|hide>", Classes: []string{"rogue"}, MinLevel: 2,
 		Summary: "Take Dash, Disengage, or Hide as a bonus action."},
+	{Key: "steady-aim", Name: "Steady Aim", Economy: EconomyBonusAction, Command: "/bonus steady-aim", Classes: []string{"rogue"}, MinLevel: 2,
+		Summary: "Give yourself advantage on your attack this turn (your speed drops to 0 until the end of your turn)."},
 	{Key: "martial-arts", Name: "Martial Arts", Economy: EconomyBonusAction, Command: "/bonus martial-arts <target>", Classes: []string{"monk"}, MinLevel: 1,
 		Summary: "Make an unarmed strike as a bonus action after you Attack."},
 	{Key: "flurry", Name: "Flurry of Blows", Economy: EconomyBonusAction, Command: "/bonus flurry <target>", Classes: []string{"monk"}, MinLevel: 2,

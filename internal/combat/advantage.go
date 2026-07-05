@@ -110,6 +110,12 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			if !IsRangedWeapon(input.Weapon) && input.AbilityUsed == "str" {
 				advReasons = append(advReasons, "Reckless Attack (active)")
 			}
+		case steadyAimAdvantageCondition:
+			// COV-8: Steady Aim's transient marker grants advantage on the
+			// rogue's attack this turn — any weapon, any target, no downside to
+			// incoming attacks (unlike reckless). It clears at the start of the
+			// rogue's next turn.
+			advReasons = append(advReasons, "Steady Aim")
 		}
 	}
 

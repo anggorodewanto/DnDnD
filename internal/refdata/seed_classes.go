@@ -308,6 +308,12 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 				"2": []map[string]string{
 					{"name": "Cunning Action", "description": "Your quick thinking and agility allow you to move and act quickly. You can take a bonus action on each of your turns in combat to take the Dash, Disengage, or Hide action.", "mechanical_effect": "bonus_action_dash_disengage_hide"},
+					// COV-8: Steady Aim (Tasha's/2024-optional, available with Cunning
+					// Action). Wired as /bonus steady-aim: a bonus-action self-advantage
+					// on the rogue's attack this turn (transient steady_aim_advantage
+					// marker read by DetectAdvantage). The speed-0 downside is not
+					// enforced (no movement-budget gate) — honored at the table.
+					{"name": "Steady Aim", "description": "As a bonus action, you give yourself advantage on your next attack roll on the current turn. You can use this bonus action only if you haven't moved, and after you use it, your speed is 0 until the end of the current turn.", "mechanical_effect": "steady_aim"},
 				},
 				"3": []map[string]string{
 					{"name": "Roguish Archetype", "description": "You choose an archetype that you emulate in the exercise of your rogue abilities.", "mechanical_effect": "subclass_choice"},

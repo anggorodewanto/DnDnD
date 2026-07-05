@@ -33,7 +33,7 @@ var bonusSubcommandKeys = []string{
 	"offhand", "rage", "end-rage", "martial-arts", "polearm", "crossbow", "shield", "step-of-the-wind",
 	"patient-defense", "font-of-magic", "lay-on-hands", "bardic-inspiration",
 	"second-wind", "wild-shape", "revert-wild-shape", "flurry", "cunning-action",
-	"drag", "release-drag",
+	"steady-aim", "drag", "release-drag",
 }
 
 // canonicalActionSubcommand resolves a normalized /action subcommand name to

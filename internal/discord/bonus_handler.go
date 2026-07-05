@@ -46,6 +46,9 @@ type BonusCombatService interface {
 	// COV-4: Second Wind (fighter self-heal bonus action).
 	SecondWind(ctx context.Context, cmd combat.SecondWindCommand, roller *dice.Roller) (combat.SecondWindResult, error)
 
+	// COV-8: Steady Aim (rogue bonus-action self-advantage on this turn's attack).
+	SteadyAim(ctx context.Context, cmd combat.SteadyAimCommand) (combat.SteadyAimResult, error)
+
 	// D-47 / Phase 47: Wild Shape activate / revert.
 	ActivateWildShape(ctx context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error)
 	RevertWildShapeService(ctx context.Context, cmd combat.RevertWildShapeCommand) (combat.RevertWildShapeResult, error)
@@ -208,6 +211,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchFlurryOfBlows(ctx, interaction, bctx, args)
 		case "cunning-action", "cunningaction":
 			h.dispatchCunningAction(ctx, interaction, bctx, args)
+		case "steady-aim", "steadyaim":
+			h.dispatchSteadyAim(ctx, interaction, bctx)
 		case "drag":
 			h.dispatchDrag(ctx, interaction, bctx, args)
 		case "release-drag", "releasedrag":
@@ -553,6 +558,21 @@ func (h *BonusHandler) dispatchSecondWind(ctx context.Context, interaction *disc
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Second Wind failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchSteadyAim wires /bonus steady-aim (COV-8). As a bonus action the rogue
+// gains advantage on their attack this turn (a transient marker); no target, no
+// roll — so it needs no roller, mirroring dispatchPatientDefense.
+func (h *BonusHandler) dispatchSteadyAim(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext) {
+	result, err := h.combatService.SteadyAim(ctx, combat.SteadyAimCommand{
+		Rogue: bctx.actor,
+		Turn:  bctx.turn,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Steady Aim failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)

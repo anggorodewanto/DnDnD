@@ -496,6 +496,7 @@ Common:
 
 Class actions:
   /bonus cunning-action dash          Rogue: dash, disengage, or hide
+  /bonus steady-aim                   Rogue: advantage on this turn's attack (speed 0)
   /bonus martial-arts [target]        Monk: bonus unarmed strike
   /bonus flurry-of-blows              Monk: two unarmed strikes (1 ki)
   /bonus step-of-the-wind dash        Monk: dash or disengage (1 ki)
