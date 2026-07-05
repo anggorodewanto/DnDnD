@@ -317,6 +317,43 @@ func GetAmmunitionName(weapon refdata.Weapon) string {
 	return "Arrows"
 }
 
+// deductWeaponAmmunition spends one unit of the weapon's ammunition from the
+// character's inventory, persists the change, and records the spend in the
+// post-combat recovery tracker (C-37) so consumption and half-recovery can
+// never drift. It parses/marshals through the full character.InventoryItem so
+// the write round-trips every other item's fields (equipped flags, magic props,
+// charges, item_id) losslessly. It is a no-op for a non-ammunition weapon or a
+// nil character. Returns a NoAmmunitionError when the matching ammo stack is
+// empty or absent, so the caller can offer DM adjudication rather than a
+// dead-end rejection. Shared by the main Attack path and the Crossbow Expert
+// bonus attack (COV-9); attacker supplies the encounter/combatant keys for the
+// recovery tracker.
+func (s *Service) deductWeaponAmmunition(ctx context.Context, char *refdata.Character, weapon refdata.Weapon, attacker refdata.Combatant) error {
+	if char == nil || !HasProperty(weapon, "ammunition") {
+		return nil
+	}
+	ammoName := GetAmmunitionName(weapon)
+	ammoID := ammunitionItemID(weapon)
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		return fmt.Errorf("parsing inventory: %w", err)
+	}
+	items, err = DeductAmmunition(items, ammoName, ammoID)
+	if err != nil {
+		return err
+	}
+	invJSON, err := character.MarshalInventory(items)
+	if err != nil {
+		return fmt.Errorf("marshaling inventory: %w", err)
+	}
+	if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}); err != nil {
+		return fmt.Errorf("updating inventory: %w", err)
+	}
+	// C-37 — track the spend so end-of-combat half-recovery returns some ammo.
+	s.recordAmmoForAttack(attacker.EncounterID, attacker.ID, weapon)
+	return nil
+}
+
 // HasFeat checks whether a character's features include a feat with the given
 // mechanical_effect ID (e.g., "crossbow-expert", "tavern-brawler").
 func HasFeat(features pqtype.NullRawMessage, featID string) bool {
@@ -1315,28 +1352,11 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
 	}
 
-	// Ammunition: deduct from inventory. Parse/marshal through the full
-	// character.InventoryItem so this write round-trips every other item's
-	// fields (equipped flags, magic props, charges, item_id) losslessly —
-	// the narrow projection used previously silently dropped them on each shot.
-	if HasProperty(weapon, "ammunition") && char != nil {
-		ammoName := GetAmmunitionName(weapon)
-		ammoID := ammunitionItemID(weapon)
-		items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
-		if err != nil {
-			return AttackResult{}, fmt.Errorf("parsing inventory: %w", err)
-		}
-		items, err = DeductAmmunition(items, ammoName, ammoID)
-		if err != nil {
-			return AttackResult{}, err
-		}
-		invJSON, err := character.MarshalInventory(items)
-		if err != nil {
-			return AttackResult{}, fmt.Errorf("marshaling inventory: %w", err)
-		}
-		if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}); err != nil {
-			return AttackResult{}, fmt.Errorf("updating inventory: %w", err)
-		}
+	// Ammunition: spend one unit from inventory and track it for post-combat
+	// recovery (see deductWeaponAmmunition, shared with the Crossbow Expert
+	// bonus attack).
+	if err := s.deductWeaponAmmunition(ctx, char, weapon, cmd.Attacker); err != nil {
+		return AttackResult{}, err
 	}
 
 	offHandOccupied := char != nil && char.EquippedOffHand.Valid && char.EquippedOffHand.String != ""
@@ -1461,10 +1481,8 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	// disadvantage; spend the grant once this attack has resolved (any target).
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 
-	// C-37 — track ammunition spent for post-combat half-recovery (Phase 37).
-	if char != nil && HasProperty(weapon, "ammunition") {
-		s.recordAmmoForAttack(cmd.Attacker.EncounterID, cmd.Attacker.ID, weapon)
-	}
+	// Ammunition spend is tracked for post-combat half-recovery inside
+	// deductWeaponAmmunition (above), coupled with the inventory write.
 
 	// Phase 37 thrown weapon: the weapon leaves the attacker's hand. Clear
 	// EquippedMainHand so subsequent attacks/bonus actions can't keep

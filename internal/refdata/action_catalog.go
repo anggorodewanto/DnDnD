@@ -166,6 +166,8 @@ var actionCatalog = []ActionCatalogEntry{
 	// --- Feat bonus actions (gated by a feat, not a class) ---
 	{Key: "polearm", Name: "Polearm Master", Economy: EconomyBonusAction, Command: "/bonus polearm <target>", Feats: []string{"polearm-master"},
 		Summary: "After you Attack with a glaive/halberd/quarterstaff/spear, strike with the opposite (blunt) end for 1d4 bludgeoning as a bonus action."},
+	{Key: "crossbow", Name: "Crossbow Expert", Economy: EconomyBonusAction, Command: "/bonus crossbow <target>", Feats: []string{"crossbow-expert"},
+		Summary: "After you Attack with a one-handed weapon, fire a hand crossbow you're holding as a bonus action (spends a bolt)."},
 }
 
 // ActionCount is the number of rows in the canonical action catalog. Derived so

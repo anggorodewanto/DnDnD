@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -583,6 +583,36 @@ catalog rows are not yet surfaced on the character sheet** — `AvailableActions
 are threaded into the sheet; (3) **magic-weapon bonus** (+1 glaive) does not apply to the butt-strike
 because FES is skipped (monk-tier parity; more visible here since the clone is a real weapon).
 
+**Shipped (Crossbow Expert bonus-attack slice).** The feat's third rider — the bonus-action
+hand-crossbow attack — is now wired as `/bonus crossbow <target>` (its two passives, loading-ignore
+and no-disadvantage-firing-in-melee, were already live). After attacking with a one-handed weapon,
+a character with the feat fires a hand crossbow they hold (main **or** off hand) as a bonus action.
+New `Service.CrossbowExpertBonusAttack` (`crossbow_expert.go`) mirrors the **full-tier**
+`GWMBonusAttack` path — NOT the lightweight monk/Polearm template — because a hand crossbow is a real
+ranged weapon: it keeps the weapon's own die and runs cover, obscurement, the Feature Effect System
+(Sneak Attack, magic-crossbow bonuses, Sharpshooter), Vex mastery, and the once-per-turn tracker, and
+sets `input.HasCrossbowExpert = true` so the melee-adjacency no-disadvantage rider carries onto the
+bonus swing. Gate order mirrors OffhandAttack: bonus-action → feat (`HasFeatureByName "Crossbow
+Expert"`) → **an attack was made this turn** (`AttacksRemaining >= resolveAttacksPerAction`, the
+attack-was-made basis, which — unlike Polearm's `Turn.ActionUsed` — correctly excludes a
+cast-a-spell action) → hand crossbow in hand (`IsHandCrossbow`, `equippedHandCrossbow` main-then-off)
+→ cover gate → **spend a bolt** → bonus action → build/resolve. **Ammo:** the one thing no other
+bonus-attack path needed (all melee) — the main Attack path's inventory-deduction block was extracted
+to a shared `Service.deductWeaponAmmunition` helper, reused by both. During `/simplify` the helper was
+deepened to also fold in the C-37 post-combat recovery tracking (`recordAmmoForAttack`), which the
+first extraction left behind in `Attack` — so a bolt fired on the bonus shot is now half-recovered at
+End Combat exactly like one fired on `/attack`, and the two call sites can't drift. No seed change
+(feat + hand crossbow + bolt all seeded). Discord/catalog wiring symmetric with polearm
+(`BonusCombatService` method + `dispatchCrossbowExpert` with `Walls` for ranged cover + `case
+"crossbow"` + `bonusSubcommandKeys` + catalog `Feats:["crossbow-expert"]` row + `help_content.go`).
+Tests: `crossbow_expert_test.go` (happy path 1d6+DEX with a bolt spent 20→19; ammo tracked for
+recovery; off-hand crossbow; feat / attack-first / hand-crossbow / NPC / bonus-used / out-of-ammo
+gates) + `IsHandCrossbow` unit + `bonus_handler_test.go` dispatch. Coverage: gates met (combat 91.41%,
+discord 86.22%, refdata 97.92%). DEFERRED (new COV items): (1) the "attacked with a **one-handed**
+weapon" clause is not enforced (no weapon-of-Attack-action tracking — same simplification as
+OffhandAttack's TWF prereq); (2) feat-gated catalog rows still not surfaced on the sheet (shared with
+the Polearm deferral); (3) 2024 Crossbow Expert shape nuances.
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -597,8 +627,10 @@ feat (or a wired GWF) needs it.
 - **Off-hand / GWM-bonus reroll already covered** — all three paths share the flag; no extra work.
 
 **Wired today:** GWM, **Sharpshooter (COV-9: −5/+10 toggle + passive ignore-half/¾-cover &
-no-long-range-disadvantage riders)**, Defensive Duelist, Crossbow Expert (partial),
-Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**,
+no-long-range-disadvantage riders)**, Defensive Duelist,
+**Crossbow Expert (COV-9: loading-ignore + no-melee-disadvantage passives + `/bonus crossbow`
+hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
+**Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
@@ -614,8 +646,8 @@ slug in combat):
 | War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |
 | Charger / Mobile / Lucky / Mage Slayer / Heavy Armor Master / Tough | movement / reroll / damage-reduction / max-HP riders | various — scope each; HAM needs a magical/non-magical damage flag (absent from `ApplyDamageInput`); Tough threads feats into `CalculateHP` (×4 callers + levelup delta) |
 
-**Also:** Crossbow Expert's **bonus-action hand-crossbow attack** is not wired (only its
-loading-ignore + no-disadvantage-in-melee are).
+**Also:** ~~Crossbow Expert's **bonus-action hand-crossbow attack** is not wired~~ **DONE
+2026-07-05** (`/bonus crossbow`, `crossbow_expert.go`; full-tier GWM template + shared ammo helper).
 
 **Note:** `feat.MechanicalEffect` JSON in seed is descriptive metadata only — combat does
 **not** parse it. Wiring a feat = add a name/slug branch in the effect pipeline, same as the

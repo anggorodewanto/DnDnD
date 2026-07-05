@@ -96,9 +96,9 @@ func (s *Service) RecordAmmoSpent(encounterID, combatantID uuid.UUID, ammoName s
 }
 
 // recordAmmoForAttack derives the ammunition name from the weapon and
-// records one shot in the tracker. Used by Service.Attack right after the
-// ammunition-property deduction path so the spent count is kept in sync
-// with the inventory write.
+// records one shot in the tracker. Called from deductWeaponAmmunition, right
+// after the inventory write, so the spent count stays in sync with it on every
+// path that fires ammunition (main Attack + Crossbow Expert bonus shot).
 func (s *Service) recordAmmoForAttack(encounterID, combatantID uuid.UUID, weapon refdata.Weapon) {
 	if !HasProperty(weapon, "ammunition") {
 		return

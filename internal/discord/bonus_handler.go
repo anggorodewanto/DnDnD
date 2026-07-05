@@ -28,6 +28,10 @@ type BonusCombatService interface {
 	// COV-9: Polearm Master butt-strike (bonus-action d4 with the opposite end
 	// of a glaive/halberd/quarterstaff/spear, after the Attack action).
 	PolearmMasterBonusAttack(ctx context.Context, cmd combat.PolearmMasterBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
+
+	// COV-9: Crossbow Expert bonus-action hand-crossbow attack (after attacking
+	// with a one-handed weapon; spends a bolt).
+	CrossbowExpertBonusAttack(ctx context.Context, cmd combat.CrossbowExpertBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	StepOfTheWind(ctx context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error)
 	PatientDefense(ctx context.Context, cmd combat.KiAbilityCommand) (combat.KiAbilityResult, error)
 	FontOfMagicConvertSlot(ctx context.Context, cmd combat.FontOfMagicCommand) (combat.FontOfMagicResult, error)
@@ -176,6 +180,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchMartialArts(ctx, interaction, bctx, args)
 		case "polearm", "polearm-master", "polearmmaster":
 			h.dispatchPolearm(ctx, interaction, bctx, args)
+		case "crossbow", "crossbow-expert", "crossbowexpert":
+			h.dispatchCrossbowExpert(ctx, interaction, bctx, args)
 		case "step-of-the-wind", "stepofthewind":
 			h.dispatchStepOfTheWind(ctx, interaction, bctx, args)
 		case "patient-defense", "patientdefense":
@@ -347,6 +353,28 @@ func (h *BonusHandler) dispatchPolearm(ctx context.Context, interaction *discord
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Polearm Master failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))
+}
+
+// dispatchCrossbowExpert wires /bonus crossbow <target> (COV-9). Requires the
+// Crossbow Expert feat, a hand crossbow in hand, an attack already made this
+// turn, and a bolt in inventory — all enforced inside the service. Walls are
+// forwarded for ranged cover, matching the off-hand path.
+func (h *BonusHandler) dispatchCrossbowExpert(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "crossbow <target>")
+	if !ok {
+		return
+	}
+	result, err := h.combatService.CrossbowExpertBonusAttack(ctx, combat.CrossbowExpertBonusAttackCommand{
+		Attacker: bctx.actor,
+		Target:   *target,
+		Turn:     bctx.turn,
+		Walls:    h.loadWalls(ctx, bctx.encounter),
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Crossbow Expert failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))

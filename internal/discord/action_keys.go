@@ -30,7 +30,7 @@ var actionSubcommandAliases = map[string]string{
 // (end-rage, revert-wild-shape, drag, release-drag) and are not player-facing
 // "abilities" on the sheet — the contract test documents those exclusions.
 var bonusSubcommandKeys = []string{
-	"offhand", "rage", "end-rage", "martial-arts", "polearm", "step-of-the-wind",
+	"offhand", "rage", "end-rage", "martial-arts", "polearm", "crossbow", "step-of-the-wind",
 	"patient-defense", "font-of-magic", "lay-on-hands", "bardic-inspiration",
 	"second-wind", "wild-shape", "revert-wild-shape", "flurry", "cunning-action",
 	"drag", "release-drag",

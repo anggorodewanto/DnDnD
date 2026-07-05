@@ -23,6 +23,7 @@ type mockBonusCombatService struct {
 	offhandCalls    []combat.OffhandAttackCommand
 	martialCalls    []combat.MartialArtsBonusAttackCommand
 	polearmCalls    []combat.PolearmMasterBonusAttackCommand
+	crossbowCalls   []combat.CrossbowExpertBonusAttackCommand
 	stepCalls       []combat.StepOfTheWindCommand
 	patientCalls    []combat.KiAbilityCommand
 	fomConvertCalls []combat.FontOfMagicCommand
@@ -36,6 +37,7 @@ type mockBonusCombatService struct {
 	offhandResult    combat.AttackResult
 	martialResult    combat.AttackResult
 	polearmResult    combat.AttackResult
+	crossbowResult   combat.AttackResult
 	stepResult       combat.KiAbilityResult
 	patientResult    combat.KiAbilityResult
 	fomResult        combat.FontOfMagicResult
@@ -86,6 +88,11 @@ func (m *mockBonusCombatService) MartialArtsBonusAttack(_ context.Context, cmd c
 func (m *mockBonusCombatService) PolearmMasterBonusAttack(_ context.Context, cmd combat.PolearmMasterBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
 	m.polearmCalls = append(m.polearmCalls, cmd)
 	return m.polearmResult, nil
+}
+
+func (m *mockBonusCombatService) CrossbowExpertBonusAttack(_ context.Context, cmd combat.CrossbowExpertBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
+	m.crossbowCalls = append(m.crossbowCalls, cmd)
+	return m.crossbowResult, nil
 }
 
 func (m *mockBonusCombatService) StepOfTheWind(_ context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error) {
@@ -625,6 +632,28 @@ func TestBonusHandler_Polearm_MissingTarget(t *testing.T) {
 	h, sess, svc, _ := setupBonusHandler()
 	h.Handle(makeBonusInteraction("polearm", ""))
 	if len(svc.polearmCalls) != 0 {
+		t.Error("expected no service call without target")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
+		t.Errorf("expected missing-target rejection, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestBonusHandler_CrossbowExpert(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("crossbow", "OS"))
+	if len(svc.crossbowCalls) != 1 {
+		t.Fatalf("expected 1 crossbow call, got %d", len(svc.crossbowCalls))
+	}
+	if svc.crossbowCalls[0].Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", svc.crossbowCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_CrossbowExpert_MissingTarget(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("crossbow", ""))
+	if len(svc.crossbowCalls) != 0 {
 		t.Error("expected no service call without target")
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
