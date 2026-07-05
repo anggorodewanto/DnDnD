@@ -457,10 +457,11 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 	// persisted store (HPMax/HPCurrent columns) separate from the CalculateHP
 	// derivation, and that derivation is not re-run on a feat pick — so the bonus
 	// is applied as an imperative delta. After the idempotency guard above, so a
-	// re-approve never double-bumps. Like the feat itself, this HP is lost on a
-	// builder rebuild (ASI feats are regenerated-and-dropped — see
-	// docs/2024-ruleset-coverage-gaps.md).
-	if err := s.bumpPersistedHP(ctx, char, featMaxHPBonus(feat, char.Level)); err != nil {
+	// re-approve never double-bumps. A builder rebuild no longer drops this: the
+	// feat feature is carried across by preservePersistedFeats (COV-17 S1) and the
+	// portal re-adds this flat HP via the same character.FeatFlatHPBonus SSOT
+	// called here (COV-17 S2).
+	if err := s.bumpPersistedHP(ctx, char, character.FeatFlatHPBonus([]character.Feature{feature}, char.Level)); err != nil {
 		return fmt.Errorf("applying feat HP bonus: %w", err)
 	}
 

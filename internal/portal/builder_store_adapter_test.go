@@ -1666,6 +1666,44 @@ func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesExpendedFeatureUses(
 		"a character edit must not refill an expended feature-use pool")
 }
 
+func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesFeatHP(t *testing.T) {
+	charID := uuid.New()
+	// Tough is stored on the persisted feature exactly as levelup.ApplyFeat writes
+	// it: a JSON array of {effect_type} maps serialized into MechanicalEffect.
+	toughFeatures, err := json.Marshal([]character.Feature{
+		{Name: "Tough", Source: "feat", Level: 4, MechanicalEffect: `[{"effect_type":"hp_plus_2_per_level"}]`},
+	})
+	require.NoError(t, err)
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			ID:         charID,
+			CampaignID: uuid.New(),
+			HpCurrent:  38,
+			Features:   pqtype.NullRawMessage{RawMessage: toughFeatures, Valid: true},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	// The fresh build supplies the feats-agnostic derivation (p.HPMax = 30); the
+	// rebuild must re-add Tough's +2/level (8 at level 4) so HPMax stays 38.
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Aria",
+		Race:          "Human",
+		Class:         "fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8},
+		HPMax:         30,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "fighter", Level: 4}},
+	}
+	require.NoError(t, adapter.UpdateCharacterRecord(context.Background(), charID.String(), params))
+
+	assert.Equal(t, int32(38), creator.capturedUpdate.HpMax, "Tough's flat +2/level HP must survive the rebuild")
+	assert.Equal(t, int32(38), creator.capturedUpdate.HpCurrent, "hp_current caps to the re-added max, not the bare derivation")
+}
+
 func TestBuilderStoreAdapter_UpdateCharacterRecord_CapsHPToNewMax(t *testing.T) {
 	charID := uuid.New()
 	creator := &captureCharacterCreator{

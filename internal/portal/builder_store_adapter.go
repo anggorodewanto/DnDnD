@@ -358,7 +358,12 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		return err
 	}
 
-	hpCurrent := min(existing.HpCurrent, c.hpMax)
+	// The fresh derivation (c.hpMax) is feats-agnostic; re-add Tough's flat
+	// +2/level, which the persisted Source:"feat" features carry but CalculateHP
+	// does not know about. Mirrors preservePersistedFeats' preservation of the
+	// features themselves. COV-17 S2.
+	hpMax := c.hpMax + featFlatHPBonus(existing.Features, c.level)
+	hpCurrent := min(existing.HpCurrent, hpMax)
 
 	_, err = a.q.UpdateCharacter(ctx, refdata.UpdateCharacterParams{
 		ID:               charID,
@@ -367,7 +372,7 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		Classes:          c.classesJSON,
 		Level:            c.level,
 		AbilityScores:    c.scoresJSON,
-		HpMax:            c.hpMax,
+		HpMax:            hpMax,
 		HpCurrent:        hpCurrent,
 		TempHp:           existing.TempHp,
 		Ac:               c.ac,
@@ -460,6 +465,23 @@ func preserveExpendedFeatureUses(existing, fresh pqtype.NullRawMessage) pqtype.N
 		return fresh
 	}
 	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// featFlatHPBonus returns the flat per-level hit points (Tough's +2/level) the
+// persisted feat features grant, which the feats-agnostic CalculateHP derivation
+// drops on a builder rebuild. Delegates the slug detection to the shared
+// character.FeatFlatHPBonus SSOT — the same rule levelup.ApplyFeat applies at
+// feat-acquisition time. Returns 0 when the features are absent or unparseable.
+// COV-17 S2.
+func featFlatHPBonus(features pqtype.NullRawMessage, totalLevel int32) int32 {
+	if !features.Valid {
+		return 0
+	}
+	var feats []character.Feature
+	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
+		return 0
+	}
+	return character.FeatFlatHPBonus(feats, totalLevel)
 }
 
 // preservePersistedFeats carries forward ASI-applied feat features across a

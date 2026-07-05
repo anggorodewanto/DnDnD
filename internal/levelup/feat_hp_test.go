@@ -77,26 +77,6 @@ func TestConHPDelta(t *testing.T) {
 	}
 }
 
-func TestFeatMaxHPBonus(t *testing.T) {
-	tests := []struct {
-		name  string
-		feat  FeatInfo
-		level int32
-		want  int32
-	}{
-		{"tough scales with level", toughFeat(), 4, 8},
-		{"non-hp effect in list", alertFeat(), 4, 0},
-		{"no mechanical effect", FeatInfo{ID: "x", Name: "X"}, 4, 0},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := featMaxHPBonus(tc.feat, tc.level); got != tc.want {
-				t.Errorf("featMaxHPBonus() = %d, want %d", got, tc.want)
-			}
-		})
-	}
-}
-
 // seedFeatChar builds a level-4 fighter with the given HP and Constitution for
 // the ApplyFeat tests.
 func seedFeatChar(t *testing.T, store *mockCharacterStore, id uuid.UUID, hpMax, hpCurrent, con int32) {

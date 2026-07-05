@@ -969,7 +969,7 @@ pact-boon/invocation/expertise picks; add fighting-style + metamagic picks the s
 ## Tier 5 — Builder-rebuild drops persisted overlays (live state reset on edit)
 
 ### COV-17 — A builder edit silently wipes feats, feat-HP, and expended feature-uses
-**Status:** S1 + S3 DONE 2026-07-05 · S2 OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
+**Status:** ✅ COMPLETE 2026-07-05 (S1 + S2 + S3 all DONE) · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
 
 **Problem.** Any builder edit runs `UpdateCharacterRecord`
 (`builder_store_adapter.go:344`), which **rebuilds the character from a fresh derivation**
@@ -1026,18 +1026,30 @@ rebuild paths — no submission-schema or service-layer change needed. Preservat
   preserved like expended slots, NOT threaded through the submission), no reuse/efficiency/complexity
   hits. A generic `preserve*` extraction was judged premature until S2/S3 land.
 
-**Slice S2 — Re-add flat feat HP on rebuild (depends on S1; smaller).**
-- After feats are preserved, `HPMax` (`:370`) still misses Tough's +2/level. Re-add the flat feat
-  HP bonus computed from the preserved `Source:"feat"` features.
-- **Cross-package SSOT move (the right depth):** the flat-HP slug detection
-  (`hp_plus_2_per_level`) is today unexported in `levelup` (`featMaxHPBonus`, `feat_hp.go`). Lift a
-  shared `character.FeatFlatHPBonus(features, totalLevel)` into `internal/character` next to
-  `CalculateHP`, and call it from **both** `levelup.ApplyFeat` (replacing `featMaxHPBonus`) and the
-  portal rebuild. Generalizes the mechanism instead of duplicating the slug check.
-- **Acceptance.** A Tough-bearing character keeps `HPMax = derivation + 2×level` across a builder
-  edit; a non-Tough character is unchanged. HPCurrent still caps to the (now-higher) new max.
-- **Risk.** Touches shipped `levelup` Tough code — re-run its tests. Keep it a pure additive
-  helper; do not fold the CON-delta path (that already works via preserved scores).
+**Slice S2 — Re-add flat feat HP on rebuild. ✅ DONE 2026-07-05.**
+- Lifted the flat-HP rule into a cross-package SSOT: new `character.FeatFlatHPBonus(features
+  []character.Feature, totalLevel int32)` + exported `character.FeatFlatHPPerLevelSlug`
+  (`internal/character/feat_hp.go`, next to `CalculateHP`). Sums +2/level per feat feature whose
+  serialized `MechanicalEffect` carries the slug; empty/unparseable → 0.
+- `levelup.ApplyFeat` now calls `character.FeatFlatHPBonus([]character.Feature{feature}, char.Level)`
+  on the `character.Feature` it just built (its `MechanicalEffect` round-trips the slug via
+  `specializeFeatEffects`, which copies `effect_type` verbatim) — the old `featMaxHPBonus` +
+  `hpPerLevelEffectSlug` const deleted from `levelup/feat_hp.go`. Both writers now share ONE rule, so
+  they can no longer diverge on representation (that divergence was the original portal bug).
+- `portal.UpdateCharacterRecord` adds `featFlatHPBonus(existing.Features, c.level)` to the
+  feats-agnostic `c.hpMax` (thin `pqtype.NullRawMessage` unmarshal wrapper delegating to the SSOT);
+  `hpCurrent` caps to the re-added max. **CON-feat HP already survived** (preserved ability scores),
+  so only the flat bonus needed re-adding.
+- Test `…_PreservesFeatHP` (red first): Tough char (persisted `[{"effect_type":"hp_plus_2_per_level"}]`),
+  fresh derivation 30, level 4 → HPMax stays 38. Plus `character.TestFeatFlatHPBonus` unit table
+  (scales/sums/non-hp/empty/unparseable/none). Shipped Tough `ApplyFeat` integration tests unchanged +
+  green.
+- `/simplify` (4 agents): all CLEAN on all 4 axes — `internal/character` is the right SSOT home (no
+  cycle; both callers already import it), the `character.Feature` representation is the correct
+  unification (not coincidence), the two-fn split + portal adapter are justified, double-parse of
+  `existing.Features` is acceptable house style. One required fix applied: the stale `ApplyFeat`
+  comment claiming feat HP "is lost on a builder rebuild" (false after S1+S2) now points at the two
+  preserve paths.
 
 **Slice S3 — Preserve expended feature-uses on rebuild. ✅ DONE 2026-07-05.**
 - Shipped `preserveExpendedFeatureUses(existing, fresh)` — a line-for-line mirror of
@@ -1060,9 +1072,9 @@ rebuild paths — no submission-schema or service-layer change needed. Preservat
   faithfully mirrors whatever `InitFeatureUses` emits and does not worsen it. Flag separately if
   multiclass Channel Divinity ever matters.
 
-**Relationship.** All three share the one persist-time seam and the `preserveExpended*` mirror; a
-fresh agent can pick any slice independently. S1 (silent feat-wipe) and S3 (feature-use refill) are
-DONE. **S2 is the only remainder** — depends on S1 (needs the feats present to sum their HP).
+**Relationship.** All three shared the one persist-time seam and the `preserveExpended*` mirror.
+**All DONE 2026-07-05** — a builder edit no longer wipes ASI feats (S1), drops Tough's flat HP (S2),
+or refills expended feature-use pools (S3). COV-17 CLOSED.
 
 ---
 
@@ -1117,7 +1129,7 @@ make sqlc-check    # if you touched .sql queries
    RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
    Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
-6. ~~**COV-17 S1 + S3 (Tier 5) — builder-rebuild overlay preservation.**~~ **DONE 2026-07-05** —
-   ASI-applied feats (`preservePersistedFeats`) and expended feature-use pools
-   (`preserveExpendedFeatureUses`) now survive a builder edit. **Only S2 left** (Tough flat-feat-HP
-   re-add, depends on S1) — low severity; CON-feat HP already survives via preserved ability scores.
+6. ~~**COV-17 (Tier 5) — builder-rebuild overlay preservation.**~~ **COMPLETE 2026-07-05** —
+   all 3 slices shipped: ASI-applied feats (`preservePersistedFeats`, S1), Tough flat +2/level HP
+   (`character.FeatFlatHPBonus` SSOT re-added on rebuild, S2), and expended feature-use pools
+   (`preserveExpendedFeatureUses`, S3) now all survive a builder edit.
