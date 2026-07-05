@@ -16,6 +16,10 @@ import (
 const (
 	invocationFeatureSource = "invocation"
 	pactBoonFeatureSource   = "pact_boon"
+	// featFeatureSource tags a feature written by the level-up ASI-feat flow
+	// (levelup.ApplyFeat). The builder rebuild preserves these across an edit
+	// rather than regenerating them (they are not builder-form choices). COV-17 S1.
+	featFeatureSource = "feat"
 )
 
 // eldritchBlastSpellID mirrors combat's spell id for eldritch blast — the

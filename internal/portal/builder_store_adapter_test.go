@@ -1575,6 +1575,61 @@ func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesExpendedPactSlots(t 
 		"a character edit must not refill the warlock's expended pact slots")
 }
 
+func TestBuilderStoreAdapter_UpdateCharacterRecord_PreservesFeatFeatures(t *testing.T) {
+	charID := uuid.New()
+	existingFeatures, err := json.Marshal([]character.Feature{
+		{Name: "Second Wind", Source: "fighter", Level: 1},
+		{Name: "Durable", Source: "feat", Level: 4, MechanicalEffect: "hp_plus_2_per_level"},
+	})
+	require.NoError(t, err)
+	creator := &captureCharacterCreator{
+		getCharResult: refdata.Character{
+			ID:         charID,
+			CampaignID: uuid.New(),
+			HpCurrent:  20,
+			Features:   pqtype.NullRawMessage{RawMessage: existingFeatures, Valid: true},
+		},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	// A non-mechanical edit re-runs the fresh build; CollectFeatures regenerates only
+	// class/subclass/racial features, so the ASI-applied feat would otherwise vanish.
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Aria",
+		Race:          "Human",
+		Class:         "fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8},
+		HPMax:         30,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "fighter", Level: 4}},
+	}
+	require.NoError(t, adapter.UpdateCharacterRecord(context.Background(), charID.String(), params))
+
+	require.True(t, creator.capturedUpdate.Features.Valid)
+	var feats []character.Feature
+	require.NoError(t, json.Unmarshal(creator.capturedUpdate.Features.RawMessage, &feats))
+
+	// The ASI-applied feat survives the rebuild with its MechanicalEffect intact,
+	// and no feature name is duplicated (fresh build never emits feats → append-once).
+	counts := map[string]int{}
+	var durable *character.Feature
+	for i := range feats {
+		counts[feats[i].Name]++
+		if feats[i].Name == "Durable" {
+			durable = &feats[i]
+		}
+	}
+	require.NotNil(t, durable, "Source:feat feature must survive the builder rebuild")
+	assert.Equal(t, "feat", durable.Source)
+	assert.Equal(t, "hp_plus_2_per_level", durable.MechanicalEffect)
+	for name, n := range counts {
+		assert.Equal(t, 1, n, "feature %q duplicated across the rebuild", name)
+	}
+}
+
 func TestBuilderStoreAdapter_UpdateCharacterRecord_CapsHPToNewMax(t *testing.T) {
 	charID := uuid.New()
 	creator := &captureCharacterCreator{

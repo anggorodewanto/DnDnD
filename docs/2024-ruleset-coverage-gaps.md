@@ -969,7 +969,7 @@ pact-boon/invocation/expertise picks; add fighting-style + metamagic picks the s
 ## Tier 5 — Builder-rebuild drops persisted overlays (live state reset on edit)
 
 ### COV-17 — A builder edit silently wipes feats, feat-HP, and expended feature-uses
-**Status:** OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
+**Status:** S1 DONE 2026-07-05 · S2/S3 OPEN · **Severity:** high (S1) / low (S2) / medium (S3) · **Pkg:** `internal/portal` (+ `internal/character` for S2)
 
 **Problem.** Any builder edit runs `UpdateCharacterRecord`
 (`builder_store_adapter.go:344`), which **rebuilds the character from a fresh derivation**
@@ -1010,18 +1010,21 @@ rebuild paths — no submission-schema or service-layer change needed. Preservat
 
 ---
 
-**Slice S1 — Preserve `Source:"feat"` features (do first; this is the real severity).**
-- New `preservePersistedFeats(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage`:
-  unmarshal both, append every `existing` entry with `Source == "feat"` to the fresh list
-  (de-dup by `Name`), re-marshal. Call it at `builder_store_adapter.go:384`
-  (`Features: preservePersistedFeats(existing.Features, c.featuresMsg)`).
-- Idempotent: `CollectFeatures` never emits feats, so fresh has none → append-once per rebuild,
-  no accumulation. Carries each feat's full struct incl. `MechanicalEffect`, so combat riders
-  survive verbatim.
-- **Acceptance.** Seed a character with a `Source:"feat"` feature (e.g. Durable/Alert), run
-  `UpdateCharacterRecord` with a fresh submission, assert the feat entry survives AND no
-  class/racial feature is duplicated. Red test first (mirror `PreservesLiveState`).
-- **Scope:** 1 helper + 1 call site + 1 test, all in `internal/portal`. Self-contained.
+**Slice S1 — Preserve `Source:"feat"` features. ✅ DONE 2026-07-05.**
+- Shipped `preservePersistedFeats(existing, fresh)` (`builder_store_adapter.go`, next to the
+  `preserveExpended*` siblings): unmarshal existing, filter `Source == featFeatureSource`, append
+  each to the fresh list de-duped by `Name`, re-marshal. Early-returns `fresh` when existing is
+  absent / feat-less / unparseable, and when `fresh` is invalid it still carries the feats forward
+  onto a fresh list. Wired at the `Features:` field of the `UpdateCharacter` write.
+- Added `featFeatureSource = "feat"` const (`invocations.go`, beside `invocationFeatureSource` /
+  `pactBoonFeatureSource`) so the source tag is no longer a bare literal — `/simplify` house-style fix.
+- Idempotent: `CollectFeatures` never emits feats, so fresh has none → append-once per rebuild.
+  Carries each feat's full struct incl. `MechanicalEffect`, so combat riders survive verbatim.
+- Test `…_PreservesFeatFeatures` (red first): seeds a `Source:"feat"` Durable feature, runs
+  `UpdateCharacterRecord`, asserts the feat + its MechanicalEffect survive and no name is duplicated.
+- `/simplify` (4 agents): all CLEAN — persist seam is the right altitude (feats are levelup-owned,
+  preserved like expended slots, NOT threaded through the submission), no reuse/efficiency/complexity
+  hits. A generic `preserve*` extraction was judged premature until S2/S3 land.
 
 **Slice S2 — Re-add flat feat HP on rebuild (depends on S1; smaller).**
 - After feats are preserved, `HPMax` (`:370`) still misses Tough's +2/level. Re-add the flat feat
@@ -1105,6 +1108,6 @@ make sqlc-check    # if you touched .sql queries
    RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
    Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
-6. **COV-17 S1 (Tier 5) — feat-feature preservation on builder rebuild.** High value / bounded:
-   without it every ASI-applied feat (all COV-9 work) silently dies on a builder edit. Then S3
-   (feature-uses preservation) and S2 (flat-feat-HP re-add) as follow-ups.
+6. ~~**COV-17 S1 (Tier 5) — feat-feature preservation on builder rebuild.**~~ **DONE 2026-07-05** —
+   ASI-applied feats now survive a builder edit (`preservePersistedFeats`). Next: **S3**
+   (feature-uses preservation, independent) then **S2** (flat-feat-HP re-add, depends on S1).

@@ -381,7 +381,7 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		PactMagicSlots:   preserveExpendedPactSlots(existing.PactMagicSlots, c.pactMagicMsg),
 		HitDiceRemaining: c.hitDiceJSON,
 		FeatureUses:      c.featureUsesMsg,
-		Features:         c.featuresMsg,
+		Features:         preservePersistedFeats(existing.Features, c.featuresMsg),
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
 		Gold:             existing.Gold,
 		AttunementSlots:  existing.AttunementSlots,
@@ -420,6 +420,58 @@ func preserveExpendedSlots(existing, fresh pqtype.NullRawMessage) pqtype.NullRaw
 		newSlots[level] = ns
 	}
 	merged, err := json.Marshal(newSlots)
+	if err != nil {
+		return fresh
+	}
+	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// preservePersistedFeats carries forward ASI-applied feat features across a
+// builder rebuild. A rebuild regenerates Features from CollectFeatures, which
+// emits only class/subclass/racial features (derive_stats.go) — so every feature
+// the level-up ASI flow wrote with Source:"feat" (Durable, Tough, Alert, the
+// martial masters, …) would otherwise vanish, silently disabling its combat
+// riders. Each existing Source=="feat" feature is appended to the fresh list,
+// de-duped by name, preserving its full struct including MechanicalEffect. The
+// fresh build never emits feats, so this appends once per rebuild with no
+// accumulation. Falls back to the fresh value when existing is absent, has no
+// feats, or is unparseable. COV-17 S1.
+func preservePersistedFeats(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage {
+	if !existing.Valid {
+		return fresh
+	}
+	var oldFeatures []character.Feature
+	if err := json.Unmarshal(existing.RawMessage, &oldFeatures); err != nil {
+		return fresh
+	}
+	var feats []character.Feature
+	for _, f := range oldFeatures {
+		if f.Source == featFeatureSource {
+			feats = append(feats, f)
+		}
+	}
+	if len(feats) == 0 {
+		return fresh
+	}
+
+	var newFeatures []character.Feature
+	if fresh.Valid {
+		if err := json.Unmarshal(fresh.RawMessage, &newFeatures); err != nil {
+			return fresh
+		}
+	}
+	present := make(map[string]bool, len(newFeatures))
+	for _, f := range newFeatures {
+		present[f.Name] = true
+	}
+	for _, f := range feats {
+		if present[f.Name] {
+			continue
+		}
+		newFeatures = append(newFeatures, f)
+		present[f.Name] = true
+	}
+	merged, err := json.Marshal(newFeatures)
 	if err != nil {
 		return fresh
 	}
