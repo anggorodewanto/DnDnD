@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert slice DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives slices DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -536,6 +536,28 @@ modifier is built (the seeded-but-unwired Ranger "Natural Explorer" `advantage_i
 next candidate). DEFERRED: Alert's "can't be surprised" + "no advantage from unseen attackers"
 (needs surprise / attacker-visibility tracking); 2024 shape (bonus = proficiency bonus + init-swap).
 
+**Shipped (Sharpshooter passive-riders slice).** Sharpshooter's two **passive** riders are now
+combat-wired (the −5/+10 power-attack toggle already existed): a character with the feat makes
+ranged weapon attacks that **ignore half & three-quarters cover** and take **no long-range
+disadvantage**. A new `AttackInput.HasSharpshooter` (the always-on "has the feat" flag, distinct
+from the per-attack `Sharpshooter` −5/+10 toggle) is set in `populateAttackFES` via
+`featsHaveName(feats, "Sharpshooter")` (name-based, mirrors Savage Attacker / GWM — no extra
+`json.Unmarshal`). Long-range rider: a new `AdvantageInput.HasSharpshooter` guards the
+`IsInLongRange` disadvantage branch in `DetectAdvantage`, an exact mirror of the existing
+`HasCrossbowExpert` flag one line above. Cover rider: `ResolveAttack` zeroes half/¾ cover before
+`EffectiveAC` when `HasSharpshooter && !isMelee`; **full cover still blocks** (handled upstream by
+`resolveAttackCover`→`ErrTargetFullyCovered`, and `CoverFull.ACBonus()` is 0 here regardless), and
+`result.Cover` keeps the geometric value so the combat log stays truthful. Both riders are always-on
+for the feat-haver, independent of whether they take the −5/+10 that swing (RAW). No seed/data change.
+Tests: `sharpshooter_test.go` (DetectAdvantage long-range negated with/without feat; ResolveAttack
+half + ¾ cover ignored via `EffectiveAC`; melee-weapon cover NOT ignored). Coverage: gates met (combat
+91.5%). **Altitude (why call-site, not FES):** FES has no trigger/effect vocabulary to *remove* a
+disadvantage source or *ignore cover* — `EffectConditionalAdvantage` only appends reasons, and
+`EffectModifyAC`/`ProcessorResult.ACModifier` is never consumed in `ResolveAttack`. The two
+hand-placed guards sit at the one layer where cover→AC and adv/disadv resolve, mirroring
+`HasCrossbowExpert` and the Alert conclusion. DEFERRED: Crossbow-Expert-style bonus-action attack is a
+separate feat; 2024 Sharpshooter shape nuances.
+
 **Altitude note (why no new `EffectType`).** Savage Attacker is a *reroll transform* of the base
 weapon dice, which the declarative FES `Effect` model (Modifier / Dice / ReplaceValue) cannot
 express, and the one nominal transform lane (`EffectReplaceRoll`, backing Great Weapon Fighting)
@@ -549,7 +571,8 @@ feat (or a wired GWF) needs it.
   when the 2024 pass reaches feats (sibling of COV-12).
 - **Off-hand / GWM-bonus reroll already covered** — all three paths share the flag; no extra work.
 
-**Wired today:** GWM, Sharpshooter, Defensive Duelist, Crossbow Expert (partial),
+**Wired today:** GWM, **Sharpshooter (COV-9: −5/+10 toggle + passive ignore-half/¾-cover &
+no-long-range-disadvantage riders)**, Defensive Duelist, Crossbow Expert (partial),
 Tavern Brawler, Dual Wielder, **Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**.
 

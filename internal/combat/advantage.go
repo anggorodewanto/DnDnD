@@ -27,6 +27,9 @@ type AdvantageInput struct {
 	// HasCrossbowExpert indicates the attacker has the Crossbow Expert feat,
 	// which removes the hostile-near-attacker ranged disadvantage.
 	HasCrossbowExpert bool
+	// HasSharpshooter indicates the attacker has the Sharpshooter feat, which
+	// removes the long-range disadvantage on ranged weapon attacks.
+	HasSharpshooter bool
 	// TargetCombatantID is the ID of the combatant currently being attacked.
 	// SR-018: enables target-scoped condition checks (e.g. help_advantage).
 	TargetCombatantID string
@@ -115,8 +118,10 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 		disadvReasons = append(disadvReasons, "hostile within 5ft")
 	}
 
-	// Combat context: long range
-	if IsInLongRange(input.Weapon, input.DistanceFt) {
+	// Combat context: long range (Sharpshooter negates it for ranged weapons;
+	// IsInLongRange is already false for melee weapons, so the guard is a no-op
+	// for anything but a ranged attack).
+	if IsInLongRange(input.Weapon, input.DistanceFt) && !input.HasSharpshooter {
 		disadvReasons = append(disadvReasons, "long range")
 	}
 

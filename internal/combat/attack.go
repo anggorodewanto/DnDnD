@@ -410,7 +410,8 @@ type AttackInput struct {
 	HasCrossbowExpert   bool             // Character has Crossbow Expert feat
 	HasTavernBrawler    bool             // Character has Tavern Brawler feat
 	GWM                 bool             // Great Weapon Master: -5 hit, +10 damage (heavy melee)
-	Sharpshooter        bool             // Sharpshooter: -5 hit, +10 damage (ranged)
+	Sharpshooter        bool             // Sharpshooter: -5 hit, +10 damage (ranged) — per-attack toggle
+	HasSharpshooter     bool             // Character HAS the Sharpshooter feat (passive: ignore cover + no long-range disadvantage)
 	Reckless            bool             // Reckless Attack: advantage on melee STR attacks (Barbarian)
 	MonkLevel           int              // Monk level (0 = not a monk)
 	AttackerHidden      bool             // Attacker is hidden (not visible)
@@ -661,10 +662,19 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		return AttackResult{}, fmt.Errorf("out of range: %dft away (max %dft)", input.DistanceFt, maxR)
 	}
 
+	// Sharpshooter (COV-9): a ranged attacker with the feat ignores half and
+	// three-quarters cover. Full cover still blocks the shot — that is handled
+	// earlier at the service layer (resolveAttackCover → ErrTargetFullyCovered)
+	// and adds no AC here, so only Half/ThreeQuarters need zeroing.
+	cover := input.Cover
+	if input.HasSharpshooter && !isMelee && (cover == CoverHalf || cover == CoverThreeQuarters) {
+		cover = CoverNone
+	}
+
 	// Pre-roll reaction (e.g. Defensive Duelist) raises the target's AC against
 	// this one attack. Declared before the roll, so it folds straight into the
 	// single hit test — nothing is resolved retroactively.
-	effectiveAC := EffectiveAC(input.TargetAC, input.Cover) + input.ReactionACBonus
+	effectiveAC := EffectiveAC(input.TargetAC, cover) + input.ReactionACBonus
 
 	// Improvised weapons: no proficiency bonus (unless Tavern Brawler)
 	profBonus := input.ProfBonus
@@ -756,6 +766,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		AbilityUsed:         input.AbilityUsed,
 		TargetCombatantID:   input.TargetCombatantID,
 		HasCrossbowExpert:   input.HasCrossbowExpert,
+		HasSharpshooter:     input.HasSharpshooter,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -2517,6 +2528,14 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	// already-parsed `feats` slice (not a fresh json.Unmarshal) to avoid re-parsing
 	// char.Features on the attack hot path.
 	input.SavageAttacker = featsHaveName(feats, "Savage Attacker")
+
+	// COV-9 Sharpshooter (passive riders): a character with the feat makes ranged
+	// attacks that ignore half/three-quarters cover and suffer no long-range
+	// disadvantage. These are always on when the feat is present — unlike the
+	// -5/+10 power-attack toggle (cmd.Sharpshooter, set in Service.Attack).
+	// Name-based detection mirrors Savage Attacker / GWM: level-up feats land in
+	// the features JSON by name without a mechanical_effect slug.
+	input.HasSharpshooter = featsHaveName(feats, "Sharpshooter")
 
 	// Hex: when the target carries this attacker's source-tagged Hex marker,
 	// every hit adds 1d6 necrotic (5e Hex). Gating by the marker means only the
