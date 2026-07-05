@@ -457,20 +457,11 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 	// persisted store (HPMax/HPCurrent columns) separate from the CalculateHP
 	// derivation, and that derivation is not re-run on a feat pick — so the bonus
 	// is applied as an imperative delta. After the idempotency guard above, so a
-	// re-approve never double-bumps; nil SpellSlots/PactMagicSlots/Features let
-	// the adapter's pickNullable preserve the features written just above. Like
-	// the feat itself, this HP is lost on a builder rebuild (ASI feats are
-	// regenerated-and-dropped — see docs/2024-ruleset-coverage-gaps.md).
-	if bonus := featMaxHPBonus(feat, char.Level); bonus > 0 {
-		if err := s.charStore.UpdateCharacterStats(ctx, characterID, StatsUpdate{
-			Level:            int(char.Level),
-			HPMax:            int(char.HPMax) + int(bonus),
-			HPCurrent:        int(char.HPCurrent) + int(bonus),
-			ProficiencyBonus: int(char.ProficiencyBonus),
-			Classes:          char.Classes,
-		}); err != nil {
-			return fmt.Errorf("applying feat HP bonus: %w", err)
-		}
+	// re-approve never double-bumps. Like the feat itself, this HP is lost on a
+	// builder rebuild (ASI feats are regenerated-and-dropped — see
+	// docs/2024-ruleset-coverage-gaps.md).
+	if err := s.bumpPersistedHP(ctx, char, featMaxHPBonus(feat, char.Level)); err != nil {
+		return fmt.Errorf("applying feat HP bonus: %w", err)
 	}
 
 	s.publishForCharacter(ctx, characterID)
@@ -599,6 +590,7 @@ func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBo
 	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
 		return fmt.Errorf("parsing ability scores: %w", err)
 	}
+	oldScores := scores // value copy captured before the in-place bump
 
 	// Direct ability bonuses (e.g. {"con": 1})
 	for ability, val := range asiBonus {
@@ -624,9 +616,39 @@ func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBo
 	if err := s.recomputeAndPersistAC(ctx, char.ID, scores); err != nil {
 		slog.Error("levelup: AC recompute after feat ASI failed", "error", err, "character_id", char.ID)
 	}
+	// A CON-raising ASI (Durable, Resilient/Tavern Brawler on CON) lifts max HP by
+	// Δ CON modifier × character level; apply it as a delta so the damage gap and
+	// any Tough bonus already in the persisted max survive — a from-scratch
+	// CalculateHP knows about neither and would clobber both.
+	if err := s.bumpPersistedHP(ctx, char, conHPDelta(oldScores, scores, char.Level)); err != nil {
+		slog.Error("levelup: HP resync after feat ASI failed", "error", err, "character_id", char.ID)
+	}
 	s.publishForCharacter(ctx, char.ID)
 	s.notifyCardUpdate(ctx, char.ID)
 	return nil
+}
+
+// bumpPersistedHP adds delta to both persisted HP stores (max + current) and
+// mirrors it onto the in-memory char snapshot so successive bumps within one
+// ApplyFeat call compose rather than clobber. A delta of 0 is a no-op. The nil
+// SpellSlots/PactMagicSlots/Features leave the adapter's pickNullable to preserve
+// live resources untouched. Shared by the flat-HP feat bonus (Tough) and the
+// CON-changing-feat resync — always a DELTA write, never a recompute-from-
+// scratch, so it never drops the damage gap or a prior flat feat bonus
+// (CalculateHP knows neither). COV-9.
+func (s *Service) bumpPersistedHP(ctx context.Context, char *StoredCharacter, delta int32) error {
+	if delta == 0 {
+		return nil
+	}
+	char.HPMax += delta
+	char.HPCurrent += delta
+	return s.charStore.UpdateCharacterStats(ctx, char.ID, StatsUpdate{
+		Level:            int(char.Level),
+		HPMax:            int(char.HPMax),
+		HPCurrent:        int(char.HPCurrent),
+		ProficiencyBonus: int(char.ProficiencyBonus),
+		Classes:          char.Classes,
+	})
 }
 
 // recomputeAndPersistAC recalculates and stores the character's base AC after an

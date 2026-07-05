@@ -32,6 +32,51 @@ func alertFeat() FeatInfo {
 	}
 }
 
+// durableFeat carries a fixed +1 CON ASI bonus (like the seeded Durable feat) —
+// the CON-changing feat family that must resync max HP.
+func durableFeat() FeatInfo {
+	return FeatInfo{
+		ID:       "durable",
+		Name:     "Durable",
+		ASIBonus: map[string]any{"con": 1},
+	}
+}
+
+// strFeat carries a +1 STR ASI bonus — an ASI feat that must NOT touch HP,
+// proving the HP resync is gated on the Constitution modifier, not "any ASI".
+func strFeat() FeatInfo {
+	return FeatInfo{
+		ID:       "str-feat",
+		Name:     "Brawny",
+		ASIBonus: map[string]any{"str": 1},
+	}
+}
+
+// TestConHPDelta — a CON-changing feat adds (Δ CON modifier × total level) hit
+// points; an odd bump that leaves the modifier unchanged adds nothing.
+func TestConHPDelta(t *testing.T) {
+	tests := []struct {
+		name           string
+		oldCON, newCON int
+		level          int32
+		want           int32
+	}{
+		{"mod rises 1→2 at level 4", 13, 14, 4, 4},
+		{"odd bump keeps modifier", 14, 15, 4, 0},
+		{"con unchanged", 14, 14, 4, 0},
+		{"mod rises at level 1", 13, 14, 1, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			old := character.AbilityScores{CON: tc.oldCON}
+			neu := character.AbilityScores{CON: tc.newCON}
+			if got := conHPDelta(old, neu, tc.level); got != tc.want {
+				t.Errorf("conHPDelta() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFeatMaxHPBonus(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -52,8 +97,9 @@ func TestFeatMaxHPBonus(t *testing.T) {
 	}
 }
 
-// seedFeatChar builds a level-4 fighter with the given HP for the ApplyFeat tests.
-func seedFeatChar(t *testing.T, store *mockCharacterStore, id uuid.UUID, hpMax, hpCurrent int32) {
+// seedFeatChar builds a level-4 fighter with the given HP and Constitution for
+// the ApplyFeat tests.
+func seedFeatChar(t *testing.T, store *mockCharacterStore, id uuid.UUID, hpMax, hpCurrent, con int32) {
 	t.Helper()
 	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 4}})
 	store.chars[id] = &StoredCharacter{
@@ -65,7 +111,7 @@ func seedFeatChar(t *testing.T, store *mockCharacterStore, id uuid.UUID, hpMax, 
 		HPCurrent:        hpCurrent,
 		ProficiencyBonus: 2,
 		Classes:          classesJSON,
-		AbilityScores:    mustJSON(t, character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}),
+		AbilityScores:    mustJSON(t, character.AbilityScores{STR: 16, DEX: 14, CON: int(con), INT: 10, WIS: 12, CHA: 8}),
 		Features:         mustJSON(t, []character.Feature{{Name: "Second Wind", Source: "fighter", Level: 1}}),
 	}
 }
@@ -76,7 +122,7 @@ func seedFeatChar(t *testing.T, store *mockCharacterStore, id uuid.UUID, hpMax, 
 func TestService_ApplyFeat_Tough_RaisesMaxAndCurrentHP(t *testing.T) {
 	charID := uuid.New()
 	store := newMockCharacterStore()
-	seedFeatChar(t, store, charID, 30, 20) // level 4 → +8; 10 damage taken
+	seedFeatChar(t, store, charID, 30, 20, 14) // level 4 → +8; 10 damage taken
 
 	svc := NewService(store, newMockClassStore(), &mockNotifier{})
 	if err := svc.ApplyFeat(context.Background(), charID, toughFeat()); err != nil {
@@ -98,7 +144,7 @@ func TestService_ApplyFeat_Tough_RaisesMaxAndCurrentHP(t *testing.T) {
 func TestService_ApplyFeat_Tough_Idempotent(t *testing.T) {
 	charID := uuid.New()
 	store := newMockCharacterStore()
-	seedFeatChar(t, store, charID, 30, 30)
+	seedFeatChar(t, store, charID, 30, 30, 14)
 
 	svc := NewService(store, newMockClassStore(), &mockNotifier{})
 	for i := 0; i < 2; i++ {
@@ -116,7 +162,7 @@ func TestService_ApplyFeat_Tough_Idempotent(t *testing.T) {
 func TestService_ApplyFeat_NonHPFeat_LeavesHPUnchanged(t *testing.T) {
 	charID := uuid.New()
 	store := newMockCharacterStore()
-	seedFeatChar(t, store, charID, 30, 30)
+	seedFeatChar(t, store, charID, 30, 30, 14)
 
 	svc := NewService(store, newMockClassStore(), &mockNotifier{})
 	if err := svc.ApplyFeat(context.Background(), charID, alertFeat()); err != nil {
@@ -125,5 +171,62 @@ func TestService_ApplyFeat_NonHPFeat_LeavesHPUnchanged(t *testing.T) {
 
 	if got := store.chars[charID]; got.HPMax != 30 || got.HPCurrent != 30 {
 		t.Errorf("HP = %d/%d, want 30/30 (non-HP feat)", got.HPCurrent, got.HPMax)
+	}
+}
+
+// A CON-raising feat (Durable) that lifts the modifier grants +1 HP per level on
+// BOTH stores. Seeded damaged (30/20 at CON 13, mod +1) so the +4 lands and the
+// 10-point damage gap survives (24 ≠ 34); the new CON is persisted.
+func TestService_ApplyFeat_Durable_RaisesMaxAndCurrentHP(t *testing.T) {
+	charID := uuid.New()
+	store := newMockCharacterStore()
+	seedFeatChar(t, store, charID, 30, 20, 13) // CON 13 (mod +1); 10 damage taken
+
+	svc := NewService(store, newMockClassStore(), &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, durableFeat()); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	got := store.chars[charID]
+	if got.HPMax != 34 || got.HPCurrent != 24 {
+		t.Errorf("HP = %d/%d, want 24/34 (both +4, gap preserved)", got.HPCurrent, got.HPMax)
+	}
+	var scores character.AbilityScores
+	json.Unmarshal(got.AbilityScores, &scores)
+	if scores.CON != 14 {
+		t.Errorf("CON = %d, want 14", scores.CON)
+	}
+}
+
+// A CON bump that does NOT cross a modifier boundary (14→15, mod stays +2) grants
+// no HP — the resync keys off the modifier delta, not the raw score.
+func TestService_ApplyFeat_ConFeat_OddBump_LeavesHPUnchanged(t *testing.T) {
+	charID := uuid.New()
+	store := newMockCharacterStore()
+	seedFeatChar(t, store, charID, 30, 30, 14) // CON 14 (mod +2)
+
+	svc := NewService(store, newMockClassStore(), &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, durableFeat()); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	if got := store.chars[charID]; got.HPMax != 30 || got.HPCurrent != 30 {
+		t.Errorf("HP = %d/%d, want 30/30 (odd CON bump, no modifier change)", got.HPCurrent, got.HPMax)
+	}
+}
+
+// An ASI feat that raises a non-CON ability never touches HP.
+func TestService_ApplyFeat_NonConASIFeat_LeavesHPUnchanged(t *testing.T) {
+	charID := uuid.New()
+	store := newMockCharacterStore()
+	seedFeatChar(t, store, charID, 30, 30, 13) // odd CON, but a STR feat won't touch it
+
+	svc := NewService(store, newMockClassStore(), &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, strFeat()); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	if got := store.chars[charID]; got.HPMax != 30 || got.HPCurrent != 30 {
+		t.Errorf("HP = %d/%d, want 30/30 (non-CON ASI feat)", got.HPCurrent, got.HPMax)
 	}
 }

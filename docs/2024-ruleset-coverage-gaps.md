@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield + Shield-Master-shield-AC-save slices DONE 2026-07-05, Shield Master COMPLETE; Tough +2-HP/level slice DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord` + `internal/levelup`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield + Shield-Master-shield-AC-save slices DONE 2026-07-05, Shield Master COMPLETE; Tough +2-HP/level slice DONE 2026-07-05; CON-feat→HP resync slice DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord` + `internal/levelup`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -746,17 +746,27 @@ re-run on a feat pick**, so a feat-aware derivation still wouldn't fire on acqui
 `feats` through `CalculateHP` + its 4 callers would add surface without being the path that grants the
 HP. A local delta at the mutation seam is the right depth.
 
+**Shipped (CON-feat→HP resync slice, `internal/levelup`).** `applyFeatASI` bumps CON for a
+CON-raising feat (Durable / Resilient / Tavern Brawler chosen on CON) and calls `recomputeAndPersistAC`,
+but **never resynced HP** — so max HP stayed flat even though `CalculateHP` uses `conMod × level`. Now
+fixed: a new pure `conHPDelta(oldScores, newScores, totalLevel)` (`feat_hp.go`) returns
+`(Δ CON modifier) × totalLevel` — mirroring `CalculateHP`'s CON term — and `applyFeatASI` applies it via
+the shared `bumpPersistedHP` helper right after the AC recompute. Detection is by the **CON-modifier
+delta**, not feat name: any current-or-future feat that lifts CON across an even boundary earns the HP,
+an odd bump that leaves the modifier unchanged (or any non-CON ASI) yields delta 0 and writes nothing.
+The `/simplify` pass then **unified the two disjoint feat→HP writers** (Tough's flat block + this CON
+resync) onto `bumpPersistedHP(ctx, char, delta)`, which (a) DRYs the nil-JSONB `pickNullable`-preservation
+invariant that was duplicated, and (b) **mirrors the delta onto the in-memory `char` snapshot** so the
+two writers *compose* rather than clobber — closing the stale-snapshot footgun should a future feat ever
+be both flat-HP **and** CON-ASI. Delta-onto-persisted (never recompute-from-scratch) is deliberate: a
+from-scratch `CalculateHP` would drop both the damage gap (`HPCurrent`) and any Tough flat bonus already
+baked into `HPMax` (the derivation knows neither). Tests: `feat_hp_test.go` (`conHPDelta` table:
+mod-rises / odd-bump-no-change / unchanged / level-scaling; `ApplyFeat` Durable raises max+current with
+the gap preserved and persists the new CON; odd CON bump leaves HP flat; non-CON ASI feat leaves HP flat).
+Coverage: gates met (levelup 89.2%). No seed/data change.
+
 **Deferred follow-ups (new COV items when picked up):**
-- **General feat→HP reconciler.** `applyFeatASI` recomputes AC but **not HP**, so a CON-boosting feat
-  (Durable/Resilient → +1 CON) never raises max HP even though `CalculateHP` uses `conMod × level`.
-  Tough's bespoke block is a second, disjoint feat→HP write. The right seam is a **delta-based**
-  `recomputeAndPersistHP` (old-derivation vs new-derivation ΔHPMax applied to the persisted store) that
-  Tough's flat +2/level folds into. A naïve mirror of `recomputeAndPersistAC` (recompute-from-scratch)
-  would **regress** — HP has two stores + live-resource semantics (HPCurrent carries damage; HPMax is
-  bumped by combat / level-up / DM overrides), the exact "builder edit resets live resources" hazard.
-  Bigger + riskier than the AC mirror → tracked, not inline. (The two paths are disjoint today — Tough
-  has no ASIBonus, Durable/Resilient no HP effect — so no double-apply hazard now.)
-- **Builder-rebuild loss.** Like the feat itself, Tough's HP does **not** survive a portal builder edit:
+- **Builder-rebuild loss.** Like the feat itself, Tough's HP (and a CON-feat's HP) does **not** survive a portal builder edit:
   `CollectFeatures` regenerates only class/subclass/racial features, dropping ASI-applied feats (affects
   ALL feats, pre-existing). Needs an ASI-feat preservation merge (sibling of the spell-slot preserve at
   `builder_store_adapter.go`), then a HP re-add.
@@ -771,7 +781,8 @@ hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
 **Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**,
 **Shield Master (COV-9 COMPLETE — `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion + `shieldMasterDexSaveBonus` +shield-AC-to-single-target-DEX-saves rider)**,
-**Tough (COV-9, +2 HP/level via `ApplyFeat`; first character-derivation feat)**.
+**Tough (COV-9, +2 HP/level via `ApplyFeat`; first character-derivation feat)**,
+**CON→HP resync (COV-9, `conHPDelta`/`bumpPersistedHP` — Durable / Resilient / Tavern Brawler on CON now raise max HP on pick)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
