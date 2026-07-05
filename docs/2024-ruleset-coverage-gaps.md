@@ -495,7 +495,7 @@ item; split if picked up separately.
 ## Tier 3 — Feats (only 6 of 41 wired)
 
 ### COV-9 — Unwired feats (description-only)
-**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield + Shield-Master-shield-AC-save slices DONE 2026-07-05, Shield Master COMPLETE) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord`
+**Status:** IN PROGRESS (Savage Attacker slice DONE 2026-07-04; Alert + Sharpshooter-passives + Polearm-Master-butt-strike + Crossbow-Expert-bonus-attack + Shield-Master-bonus-shove + Shield-Master-Interpose-Shield + Shield-Master-shield-AC-save slices DONE 2026-07-05, Shield Master COMPLETE; Tough +2-HP/level slice DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` + `internal/refdata` + `internal/discord` + `internal/levelup`
 
 **Shipped (Savage Attacker slice).** Savage Attacker is combat-wired: a character with the
 feat rerolls a **melee weapon's damage dice once per turn and keeps the higher total**
@@ -721,13 +721,57 @@ feat (or a wired GWF) needs it.
   when the 2024 pass reaches feats (sibling of COV-12).
 - **Off-hand / GWM-bonus reroll already covered** — all three paths share the flag; no extra work.
 
+**Shipped (Tough slice — first character-derivation feat, `internal/levelup`).** Tough raises a
+character's **hit-point maximum by 2 per character level** (and grants those HP, so current HP rises
+with max) the instant the feat is gained. New `levelup/feat_hp.go`: `featMaxHPBonus(feat, totalLevel)`
+returns `2*totalLevel` for a feat carrying the seeded mechanical-effect slug `hp_plus_2_per_level`
+(Tough), 0 otherwise — **slug detection, not name** (mirrors the feature-effect engine's `effect_type`
+dispatch; any future feat with the same slug earns it free). Wired into `Service.ApplyFeat` (the
+**feat-acquisition seam** — where an ASI-chosen feat is committed to the character's Features), right
+after the feature write and **after the idempotency guard**, so a re-approve never double-bumps. The
+bump is an **imperative delta** on the persisted `HPMax`/`HPCurrent` columns via the existing
+`UpdateCharacterStats` (nil `SpellSlots`/`PactMagicSlots`/`Features` → the adapter's `pickNullable`
+preserves the just-written features); `char.Level/ProficiencyBonus/Classes` are re-sent unchanged.
+Tests: `feat_hp_test.go` (`featMaxHPBonus` scales-with-level / non-hp-effect / no-effect; `ApplyFeat`
+raises max+current with the gap preserved on a damaged char; idempotent double-apply bumps once;
+non-HP feat leaves HP untouched) + one line making the levelup mock faithful (`UpdateCharacterStats`
+now writes `HPCurrent`). Coverage: gates met (levelup 89.2%). No seed/data change.
+
+**Altitude (why `ApplyFeat`, not `CalculateHP`).** `character.CalculateHP` is the "morally correct"
+home (Tough is a pure function of level), but three facts block it: (1) the derivation is deliberately
+feats-agnostic and the fresh-build path computes HP **before** features exist; (2) there is **no
+general feat picker** — the ASI-feat flow into `ApplyFeat` is the only live acquisition path; (3)
+decisive — HP lives in a **persisted store separate from the derivation**, and `CalculateHP` is **not
+re-run on a feat pick**, so a feat-aware derivation still wouldn't fire on acquisition. Threading
+`feats` through `CalculateHP` + its 4 callers would add surface without being the path that grants the
+HP. A local delta at the mutation seam is the right depth.
+
+**Deferred follow-ups (new COV items when picked up):**
+- **General feat→HP reconciler.** `applyFeatASI` recomputes AC but **not HP**, so a CON-boosting feat
+  (Durable/Resilient → +1 CON) never raises max HP even though `CalculateHP` uses `conMod × level`.
+  Tough's bespoke block is a second, disjoint feat→HP write. The right seam is a **delta-based**
+  `recomputeAndPersistHP` (old-derivation vs new-derivation ΔHPMax applied to the persisted store) that
+  Tough's flat +2/level folds into. A naïve mirror of `recomputeAndPersistAC` (recompute-from-scratch)
+  would **regress** — HP has two stores + live-resource semantics (HPCurrent carries damage; HPMax is
+  bumped by combat / level-up / DM overrides), the exact "builder edit resets live resources" hazard.
+  Bigger + riskier than the AC mirror → tracked, not inline. (The two paths are disjoint today — Tough
+  has no ASIBonus, Durable/Resilient no HP effect — so no double-apply hazard now.)
+- **Builder-rebuild loss.** Like the feat itself, Tough's HP does **not** survive a portal builder edit:
+  `CollectFeatures` regenerates only class/subclass/racial features, dropping ASI-applied feats (affects
+  ALL feats, pre-existing). Needs an ASI-feat preservation merge (sibling of the spell-slot preserve at
+  `builder_store_adapter.go`), then a HP re-add.
+- **Parameterize the magnitude.** The `+2` is hardcoded in Go while the slug encodes only the type; the
+  seed precedent (`bonus_initiative` carries `"value":"5"`) shows the pattern — re-seed as
+  `effect_type:"hp_per_level"` + `value:"2"` and parse it, generalizing to any "HP per level" feat.
+
 **Wired today:** GWM, **Sharpshooter (COV-9: −5/+10 toggle + passive ignore-half/¾-cover &
 no-long-range-disadvantage riders)**, Defensive Duelist,
 **Crossbow Expert (COV-9: loading-ignore + no-melee-disadvantage passives + `/bonus crossbow`
 hand-crossbow bonus attack)**, Tavern Brawler, Dual Wielder,
 **Savage Attacker (COV-9, once/turn melee damage reroll)**,
 **Alert (COV-9, +5 initiative)**, **Polearm Master (COV-9, `/bonus polearm` butt-strike; OA half deferred)**,
-**Shield Master (COV-9 COMPLETE — `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion + `shieldMasterDexSaveBonus` +shield-AC-to-single-target-DEX-saves rider)**.
+**Shield Master (COV-9 COMPLETE — `/bonus shield` bonus-action shove + `ApplyInterposeShield` DEX-save damage evasion + `shieldMasterDexSaveBonus` +shield-AC-to-single-target-DEX-saves rider)**,
+**Tough (COV-9, +2 HP/level via `ApplyFeat`; first character-derivation feat)**.
 
 **Description-only, no combat effect** (in `seed_feats.go`, matched by neither name nor
 slug in combat):
@@ -740,7 +784,8 @@ slug in combat):
 | ~~Savage Attacker~~ **DONE 2026-07-04** | reroll melee weapon damage once/turn, keep higher | `savage_attacker.go` — `rollWeaponDamageSavage` at the `resolveWeaponDamage` call site + once/turn key on `OncePerTurnEffectsFired` |
 | ~~Alert~~ **DONE 2026-07-05** | +5 initiative (2014) | `alert.go` — `alertInitiativeBonus` at the `RollInitiative` roll site (`getInitiativeModifiers`); +5 in the roll total, DexMod tie-break kept pure |
 | War Caster | advantage on concentration saves; cast as OA | concentration save only auto-rolls on turn timeout (`timer_resolution.go:247`, bare `Roll("1d20")`) — bypasses advantage-aware `save.Service`; NOT a clean rider (needs a player-driven concentration roll first) |
-| Charger / Mobile / Lucky / Mage Slayer / Heavy Armor Master / Tough | movement / reroll / damage-reduction / max-HP riders | various — scope each; HAM needs a magical/non-magical damage flag (absent from `ApplyDamageInput`); Tough threads feats into `CalculateHP` (×4 callers + levelup delta) |
+| Charger / Mobile / Lucky / Mage Slayer / Heavy Armor Master | movement / reroll / damage-reduction riders | various — scope each; HAM needs a magical/non-magical damage flag (absent from `ApplyDamageInput`) |
+| ~~Tough~~ **DONE 2026-07-05** | +2 max HP per level | `levelup/feat_hp.go` — `featMaxHPBonus` (slug `hp_plus_2_per_level`) applied as an HPMax/HPCurrent delta in `Service.ApplyFeat` (the feat-acquisition seam), NOT threaded into `CalculateHP` (persisted HP store ≠ derivation; see Shipped block) |
 
 **Also:** ~~Crossbow Expert's **bonus-action hand-crossbow attack** is not wired~~ **DONE
 2026-07-05** (`/bonus crossbow`, `crossbow_expert.go`; full-tier GWM template + shared ammo helper).

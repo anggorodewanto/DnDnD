@@ -401,7 +401,8 @@ func (s *Service) DenyASI(ctx context.Context, characterID uuid.UUID, reason str
 	return nil
 }
 
-// ApplyFeat adds a feat to a character's features and applies any ASI bonuses.
+// ApplyFeat adds a feat to a character's features and applies its riders: any
+// ASI bonuses, proficiency choices, and hit-point maximum bonus (Tough).
 func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat FeatInfo) error {
 	if err := validateRequiredFeatChoices(feat); err != nil {
 		return err
@@ -451,6 +452,27 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 	if err := s.charStore.UpdateFeatures(ctx, characterID, featuresJSON); err != nil {
 		return fmt.Errorf("updating features: %w", err)
 	}
+
+	// COV-9 Tough: bump max + current HP here, the feat-acquisition seam. HP is a
+	// persisted store (HPMax/HPCurrent columns) separate from the CalculateHP
+	// derivation, and that derivation is not re-run on a feat pick — so the bonus
+	// is applied as an imperative delta. After the idempotency guard above, so a
+	// re-approve never double-bumps; nil SpellSlots/PactMagicSlots/Features let
+	// the adapter's pickNullable preserve the features written just above. Like
+	// the feat itself, this HP is lost on a builder rebuild (ASI feats are
+	// regenerated-and-dropped — see docs/2024-ruleset-coverage-gaps.md).
+	if bonus := featMaxHPBonus(feat, char.Level); bonus > 0 {
+		if err := s.charStore.UpdateCharacterStats(ctx, characterID, StatsUpdate{
+			Level:            int(char.Level),
+			HPMax:            int(char.HPMax) + int(bonus),
+			HPCurrent:        int(char.HPCurrent) + int(bonus),
+			ProficiencyBonus: int(char.ProficiencyBonus),
+			Classes:          char.Classes,
+		}); err != nil {
+			return fmt.Errorf("applying feat HP bonus: %w", err)
+		}
+	}
+
 	s.publishForCharacter(ctx, characterID)
 	s.notifyCardUpdate(ctx, characterID)
 

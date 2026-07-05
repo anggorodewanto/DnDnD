@@ -43,6 +43,7 @@ func (m *mockCharacterStore) UpdateCharacterStats(ctx context.Context, id uuid.U
 	}
 	c.Level = int32(update.Level)
 	c.HPMax = int32(update.HPMax)
+	c.HPCurrent = int32(update.HPCurrent)
 	c.ProficiencyBonus = int32(update.ProficiencyBonus)
 	c.Classes = update.Classes
 	if len(update.Features) > 0 {
