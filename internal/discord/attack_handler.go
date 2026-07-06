@@ -189,6 +189,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 	sharpshooter := optionBool(interaction, "sharpshooter")
 	reckless := optionBool(interaction, "reckless")
 	tactical := optionString(interaction, "tactical")
+	cunning := optionString(interaction, "cunning")
 	twoHanded := optionBool(interaction, "twohanded")
 	offhand := optionBool(interaction, "offhand")
 	thrown := optionBool(interaction, "thrown")
@@ -263,6 +264,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 			Sharpshooter:    sharpshooter,
 			Reckless:        reckless,
 			TacticalMastery: tactical,
+			CunningStrike:   cunning,
 			TwoHanded:       twoHanded,
 			Thrown:          thrown,
 			IsImprovised:    improvised,

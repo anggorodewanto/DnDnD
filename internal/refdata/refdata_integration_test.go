@@ -316,6 +316,46 @@ func TestIntegration_SeedRogueUncannyDodgeFeature(t *testing.T) {
 	}
 }
 
+// TestIntegration_SeedRogueCunningStrikeFeature locks the COV-8/COV-10 seed→present
+// link: the seeded Rogue must carry the `cunning_strike` mechanical_effect at level
+// 5 so the level-gated derivation grants the feature and the combat gate
+// (hasFeatureEffect) can enable /attack cunning:trip. A seed reshuffle that drops
+// this key would silently make Cunning Strike unusable.
+func TestIntegration_SeedRogueCunningStrikeFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	rogue, err := refdata.New(db).GetClass(ctx, "rogue")
+	if err != nil {
+		t.Fatalf("GetClass(rogue) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(rogue.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["5"] {
+		if f.MechanicalEffect == "cunning_strike" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Rogue L5 must seed the `cunning_strike` mechanical_effect; got %+v", byLevel["5"])
+	}
+}
+
 // TestIntegration_SeedFighterTacticalMasterFeature locks the COV-10/COV-8
 // seed→present link: the seeded Fighter must carry the `tactical_master`
 // mechanical_effect at level 9 so the level-gated derivation grants the feature,

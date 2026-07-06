@@ -472,13 +472,13 @@ Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of 
 ---
 
 ### COV-8 — Cunning Strike / Brutal Strike / Tactical Master / Steady Aim
-**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
+**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06; Cunning Strike **Trip** DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
 
 Four 2024 martial riders that each sit on already-wired machinery. Each is its own small
 item; split if picked up separately.
 
 - **Cunning Strike (Rogue L5):** spend sneak-attack dice for a rider (poison/trip/withdraw).
-  Rides the once/turn `SneakAttackFeature` (`feature_integration.go:89`).
+  Rides the once/turn `SneakAttackFeature` (`feature_integration.go:89`). **Trip DONE 2026-07-06** — see the Shipped block below; Poison + Withdraw deferred.
 - **Brutal Strike (Barb L9):** forgo advantage → on-hit extra damage + effect. Mirrors the
   GWM on-hit rider (`GreatWeaponMasterFeature` `feature_integration.go:317`) and the mastery
   on-hit pipeline (`mastery.go`).
@@ -551,13 +551,60 @@ per-turn movement-budget gate exists to enforce them (the same infra gap that de
 Polearm-OA); disclosed in the combat log, code comment, seed comment, catalog summary, and help
 text so the table honors it. Coverage gates met (combat 91.37%, discord 86.22%, refdata 97.9%).
 
-**Blocker for the remaining two (Cunning L5 / Brutal L9):** the level's feature must exist in seed
-data — see COV-10. Tactical Master (Fighter L9) is now seeded + wired; Cunning L5 / Brutal L9 still
-need their higher-level seed key added alongside the rider (each a two-part slice — seed + rider).
-Both riders are also more fragile than Tactical Master was: Cunning Strike needs new
-sneak-attack-dice-reduction plumbing + per-rider save resolvers + the withdraw/OA movement gap;
-Brutal Strike needs a "forgo the Reckless advantage" suppression in the shared `DetectAdvantage`
-(two sites) plus 15ft-push / −15-speed riders that don't reuse the hardcoded 10ft/−10 mastery values.
+**Shipped (Cunning Strike — Trip effect, first of the effects).** Wired as `/attack cunning:trip`: a
+Rogue-5 who deals Sneak Attack damage may forgo **one** Sneak Attack die to force the target to make a
+**Dexterity save (DC 8 + prof + DEX) or fall Prone**. Two seams: (1) the **die is forgone** in
+`populateAttackFES` (new `cunning_strike.go` `reduceSneakAttackDice`/`reduceDiceCount`), which decrements
+the Sneak Attack FES effect's dice **string** `"Nd6"→"(N-1)d6"` in place — string-rewrite because the FES
+`Effect.Dice` has no structured count today (altitude: correct localized depth; the post-build in-place
+mutation is the right placement — threading a forgo-count into the generic `SneakAttackFeature`/`BuildFeatureDefinitions`
+would pollute a multi-feature constructor; a structured `Effect.DiceCount` is the future generalize-for-free
+move when a 2nd dice-cost effect lands). Gated on the `cunning_strike` **slug** (`hasFeatureEffect`,
+mirroring Tactical Master) so a non-rogue's `/attack cunning` is inert and the die is never touched. (2)
+The **rider resolves synchronously post-hit** in `Service.Attack` (`applyCunningStrikeTrip`), a direct
+mirror of the Topple mastery's `applyToppleSave` — a single-target resolve-now save-or-Prone, NOT the
+async multi-target `PendingSave` queue. Eligibility is baked into `input.CunningStrike` (set only behind
+the feature gate) so the pure `ResolveAttack` treats it as authoritative (same contract as `PactBladeCHA`);
+the DEX-save DC is precomputed there (where prof+DEX are in scope, hardcoding `Scores.Dex` — RAW-correct,
+not Topple's `effectiveAbilityMod`) and carried on the result as `CunningStrikeTripDC` (a non-zero DC IS
+the "trip fired" gate — no separate bool, mirroring `MasteryToppleSaveDC`), consumed by `applyCunningStrikeTrip`
+which rolls the save and sets `CunningStrikeTripSaved`. `FormatAttackLog` surfaces the outcome (saved vs
+knocked Prone) as a 🦵 line (Topple applies its Prone silently; this does better). "Only when Sneak Attack
+dealt damage" is gated by `sneakAttackDealt` (name-scan of `OncePerTurnEffectNames`, since the
+`extra_damage_dice` type is shared with Hex/Hunter's Mark). Seed (COV-10): Rogue `features_by_level["5"]`
+now carries `cunning_strike` beside `uncanny_dodge` — within-range map add, guarded by
+`TestIntegration_SeedRogueCunningStrikeFeature`. Discord: `/attack cunning` String option (trip Choice) +
+`optionString` parse + `CunningStrike` on `AttackCommand` (mirrors the Tactical Master threading exactly);
+NOT documented in the `helpAttack` string (adding a line pushed it past Discord's 2000-char cap and split
+the tail — same reason `tactical` isn't there either; the slash-command Choice description is the surface).
+Tests: `cunning_strike_test.go` (pure `reduceDiceCount`/`reduceSneakAttackDice`/`sneakAttackDealt`/
+`recordCunningStrikeTrip`; 3 `Service.Attack` end-to-end — failed-save→Prone with SA 3d6→2d6 (18 dmg),
+made-save→no-Prone, no-feature→full 3d6 (23 dmg)/no-trip; `FormatAttackLog` both outcomes) +
+`attack_handler_test.go` option threading + the seed guard. `/simplify`: 4 agents — reuse/simplification/
+efficiency clean of blockers, altitude affirmed 4/5 seams (dice-string mutation placement, mastery-mirror,
+input-baked eligibility, DC-on-result all right depth; the flat Trip-named result fields are honest bespoke,
+retire for a generic `CunningStrikeRider` struct when effect #2 arrives). **Applied 2 fixes:** replaced the
+hand-rolled NdX byte-scanner in `reduceDiceCount` with `strings.Cut` (all 3 agents flagged it; chose the
+behavior-preserving split over `parseDiceExpr`/`dice.ParseExpression`, whose error-semantics would drift the
+malformed-passthrough cases); dropped the redundant `CunningStrikeTrip` bool in favor of the
+`CunningStrikeTripDC > 0` gate. **Skipped:** extract a shared `saveOrProne` with `applyToppleSave` (reuse
+agent + the `preserveExpended` per-feature precedent — two divergent sites, touches tested Topple code);
+reuse the parsed `feats` via a `featsHaveEffect` helper (moot — the `cmd.CunningStrike != ""` guard
+short-circuits the second unmarshal off the hot path, and direct `hasFeatureEffect` matches the Tactical
+Master sibling). Coverage gates met (combat 91.32%, discord 86.22%, refdata 98.09%). **DEFERRED (new
+slices):** the other Cunning Strike effects — **Poison** (CON save → Poisoned; carries a per-turn re-save
+nuance, and is the natural trigger to extract the generic rider struct + retire the `reduceDiceCount`
+hand-parse for `dice.ParseExpression`), **Withdraw** (move without provoking OA — needs the movement/OA
+trigger system that does not exist yet, same gap as Sentinel/Polearm-OA), Daze/etc.; the "Large or smaller"
+size gate on Trip (Topple applies Prone without one today — parity); forgoing >1 die / multiple effects on
+one Sneak Attack (single-effect only this slice).
+
+**Blocker for the remaining Cunning effects + Brutal Strike (Barb L9):** Cunning **Trip** is now seeded +
+wired (Rogue L5 `cunning_strike`); the remaining Cunning effects (Poison/Withdraw) reuse that seam but need
+their own resolvers (Withdraw is blocked on the movement/OA trigger). Brutal Strike still needs its L9 seed
+key (see COV-10) added alongside the rider, and is more fragile: a "forgo the Reckless advantage" suppression
+in the shared `DetectAdvantage` (two sites) plus 15ft-push / −15-speed riders that don't reuse the hardcoded
+10ft/−10 mastery values.
 
 ---
 
@@ -991,11 +1038,12 @@ Brutal Strike (L9), ~~Tactical Master (L9)~~, Studied Attacks (L13), Cunning Str
 **This is the blocker under COV-3 and COV-8.** Extend the seed to the levels those items need
 (don't have to seed all 20 at once — seed the levels you wire).
 
-**Progress:** Fighter `features_by_level["9"]` now carries `tactical_master` (added with the
-COV-8 Tactical Master wiring, 2026-07-06) — the pattern is proven: a sparse higher-level key is a
-clean map add, level-gated by `derive_stats.go`, and guarded seed→present by a
-`TestIntegration_Seed…Feature` test (mirrors the Evasion L7 / Uncanny Dodge L5 seeds). Still needed
-for the open COV-8 riders: Rogue L5 (Cunning Strike) and Barbarian L9 (Brutal Strike).
+**Progress:** Fighter `features_by_level["9"]` carries `tactical_master` (Tactical Master, 2026-07-06)
+and Rogue `features_by_level["5"]` carries `cunning_strike` (Cunning Strike Trip, 2026-07-06) — the
+pattern is proven: a sparse higher-level key is a clean map add, level-gated by `derive_stats.go`, and
+guarded seed→present by a `TestIntegration_Seed…Feature` test (mirrors the Evasion L7 / Uncanny Dodge L5
+seeds). Note Rogue L5 was already in the seeded 1–5 range (Uncanny Dodge), so Cunning Strike needed no new
+higher-level key. Still needed for the open COV-8 riders: Barbarian L9 (Brutal Strike).
 
 ### COV-11 — Subclass unlock levels pre-2024
 **Status:** OPEN · **Severity:** low · **Pkg:** `internal/refdata`

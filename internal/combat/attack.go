@@ -476,6 +476,11 @@ type AttackInput struct {
 	// ExhaustionLevel is the attacker's current exhaustion. 2024 rules apply a
 	// flat -2/level penalty to the attack roll (folded into the to-hit modifier).
 	ExhaustionLevel int
+	// CunningStrike, when "trip", signals a Rogue-5 Cunning Strike Trip whose
+	// Sneak Attack die cost has already been forgone from Features. It is set by
+	// populateAttackFES ONLY when the attacker carries the feature, so ResolveAttack
+	// can treat a non-empty value as authoritative eligibility.
+	CunningStrike string
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -577,6 +582,15 @@ type AttackResult struct {
 	// Zero unless MasteryProperty == "topple".
 	MasteryToppleSaveDC int
 
+	// COV-8 Cunning Strike (Trip): CunningStrikeTripDC is the DEX save DC
+	// (8 + prof + DEX mod), set in ResolveAttack only when a Rogue opted into
+	// cunning:trip, the attack hit, and Sneak Attack actually dealt damage — so a
+	// non-zero DC IS the "trip fired" gate (it is always >= 5 when set), mirroring
+	// how Topple carries only MasteryToppleSaveDC. CunningStrikeTripSaved is set by
+	// Service.Attack once the save is rolled (true = made the save, no Prone).
+	CunningStrikeTripDC    int
+	CunningStrikeTripSaved bool
+
 	// CleaveAttack carries the secondary attack resolution from the 2024
 	// Cleave mastery (nil when no cleave occurred). The service layer auto-
 	// resolves one extra attack with the same weapon against a second creature
@@ -627,6 +641,10 @@ type AttackCommand struct {
 	// attack. Ignored unless the attacker carries the feature and already uses
 	// the weapon's own mastery (see tacticalMasteryOverride).
 	TacticalMastery string
+	// CunningStrike, when "trip", is a Rogue-5 Cunning Strike request to forgo a
+	// Sneak Attack die and force the target to make a DEX save or fall Prone.
+	// Ignored unless the attacker carries the feature (see cunning_strike.go).
+	CunningStrike string
 	// ReactionACBonus is AC the targeted PC gains against THIS attack from a
 	// reaction declared in the pre-roll window (e.g. Defensive Duelist +PB).
 	// ReactionReason names it for the log. Baked into effectiveAC by ResolveAttack.
@@ -885,6 +903,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		// just as they do on a rolled hit. Graze is miss-only and never reached.
 		recordOnHitMastery(&result, onHitMastery(input, isMelee),
 			8+profBonus+effectiveAbilityMod(input))
+		recordCunningStrikeTrip(&result, input, 8+profBonus+AbilityModifier(input.Scores.Dex))
 		return result, nil
 	}
 
@@ -944,6 +963,10 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	// unchanged. Graze is handled separately on the miss path above.
 	recordOnHitMastery(&result, onHitMastery(input, isMelee),
 		8+profBonus+effectiveAbilityMod(input))
+	// COV-8 Cunning Strike (Trip): if the rogue opted in and Sneak Attack dealt
+	// damage on this hit, record the DEX-save DC (8 + prof + DEX). The save is
+	// rolled post-hit in Service.Attack (applyCunningStrikeTrip).
+	recordCunningStrikeTrip(&result, input, 8+profBonus+AbilityModifier(input.Scores.Dex))
 
 	return result, nil
 }
@@ -1218,6 +1241,18 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, "\n    \u2192 \u2694\ufe0f Cleave misses %s", result.CleaveAttack.TargetName)
 	}
 
+	// COV-8 Cunning Strike (Trip): surface the DEX-save outcome so players see
+	// whether the forgone die knocked the target Prone.
+	if result.CunningStrikeTripDC > 0 {
+		if result.CunningStrikeTripSaved {
+			fmt.Fprintf(&b, "\n    \u2192 \U0001f9b5 Cunning Strike (Trip): %s saves (DC %d) \u2014 stays up",
+				result.TargetName, result.CunningStrikeTripDC)
+		} else {
+			fmt.Fprintf(&b, "\n    \u2192 \U0001f9b5 Cunning Strike (Trip): %s fails (DC %d) \u2014 knocked Prone",
+				result.TargetName, result.CunningStrikeTripDC)
+		}
+	}
+
 	if result.InvisibilityBroken {
 		fmt.Fprintf(&b, "\n    \u2192 \U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.", result.AttackerName)
 	}
@@ -1463,6 +1498,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	//   - Topple: a hit forces a CON save or the target falls Prone.
 	// Gated by result.MasteryProperty so only an active mastery touches state.
 	if err := s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
+		return result, err
+	}
+
+	// COV-8 Cunning Strike (Trip): a Rogue who dealt Sneak Attack damage this hit
+	// forces a DEX save or Prone. Gated by result.CunningStrikeTrip (set in
+	// ResolveAttack only when the feature is present, the hit landed, and Sneak
+	// Attack actually dealt damage).
+	if err := s.applyCunningStrikeTrip(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
 		return result, err
 	}
 
@@ -2547,6 +2590,18 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	// attack roll / damage. collectMagicItemFeatures degrades to nil on bad
 	// inventory JSON rather than failing the whole attack.
 	input.Features = BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(*char))
+
+	// COV-8 Cunning Strike (Rogue 5): forgo Sneak Attack dice to add an on-hit
+	// rider. When the attacker carries the feature (slug gate), subtract the
+	// chosen effect's die cost from the Sneak Attack extra-damage dice here —
+	// before the roll — and bake the eligibility into input.CunningStrike so
+	// ResolveAttack can precompute the DEX-save DC and Service.Attack can resolve
+	// the rider post-hit. A non-rogue's /attack cunning is inert (gate fails →
+	// empty input.CunningStrike, no dice touched).
+	if cmd.CunningStrike != "" && hasFeatureEffect(char.Features, cunningStrikeEffect) {
+		input.CunningStrike = cmd.CunningStrike
+		reduceSneakAttackDice(input.Features, cunningStrikeDiceCost(cmd.CunningStrike))
+	}
 
 	// SR-058: Sacred Weapon condition → inject CHA mod as modify_attack_roll.
 	if HasCondition(cmd.Attacker.Conditions, "sacred_weapon") {
