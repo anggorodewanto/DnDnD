@@ -442,6 +442,15 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 	for _, f := range features {
 		// Handle comma-separated mechanical effects (e.g., "martial_arts_d4,bonus_action_unarmed_strike")
 		for _, effect := range splitMechanicalEffects(f.MechanicalEffect) {
+			// The seed emits the suffixed slug "sneak_attack_1d6" (a vestigial
+			// dice hint), but the dice actually scale with rogue level via
+			// SneakAttackDice. Collapse any "sneak_attack*" variant onto the bare
+			// case so seeded rogues aren't silently stripped of Sneak Attack.
+			// Scoped to sneak_attack only — siblings like "martial_arts_d4" and
+			// "speed_plus_10" keep their suffixes because they have their own cases.
+			if strings.HasPrefix(effect, "sneak_attack") {
+				effect = "sneak_attack"
+			}
 			switch effect {
 			case "rage":
 				defs = append(defs, RageFeature(max(barbarianLevel, 1)))

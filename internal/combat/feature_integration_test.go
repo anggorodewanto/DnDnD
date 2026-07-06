@@ -393,6 +393,39 @@ func TestBuildFeatureDefinitions_Rogue5(t *testing.T) {
 	}
 }
 
+// TestBuildFeatureDefinitions_SneakAttackSeededSlug is a regression guard for
+// the live-play bug where a seeded Rogue dealt zero Sneak Attack damage. The
+// seed emits the suffixed slug "sneak_attack_1d6" (a vestigial dice hint), but
+// the dice actually scale with rogue level via SneakAttackDice. The switch
+// matched only the bare "sneak_attack", so the feature was silently dropped for
+// every SEEDED rogue under every trigger. The suffixed slug must still yield the
+// feature, at level-correct dice (Rogue 4 -> 2d6, NOT the slug's literal 1d6).
+func TestBuildFeatureDefinitions_SneakAttackSeededSlug(t *testing.T) {
+	classes := []CharacterClass{{Class: "Rogue", Level: 4}}
+	features := []CharacterFeature{
+		{Name: "Sneak Attack", MechanicalEffect: "sneak_attack_1d6"},
+	}
+
+	defs := BuildFeatureDefinitions(classes, features)
+
+	var sneak *FeatureDefinition
+	for i := range defs {
+		if defs[i].Name == "Sneak Attack" {
+			sneak = &defs[i]
+			break
+		}
+	}
+	if sneak == nil {
+		t.Fatal(`expected Sneak Attack feature from seeded slug "sneak_attack_1d6"`)
+	}
+	if len(sneak.Effects) != 1 {
+		t.Fatalf("expected 1 effect on Sneak Attack, got %d", len(sneak.Effects))
+	}
+	if got := sneak.Effects[0].Dice; got != "2d6" {
+		t.Errorf("Rogue 4 Sneak Attack dice = %q, want 2d6 (level-scaled, not the slug's 1d6)", got)
+	}
+}
+
 func TestBuildFeatureDefinitions_Rogue7(t *testing.T) {
 	classes := []CharacterClass{{Class: "Rogue", Level: 7}}
 	features := []CharacterFeature{
