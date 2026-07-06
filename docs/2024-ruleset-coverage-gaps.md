@@ -1405,11 +1405,23 @@ penalty lands only in the roll TOTAL, never `DexMod` — 2024 ties break on the 
 exhaustion doesn't lower. Tests: `exhaustion_initiative_test.go` (creature penalty, Alert+exhaustion
 compose, end-to-end ordering). Gates met (combat 91.3%).
 
+**Contested-check sub-gap DONE 2026-07-06.** Grapple, shove, and grapple-escape are all contested
+ability checks → d20 Tests on BOTH sides, so the penalty now folds into every contestant's roll.
+`Grapple` folds `ExhaustionD20Penalty(cmd.Grappler.ExhaustionLevel)` into `grapplerStrMod`;
+`resolveShove` folds the shover's into `shoverStrMod`; the shared `resolveTargetDefense` helper folds
+the target's into the returned `.Mod` (one write covers both grapple + shove target rolls, after the
+Athletics/Acrobatics max-pick so it can't perturb the ability selection); `Escape` folds both the
+escapee's and grappler's (uniform penalty leaves the escapee's auto-pick unchanged). Read from
+`.ExhaustionLevel` on the combatant → applies to creatures too. Tests:
+`exhaustion_contested_test.go` (5 subtests: grappler/shover/escapee actor-side flips + target/grappler
+defender-side flips). Gates met.
+
 **Deferred (pre-existing gaps — these d20 tests never consumed exhaustion, not a regression):**
-concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), contested &
-skill checks (grapple/shove, escape, Hide/stealth in `standard_actions.go` / `grapple_shove.go`),
-and death saves (`deathsave.go` takes a pre-rolled value). Full-2024 coverage would inject
-`ExhaustionD20Penalty` at each; out of scope for the command-path fix.
+concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), remaining skill
+checks (Hide/stealth and other ad-hoc ability checks), and death saves (`deathsave.go` conflates the
+raw die with the DC-10 total, so a clean fold needs a die/total split first — exhaustion must lower the
+total but not the nat-20/nat-1 detection). Full-2024 coverage would inject `ExhaustionD20Penalty` at
+each remaining site.
 
 ---
 

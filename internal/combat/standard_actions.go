@@ -775,12 +775,17 @@ func (s *Service) Escape(ctx context.Context, cmd EscapeCommand, roller *dice.Ro
 	if err != nil {
 		return EscapeResult{}, err
 	}
+	// A contested escape is a d20 Test on both sides, so 2024 exhaustion
+	// (-2×level) folds into each modifier. The uniform penalty can't change the
+	// auto-pick above (it shifts str and dex equally).
+	escMod += ExhaustionD20Penalty(int(cmd.Escapee.ExhaustionLevel))
 
 	// Grappler's Athletics (STR)
 	grapMod, err := s.getAbilityMod(ctx, cmd.Grappler, "str")
 	if err != nil {
 		return EscapeResult{}, err
 	}
+	grapMod += ExhaustionD20Penalty(int(cmd.Grappler.ExhaustionLevel))
 
 	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
 	if err != nil {

@@ -76,11 +76,14 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 			cmd.Target.DisplayName, dist)
 	}
 
-	// Get ability modifiers
+	// Get ability modifiers. Exhaustion (2024) reduces every d20 Test by
+	// 2×level; a contested grapple is an ability check on both sides, so the
+	// grappler's penalty folds in here and the target's inside resolveTargetDefense.
 	grapplerStrMod, err := s.getAbilityMod(ctx, cmd.Grappler, "str")
 	if err != nil {
 		return GrappleResult{}, err
 	}
+	grapplerStrMod += ExhaustionD20Penalty(int(cmd.Grappler.ExhaustionLevel))
 	targetDef, err := s.resolveTargetDefense(ctx, cmd.Target)
 	if err != nil {
 		return GrappleResult{}, err
@@ -241,11 +244,14 @@ func (s *Service) resolveShove(ctx context.Context, cmd ShoveCommand, roller *di
 		}
 	}
 
-	// Get ability modifiers
+	// Get ability modifiers. Exhaustion (2024) reduces every d20 Test by
+	// 2×level; a contested shove is an ability check on both sides, so the
+	// shover's penalty folds in here and the target's inside resolveTargetDefense.
 	shoverStrMod, err := s.getAbilityMod(ctx, cmd.Shover, "str")
 	if err != nil {
 		return ShoveResult{}, err
 	}
+	shoverStrMod += ExhaustionD20Penalty(int(cmd.Shover.ExhaustionLevel))
 	targetDef, err := s.resolveTargetDefense(ctx, cmd.Target)
 	if err != nil {
 		return ShoveResult{}, err
@@ -426,7 +432,10 @@ type targetDefenseResult struct {
 	Skill string // "Athletics" or "Acrobatics"
 }
 
-// resolveTargetDefense returns the higher of the target's Athletics (STR) or Acrobatics (DEX).
+// resolveTargetDefense returns the modifier the target adds to a contested
+// grapple/shove roll, using the higher of Athletics (STR) or Acrobatics (DEX).
+// The 2024 exhaustion penalty (-2×level) folds into the returned Mod because the
+// defense is itself a d20 Test; the Skill label reflects only the chosen ability.
 func (s *Service) resolveTargetDefense(ctx context.Context, target refdata.Combatant) (targetDefenseResult, error) {
 	strMod, err := s.getAbilityMod(ctx, target, "str")
 	if err != nil {
@@ -436,10 +445,11 @@ func (s *Service) resolveTargetDefense(ctx context.Context, target refdata.Comba
 	if err != nil {
 		return targetDefenseResult{}, err
 	}
+	exhaustion := ExhaustionD20Penalty(int(target.ExhaustionLevel))
 	if dexMod > strMod {
-		return targetDefenseResult{Mod: dexMod, Skill: "Acrobatics"}, nil
+		return targetDefenseResult{Mod: dexMod + exhaustion, Skill: "Acrobatics"}, nil
 	}
-	return targetDefenseResult{Mod: strMod, Skill: "Athletics"}, nil
+	return targetDefenseResult{Mod: strMod + exhaustion, Skill: "Athletics"}, nil
 }
 
 // checkFreeHand validates that a combatant has a free hand for grappling.
