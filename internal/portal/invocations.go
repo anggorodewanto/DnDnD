@@ -16,6 +16,10 @@ import (
 const (
 	invocationFeatureSource = "invocation"
 	pactBoonFeatureSource   = "pact_boon"
+	// metamagicFeatureSource tags a resolved Sorcerer Metamagic pick (COV-15).
+	// Combat reads it by mechanical_effect (combat.HasMetamagic); the builder
+	// edit round-trip reverse-maps by this source, mirroring invocations.
+	metamagicFeatureSource = "metamagic"
 	// featFeatureSource tags a feature written by the level-up ASI-feat flow
 	// (levelup.ApplyFeat). The builder rebuild preserves these across an edit
 	// rather than regenerating them (they are not builder-form choices). COV-17 S1.
@@ -38,17 +42,23 @@ func isInvocationPlaceholder(mechanicalEffect string) bool {
 		strings.HasSuffix(mechanicalEffect, "_eldritch_invocations")
 }
 
-// submissionWarlockLevel returns the warlock class level in the submission
-// (0 if the character has no warlock levels). Invocation / pact-boon grants
-// scale with warlock class level specifically, not total character level, so a
-// multiclassed warlock is gated by its warlock level.
-func submissionWarlockLevel(sub CharacterSubmission) int {
+// submissionClassLevel returns the level of the named class in the submission
+// (0 if absent). Class-feature grants (invocations, pact boon, metamagic) scale
+// with the specific class level, not total character level, so a multiclassed
+// character is gated by that class's level.
+func submissionClassLevel(sub CharacterSubmission, className string) int {
 	for _, c := range SubmissionClasses(sub) {
-		if strings.EqualFold(c.Class, "warlock") {
+		if strings.EqualFold(c.Class, className) {
 			return c.Level
 		}
 	}
 	return 0
+}
+
+// submissionWarlockLevel returns the warlock class level in the submission
+// (0 if the character has no warlock levels).
+func submissionWarlockLevel(sub CharacterSubmission) int {
+	return submissionClassLevel(sub, "warlock")
 }
 
 // submissionKnowsEldritchBlast reports whether the submission's chosen spells
@@ -200,6 +210,10 @@ func classFeatureFeaturesForSubmission(sub CharacterSubmission) []character.Feat
 	if style, ok := fightingStyleFeatureForSubmission(sub); ok {
 		out = append(out, style)
 	}
+	// COV-15: the Sorcerer metamagic picks resolve as a multi-select (mirrors
+	// invocations), each carrying the clean slug the combat cast gate reads,
+	// replacing choose_2_metamagic_options.
+	out = append(out, metamagicFeaturesForSubmission(sub)...)
 	return out
 }
 
@@ -239,7 +253,7 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 		return base
 	}
 
-	var boonResolved, invResolved, styleResolved bool
+	var boonResolved, invResolved, styleResolved, metamagicResolved bool
 	for _, f := range picks {
 		switch f.Source {
 		case pactBoonFeatureSource:
@@ -248,6 +262,8 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 			invResolved = true
 		case fightingStyleFeatureSource:
 			styleResolved = true
+		case metamagicFeatureSource:
+			metamagicResolved = true
 		}
 	}
 
@@ -262,6 +278,9 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 		if styleResolved && f.MechanicalEffect == refdata.ChooseFightingStyleEffect {
 			continue
 		}
+		if metamagicResolved && f.MechanicalEffect == refdata.ChooseMetamagicEffect {
+			continue
+		}
 		out = append(out, f)
 	}
 	return append(out, picks...)
@@ -271,7 +290,7 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 // submission's PactBoon + Invocations (the inverse of injectClassFeatureChoices)
 // so an edit round-trip preserves a warlock's picks instead of silently
 // resetting them (cf. the builder-edit-resets-live-resources class of bugs).
-func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string, fightingStyle string) {
+func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string, fightingStyle string, metamagic []string) {
 	for _, f := range features {
 		switch f.Source {
 		case pactBoonFeatureSource:
@@ -280,7 +299,9 @@ func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon str
 			invocations = append(invocations, f.MechanicalEffect)
 		case fightingStyleFeatureSource:
 			fightingStyle = f.MechanicalEffect
+		case metamagicFeatureSource:
+			metamagic = append(metamagic, f.MechanicalEffect)
 		}
 	}
-	return pactBoon, invocations, fightingStyle
+	return pactBoon, invocations, fightingStyle, metamagic
 }

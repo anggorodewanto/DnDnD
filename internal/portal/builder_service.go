@@ -61,7 +61,13 @@ type CharacterSubmission struct {
 	// mechanical_effect slug (e.g. "archery"). Resolved into a character.Feature
 	// by injectClassFeatureChoices, replacing the choose_fighting_style
 	// placeholder — the same shape as PactBoon.
-	FightingStyle   string   `json:"fighting_style,omitempty"`
+	FightingStyle string `json:"fighting_style,omitempty"`
+	// Metamagic is the Sorcerer metamagic picks (COV-15): refdata.MetamagicCatalog
+	// ids that double as the combat cast-gate slugs (e.g. "quickened"). Resolved
+	// into character.Feature entries by injectClassFeatureChoices, replacing the
+	// choose_2_metamagic_options placeholder — the multi-select analogue of
+	// Invocations. Capped at MetamagicKnown(sorcererLevel).
+	Metamagic       []string `json:"metamagic,omitempty"`
 	Equipment       []string `json:"equipment,omitempty"`
 	Spells          []string `json:"spells,omitempty"`
 	WeaponMasteries []string `json:"weapon_masteries,omitempty"`
@@ -552,6 +558,11 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 	// COV-15: reject an illegal Fighting Style pick (unknown id, or a style on a
 	// class/level that grants none).
 	if err := validateSubmittedFightingStyle(sub); err != nil {
+		errs = append(errs, err.Error())
+	}
+	// COV-15: reject an illegal Metamagic selection (non-sorcerer, over the
+	// sorcerer-level grant, unknown/duplicate ids).
+	if err := validateSubmittedMetamagic(sub); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {

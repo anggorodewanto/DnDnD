@@ -31,6 +31,14 @@ func makeSorcererCharacter(id uuid.UUID, sorcLevel int, sorceryPoints int) refda
 	})
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Sorcerer", Level: sorcLevel}})
 	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeySorceryPoints: {Current: sorceryPoints, Max: sorceryPoints, Recharge: "long"}})
+	// A fully-built sorcerer has learned its Metamagic options; grant all of them
+	// so the known-metamagic cast gate (COV-15) doesn't reject the fixture, and
+	// the fixture never drifts from the catalog.
+	var feats []CharacterFeature
+	for _, m := range refdata.MetamagicCatalog() {
+		feats = append(feats, CharacterFeature{Name: m.Name, MechanicalEffect: m.ID})
+	}
+	featuresJSON, _ := json.Marshal(feats)
 	return refdata.Character{
 		ID:               id,
 		Name:             "Elara",
@@ -39,6 +47,7 @@ func makeSorcererCharacter(id uuid.UUID, sorcLevel int, sorceryPoints int) refda
 		AbilityScores:    scoresJSON,
 		SpellSlots:       pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
 		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+		Features:         pqtype.NullRawMessage{RawMessage: featuresJSON, Valid: true},
 		Level:            int32(sorcLevel),
 	}
 }

@@ -27,6 +27,7 @@
     computeInvocationState, reconcileInvocations, reconcilePactBoon,
   } from './lib/invocations.js';
   import { FIGHTING_STYLES, fightingStyleEligible, reconcileFightingStyle } from './lib/fighting-styles.js';
+  import { METAMAGICS, metamagicEligible, metamagicGrantCount, reconcileMetamagics } from './lib/metamagics.js';
   import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
   import { assembleEquipment } from './lib/equipment-assembly.js';
 
@@ -86,6 +87,9 @@
   // Fighter/Paladin/Ranger fighting-style pick (COV-15): a combat-wired style id
   // resolved server-side into a character feature.
   let selectedFightingStyle = $state('');
+  // Sorcerer metamagic picks (COV-15): combat-wired option ids, capped at the
+  // sorcerer-level grant, resolved server-side into character features.
+  let selectedMetamagics = $state([]);
   let selectedSpells = $state([]);
   // Concrete bonus languages chosen by the player. The race's base languages
   // are read-only; this holds only the background-granted picks (ISSUE-009).
@@ -293,6 +297,7 @@
     if (d.selectedPactBoon !== undefined) selectedPactBoon = d.selectedPactBoon;
     if (Array.isArray(d.selectedInvocations)) selectedInvocations = d.selectedInvocations;
     if (d.selectedFightingStyle !== undefined) selectedFightingStyle = d.selectedFightingStyle;
+    if (Array.isArray(d.selectedMetamagics)) selectedMetamagics = d.selectedMetamagics;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
     if (Array.isArray(d.chosenLanguages)) chosenLanguages = d.chosenLanguages;
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
@@ -313,6 +318,7 @@
       currentStep, name, race, subrace, background, appearance, backstory,
       classEntries, scores, abilityMethod, abilityRolls,
       selectedSkills, selectedExpertise, selectedPactBoon, selectedInvocations,
+      selectedFightingStyle, selectedMetamagics,
       selectedSpells, chosenLanguages, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
     });
@@ -392,6 +398,7 @@
     selectedPactBoon = ch.pact_boon || '';
     selectedInvocations = Array.isArray(ch.invocations) ? ch.invocations : [];
     selectedFightingStyle = ch.fighting_style || '';
+    selectedMetamagics = Array.isArray(ch.metamagic) ? ch.metamagic : [];
     selectedSpells = Array.isArray(ch.spells) ? ch.spells : [];
     selectedMasteries = Array.isArray(ch.weapon_masteries) ? ch.weapon_masteries : [];
     chosenLanguages = Array.isArray(ch.languages) ? ch.languages : [];
@@ -486,6 +493,17 @@
       selectedInvocations = selectedInvocations.filter((x) => x !== id);
     } else {
       selectedInvocations = [...selectedInvocations, id];
+    }
+  }
+
+  // Toggle a Sorcerer metamagic pick. The at-cap case is guarded by the checkbox
+  // `disabled` state (metamagicGrantCount); reconcileMetamagics is the
+  // belt-and-suspenders at submit time.
+  function toggleMetamagic(id) {
+    if (selectedMetamagics.includes(id)) {
+      selectedMetamagics = selectedMetamagics.filter((x) => x !== id);
+    } else {
+      selectedMetamagics = [...selectedMetamagics, id];
     }
   }
 
@@ -704,7 +722,7 @@
   let isCaster = $derived(anyCaster(classEntries));
   // Warlock pact-boon + invocation step gating (ISSUE-060). stepCtx feeds the
   // wizard nav so both the Spells and Class Features steps skip cleanly.
-  let hasClassFeatures = $derived(hasClassFeatureChoices(classEntries) || fightingStyleEligible(classEntries));
+  let hasClassFeatures = $derived(hasClassFeatureChoices(classEntries) || fightingStyleEligible(classEntries) || metamagicEligible(classEntries));
   let stepCtx = $derived({ isCaster, hasClassFeatures });
   // Per-class spell counts use that class's own spellcasting ability, so pass
   // the modifier for each casting ability and let the helper pick per entry.
@@ -785,6 +803,7 @@
       pact_boon: pactBoon,
       invocations,
       fighting_style: reconcileFightingStyle({ classEntries, style: selectedFightingStyle }),
+      metamagic: reconcileMetamagics({ classEntries, metamagics: selectedMetamagics }),
       equipment: submissionEquipment(),
       spells: selectedSpells,
       languages: assembleLanguages(raceBaseLanguages(selectedRaceData), chosenLanguages),
@@ -1517,10 +1536,39 @@
     {:else if currentStep === CLASS_FEATURES_STEP}
       {@const warlockLevel = warlockLevelOf(classEntries)}
       {@const styleEligible = fightingStyleEligible(classEntries)}
+      {@const metaCap = metamagicGrantCount(classEntries)}
       <div class="step-content">
         <h3>Class Features</h3>
-        {#if warlockLevel < 2 && !styleEligible}
+        {#if warlockLevel < 2 && !styleEligible && metaCap === 0}
           <p class="muted">No class-feature choices for the current build.</p>
+        {/if}
+
+        {#if metaCap > 0}
+          <div class="cf-section">
+            <h4>Metamagic</h4>
+            <p class="cf-budget">
+              Chosen <strong>{selectedMetamagics.length}</strong> / {metaCap}.
+              <span class="muted">Options you learn here are the only ones your sorcerer may apply with <code>/cast</code>.</span>
+            </p>
+            <div class="cf-options">
+              {#each METAMAGICS as m}
+                {@const chosen = selectedMetamagics.includes(m.id)}
+                {@const atCap = !chosen && selectedMetamagics.length >= metaCap}
+                <label class="cf-option" class:selected={chosen} class:cf-disabled={atCap}>
+                  <input
+                    type="checkbox"
+                    checked={chosen}
+                    disabled={atCap}
+                    onchange={() => toggleMetamagic(m.id)}
+                  />
+                  <div class="cf-body">
+                    <div class="cf-name">{m.name}</div>
+                    <div class="cf-desc">{m.description}</div>
+                  </div>
+                </label>
+              {/each}
+            </div>
+          </div>
         {/if}
 
         {#if styleEligible}

@@ -460,6 +460,11 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	var metamagicFeatureUses map[string]character.FeatureUse
 	var metamagicCurrentPoints int
 	if len(cmd.Metamagic) > 0 {
+		// COV-15: gate each option on the sorcerer having actually learned it
+		// (builder-captured picks), before slot/sorcery-point deduction.
+		if err := validateKnownMetamagic(char.Features, cmd.Metamagic); err != nil {
+			return AoECastResult{}, err
+		}
 		metamagicFeatureUses, metamagicCurrentPoints, err = ParseFeatureUses(char, FeatureKeySorceryPoints)
 		if err != nil {
 			return AoECastResult{}, err

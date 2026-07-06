@@ -1055,7 +1055,7 @@ Blast *bonus* multiplies by beam count (`agonizing_blast.go:35`). Correct multi-
 N attack rolls at levels 5/11/17. **Blocks per-beam Repelling Blast (COV-6).**
 
 ### COV-15 — Fighting Style / Metamagic not enforced end-to-end
-**Status:** IN PROGRESS (Fighting Style DONE 2026-07-06; Metamagic still OPEN) · **Severity:** low · **Pkg:** `internal/portal` (builder) + `internal/refdata`
+**Status:** ✅ DONE 2026-07-06 (Fighting Style + Metamagic both wired end-to-end) · **Severity:** low · **Pkg:** `internal/portal` (builder) + `internal/refdata` + `internal/combat` (metamagic cast gate)
 
 **Shipped (Fighting Style, full loop).** The Fighter/Paladin/Ranger fighting-style pick is now
 captured end-to-end and drives combat. The builder resolves the player's pick into a
@@ -1096,12 +1096,57 @@ preserves it exactly like an invocation. Combat already consumes the slug (no en
   today); the remaining 5 non-wired PHB styles (each needs its combat rider first); a generated
   `fighting-styles-catalog.json` + `make` drift guard (unjustified for a 5-entry list).
 
-**Still OPEN — Metamagic.** The other half is a different shape and NOT wired: metamagic is applied at
-**cast time via `/cast` flags** (`metamagic.go`), not read passively off a persisted feature, so capturing
-the player's two picks in the builder also needs combat to gate `/cast quickened|distant|…` on "does this
-sorcerer know that metamagic." The builder still writes only the `choose_2_metamagic_options` placeholder
-(`seed_classes.go:373`). Mirror the fighting-style capture for the builder half, then add the cast-time
-known-metamagic gate.
+**Shipped (Metamagic, full loop).** The Sorcerer metamagic picks are now captured in the builder AND
+enforced at cast time — closing the gap where any sorcerer with sorcery points could apply ANY of the eight
+options regardless of which they picked. Two interdependent halves shipped together (capture without the
+gate would be dead data; the gate without capture would be a regression):
+
+- **Builder capture** — a multi-select analogue of the invocation pipeline. `CharacterSubmission.Metamagic`
+  (`[]string`) resolves into `character.Feature{Source:"metamagic", MechanicalEffect:<slug>}` entries that
+  replace the `choose_2_metamagic_options` placeholder, folded into the SAME
+  `classFeatureFeaturesForSubmission` → `injectClassFeatureChoices` strip → `classFeatureChoicesFromFeatures`
+  reverse-map pipeline (`invocations.go`), so an edit round-trip preserves the picks like invocations.
+  `internal/portal/metamagic.go`: `metamagicFeaturesForSubmission` (cap at grant, dedup, drop unknown) +
+  `validateSubmittedMetamagic` (non-sorcerer / over-grant / unknown / duplicate) wired at `prepareCharParams`.
+  Resolution independently guards over-grant/unknown because the **Preview** path reaches it without calling
+  `validate*`. (During /simplify the `submissionSorcererLevel`/`submissionWarlockLevel` loops were unified onto
+  a shared `submissionClassLevel(sub, className)`.)
+- **SSOT** — new `refdata.MetamagicCatalog()` (`metamagic_catalog.go`, mirrors `FightingStyleCatalog`) holds
+  **only the 8 combat-wired options** (careful/distant/empowered/extended/heightened/quickened/subtle/twinned);
+  Seeking/Transmuted are deliberately absent (the cast path has no flag/cost/validator — they'd be dead data).
+  `MetamagicKnown(sorcererLevel)` (2/3/4 at 3/10/17, mirrors `InvocationsKnown`) + `ChooseMetamagicEffect`
+  placeholder const (the seed now references it → seed↔stripper can't drift, mirrors `ChooseFightingStyleEffect`)
+  live beside the catalog.
+- **Cast-time gate (the crux, NEW)** — `combat.HasMetamagic(features, slug)` (thin wrapper over
+  `hasFeatureEffect`, mirrors `HasInvocation`) + `validateKnownMetamagic(features, metamagics)` reject any
+  requested option the character hasn't learned. Inserted as a peer validator at the top of the existing
+  `if len(cmd.Metamagic) > 0` block in BOTH `Service.Cast` (`spellcasting.go`) and `Service.CastAoE`
+  (`aoe.go`), **before** any slot/sorcery-point deduction, so a rejected cast burns nothing. (/simplify altitude
+  affirmed a separate helper called from two sites — like the sibling `ValidateMetamagicOptions` — is the right
+  depth; folding it into `ValidateMetamagic` would drag a storage type into a pure rules function.)
+- **Dead-data guards (both directions):** `TestMetamagicCatalog_MatchesWiredCombatSet` (refdata, pins
+  catalog == a hand-maintained `wiredMetamagicSlugs`) + `TestMetamagicCatalog_AllWiredInCombat` (combat,
+  the only direction that can cross the import boundary: every catalog id must have a real `SorceryPointCost`).
+- **Frontend** — one shared `CharacterBuilder.svelte` (portal + DM dashboard): a Metamagic checkbox
+  multi-select in the Class Features step, gated on sorcerer L3+ and capped at `metamagicGrantCount`
+  (`metamagics.js`); submission field + edit hydration + draft field; rebuilt committed vite bundle. Also
+  closed a latent gap: `selectedFightingStyle`/`selectedMetamagics` are now in the draft **snapshot** (the
+  Fighting-Style field was in `DRAFT_FIELDS` but never written to the snapshot, so its draft never persisted).
+
+**Migration note (live-play blast radius).** The gate makes an existing sorcerer who was NEVER rebuilt with
+picks unable to apply ANY metamagic until re-picked — this is the enforcement working, not a bug (unlike
+Fighting Style / Invocations, whose absent-feature default *fails safe*; metamagic's pre-existing default was
+"allow all," so flipping absence → "cannot use" IS the fix). Remedy is a ~30-second re-pick in the builder or
+the DM dashboard (the edit round-trip now reverse-maps picks), and the cast-time error names the option and
+points at the builder. /simplify altitude firmly **rejected** a "no captured metamagics → allow all" escape
+hatch: it would silently and permanently reinstate the exact hole COV-15 closes. **Deferred (optional,
+non-blocking):** a proactive dashboard nudge flagging L3+ sorcerers with zero metamagic features, so the
+rejection isn't first discovered mid-combat.
+
+**Deferred:** the 2024 higher-count metamagic (3 at L10, 4 at L17) is modeled in `MetamagicKnown` (the picker
+cap scales) but the seed still grants only the single L3 "choose 2" feature — a sorcerer at L10+ can pick 3/4
+in the builder, but the seeded placeholder text still says "choose two" (cosmetic, same as invocations'
+level-scaled `choose_N` slug); Seeking/Transmuted options (need cast-path wiring first).
 
 ---
 
@@ -1304,7 +1349,14 @@ make sqlc-check    # if you touched .sql queries
    captured in the builder (`fighting-styles.js` picker + `CharacterSubmission.FightingStyle`) and
    resolved into a combat-read `Feature{MechanicalEffect:<slug>}` via the existing
    `injectClassFeatureChoices` pipeline; new `refdata.FightingStyleCatalog` SSOT holds only the 5
-   combat-wired styles (dead-data-guarded). Metamagic half still OPEN (cast-time gate, different shape).
+   combat-wired styles (dead-data-guarded).
+5c. ~~**COV-15 Metamagic**~~ **DONE 2026-07-06** — **COV-15 fully closed**. The Sorcerer metamagic picks are
+   captured in the builder (multi-select mirror of invocations: `metamagics.js` + `CharacterSubmission.Metamagic`
+   → `Feature{Source:"metamagic", MechanicalEffect:<slug>}`) AND enforced by a NEW cast-time gate
+   (`combat.HasMetamagic` + `validateKnownMetamagic` in `Service.Cast`/`CastAoE`) that rejects any option the
+   sorcerer hasn't learned — closing the "any SP → any option" hole. `refdata.MetamagicCatalog` SSOT +
+   `MetamagicKnown` (2/3/4 at 3/10/17), dead-data-guarded both directions. Live-play migration: existing
+   sorcerers re-pick via builder/DM dashboard (see the COV-15 Migration note).
 6. ~~**COV-17 (Tier 5) — builder-rebuild overlay preservation.**~~ **COMPLETE 2026-07-05** —
    all 3 slices shipped: ASI-applied feats (`preservePersistedFeats`, S1), Tough flat +2/level HP
    (`character.FeatFlatHPBonus` SSOT re-added on rebuild, S2), and expended feature-use pools

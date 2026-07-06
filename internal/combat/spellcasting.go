@@ -575,6 +575,12 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	var metamagicFeatureUses map[string]character.FeatureUse
 	var metamagicCurrentPoints int
 	if len(cmd.Metamagic) > 0 {
+		// COV-15: gate each option on the sorcerer having actually learned it
+		// (builder-captured picks). Runs before any slot/sorcery-point deduction
+		// so a rejected cast burns nothing.
+		if err := validateKnownMetamagic(char.Features, cmd.Metamagic); err != nil {
+			return CastResult{}, err
+		}
 		metamagicFeatureUses, metamagicCurrentPoints, err = ParseFeatureUses(char, FeatureKeySorceryPoints)
 		if err != nil {
 			return CastResult{}, err

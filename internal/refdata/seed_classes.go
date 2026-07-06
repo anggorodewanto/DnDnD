@@ -370,7 +370,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 					{"name": "Font of Magic", "description": "You tap into a deep wellspring of magic within yourself. This wellspring is represented by sorcery points.", "mechanical_effect": "sorcery_points_equal_sorcerer_level"},
 				},
 				"3": []map[string]string{
-					{"name": "Metamagic", "description": "You gain the ability to twist your spells to suit your needs. You gain two Metamagic options of your choice.", "mechanical_effect": "choose_2_metamagic_options"},
+					{"name": "Metamagic", "description": "You gain the ability to twist your spells to suit your needs. You gain two Metamagic options of your choice.", "mechanical_effect": ChooseMetamagicEffect},
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),

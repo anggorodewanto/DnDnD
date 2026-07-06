@@ -670,7 +670,7 @@ func submissionFromCharacter(ch refdata.Character) CharacterSubmission {
 	if ch.Features.Valid {
 		var feats []character.Feature
 		if json.Unmarshal(ch.Features.RawMessage, &feats) == nil {
-			sub.PactBoon, sub.Invocations, sub.FightingStyle = classFeatureChoicesFromFeatures(feats)
+			sub.PactBoon, sub.Invocations, sub.FightingStyle, sub.Metamagic = classFeatureChoicesFromFeatures(feats)
 		}
 	}
 
