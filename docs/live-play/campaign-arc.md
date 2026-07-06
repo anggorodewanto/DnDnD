@@ -218,6 +218,22 @@ answer, and that's the point. Never resolve it *for* them.
   the **moment they open it**. Re-uses **rung 1**; **no new rung**. Do **not** open the door, reveal the renegade, or force combat
   until the party commits.
 
+  **★ RUNG 4 LANDED — the far door opens, face-to-face (07-06, #the-story ~4:35 PM / 09:35Z):** the party committed. **Windreth
+  Stealth 12** reached the door unseen (hidden card — the grey man's attention lands on Vale, not him); **Forge** free-swapped to his
+  greataxe at the door; **Vale opened the far door.** Beyond: a stone **vault** with **the one kept scrap**, and over it **the grey man
+  = the Renegade Name-Keeper**, played per spine — **unhurried, unafraid, "sure of his welcome, delivering not fleeing"** (rung 3
+  carried). **What rung 4 SPENT / revealed (now table-facing):** (a) the renegade **in the flesh, face-to-face** — scraped-blank face +
+  broken warden's disc confirmed up close; (b) he **sees through Vale's Disguise Self by knowledge** — he knows the *real* surviving
+  warden whose face she stole (*"You are not him. His hands never shook."* — no contradiction with the living gate-survivor: wardens
+  are NOT all dead); (c) he **clocks the name-piece Vale carries** and frames a **shared-goal / opposed-reason** conflict (*"we want the
+  same thing… only not for the same reason"*); (d) he **opens a parley, does NOT attack.** **What is STILL HELD (rung 4's deeper core —
+  unfold through the parley, do NOT dump in one beat):** the Order of the Pale-Watch's formal **right-to-refuse / keep-it-scattered
+  doctrine**, **Vale's patron = the rival collector using her**, and the **reassemble-vs-scatter-vs-hand-over** choice. *"Not for the
+  same reason"* only cracks the first layer. **Combat NOT triggered** — this is a standoff/parley; initiative starts only if the players
+  start it (or push him to). Re-uses **rung 3** (his manner); **rung 4 now the live scene** — the arc's central social/heist knot
+  (below) is now on the table, in person. **Next rungs from here unfold via play, not pre-scripted:** his doctrine, the patron's hand,
+  and the party's scatter-vs-reassemble-vs-refuse decision.
+
 ---
 
 ## The clock (why speed matters — makes improv have stakes)
