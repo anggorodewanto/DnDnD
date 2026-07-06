@@ -78,8 +78,10 @@ func TestService_RollInitiative_AlertFeatAddsFive(t *testing.T) {
 	assert.Equal(t, alertPC.ID, result[0].ID, "Alert PC beats the higher-DEX rogue via the +5")
 }
 
-// Creatures carry no features, so getInitiativeModifiers returns a zero feat
-// bonus for them (Alert's +5 never applies to a monster's initiative).
+// Creatures carry no features, so getInitiativeModifiers adds no Alert bonus to
+// their rollBonus (Alert's +5 never applies to a monster's initiative). With no
+// exhaustion here, rollBonus is 0; the exhaustion-on-creatures case is covered in
+// exhaustion_initiative_test.go.
 func TestService_getInitiativeModifiers_CreatureHasNoFeatBonus(t *testing.T) {
 	store := defaultMockStore()
 	store.getCreatureFn = func(context.Context, string) (refdata.Creature, error) {
@@ -88,8 +90,8 @@ func TestService_getInitiativeModifiers_CreatureHasNoFeatBonus(t *testing.T) {
 	svc := NewService(store)
 	combatant := refdata.Combatant{CreatureRefID: sql.NullString{String: "goblin", Valid: true}}
 
-	dexMod, featBonus, err := svc.getInitiativeModifiers(context.Background(), combatant)
+	dexMod, rollBonus, err := svc.getInitiativeModifiers(context.Background(), combatant)
 	require.NoError(t, err)
 	assert.Equal(t, 2, dexMod, "DEX 14 → +2")
-	assert.Equal(t, 0, featBonus, "creatures have no feat bonus")
+	assert.Equal(t, 0, rollBonus, "no Alert feat and no exhaustion → zero roll bonus")
 }

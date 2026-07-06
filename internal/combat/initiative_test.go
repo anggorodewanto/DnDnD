@@ -777,10 +777,10 @@ func TestService_getInitiativeModifiers_NeitherCharacterNorCreature(t *testing.T
 		CharacterID:   uuid.NullUUID{},
 		CreatureRefID: sql.NullString{},
 	}
-	mod, featBonus, err := svc.getInitiativeModifiers(context.Background(), combatant)
+	mod, rollBonus, err := svc.getInitiativeModifiers(context.Background(), combatant)
 	require.NoError(t, err)
 	assert.Equal(t, 0, mod)
-	assert.Equal(t, 0, featBonus)
+	assert.Equal(t, 0, rollBonus)
 }
 
 func TestService_getInitiativeModifiers_BadCreatureAbilityScores(t *testing.T) {

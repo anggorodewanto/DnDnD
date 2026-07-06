@@ -251,10 +251,13 @@ func dexModFromScores(raw json.RawMessage, label string) (int, error) {
 
 // getInitiativeModifiers returns a combatant's initiative modifiers from a
 // single ability-score lookup: dexMod (added to the roll and used for the
-// initiative tie-break) and featBonus (flat feat bonuses added only to the roll
-// total — currently the Alert feat's +5). Creatures carry no feats, so their
-// featBonus is always 0.
-func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatant) (dexMod, featBonus int, err error) {
+// initiative tie-break) and rollBonus (flat modifiers added only to the roll
+// total, never the tie-break). rollBonus carries the Alert feat's +5 and the
+// 2024 exhaustion penalty (−2 × level, a d20-Test penalty that lowers results
+// but not the Dexterity score). Exhaustion is read from the combatant, so it
+// applies to creatures too; the Alert bonus is character-only.
+func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatant) (dexMod, rollBonus int, err error) {
+	exhaustionPenalty := ExhaustionD20Penalty(int(c.ExhaustionLevel))
 	if c.CharacterID.Valid {
 		char, err := s.store.GetCharacter(ctx, c.CharacterID.UUID)
 		if err != nil {
@@ -264,7 +267,7 @@ func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatan
 		if err != nil {
 			return 0, 0, err
 		}
-		return dexMod, alertInitiativeBonus(char.Features.RawMessage), nil
+		return dexMod, alertInitiativeBonus(char.Features.RawMessage) + exhaustionPenalty, nil
 	}
 	if c.CreatureRefID.Valid {
 		creature, err := s.store.GetCreature(ctx, c.CreatureRefID.String)
@@ -272,9 +275,9 @@ func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatan
 			return 0, 0, fmt.Errorf("getting creature %s: %w", c.CreatureRefID.String, err)
 		}
 		dexMod, err = dexModFromScores(creature.AbilityScores, "creature")
-		return dexMod, 0, err
+		return dexMod, exhaustionPenalty, err
 	}
-	return 0, 0, nil
+	return 0, exhaustionPenalty, nil
 }
 
 // RollInitiative rolls initiative for all combatants in an encounter, sorts them,
@@ -301,11 +304,11 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 
 	entries := make([]InitiativeEntry, len(rollable))
 	for i, c := range rollable {
-		dexMod, featBonus, err := s.getInitiativeModifiers(ctx, c)
+		dexMod, rollBonus, err := s.getInitiativeModifiers(ctx, c)
 		if err != nil {
 			return nil, err
 		}
-		result, err := roller.RollD20(dexMod+featBonus, dice.Normal)
+		result, err := roller.RollD20(dexMod+rollBonus, dice.Normal)
 		if err != nil {
 			return nil, fmt.Errorf("rolling initiative for %s: %w", c.DisplayName, err)
 		}

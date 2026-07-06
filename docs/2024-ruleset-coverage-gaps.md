@@ -1395,11 +1395,20 @@ real gap even vs 2014.
   Spell `/cast` attack rolls patched at `spellcasting.go` too.
 - Seeded reference text (`seeder.go`) rewritten to the 2024 rule.
 
+**Initiative sub-gap DONE 2026-07-06.** Initiative is a 2024 Dex check → a d20 Test, so it now
+takes the penalty. `getInitiativeModifiers` (`initiative.go`) folds
+`ExhaustionD20Penalty(c.ExhaustionLevel)` into the returned roll bonus (renamed `featBonus`→
+`rollBonus` since it now carries Alert +5 AND exhaustion) — both roll sites (`RollInitiative`,
+`InsertSummonIntoInitiative`) get it free. Read from `c.ExhaustionLevel` on the combatant, so it
+applies to creatures too (monsters can be exhausted), unlike the character-only Alert bonus. The
+penalty lands only in the roll TOTAL, never `DexMod` — 2024 ties break on the Dexterity score, which
+exhaustion doesn't lower. Tests: `exhaustion_initiative_test.go` (creature penalty, Alert+exhaustion
+compose, end-to-end ordering). Gates met (combat 91.3%).
+
 **Deferred (pre-existing gaps — these d20 tests never consumed exhaustion, not a regression):**
-initiative (`initiative.go`, a 2024 Dex check), concentration / effect CON saves
-(`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), contested & skill checks
-(grapple/shove, escape, Hide/stealth in `standard_actions.go` / `grapple_shove.go`), and
-death saves (`deathsave.go` takes a pre-rolled value). Full-2024 coverage would inject
+concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), contested &
+skill checks (grapple/shove, escape, Hide/stealth in `standard_actions.go` / `grapple_shove.go`),
+and death saves (`deathsave.go` takes a pre-rolled value). Full-2024 coverage would inject
 `ExhaustionD20Penalty` at each; out of scope for the command-path fix.
 
 ---
