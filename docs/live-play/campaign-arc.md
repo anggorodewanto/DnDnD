@@ -196,6 +196,18 @@ answer, and that's the point. Never resolve it *for* them.
   available** — Vale is close and has seen his face (Mask needs no consent). Held: **no combat triggered, fiction not advanced** — the
   "something may have heard" is a live cliffhanger the party must answer.
 
+  **Vale takes the face + the inner keep opens (07-06, #the-story ~2:14 PM / 07:14Z):** party split to scout. **Windreth Perception
+  11** (raw 7) listening — deep in the keep **one sound answers** (a step / a dragged cloth), then stillness; **can't place it**, keep
+  **not empty** (honors the cliffhanger without confirming the intruder is still inside — rung 4 held). **Vale cast Disguise Self**
+  (Mask of Many Faces, at-will, no check) → wears the survivor warden's face + grey coat + iron disc (**glamour thin — touch/voice
+  breaks it**) and walked into the inner keep; **Forge** holds the inner door, **Windreth** on overwatch. **First durable Palewatch
+  interior canon (table-public):** a **hall of name-niches** (most full, **a few freshly/deliberately emptied**), the erasure-trail
+  runs down the middle to a **heavier far door**, past which is **the one scrap the Order swore never to give up** + where the
+  intruder went (consistent with the public "forgetting-order hoards one piece on purpose" seed — **not a new rung**). Re-uses **rung
+  1** (erasure-wake). **Rung 4 still held** — the **far door is the face-to-face threshold** (renegade unseen; the ex-warden link /
+  right-to-refuse / Vale's patron = rival collector all land there). Build each interior room **live** as they step into it; do **not**
+  spring the renegade or force combat until the party commits to the far door.
+
 ---
 
 ## The clock (why speed matters — makes improv have stakes)
