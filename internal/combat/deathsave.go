@@ -97,9 +97,12 @@ func formatDroppedToZeroLog(name string, isNpc, instantDeath bool) string {
 	return fmt.Sprintf("💔  %s drops to 0 HP — unconscious and dying", name)
 }
 
-// RollDeathSave processes a death saving throw with the given d20 roll value.
-// Applies nat 20 (regain 1 HP), nat 1 (2 failures), and normal success/failure rules.
-func RollDeathSave(name string, ds DeathSaves, roll int) DeathSaveOutcome {
+// RollDeathSave processes a death saving throw. roll is the natural d20 die,
+// which alone drives the nat-20 (regain 1 HP) and nat-1 (2 failures) branches.
+// penalty is the summed 2024 d20-test modifier (exhaustion, ≤ 0) applied only
+// to the total compared against DC 10 — never to the nat detection, which keys
+// off the raw face. Callers fold ExhaustionD20Penalty into penalty.
+func RollDeathSave(name string, ds DeathSaves, roll, penalty int) DeathSaveOutcome {
 	if roll == 20 {
 		return DeathSaveOutcome{
 			TokenState: TokenAlive,
@@ -115,18 +118,26 @@ func RollDeathSave(name string, ds DeathSaves, roll int) DeathSaveOutcome {
 	switch {
 	case roll == 1:
 		newDS.Failures += 2
-	case roll >= 10:
+	case deathSaveSucceeds(roll, penalty):
 		newDS.Successes++
 	default:
 		newDS.Failures++
 	}
-	return buildDeathSaveOutcome(name, newDS, roll)
+	return buildDeathSaveOutcome(name, newDS, roll, penalty)
+}
+
+// deathSaveSucceeds reports whether a non-natural death-save die clears DC 10
+// after the 2024 d20-test penalty. The single home for the threshold, shared by
+// the tally switch and the display label so they can never disagree. Natural
+// 20/1 are resolved by their own branches before this is consulted.
+func deathSaveSucceeds(roll, penalty int) bool {
+	return roll+penalty >= 10
 }
 
 // buildDeathSaveOutcome constructs the outcome after updating death save tallies.
-func buildDeathSaveOutcome(name string, ds DeathSaves, roll int) DeathSaveOutcome {
+func buildDeathSaveOutcome(name string, ds DeathSaves, roll, penalty int) DeathSaveOutcome {
 	tally := fmt.Sprintf("(%dS / %dF)", ds.Successes, ds.Failures)
-	rollDesc := deathSaveRollDesc(roll)
+	rollDesc := deathSaveRollDesc(roll, penalty)
 
 	msg := fmt.Sprintf("🎲  %s rolls death save — %s %s", name, rollDesc, tally)
 
@@ -157,15 +168,21 @@ func buildDeathSaveOutcome(name string, ds DeathSaves, roll int) DeathSaveOutcom
 	}
 }
 
-// deathSaveRollDesc returns the display text for a death save roll value.
-func deathSaveRollDesc(roll int) string {
+// deathSaveRollDesc returns the display text for a death save roll value. When
+// a d20-test penalty applies (2024 exhaustion), it shows the arithmetic so the
+// table sees why a raw ≥10 die still failed; the nat-1 line is penalty-agnostic.
+func deathSaveRollDesc(roll, penalty int) string {
 	if roll == 1 {
 		return "💥 NAT 1 — 2 failures!"
 	}
-	if roll >= 10 {
-		return fmt.Sprintf("%d — Success", roll)
+	label := "Failure"
+	if deathSaveSucceeds(roll, penalty) {
+		label = "Success"
 	}
-	return fmt.Sprintf("%d — Failure", roll)
+	if penalty != 0 {
+		return fmt.Sprintf("%d - %d exhaustion = %d — %s", roll, -penalty, roll+penalty, label)
+	}
+	return fmt.Sprintf("%d — %s", roll, label)
 }
 
 // ApplyDamageAtZeroHP processes damage taken while at 0 HP.

@@ -1416,12 +1416,26 @@ escapee's and grappler's (uniform penalty leaves the escapee's auto-pick unchang
 `exhaustion_contested_test.go` (5 subtests: grappler/shover/escapee actor-side flips + target/grappler
 defender-side flips). Gates met.
 
+**Death-save sub-gap DONE 2026-07-06.** Death saving throws are 2024 d20 Tests, so the −2×level penalty
+now lowers the total vs DC 10 — but NOT the nat-20 (regain 1 HP) / nat-1 (2 failures) detection, which
+keys off the natural die face. This needed the die/total split the earlier note flagged: `RollDeathSave`
+gained a `penalty int` param (mirroring `save.Save`/`check.SingleCheck`, which already take a numeric
+penalty), so `roll` stays the raw die (nat branches unchanged) while the pass/fail switch became
+`deathSaveSucceeds(roll, penalty)` — a new one-line helper that is the single home for the DC-10 threshold,
+shared by the tally switch and the display label so they can't diverge. Both callers fold
+`ExhaustionD20Penalty(int(combatant.ExhaustionLevel))`: the player `/deathsave` handler
+(`discord/deathsave_handler.go`) and the auto-timeout resolver (`combat/timer_resolution.go`). The log line
+discloses the arithmetic ("11 - 2 exhaustion = 9 — Failure") only when a penalty applies, so zero-exhaustion
+output is byte-identical to before. Test `exhaustion_deathsave_test.go` (5 subtests: success→failure flip,
+high-roll-still-succeeds, nat-20 protected, nat-1 double under exhaustion, penalty-0 base-rules unchanged).
+/simplify: 2 agents — both ship it, the `penalty int` seam affirmed as the exact codebase idiom; applied
+their one shared finding (the `deathSaveSucceeds` helper to unify the twice-encoded DC-10 threshold). Gates
+met (combat 91.34%, discord 86.22%).
+
 **Deferred (pre-existing gaps — these d20 tests never consumed exhaustion, not a regression):**
-concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), remaining skill
-checks (Hide/stealth and other ad-hoc ability checks), and death saves (`deathsave.go` conflates the
-raw die with the DC-10 total, so a clean fold needs a die/total split first — exhaustion must lower the
-total but not the nat-20/nat-1 detection). Full-2024 coverage would inject `ExhaustionD20Penalty` at
-each remaining site.
+concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`) and remaining skill
+checks (Hide/stealth and other ad-hoc ability checks). Full-2024 coverage would inject
+`ExhaustionD20Penalty` at each remaining site.
 
 ---
 

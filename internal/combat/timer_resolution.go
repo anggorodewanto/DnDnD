@@ -150,7 +150,9 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 			return nil, fmt.Errorf("rolling death save: %w", err)
 		}
 		roll := rollResult.Total
-		outcome := RollDeathSave(combatant.DisplayName, ds, roll)
+		// 2024 d20 Test: exhaustion's -2×level lowers the total vs DC 10.
+		penalty := ExhaustionD20Penalty(int(combatant.ExhaustionLevel))
+		outcome := RollDeathSave(combatant.DisplayName, ds, roll, penalty)
 		actions = append(actions, outcome.Messages...)
 
 		// Update combatant with new death saves state

@@ -104,7 +104,7 @@ func TestProcessDropToZeroHP_InstantDeath(t *testing.T) {
 
 func TestRollDeathSave_NormalSuccess(t *testing.T) {
 	ds := DeathSaves{Successes: 0, Failures: 1}
-	outcome := RollDeathSave("Aria", ds, 14)
+	outcome := RollDeathSave("Aria", ds, 14, 0)
 	assert.Equal(t, 1, outcome.DeathSaves.Successes)
 	assert.Equal(t, 1, outcome.DeathSaves.Failures)
 	assert.Equal(t, TokenDying, outcome.TokenState)
@@ -119,7 +119,7 @@ func TestRollDeathSave_NormalSuccess(t *testing.T) {
 
 func TestRollDeathSave_NormalFailure(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 0}
-	outcome := RollDeathSave("Aria", ds, 5)
+	outcome := RollDeathSave("Aria", ds, 5, 0)
 	assert.Equal(t, 1, outcome.DeathSaves.Successes)
 	assert.Equal(t, 1, outcome.DeathSaves.Failures)
 	assert.Equal(t, TokenDying, outcome.TokenState)
@@ -132,7 +132,7 @@ func TestRollDeathSave_NormalFailure(t *testing.T) {
 
 func TestRollDeathSave_ThreeSuccessesStabilize(t *testing.T) {
 	ds := DeathSaves{Successes: 2, Failures: 1}
-	outcome := RollDeathSave("Aria", ds, 15)
+	outcome := RollDeathSave("Aria", ds, 15, 0)
 	assert.Equal(t, 3, outcome.DeathSaves.Successes)
 	assert.Equal(t, TokenStable, outcome.TokenState)
 	assert.True(t, outcome.IsStable)
@@ -144,7 +144,7 @@ func TestRollDeathSave_ThreeSuccessesStabilize(t *testing.T) {
 
 func TestRollDeathSave_ThreeFailuresDead(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 5)
+	outcome := RollDeathSave("Aria", ds, 5, 0)
 	assert.Equal(t, 3, outcome.DeathSaves.Failures)
 	assert.Equal(t, TokenDead, outcome.TokenState)
 	assert.False(t, outcome.IsAlive)
@@ -156,7 +156,7 @@ func TestRollDeathSave_ThreeFailuresDead(t *testing.T) {
 
 func TestRollDeathSave_Nat20(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 20)
+	outcome := RollDeathSave("Aria", ds, 20, 0)
 	assert.Equal(t, 0, outcome.DeathSaves.Successes) // tallies reset
 	assert.Equal(t, 0, outcome.DeathSaves.Failures)  // tallies reset
 	assert.Equal(t, 1, outcome.HPCurrent)
@@ -173,7 +173,7 @@ func TestRollDeathSave_Nat20(t *testing.T) {
 
 func TestRollDeathSave_Nat1_TwoFailures(t *testing.T) {
 	ds := DeathSaves{Successes: 0, Failures: 0}
-	outcome := RollDeathSave("Aria", ds, 1)
+	outcome := RollDeathSave("Aria", ds, 1, 0)
 	assert.Equal(t, 0, outcome.DeathSaves.Successes)
 	assert.Equal(t, 2, outcome.DeathSaves.Failures)
 	assert.Equal(t, TokenDying, outcome.TokenState)
@@ -186,7 +186,7 @@ func TestRollDeathSave_Nat1_TwoFailures(t *testing.T) {
 
 func TestRollDeathSave_Nat1_CausesDeath(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 1)
+	outcome := RollDeathSave("Aria", ds, 1, 0)
 	assert.Equal(t, TokenDead, outcome.TokenState)
 	assert.False(t, outcome.IsAlive)
 	// Failures should be capped at 3 or show actual count
@@ -197,7 +197,7 @@ func TestRollDeathSave_Nat1_CausesDeath(t *testing.T) {
 
 func TestRollDeathSave_Nat1_OneExistingFailure(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 1}
-	outcome := RollDeathSave("Aria", ds, 1)
+	outcome := RollDeathSave("Aria", ds, 1, 0)
 	// 1 + 2 = 3 -> dead
 	assert.Equal(t, TokenDead, outcome.TokenState)
 	assert.False(t, outcome.IsAlive)
@@ -208,7 +208,7 @@ func TestRollDeathSave_Nat1_OneExistingFailure(t *testing.T) {
 
 func TestRollDeathSave_RollTen_IsSuccess(t *testing.T) {
 	ds := DeathSaves{}
-	outcome := RollDeathSave("Aria", ds, 10)
+	outcome := RollDeathSave("Aria", ds, 10, 0)
 	assert.Equal(t, 1, outcome.DeathSaves.Successes)
 	assert.Equal(t, 0, outcome.DeathSaves.Failures)
 }
@@ -217,7 +217,7 @@ func TestRollDeathSave_RollTen_IsSuccess(t *testing.T) {
 
 func TestRollDeathSave_RollNine_IsFailure(t *testing.T) {
 	ds := DeathSaves{}
-	outcome := RollDeathSave("Aria", ds, 9)
+	outcome := RollDeathSave("Aria", ds, 9, 0)
 	assert.Equal(t, 0, outcome.DeathSaves.Successes)
 	assert.Equal(t, 1, outcome.DeathSaves.Failures)
 }
@@ -369,7 +369,7 @@ func TestConditionsForDying(t *testing.T) {
 
 func TestRollDeathSave_MessageFormat_SuccessWithTally(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 1}
-	outcome := RollDeathSave("Aria", ds, 14)
+	outcome := RollDeathSave("Aria", ds, 14, 0)
 	assert.Contains(t, outcome.Messages[0], "🎲")
 	assert.Contains(t, outcome.Messages[0], "Aria rolls death save")
 	assert.Contains(t, outcome.Messages[0], "2S / 1F")
@@ -379,7 +379,7 @@ func TestRollDeathSave_MessageFormat_SuccessWithTally(t *testing.T) {
 
 func TestRollDeathSave_MessageFormat_FailureToDeath(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 5)
+	outcome := RollDeathSave("Aria", ds, 5, 0)
 	assert.Contains(t, outcome.Messages[0], "1S / 3F")
 	assert.Contains(t, outcome.Messages[0], "dead")
 }
@@ -407,7 +407,7 @@ func TestApplyDamageAtZeroHP_CritMessageFormat(t *testing.T) {
 
 func TestRollDeathSave_Nat20_MessageFormat(t *testing.T) {
 	ds := DeathSaves{Successes: 0, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 20)
+	outcome := RollDeathSave("Aria", ds, 20, 0)
 	assert.Contains(t, outcome.Messages[0], "🎯 NAT 20")
 	assert.Contains(t, outcome.Messages[0], "Aria regains 1 HP")
 	assert.Contains(t, outcome.Messages[0], "conscious")
@@ -417,7 +417,7 @@ func TestRollDeathSave_Nat20_MessageFormat(t *testing.T) {
 
 func TestRollDeathSave_Nat1_MessageFormat(t *testing.T) {
 	ds := DeathSaves{Successes: 1, Failures: 0}
-	outcome := RollDeathSave("Aria", ds, 1)
+	outcome := RollDeathSave("Aria", ds, 1, 0)
 	assert.Contains(t, outcome.Messages[0], "💥 NAT 1")
 	assert.Contains(t, outcome.Messages[0], "2 failures")
 	assert.Contains(t, outcome.Messages[0], "1S / 2F")
@@ -454,7 +454,7 @@ func TestHealFromZeroHP_MessageFormat(t *testing.T) {
 
 func TestRollDeathSave_ExactlyThreeSuccesses(t *testing.T) {
 	ds := DeathSaves{Successes: 2, Failures: 2}
-	outcome := RollDeathSave("Aria", ds, 10)
+	outcome := RollDeathSave("Aria", ds, 10, 0)
 	assert.Equal(t, 3, outcome.DeathSaves.Successes)
 	assert.Equal(t, TokenStable, outcome.TokenState)
 	assert.True(t, outcome.IsStable)

@@ -116,7 +116,10 @@ func (h *DeathSaveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	outcome := combat.RollDeathSave(combatant.DisplayName, ds, rollResult.Total)
+	// Death saves are 2024 d20 Tests, so exhaustion's -2×level penalty lowers
+	// the total vs DC 10 (nat-20/nat-1 still key off the raw die inside).
+	penalty := combat.ExhaustionD20Penalty(int(combatant.ExhaustionLevel))
+	outcome := combat.RollDeathSave(combatant.DisplayName, ds, rollResult.Total, penalty)
 
 	if persistErr := h.persistOutcome(ctx, combatant, outcome); persistErr != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to save death save: %v", persistErr))
