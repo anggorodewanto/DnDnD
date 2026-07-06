@@ -331,9 +331,10 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"5": []map[string]string{
 					{"name": "Uncanny Dodge", "description": "When an attacker you can see hits you with an attack, you can use your reaction to halve the attack's damage against you.", "mechanical_effect": "uncanny_dodge"},
 					// COV-8: Cunning Strike (2024 Rogue L5). Wired in combat
-					// (populateAttackFES dice-reduction + applyCunningStrikeTrip):
+					// (populateAttackFES dice-reduction + applyCunningStrike):
 					// when you deal Sneak Attack damage you may forgo a die to add
-					// an effect such as Trip (Dex save or Prone).
+					// an effect such as Trip (Dex save or Prone) or Poison (Con save
+					// or Poisoned).
 					{"name": "Cunning Strike", "description": "When you deal Sneak Attack damage, you can forgo one or more of the extra dice to add an effect, such as Trip (the target makes a Dexterity save or has the Prone condition).", "mechanical_effect": "cunning_strike"},
 				},
 				// COV-3: Evasion (2024 Rogue L7). Wired end-to-end in combat

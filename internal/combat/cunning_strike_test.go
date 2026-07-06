@@ -34,10 +34,21 @@ func TestReduceDiceCount(t *testing.T) {
 	}
 }
 
-func TestCunningStrikeDiceCost(t *testing.T) {
-	assert.Equal(t, 1, cunningStrikeDiceCost("trip"))
-	assert.Equal(t, 0, cunningStrikeDiceCost(""))
-	assert.Equal(t, 0, cunningStrikeDiceCost("unknown"))
+func TestCunningStrikeRiders(t *testing.T) {
+	trip, ok := cunningStrikeRiders["trip"]
+	require.True(t, ok)
+	assert.Equal(t, 1, trip.diceCost)
+	assert.Equal(t, "dex", trip.saveAbility)
+	assert.Equal(t, "prone", trip.condition)
+
+	poison, ok := cunningStrikeRiders["poison"]
+	require.True(t, ok)
+	assert.Equal(t, 1, poison.diceCost)
+	assert.Equal(t, "con", poison.saveAbility)
+	assert.Equal(t, "poisoned", poison.condition)
+
+	_, ok = cunningStrikeRiders["withdraw"]
+	assert.False(t, ok, "Withdraw not wired (needs a movement/OA trigger)")
 }
 
 // TestReduceSneakAttackDice: only the Sneak Attack extra-damage dice are
@@ -58,30 +69,36 @@ func TestSneakAttackDealt(t *testing.T) {
 	assert.False(t, sneakAttackDealt(AttackResult{}))
 }
 
-// TestRecordCunningStrikeTrip: the trip signal is recorded only when the option
-// is "trip", the attack hit, AND Sneak Attack actually dealt damage.
-func TestRecordCunningStrikeTrip(t *testing.T) {
+// TestRecordCunningStrike: the chosen effect is recorded only when it is a known
+// rider, the attack hit, AND Sneak Attack actually dealt damage.
+func TestRecordCunningStrike(t *testing.T) {
 	saHit := AttackResult{Hit: true, OncePerTurnEffectNames: []string{"Sneak Attack"}}
-	tripInput := AttackInput{CunningStrike: "trip"}
 
 	r := saHit
-	recordCunningStrikeTrip(&r, tripInput, 14)
-	assert.Equal(t, 14, r.CunningStrikeTripDC, "recorded → non-zero DC gates the trip")
+	recordCunningStrike(&r, AttackInput{CunningStrike: "trip"}, 14)
+	assert.Equal(t, "trip", r.CunningStrikeChoice, "recorded → choice gates the rider")
+	assert.Equal(t, 14, r.CunningStrikeSaveDC)
+
+	// A second effect records identically.
+	p := saHit
+	recordCunningStrike(&p, AttackInput{CunningStrike: "poison"}, 15)
+	assert.Equal(t, "poison", p.CunningStrikeChoice)
+	assert.Equal(t, 15, p.CunningStrikeSaveDC)
 
 	// Sneak Attack did not fire → not recorded.
 	noSA := AttackResult{Hit: true, OncePerTurnEffectNames: []string{"Hex"}}
-	recordCunningStrikeTrip(&noSA, tripInput, 14)
-	assert.Zero(t, noSA.CunningStrikeTripDC)
+	recordCunningStrike(&noSA, AttackInput{CunningStrike: "trip"}, 14)
+	assert.Empty(t, noSA.CunningStrikeChoice)
 
-	// Not a trip choice → not recorded.
-	noChoice := saHit
-	recordCunningStrikeTrip(&noChoice, AttackInput{}, 14)
-	assert.Zero(t, noChoice.CunningStrikeTripDC)
+	// Unknown / empty choice → not recorded.
+	unknown := saHit
+	recordCunningStrike(&unknown, AttackInput{CunningStrike: "withdraw"}, 14)
+	assert.Empty(t, unknown.CunningStrikeChoice)
 
 	// Miss → not recorded.
 	miss := AttackResult{Hit: false, OncePerTurnEffectNames: []string{"Sneak Attack"}}
-	recordCunningStrikeTrip(&miss, tripInput, 14)
-	assert.Zero(t, miss.CunningStrikeTripDC)
+	recordCunningStrike(&miss, AttackInput{CunningStrike: "trip"}, 14)
+	assert.Empty(t, miss.CunningStrikeChoice)
 }
 
 // --- Service.Attack end-to-end ----------------------------------------------
@@ -189,8 +206,9 @@ func TestServiceAttack_CunningStrikeTrip_FailedSaveAppliesProne(t *testing.T) {
 	}, roller)
 	require.NoError(t, err)
 	require.True(t, result.Hit)
-	assert.Equal(t, 14, result.CunningStrikeTripDC, "trip fired: 8 + prof 3 + DEX 3")
-	assert.False(t, result.CunningStrikeTripSaved, "low roll → failed save")
+	assert.Equal(t, "trip", result.CunningStrikeChoice)
+	assert.Equal(t, 14, result.CunningStrikeSaveDC, "trip fired: 8 + prof 3 + DEX 3")
+	assert.False(t, result.CunningStrikeSaved, "low roll → failed save")
 	assert.Contains(t, *applied, "prone", "failed save knocks the target prone")
 	// One SA die forgone: 1d8(5) + DEX(3) + 2d6(10) = 18 (vs 23 at the full 3d6).
 	assert.Equal(t, 18, result.DamageTotal, "Cunning Strike forgoes one Sneak Attack die (3d6→2d6)")
@@ -227,8 +245,8 @@ func TestServiceAttack_CunningStrikeTrip_SuccessfulSaveNoProne(t *testing.T) {
 	}, roller)
 	require.NoError(t, err)
 	require.True(t, result.Hit)
-	assert.Equal(t, 14, result.CunningStrikeTripDC, "trip fired")
-	assert.True(t, result.CunningStrikeTripSaved, "high roll → made save")
+	assert.Equal(t, 14, result.CunningStrikeSaveDC, "trip fired")
+	assert.True(t, result.CunningStrikeSaved, "high roll → made save")
 	assert.NotContains(t, *applied, "prone", "made save → no prone")
 	assert.Equal(t, 18, result.DamageTotal, "die still forgone on a made save")
 }
@@ -259,15 +277,55 @@ func TestServiceAttack_CunningStrikeTrip_NoFeatureIgnored(t *testing.T) {
 	}, roller)
 	require.NoError(t, err)
 	require.True(t, result.Hit)
-	assert.Zero(t, result.CunningStrikeTripDC, "no feature → trip not attempted")
+	assert.Empty(t, result.CunningStrikeChoice, "no feature → trip not attempted")
 	assert.NotContains(t, *applied, "prone")
 	// Full 3d6 Sneak Attack: 1d8(5) + DEX(3) + 3d6(15) = 23.
 	assert.Equal(t, 23, result.DamageTotal, "no feature → full Sneak Attack dice")
 }
 
-// TestFormatAttackLog_CunningStrikeTrip surfaces the Trip outcome (saved vs
-// knocked prone) as a player-visible line.
-func TestFormatAttackLog_CunningStrikeTrip(t *testing.T) {
+// TestServiceAttack_CunningStrikePoison_FailedSaveAppliesPoisoned: a Rogue-5 with
+// the feature opts into cunning:poison; the target fails its CON save → Poisoned,
+// and one Sneak Attack die is forgone (same seam as Trip, different save+condition).
+func TestServiceAttack_CunningStrikePoison_FailedSaveAppliesPoisoned(t *testing.T) {
+	ctx := context.Background()
+	charID, attackerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	turnID, encounterID := uuid.New(), uuid.New()
+
+	ms, applied := cunningStrikeMockStore(t, charID, true)
+	svc := NewService(ms)
+
+	// Attack rolls twice (advantage) — both 18 (hit); the CON save rolls once — 1 (fail).
+	d20calls := 0
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			d20calls++
+			if d20calls <= 2 {
+				return 18 // attack hits
+			}
+			return 1 // CON save fails
+		}
+		return 5
+	})
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker:      cunningRogueAttacker(charID, attackerID, encounterID),
+		Target:        cunningProneGoblin(targetID, encounterID),
+		Turn:          turn,
+		CunningStrike: "poison",
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit)
+	assert.Equal(t, "poison", result.CunningStrikeChoice)
+	assert.Equal(t, 14, result.CunningStrikeSaveDC, "poison DC is also 8 + prof 3 + DEX 3")
+	assert.False(t, result.CunningStrikeSaved, "low roll → failed save")
+	assert.Contains(t, *applied, "poisoned", "failed CON save poisons the target")
+	assert.Equal(t, 18, result.DamageTotal, "poison also forgoes one Sneak Attack die (3d6→2d6)")
+}
+
+// TestFormatAttackLog_CunningStrike surfaces each effect's outcome (saved vs the
+// rider's condition) as a player-visible line, labelled by effect.
+func TestFormatAttackLog_CunningStrike(t *testing.T) {
 	base := AttackResult{
 		AttackerName: "Snik", TargetName: "Goblin", WeaponName: "Rapier",
 		IsMelee: true, Hit: true, DamageTotal: 18, DamageType: "piercing", DamageDice: "1d8",
@@ -275,13 +333,22 @@ func TestFormatAttackLog_CunningStrikeTrip(t *testing.T) {
 	}
 
 	tripped := base
-	tripped.CunningStrikeTripDC = 14
+	tripped.CunningStrikeChoice = "trip"
+	tripped.CunningStrikeSaveDC = 14
 	log := FormatAttackLog(tripped)
-	assert.Contains(t, log, "Cunning Strike")
-	assert.Contains(t, log, "Prone")
+	assert.Contains(t, log, "Cunning Strike (Trip)")
+	assert.Contains(t, log, "knocked Prone")
+
+	poisoned := base
+	poisoned.CunningStrikeChoice = "poison"
+	poisoned.CunningStrikeSaveDC = 14
+	plog := FormatAttackLog(poisoned)
+	assert.Contains(t, plog, "Cunning Strike (Poison)")
+	assert.Contains(t, plog, "Poisoned")
 
 	saved := base
-	saved.CunningStrikeTripDC = 14
-	saved.CunningStrikeTripSaved = true
+	saved.CunningStrikeChoice = "trip"
+	saved.CunningStrikeSaveDC = 14
+	saved.CunningStrikeSaved = true
 	assert.Contains(t, FormatAttackLog(saved), "saves")
 }

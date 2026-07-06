@@ -472,13 +472,13 @@ Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of 
 ---
 
 ### COV-8 — Cunning Strike / Brutal Strike / Tactical Master / Steady Aim
-**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06; Cunning Strike **Trip** DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
+**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06; Cunning Strike **Trip + Poison** DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
 
 Four 2024 martial riders that each sit on already-wired machinery. Each is its own small
 item; split if picked up separately.
 
 - **Cunning Strike (Rogue L5):** spend sneak-attack dice for a rider (poison/trip/withdraw).
-  Rides the once/turn `SneakAttackFeature` (`feature_integration.go:89`). **Trip DONE 2026-07-06** — see the Shipped block below; Poison + Withdraw deferred.
+  Rides the once/turn `SneakAttackFeature` (`feature_integration.go:89`). **Trip + Poison DONE 2026-07-06** — see the Shipped blocks below; Withdraw deferred (needs the movement/OA trigger).
 - **Brutal Strike (Barb L9):** forgo advantage → on-hit extra damage + effect. Mirrors the
   GWM on-hit rider (`GreatWeaponMasterFeature` `feature_integration.go:317`) and the mastery
   on-hit pipeline (`mastery.go`).
@@ -599,12 +599,42 @@ trigger system that does not exist yet, same gap as Sentinel/Polearm-OA), Daze/e
 size gate on Trip (Topple applies Prone without one today — parity); forgoing >1 die / multiple effects on
 one Sneak Attack (single-effect only this slice).
 
-**Blocker for the remaining Cunning effects + Brutal Strike (Barb L9):** Cunning **Trip** is now seeded +
-wired (Rogue L5 `cunning_strike`); the remaining Cunning effects (Poison/Withdraw) reuse that seam but need
-their own resolvers (Withdraw is blocked on the movement/OA trigger). Brutal Strike still needs its L9 seed
-key (see COV-10) added alongside the rider, and is more fragile: a "forgo the Reckless advantage" suppression
-in the shared `DetectAdvantage` (two sites) plus 15ft-push / −15-speed riders that don't reuse the hardcoded
-10ft/−10 mastery values.
+**Shipped (Cunning Strike — Poison effect + generic rider refactor, 2026-07-06).** `/attack cunning:poison`
+= forgo one SA die → target **CON save (same DC 8+prof+DEX) or Poisoned**. This slice did the
+`/simplify`-altitude-endorsed refactor: the Trip-specific code became a **data-driven** `cunningStrikeRiders`
+map (`cunning_strike.go`) — each entry carries `{diceCost, saveAbility, condition, label, onFail}`, and one
+entry now drives the whole pipeline (die forgone in `populateAttackFES`, the eligibility + record gates, the
+save+condition in `applyCunningStrike`, and both `FormatAttackLog` branches) with **no per-effect switch**
+anywhere. Adding an effect in the "save-or-condition family" is one map row + one `/attack cunning` Choice.
+Result fields went generic: `CunningStrikeTripDC/Saved` → `CunningStrikeChoice` (the gate + rider-lookup
+key) + `CunningStrikeSaveDC` + `CunningStrikeSaved`. The DC (`8+prof+DEX`) stays computed in `ResolveAttack`
+— a Cunning-Strike-feature invariant, target-ability-independent — while the rider carries only the ability
+the **target** rolls (DEX for Trip, CON for Poison); altitude affirmed that split is coherent. The
+`populateAttackFES` gate became `if rider, ok := cunningStrikeRiders[cmd.CunningStrike]; ok && hasFeatureEffect(...)`
+— strictly better than the prior `!="" &&` (rejects unknown choices before the `char.Features` unmarshal
+too, and still short-circuits the hot path). `poisoned` is a real wired condition (`condition_effects.go`,
+`advantage.go` → disadvantage on the poisoned creature's attacks; `ApplyCondition` skips poison-immune
+targets). No seed change (same `cunning_strike` slug/feature). Discord: added the `poison` Choice to the
+`cunning` option. Tests: `TestCunningStrikeRiders` (table pins trip/poison, Withdraw absent), generic
+`TestRecordCunningStrike`, a Poison `Service.Attack` end-to-end (CON save fail → poisoned, SA 3d6→2d6 = 18
+dmg), a two-effect `FormatAttackLog` case. `/simplify`: 2 focused agents (shape already vetted in the Trip
+slice) — both **ship it**, generalization mechanically clean (no dead code / redundant state / efficiency
+regression); **applied 4 doc-only fixes** (3 stale Trip-only comments left by the rename + expanded the
+deferred-effects comment with the seam analysis below). **DEFERRED / seam analysis for the next effect
+(documented in `cunning_strike.go`):** Withdraw (no save/condition — a different resolution category; add a
+SEPARATE non-save handler when the movement/OA trigger exists, do NOT widen the rider struct); Daze
+(condition-until-end-of-turn — needs `durationRounds`/`expiresOn` on the rider + `StartedRound` threaded into
+`applyCunningStrike` + note `isExpired` keys expiry to the SOURCE's turn, so "end of the TARGET's next turn"
+RAW needs an expiry-keying change); Poisoner's Kit on Poison (a binary inventory check — the one deferral
+most worth closing, no new infra); per-turn re-save on Poisoned (indefinite-until-teardown, COV-2 model).
+Coverage gates met (combat 91.32%, discord 86.22%, refdata 98.09%).
+
+**Blocker for the remaining Cunning effect + Brutal Strike (Barb L9):** Cunning **Trip + Poison** are now
+wired (Rogue L5 `cunning_strike`, the data-driven rider table). Only **Withdraw** remains of the Cunning
+effects — blocked on the movement/OA trigger system (add a separate non-save handler, per the seam analysis).
+Brutal Strike still needs its L9 seed key (see COV-10) added alongside the rider, and is more fragile: a
+"forgo the Reckless advantage" suppression in the shared `DetectAdvantage` (two sites) plus 15ft-push /
+−15-speed riders that don't reuse the hardcoded 10ft/−10 mastery values.
 
 ---
 

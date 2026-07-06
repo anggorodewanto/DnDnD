@@ -128,6 +128,7 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Description: "Cunning Strike (Rogue 5): forgo a Sneak Attack die to add an effect",
 					Choices: []*discordgo.ApplicationCommandOptionChoice{
 						{Name: "trip (Dex save or Prone)", Value: "trip"},
+						{Name: "poison (Con save or Poisoned)", Value: "poison"},
 					},
 				},
 				{

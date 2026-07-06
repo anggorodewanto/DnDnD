@@ -13,17 +13,37 @@ import (
 
 // Cunning Strike (2024 Rogue, level 5): "When you deal Sneak Attack damage, you
 // can add one of the following effects, forgoing a number of Sneak Attack dice
-// (the effect's cost) before rolling the rest." This slice wires the Trip effect
-// (Cost 1 die): on a hit that dealt Sneak Attack damage, the target makes a
-// Dexterity save (DC 8 + proficiency + the rogue's DEX modifier) or falls Prone.
+// (the effect's cost) before rolling the rest." Each effect makes the target save
+// (DC 8 + proficiency + the rogue's DEX modifier) or suffer a condition. Wired
+// effects (cunningStrikeRiders): Trip (Cost 1, DEX save or Prone) and Poison
+// (Cost 1, CON save or Poisoned).
 //
 // The die cost is subtracted from the Sneak Attack extra-damage dice in
-// populateAttackFES (before the roll); the rider itself is resolved post-hit in
-// Service.Attack (applyCunningStrikeTrip), synchronously, mirroring the Topple
-// mastery's inline save-or-Prone (applyToppleSave). Deferred: the Poison and
-// Withdraw effects (Poison has a re-save nuance; Withdraw needs the movement/OA
-// trigger system that does not exist yet), and the "Large or smaller" size gate
-// (Topple applies Prone without one today, so Trip matches for parity).
+// populateAttackFES (before the roll); the rider is resolved post-hit in
+// Service.Attack (applyCunningStrike), synchronously, mirroring the Topple
+// mastery's inline save-or-condition (applyToppleSave).
+//
+// cunningStrikeRiders is the "save-or-condition family": every entry is a target
+// save that lands an indefinite condition on a failure. Deferred effects that do
+// NOT fit that shape need more than a new row (documented here so the next slice
+// inherits the seam analysis):
+//   - Withdraw (move without provoking OA) has no save and no condition — a
+//     different resolution CATEGORY. Add a separate non-save handler when the
+//     movement/OA trigger exists; do NOT widen the rider struct with optional
+//     movement fields.
+//   - Daze (a condition until the end of a turn) needs a duration: add
+//     durationRounds/expiresOn to the rider (zero-value stays today's indefinite,
+//     so Trip/Poison are unaffected), thread the current round into
+//     applyCunningStrike to seed CombatCondition.StartedRound, and note that
+//     isExpired keys expiry to the SOURCE's turn — "end of the TARGET's next turn"
+//     (Daze RAW) needs an expiry-keying change, not just a duration.
+//
+// Also deferred: the Poisoner's Kit requirement on Poison (a binary inventory
+// check — the one deferral most worth closing, no new infra); the per-turn
+// re-save on the Poisoned condition (no repeated-save scheduler — the same
+// indefinite-until-teardown model COV-2 uses for save-or-suck conditions); the
+// "Large or smaller" size gate on Trip (Topple applies Prone without one today);
+// and forgoing more than one die / stacking multiple effects on one Sneak Attack.
 
 // cunningStrikeEffect is the seeded mechanical_effect slug that gates Cunning
 // Strike. Detection is by slug via hasFeatureEffect (mirroring the Tactical
@@ -37,14 +57,26 @@ const cunningStrikeEffect = "cunning_strike"
 // not a discriminator (Hex / Hunter's Mark share it), so we key on the name.
 const sneakAttackFeatureName = "Sneak Attack"
 
-// cunningStrikeDiceCost returns the number of Sneak Attack dice a Cunning Strike
-// option forgoes, or 0 for an unknown/empty choice (which makes the whole path
-// inert). Trip costs one die.
-func cunningStrikeDiceCost(choice string) int {
-	if choice == "trip" {
-		return 1
-	}
-	return 0
+// cunningStrikeRider describes one Cunning Strike effect: the number of Sneak
+// Attack dice forgone (diceCost), the ability the TARGET saves with, the
+// condition applied on a failed save, and the player-facing label / fail-outcome
+// text for the combat log. The save DC is always 8 + prof + the rogue's DEX
+// (computed once in ResolveAttack), independent of which ability the target rolls.
+type cunningStrikeRider struct {
+	diceCost    int
+	saveAbility string
+	condition   string
+	label       string // effect name in the log, e.g. "Trip"
+	onFail      string // outcome text on a failed save, e.g. "knocked Prone"
+}
+
+// cunningStrikeRiders is the closed set of wired Cunning Strike effects. Adding
+// an effect is one entry here plus one /attack cunning Choice — the resolution
+// (dice forgone, save, condition, log) is fully data-driven. Withdraw is absent:
+// it needs a movement/OA trigger that does not exist yet.
+var cunningStrikeRiders = map[string]cunningStrikeRider{
+	"trip":   {diceCost: 1, saveAbility: "dex", condition: "prone", label: "Trip", onFail: "knocked Prone"},
+	"poison": {diceCost: 1, saveAbility: "con", condition: "poisoned", label: "Poison", onFail: "Poisoned"},
 }
 
 // reduceDiceCount subtracts `by` from the count of an "NdX" dice expression,
@@ -95,50 +127,53 @@ func sneakAttackDealt(result AttackResult) bool {
 	return slices.Contains(result.OncePerTurnEffectNames, sneakAttackFeatureName)
 }
 
-// recordCunningStrikeTrip records the Trip save DC on the result when the rogue
-// opted into cunning:trip, the attack hit, and Sneak Attack actually dealt
-// damage — the non-zero DC is the "trip fired" gate downstream. The eligibility
-// (feature present) is already baked into input.CunningStrike by
-// populateAttackFES, so a non-rogue's request never reaches here as "trip". The
-// save itself is rolled later in Service.Attack (applyCunningStrikeTrip).
-func recordCunningStrikeTrip(result *AttackResult, input AttackInput, dc int) {
-	if input.CunningStrike != "trip" {
+// recordCunningStrike records the chosen Cunning Strike effect + its save DC on
+// the result when the rogue opted into a known cunning effect, the attack hit,
+// and Sneak Attack actually dealt damage — a non-empty CunningStrikeChoice is the
+// "rider fired" gate downstream. The eligibility (feature present, choice known)
+// is already baked into input.CunningStrike by populateAttackFES, so a
+// non-rogue's request never reaches here. The save itself is rolled later in
+// Service.Attack (applyCunningStrike).
+func recordCunningStrike(result *AttackResult, input AttackInput, dc int) {
+	if _, ok := cunningStrikeRiders[input.CunningStrike]; !ok {
 		return
 	}
 	if !result.Hit || !sneakAttackDealt(*result) {
 		return
 	}
-	result.CunningStrikeTripDC = dc
+	result.CunningStrikeChoice = input.CunningStrike
+	result.CunningStrikeSaveDC = dc
 }
 
-// applyCunningStrikeTrip resolves the target's DEX save against the Cunning
-// Strike Trip DC and applies Prone on a failure. A no-op unless
-// result.CunningStrikeTrip was set in ResolveAttack. Mirrors applyToppleSave but
-// on a DEX save; sets result.CunningStrikeTripSaved so the log can report the
+// applyCunningStrike resolves the target's save against the Cunning Strike DC and
+// applies the rider's condition on a failure. A no-op unless a rider was recorded
+// in ResolveAttack. Mirrors applyToppleSave, generalized over the rider's save
+// ability + condition; sets result.CunningStrikeSaved so the log can report the
 // outcome.
-func (s *Service) applyCunningStrikeTrip(ctx context.Context, attacker, target refdata.Combatant, result *AttackResult, roller *dice.Roller) error {
-	if result.CunningStrikeTripDC <= 0 {
+func (s *Service) applyCunningStrike(ctx context.Context, attacker, target refdata.Combatant, result *AttackResult, roller *dice.Roller) error {
+	rider, ok := cunningStrikeRiders[result.CunningStrikeChoice]
+	if !ok {
 		return nil
 	}
-	dexSaveBonus, err := s.resolveCombatantSaveBonus(ctx, target, "dex")
+	saveBonus, err := s.resolveCombatantSaveBonus(ctx, target, rider.saveAbility)
 	if err != nil {
-		return fmt.Errorf("resolving cunning strike DEX save: %w", err)
+		return fmt.Errorf("resolving cunning strike %s save: %w", rider.saveAbility, err)
 	}
-	d20Result, err := roller.RollD20(dexSaveBonus, dice.Normal)
+	d20Result, err := roller.RollD20(saveBonus, dice.Normal)
 	if err != nil {
-		return fmt.Errorf("rolling cunning strike DEX save: %w", err)
+		return fmt.Errorf("rolling cunning strike %s save: %w", rider.saveAbility, err)
 	}
-	if d20Result.Total >= result.CunningStrikeTripDC {
-		result.CunningStrikeTripSaved = true
-		return nil // save succeeds → no Prone
+	if d20Result.Total >= result.CunningStrikeSaveDC {
+		result.CunningStrikeSaved = true
+		return nil // save succeeds → no condition
 	}
-	prone := CombatCondition{
-		Condition:         "prone",
+	cond := CombatCondition{
+		Condition:         rider.condition,
 		DurationRounds:    0,
 		SourceCombatantID: attacker.ID.String(),
 	}
-	if _, _, err := s.ApplyCondition(ctx, target.ID, prone); err != nil {
-		return fmt.Errorf("applying prone from cunning strike trip: %w", err)
+	if _, _, err := s.ApplyCondition(ctx, target.ID, cond); err != nil {
+		return fmt.Errorf("applying %s from cunning strike %s: %w", rider.condition, result.CunningStrikeChoice, err)
 	}
 	return nil
 }
