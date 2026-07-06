@@ -266,6 +266,9 @@ func (s *Service) PassiveCheck(input PassiveCheckInput) PassiveCheckResult {
 type GroupParticipant struct {
 	Name     string
 	Modifier int
+	// ExhaustionLevel drives the 2024 flat -2/level d20-Test penalty on this
+	// participant's roll (mirrors SingleCheck). 0 = no penalty.
+	ExhaustionLevel int
 }
 
 // GroupCheckInput holds parameters for a group check.
@@ -299,7 +302,8 @@ func (s *Service) GroupCheck(input GroupCheckInput) GroupCheckResult {
 	}
 
 	for _, p := range input.Participants {
-		d20, _ := s.roller.RollD20(p.Modifier, dice.Normal)
+		// 2024 exhaustion applies a flat -2/level penalty to the d20 Test.
+		d20, _ := s.roller.RollD20(p.Modifier+combat.ExhaustionD20Penalty(p.ExhaustionLevel), dice.Normal)
 		passed := d20.Total >= input.DC
 		if passed {
 			result.Passed++
@@ -322,6 +326,9 @@ type ContestedParticipant struct {
 	Name     string
 	Modifier int
 	RollMode dice.RollMode
+	// ExhaustionLevel drives the 2024 flat -2/level d20-Test penalty on this
+	// participant's roll (mirrors SingleCheck). 0 = no penalty.
+	ExhaustionLevel int
 }
 
 // ContestedCheckInput holds parameters for a contested check.
@@ -342,8 +349,9 @@ type ContestedCheckResult struct {
 
 // ContestedCheck performs a contested check between two participants.
 func (s *Service) ContestedCheck(input ContestedCheckInput) ContestedCheckResult {
-	initD20, _ := s.roller.RollD20(input.Initiator.Modifier, input.Initiator.RollMode)
-	oppD20, _ := s.roller.RollD20(input.Opponent.Modifier, input.Opponent.RollMode)
+	// 2024 exhaustion applies a flat -2/level penalty to each side's d20 Test.
+	initD20, _ := s.roller.RollD20(input.Initiator.Modifier+combat.ExhaustionD20Penalty(input.Initiator.ExhaustionLevel), input.Initiator.RollMode)
+	oppD20, _ := s.roller.RollD20(input.Opponent.Modifier+combat.ExhaustionD20Penalty(input.Opponent.ExhaustionLevel), input.Opponent.RollMode)
 
 	result := ContestedCheckResult{
 		InitiatorD20:   initD20,

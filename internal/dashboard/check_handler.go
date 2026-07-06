@@ -152,7 +152,7 @@ func (h *CheckHandler) collectGroupParticipants(ctx context.Context, encounterID
 		if name == "" {
 			name = char.Name
 		}
-		out = append(out, check.GroupParticipant{Name: name, Modifier: mod})
+		out = append(out, check.GroupParticipant{Name: name, Modifier: mod, ExhaustionLevel: int(c.ExhaustionLevel)})
 	}
 	return out, nil
 }

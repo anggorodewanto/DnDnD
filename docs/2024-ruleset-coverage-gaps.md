@@ -1454,8 +1454,28 @@ rolls only **damage**. The d20 save feeding it is rolled in `discord/save_handle
 AoE / single-target save path is covered. Folding exhaustion into `ResolveAoESaves` would be
 wrong-layer (double-count after success is already known).
 
+**Group / contested check sub-gap DONE 2026-07-07.** `internal/check`'s two remaining d20-roll
+sites skipped exhaustion while `SingleCheck` (`check.go:155`) already folded it. Both closed by
+adding an `ExhaustionLevel int` field to `GroupParticipant` + `ContestedParticipant` and folding
+`combat.ExhaustionD20Penalty(...)` into the `RollD20` modifier at each site (same numeric-term
+fold as SingleCheck and the ≈9 combat sites — these structs carry only a precomputed `Modifier`,
+not `Conditions`, so the resolver path isn't available or appropriate). **`GroupCheck` is the live
+path** (DM-driven group check, dashboard `HandleGroupCheck`): every participant is a combatant, so
+`collectGroupParticipants` populates `ExhaustionLevel: int(c.ExhaustionLevel)` off the row already
+in the loop — fully correct, no deferral. **`ContestedCheck`:** initiator populated from
+`input.ExhaustionLevel` in `discord/check_handler.go handleContestedCheck` (live-correct when the
+path is wired); the function folds the opponent side symmetrically too, but the handler leaves it 0
+— `ResolveContestedOpponent` (interface) returns only name+modifier+ok, and the contested path is
+**prod-unwired** (no `SetOpponentResolver` caller), so opponent-side exhaustion is deferred until
+the resolver carries it (folded now → correct the instant it does). Test
+`exhaustion_check_test.go` (`TestGroupCheck_Exhaustion` flip+control; `TestContestedCheck_Exhaustion`
+initiator-flip + opponent-flip subtests). /simplify: 2 agents — both **ship it**, clean on all four
+axes (roll-site fold affirmed as the right altitude; symmetric opponent fold + honest deferral
+comment judged higher-altitude than initiator-only special-casing). Gates met.
+
 **Still deferred (pre-existing, not a regression):** remaining ad-hoc skill/ability checks
-(Hide/stealth and other non-save d20 tests). Each just needs `ExhaustionD20Penalty` at its roll.
+(Hide/stealth and other non-save d20 tests not routed through `internal/check`). Each just needs
+`ExhaustionD20Penalty` at its roll.
 
 ---
 

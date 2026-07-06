@@ -411,8 +411,12 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 	initiatorMod := character.SkillModifier(input.Scores, input.Skill, input.ProficientSkills, input.ExpertiseSkills, input.JackOfAllTrades, input.ProfBonus)
 
 	contested := h.checkService.ContestedCheck(check.ContestedCheckInput{
-		Initiator: check.ContestedParticipant{Name: char.Name, Modifier: initiatorMod, RollMode: input.RollMode},
-		Opponent:  check.ContestedParticipant{Name: oppName, Modifier: oppMod, RollMode: dice.Normal},
+		Initiator: check.ContestedParticipant{Name: char.Name, Modifier: initiatorMod, RollMode: input.RollMode, ExhaustionLevel: input.ExhaustionLevel},
+		// Opponent exhaustion is deferred: ResolveContestedOpponent returns only a
+		// precomputed modifier, and this contested path is not yet wired in prod
+		// (no SetOpponentResolver caller). ContestedCheck folds the opponent side
+		// so it is correct the moment the resolver carries exhaustion.
+		Opponent: check.ContestedParticipant{Name: oppName, Modifier: oppMod, RollMode: dice.Normal},
 	})
 
 	msg := formatContestedCheckResult(input.Skill, contested)
