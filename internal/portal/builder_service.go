@@ -54,8 +54,14 @@ type CharacterSubmission struct {
 	// of Eldritch Invocation ids (refdata.InvocationCatalog). Both resolve into
 	// character.Feature entries via injectClassFeatureChoices — an invocation id
 	// doubles as the clean-slug mechanical_effect the combat engine reads.
-	PactBoon        string   `json:"pact_boon,omitempty"`
-	Invocations     []string `json:"invocations,omitempty"`
+	PactBoon    string   `json:"pact_boon,omitempty"`
+	Invocations []string `json:"invocations,omitempty"`
+	// FightingStyle is the Fighter/Paladin/Ranger fighting-style pick (COV-15): a
+	// refdata.FightingStyleCatalog id that doubles as the combat-read
+	// mechanical_effect slug (e.g. "archery"). Resolved into a character.Feature
+	// by injectClassFeatureChoices, replacing the choose_fighting_style
+	// placeholder — the same shape as PactBoon.
+	FightingStyle   string   `json:"fighting_style,omitempty"`
 	Equipment       []string `json:"equipment,omitempty"`
 	Spells          []string `json:"spells,omitempty"`
 	WeaponMasteries []string `json:"weapon_masteries,omitempty"`
@@ -541,6 +547,11 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 	// ISSUE-060: reject illegal Warlock pact-boon / Eldritch Invocation picks
 	// (non-warlock, over the warlock-level grant, unmet prereqs, unknown ids).
 	if err := validateSubmittedClassFeatures(sub); err != nil {
+		errs = append(errs, err.Error())
+	}
+	// COV-15: reject an illegal Fighting Style pick (unknown id, or a style on a
+	// class/level that grants none).
+	if err := validateSubmittedFightingStyle(sub); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {

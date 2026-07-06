@@ -1055,14 +1055,53 @@ Blast *bonus* multiplies by beam count (`agonizing_blast.go:35`). Correct multi-
 N attack rolls at levels 5/11/17. **Blocks per-beam Repelling Blast (COV-6).**
 
 ### COV-15 — Fighting Style / Metamagic not enforced end-to-end
-**Status:** OPEN · **Severity:** low · **Pkg:** `internal/portal` (builder)
+**Status:** IN PROGRESS (Fighting Style DONE 2026-07-06; Metamagic still OPEN) · **Severity:** low · **Pkg:** `internal/portal` (builder) + `internal/refdata`
 
-The combat engine *can* apply specific fighting styles (archery/defense/dueling/GWF,
-`feature_integration.go:399-406`) and specific metamagic (`metamagic.go`), but the **builder
-only writes the generic `choose_fighting_style` / `choose_2_metamagic_options` placeholder**
-(`seed_classes.go:163/348`) — the player's actual pick is never injected as a feature.
-Mirror `injectClassFeatureChoices` (`builder_service.go:563`), which already materializes
-pact-boon/invocation/expertise picks; add fighting-style + metamagic picks the same way.
+**Shipped (Fighting Style, full loop).** The Fighter/Paladin/Ranger fighting-style pick is now
+captured end-to-end and drives combat. The builder resolves the player's pick into a
+`character.Feature{Source:"fighting_style", MechanicalEffect:<slug>}` that replaces the seeded
+`choose_fighting_style` placeholder — folded into the **existing** pact-boon/invocation resolution
+pipeline (`classFeatureFeaturesForSubmission` → `injectClassFeatureChoices` strip →
+`classFeatureChoicesFromFeatures` reverse-map, all in `invocations.go`), so an edit round-trip
+preserves it exactly like an invocation. Combat already consumes the slug (no engine change):
+`archery`/`defense`/`dueling`/`great_weapon_fighting` via `BuildFeatureDefinitions`,
+`two_weapon_fighting` via `HasFightingStyle`, `defense` also via `hasDefenseFightingStyle`.
+
+- **SSOT:** new `refdata.FightingStyleCatalog()` (`fighting_style_catalog.go`, mirrors
+  `PactBoonCatalog`) holds **only the 5 combat-wired styles** — a pickable-but-inert style would be
+  the dead-data anti-pattern; `TestFightingStyleCatalog_MatchesWiredCombatSet` pins catalog == wired
+  set in both directions, so a future 6th style must land its combat rider first. `FightingStyleGrantLevel`
+  (fighter L1, paladin/ranger L2) lives here too, beside the catalog + the new
+  `ChooseFightingStyleEffect` placeholder const (the 3 seed sites now reference it, so seed↔stripper
+  can't drift — mirrors `ChoosePactBoonEffect`).
+- **Backend** (`internal/portal/fighting_style.go`): `submissionFightingStyleGrant` /
+  `fightingStyleFeatureForSubmission` / `validateSubmittedFightingStyle` — the same validate/resolve/grant
+  trio each warlock/expertise feature hand-writes (no shared generic; triple-dup is the established call,
+  per the `preserveExpended*` /simplify decision). `CharacterSubmission.FightingStyle` (`json:"fighting_style"`)
+  added; validation wired at `prepareCharParams`. Resolution independently guards unknown/no-grant because
+  the **Preview** path reaches it without calling `validate*`.
+- **Frontend** (one shared `CharacterBuilder.svelte`, covers portal + DM dashboard): a Fighting Style
+  radio picker in the Class Features step (`fighting-styles.js` — eligibility + reconcile mirror the
+  Go/JS warlock split; the step-visibility gate ORs `fightingStyleEligible` at the call site so
+  `invocations.js` stays warlock-scoped); submission field + edit hydration + draft persistence. The
+  ~5-style JS list is hand-copied (tiny, combat-capped — no gen pipeline like invocations' catalog JSON;
+  keep in sync by hand, disclosed in the file header).
+- **Tests:** `fighting_style_catalog_test.go` (wired-set pin, slug hygiene, grant levels),
+  `fighting_style_test.go` (grant eligibility, validation table, inject strip, **combat-reader
+  end-to-end via `combat.HasFightingStyle`**, no-pick-leaves-placeholder, reverse-map). `/simplify`:
+  4 agents — reuse/simplification/efficiency CLEAN; altitude affirmed 5/6 seams, applied 2 fixes
+  (honest JS-duplication comment; moved the grant-level map into refdata beside the catalog). Coverage
+  gates met.
+- **Deferred:** per-class style restrictions (2024 limits some styles to some classes — engine is open
+  today); the remaining 5 non-wired PHB styles (each needs its combat rider first); a generated
+  `fighting-styles-catalog.json` + `make` drift guard (unjustified for a 5-entry list).
+
+**Still OPEN — Metamagic.** The other half is a different shape and NOT wired: metamagic is applied at
+**cast time via `/cast` flags** (`metamagic.go`), not read passively off a persisted feature, so capturing
+the player's two picks in the builder also needs combat to gate `/cast quickened|distant|…` on "does this
+sorcerer know that metamagic." The builder still writes only the `choose_2_metamagic_options` placeholder
+(`seed_classes.go:373`). Mirror the fighting-style capture for the builder half, then add the cast-time
+known-metamagic gate.
 
 ---
 
@@ -1261,6 +1300,11 @@ make sqlc-check    # if you touched .sql queries
    RAW reaction cost/economy auto-simplified + deferred to a future save-path reaction lane. Shield
    Master's +shield-AC-to-DEX-saves rider still open.
 5. Tier 4 data fixes (COV-11..15) — low risk, do alongside related feature work.
+5b. ~~**COV-15 Fighting Style**~~ **DONE 2026-07-06** — full loop: the Fighter/Paladin/Ranger pick is
+   captured in the builder (`fighting-styles.js` picker + `CharacterSubmission.FightingStyle`) and
+   resolved into a combat-read `Feature{MechanicalEffect:<slug>}` via the existing
+   `injectClassFeatureChoices` pipeline; new `refdata.FightingStyleCatalog` SSOT holds only the 5
+   combat-wired styles (dead-data-guarded). Metamagic half still OPEN (cast-time gate, different shape).
 6. ~~**COV-17 (Tier 5) — builder-rebuild overlay preservation.**~~ **COMPLETE 2026-07-05** —
    all 3 slices shipped: ASI-applied feats (`preservePersistedFeats`, S1), Tough flat +2/level HP
    (`character.FeatFlatHPBonus` SSOT re-added on rebuild, S2), and expended feature-use pools

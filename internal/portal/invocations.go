@@ -195,6 +195,11 @@ func classFeatureFeaturesForSubmission(sub CharacterSubmission) []character.Feat
 			MechanicalEffect: inv.ID,
 		})
 	}
+	// COV-15: the Fighter/Paladin/Ranger fighting-style pick resolves the same way
+	// (concrete feature carrying the combat-read slug, replacing choose_fighting_style).
+	if style, ok := fightingStyleFeatureForSubmission(sub); ok {
+		out = append(out, style)
+	}
 	return out
 }
 
@@ -234,13 +239,15 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 		return base
 	}
 
-	var boonResolved, invResolved bool
+	var boonResolved, invResolved, styleResolved bool
 	for _, f := range picks {
 		switch f.Source {
 		case pactBoonFeatureSource:
 			boonResolved = true
 		case invocationFeatureSource:
 			invResolved = true
+		case fightingStyleFeatureSource:
+			styleResolved = true
 		}
 	}
 
@@ -252,6 +259,9 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 		if invResolved && isInvocationPlaceholder(f.MechanicalEffect) {
 			continue
 		}
+		if styleResolved && f.MechanicalEffect == refdata.ChooseFightingStyleEffect {
+			continue
+		}
 		out = append(out, f)
 	}
 	return append(out, picks...)
@@ -261,14 +271,16 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 // submission's PactBoon + Invocations (the inverse of injectClassFeatureChoices)
 // so an edit round-trip preserves a warlock's picks instead of silently
 // resetting them (cf. the builder-edit-resets-live-resources class of bugs).
-func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string) {
+func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string, fightingStyle string) {
 	for _, f := range features {
 		switch f.Source {
 		case pactBoonFeatureSource:
 			pactBoon = f.MechanicalEffect
 		case invocationFeatureSource:
 			invocations = append(invocations, f.MechanicalEffect)
+		case fightingStyleFeatureSource:
+			fightingStyle = f.MechanicalEffect
 		}
 	}
-	return pactBoon, invocations
+	return pactBoon, invocations, fightingStyle
 }

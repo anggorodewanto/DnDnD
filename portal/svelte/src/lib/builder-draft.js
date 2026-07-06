@@ -41,6 +41,7 @@ const DRAFT_FIELDS = [
   'selectedExpertise',
   'selectedPactBoon',
   'selectedInvocations',
+  'selectedFightingStyle',
   'selectedSpells',
   'chosenLanguages',
   'selectedMasteries',

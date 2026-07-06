@@ -160,7 +160,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"acrobatics", "animal-handling", "athletics", "history", "insight", "intimidation", "perception", "survival"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
-					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": "choose_fighting_style"},
+					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": ChooseFightingStyleEffect},
 					{"name": "Second Wind", "description": "You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level.", "mechanical_effect": "bonus_action_heal_1d10_plus_level"},
 				},
 				"2": []map[string]string{
@@ -238,7 +238,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 					{"name": "Lay on Hands", "description": "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level x 5.", "mechanical_effect": "healing_pool_5x_paladin_level"},
 				},
 				"2": []map[string]string{
-					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": "choose_fighting_style"},
+					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": ChooseFightingStyleEffect},
 					{"name": "Spellcasting", "description": "You have learned to draw on divine magic through meditation and prayer to cast spells.", "mechanical_effect": "spellcasting_cha"},
 					{"name": "Divine Smite", "description": "When you hit a creature with a melee weapon attack, you can expend one spell slot to deal radiant damage to the target, in addition to the weapon's damage.", "mechanical_effect": "expend_spell_slot_2d8_radiant_plus_1d8_per_slot_level"},
 				},
@@ -277,7 +277,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 					{"name": "Natural Explorer", "description": "You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions.", "mechanical_effect": "difficult_terrain_no_penalty,advantage_initiative,advantage_first_turn_attacks"},
 				},
 				"2": []map[string]string{
-					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": "choose_fighting_style"},
+					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": ChooseFightingStyleEffect},
 					{"name": "Spellcasting", "description": "You have learned to use the magical essence of nature to cast spells.", "mechanical_effect": "spellcasting_wis"},
 				},
 				"3": []map[string]string{

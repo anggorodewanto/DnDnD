@@ -26,6 +26,7 @@
     pactBoonList, pactBoonGranted, warlockLevelOf, hasClassFeatureChoices,
     computeInvocationState, reconcileInvocations, reconcilePactBoon,
   } from './lib/invocations.js';
+  import { FIGHTING_STYLES, fightingStyleEligible, reconcileFightingStyle } from './lib/fighting-styles.js';
   import { armorOptionIds, weaponOptionIds, reconcileEquipPick } from './lib/equip-selection.js';
   import { assembleEquipment } from './lib/equipment-assembly.js';
 
@@ -82,6 +83,9 @@
   // (an invocation id doubles as its combat mechanical_effect slug).
   let selectedPactBoon = $state('');
   let selectedInvocations = $state([]);
+  // Fighter/Paladin/Ranger fighting-style pick (COV-15): a combat-wired style id
+  // resolved server-side into a character feature.
+  let selectedFightingStyle = $state('');
   let selectedSpells = $state([]);
   // Concrete bonus languages chosen by the player. The race's base languages
   // are read-only; this holds only the background-granted picks (ISSUE-009).
@@ -288,6 +292,7 @@
     if (Array.isArray(d.selectedExpertise)) selectedExpertise = d.selectedExpertise;
     if (d.selectedPactBoon !== undefined) selectedPactBoon = d.selectedPactBoon;
     if (Array.isArray(d.selectedInvocations)) selectedInvocations = d.selectedInvocations;
+    if (d.selectedFightingStyle !== undefined) selectedFightingStyle = d.selectedFightingStyle;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
     if (Array.isArray(d.chosenLanguages)) chosenLanguages = d.chosenLanguages;
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
@@ -386,6 +391,7 @@
     selectedExpertise = Array.isArray(ch.expertise) ? ch.expertise : [];
     selectedPactBoon = ch.pact_boon || '';
     selectedInvocations = Array.isArray(ch.invocations) ? ch.invocations : [];
+    selectedFightingStyle = ch.fighting_style || '';
     selectedSpells = Array.isArray(ch.spells) ? ch.spells : [];
     selectedMasteries = Array.isArray(ch.weapon_masteries) ? ch.weapon_masteries : [];
     chosenLanguages = Array.isArray(ch.languages) ? ch.languages : [];
@@ -698,7 +704,7 @@
   let isCaster = $derived(anyCaster(classEntries));
   // Warlock pact-boon + invocation step gating (ISSUE-060). stepCtx feeds the
   // wizard nav so both the Spells and Class Features steps skip cleanly.
-  let hasClassFeatures = $derived(hasClassFeatureChoices(classEntries));
+  let hasClassFeatures = $derived(hasClassFeatureChoices(classEntries) || fightingStyleEligible(classEntries));
   let stepCtx = $derived({ isCaster, hasClassFeatures });
   // Per-class spell counts use that class's own spellcasting ability, so pass
   // the modifier for each casting ability and let the helper pick per entry.
@@ -778,6 +784,7 @@
       expertise,
       pact_boon: pactBoon,
       invocations,
+      fighting_style: reconcileFightingStyle({ classEntries, style: selectedFightingStyle }),
       equipment: submissionEquipment(),
       spells: selectedSpells,
       languages: assembleLanguages(raceBaseLanguages(selectedRaceData), chosenLanguages),
@@ -1509,11 +1516,41 @@
     <!-- Step 6: Class Features (Warlock pact boon + Eldritch Invocations) -->
     {:else if currentStep === CLASS_FEATURES_STEP}
       {@const warlockLevel = warlockLevelOf(classEntries)}
+      {@const styleEligible = fightingStyleEligible(classEntries)}
       <div class="step-content">
         <h3>Class Features</h3>
-        {#if warlockLevel < 2}
+        {#if warlockLevel < 2 && !styleEligible}
           <p class="muted">No class-feature choices for the current build.</p>
-        {:else}
+        {/if}
+
+        {#if styleEligible}
+          <div class="cf-section">
+            <h4>Fighting Style</h4>
+            <p class="muted">Choose a fighting style specialty.</p>
+            <div class="cf-options">
+              {#each FIGHTING_STYLES as style}
+                <label class="cf-option" class:selected={selectedFightingStyle === style.id}>
+                  <input
+                    type="radio"
+                    name="fighting-style"
+                    value={style.id}
+                    checked={selectedFightingStyle === style.id}
+                    onchange={() => (selectedFightingStyle = style.id)}
+                  />
+                  <div class="cf-body">
+                    <div class="cf-name">{style.name}</div>
+                    <div class="cf-desc">{style.description}</div>
+                  </div>
+                </label>
+              {/each}
+            </div>
+            {#if selectedFightingStyle}
+              <button type="button" class="cf-clear" onclick={() => (selectedFightingStyle = '')}>Clear fighting style</button>
+            {/if}
+          </div>
+        {/if}
+
+        {#if warlockLevel >= 2}
           {#if pactBoonGranted(warlockLevel)}
             <div class="cf-section">
               <h4>Pact Boon</h4>
