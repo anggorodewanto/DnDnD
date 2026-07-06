@@ -159,7 +159,11 @@ func (s *Service) applyCunningStrike(ctx context.Context, attacker, target refda
 	if err != nil {
 		return fmt.Errorf("resolving cunning strike %s save: %w", rider.saveAbility, err)
 	}
-	d20Result, err := roller.RollD20(saveBonus, dice.Normal)
+	// The rider's save is a 2024 d20 Test, so the target's exhaustion
+	// (-2 x level) lowers the roll total vs the DC (folded at the roll, not into
+	// the pure save bonus — mirrors every other exhaustion d20-test site).
+	penalty := ExhaustionD20Penalty(int(target.ExhaustionLevel))
+	d20Result, err := roller.RollD20(saveBonus+penalty, dice.Normal)
 	if err != nil {
 		return fmt.Errorf("rolling cunning strike %s save: %w", rider.saveAbility, err)
 	}

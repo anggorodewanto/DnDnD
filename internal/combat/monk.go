@@ -350,14 +350,24 @@ func (s *Service) StunningStrike(ctx context.Context, cmd StunningStrikeCommand,
 		return StunningStrikeResult{}, err
 	}
 
-	// Roll the save
-	d20Result, err := roller.RollD20(conSaveBonus, dice.Normal)
+	// Stunning Strike's save is a 2024 d20 Test, so the target's exhaustion
+	// (-2 x level) lowers the roll total vs the DC (folded at the roll, not into
+	// the pure save bonus — mirrors every other exhaustion d20-test site).
+	penalty := ExhaustionD20Penalty(int(cmd.Target.ExhaustionLevel))
+	d20Result, err := roller.RollD20(conSaveBonus+penalty, dice.Normal)
 	if err != nil {
 		return StunningStrikeResult{}, fmt.Errorf("rolling CON save: %w", err)
 	}
 	saveRoll := d20Result.Chosen
 	saveTotal := d20Result.Total
 	saveSucceeded := saveTotal >= dc
+
+	// Keep the log's roll breakdown honest without disturbing the non-exhausted
+	// output: the exhaustion term appears only when a penalty applies.
+	saveBreakdown := fmt.Sprintf("roll %d + %d", saveRoll, conSaveBonus)
+	if penalty != 0 {
+		saveBreakdown += fmt.Sprintf(" - %d exhaustion", -penalty)
+	}
 
 	result := StunningStrikeResult{
 		SaveRoll:      saveRoll,
@@ -369,8 +379,8 @@ func (s *Service) StunningStrike(ctx context.Context, cmd StunningStrikeCommand,
 
 	if saveSucceeded {
 		result.Stunned = false
-		result.CombatLog = fmt.Sprintf("\u26a1 %s attempts Stunning Strike on %s! CON save: %d (roll %d + %d) vs DC %d — %s resists!",
-			cmd.Attacker.DisplayName, cmd.Target.DisplayName, saveTotal, saveRoll, conSaveBonus, dc, cmd.Target.DisplayName)
+		result.CombatLog = fmt.Sprintf("\u26a1 %s attempts Stunning Strike on %s! CON save: %d (%s) vs DC %d — %s resists!",
+			cmd.Attacker.DisplayName, cmd.Target.DisplayName, saveTotal, saveBreakdown, dc, cmd.Target.DisplayName)
 		return result, nil
 	}
 
@@ -388,8 +398,8 @@ func (s *Service) StunningStrike(ctx context.Context, cmd StunningStrikeCommand,
 	}
 
 	result.Stunned = true
-	result.CombatLog = fmt.Sprintf("\u26a1 %s attempts Stunning Strike on %s! CON save: %d (roll %d + %d) vs DC %d — %s is stunned!",
-		cmd.Attacker.DisplayName, cmd.Target.DisplayName, saveTotal, saveRoll, conSaveBonus, dc, cmd.Target.DisplayName)
+	result.CombatLog = fmt.Sprintf("\u26a1 %s attempts Stunning Strike on %s! CON save: %d (%s) vs DC %d — %s is stunned!",
+		cmd.Attacker.DisplayName, cmd.Target.DisplayName, saveTotal, saveBreakdown, dc, cmd.Target.DisplayName)
 
 	return result, nil
 }

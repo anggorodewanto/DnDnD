@@ -1432,10 +1432,30 @@ high-roll-still-succeeds, nat-20 protected, nat-1 double under exhaustion, penal
 their one shared finding (the `deathSaveSucceeds` helper to unify the twice-encoded DC-10 threshold). Gates
 met (combat 91.34%, discord 86.22%).
 
-**Deferred (pre-existing gaps — these d20 tests never consumed exhaustion, not a regression):**
-concentration / effect CON saves (`monk.go`, `mastery.go`, AoE `ResolveAoESaves`) and remaining skill
-checks (Hide/stealth and other ad-hoc ability checks). Full-2024 coverage would inject
-`ExhaustionD20Penalty` at each remaining site.
+**Effect-save sub-gap DONE 2026-07-06.** The saving throws the engine rolls *on a target's behalf*
+against an effect are 2024 d20 Tests, so an exhausted target now takes −2×level on them. Folded
+`ExhaustionD20Penalty(int(<target>.ExhaustionLevel))` into the roll modifier (never into the pure
+save-bonus resolver — the package idiom) at all four inline effect-save roll sites: Topple
+(`mastery.go` `applyToppleSave`, CON save→Prone), Cunning Strike (`cunning_strike.go`
+`applyCunningStrike`, rider save→condition), Stunning Strike (`monk.go` `StunningStrike`, CON
+save→Stunned), and Turn Undead (`channel_divinity.go`, WIS save→Turned). Stunning Strike's log
+decomposes the roll, so a `saveBreakdown` local appends "− N exhaustion" only when a penalty
+applies (zero-exhaustion output byte-identical); the other three surface only the total, so no log
+change. Turn Undead was surfaced by the /simplify altitude pass as a genuinely-missed sibling of
+the same mechanism and pulled into the slice (mirrors the contested-check slice pulling in Escape).
+Test `exhaustion_effect_save_test.go` (7 subtests: a flip + a zero-exhaustion control for each site
+family). /simplify: 2 agents — both ship it, inline point-of-use fold affirmed as the idiom
+(≈9 sibling sites), no extraction warranted. Gates met (combat 91.3%).
+
+**Not a gap — `aoe.go` `ResolveAoESaves`.** The altitude pass confirmed this is **not** an
+effect-save *roll* site: it consumes pre-computed `SaveResults` (`sr.Success` decided upstream) and
+rolls only **damage**. The d20 save feeding it is rolled in `discord/save_handler.go`, which
+**already** folds exhaustion via `input.ExhaustionLevel` — so the player-driven concentration /
+AoE / single-target save path is covered. Folding exhaustion into `ResolveAoESaves` would be
+wrong-layer (double-count after success is already known).
+
+**Still deferred (pre-existing, not a regression):** remaining ad-hoc skill/ability checks
+(Hide/stealth and other non-save d20 tests). Each just needs `ExhaustionD20Penalty` at its roll.
 
 ---
 

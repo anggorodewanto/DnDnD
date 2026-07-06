@@ -362,7 +362,11 @@ func (s *Service) applyToppleSave(ctx context.Context, attacker, target refdata.
 		return fmt.Errorf("resolving topple CON save: %w", err)
 	}
 
-	d20Result, err := roller.RollD20(conSaveBonus, dice.Normal)
+	// Topple's save is a 2024 d20 Test, so the target's exhaustion (-2 x level)
+	// lowers the roll total vs the DC (folded at the roll, not into the pure
+	// save bonus — mirrors every other exhaustion d20-test site).
+	penalty := ExhaustionD20Penalty(int(target.ExhaustionLevel))
+	d20Result, err := roller.RollD20(conSaveBonus+penalty, dice.Normal)
 	if err != nil {
 		return fmt.Errorf("rolling topple CON save: %w", err)
 	}
