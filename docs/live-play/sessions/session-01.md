@@ -2365,3 +2365,23 @@ Party state at commit: Vale 31/31 (pact 2/2 @ L2), Forge 41/41, Windreth 31/31, 
 **No queue item** (the commit was RP in #in-character, not a `/check`/`/cast`).
 
 **Await:** Vale's `/cast hold person` on her turn → it creates a pending_save (COV-1) → I resolve the grey man's **WIS +7** save honestly → narrate paralyzed-or-not. Then Forge (order 2), Windreth (order 3), then I play the grey man (order 4). Never roll/act/decide for the PCs.
+
+---
+
+### Round 1 — Vale's Hold Person FAILS: the grey man saves (07-06)
+
+**Vale cast** (11:54Z, bot confirm in #in-character): *"Vale casts Hold Person on The Grey Man / Used pact slot (1 remaining) / DC 14 WIS save — The Grey Man must save (roll /save, or resolve on the dashboard) / Concentrating on Hold Person."* The bot itself pointed to the dashboard resolve path.
+
+**I resolved the NPC save through the app's own roller** — `POST /api/combat/2846a6ca…/pending-saves/1677e5c5…/resolve` (in-page authenticated DM fetch, **no body**). The handler rolls `1d20` server-side and adds the creature's stored WIS bonus (`resolveCombatantSaveBonus` prefers the `saving_throws.wis` entry = **+7**), compares to DC 14, and — because this is a single-target save spell — applies the condition-or-nothing itself. Fully honest: I never see or set the number.
+
+**Result (returned by the endpoint):** `natural_roll: 8`, `save_bonus: 7`, `total: 15`, `dc: 14`, **`success: true`**, `damage: 0`. **The grey man SAVED by 1.** DB confirms: his `conditions` stayed `[]` (NOT paralyzed), HP untouched 104/104, the save row went `status=applied`. Vale still shows `concentration_spell_name=Hold Person` — the spell holds but slid off him with no effect (an inert single-target concentration she can drop for free). Turn is still **Vale's** (`action_used=true`, bonus action free, 30 ft move left).
+
+**Two OOC-to-DM notes surfaced from earlier** (#in-character, before combat) that I owed an answer:
+- 08:40Z Windreth (dewa): *"(To DM: Why has Windreth rolled less than 10 on a d20 seven times in a row? That's a 1 in 128 probability. Is he cursed?)"*
+- 08:47Z Forge (JonathanEka): *"(To DM: not just Windreth, 3 of us.)"*
+
+I answered them honestly in the coda (below) — **not** by fudging anything: every roll here, PC and NPC alike, is rolled by the server; I never change a number up or down; long cold streaks feel cursed but are real chance and even out over a session; the enemy save just now was the app's own roll, not mine. No promise of better luck — just the truth about how the dice work.
+
+**Narration — the miss** (07-06 ~6:57 PM / ~11:57Z; #the-story msg `1523660733525786745`, DB `33f37215`, `201`; via `/api/narration/post` in-page fetch; OOC coda first, read-aloud last, plain ESL). Coda: reported only that **the grey man made his save** — his **+7 / the total 15 kept SECRET** per the enemy-stats rule (players see success/fail, never a boss's save mod); answered the dice-luck note as above; per-PC menu — **Vale** finish her turn (`/move` to cover / drop the dead spell / `/end`), **Forge** (order 2) close + `/attack the grey man` or `/ready`, **Windreth** (order 3, still unseen) strike-from-hiding `/attack` (advantage) or `/ready`. Read-aloud: the binding word *reaches* him — half a breath of stillness, his open hand stopping — then his certainty closes over it "like water over a dropped stone," his eyes clear, he is **not held**; almost-kindness as he tells Vale *"you were wrong to think that would hold me"*; the room becomes a fight, no one has struck yet, **cut before he acts**. Pronouns: Windreth he/him, Vale she/her, Forge he/him, grey man he/him.
+
+**Await:** Vale finishes / `/end`s her turn → **Forge** (order 2) → **Windreth** (order 3) → I play the **grey man** (order 4, his first swing). Never roll/act/decide for the PCs.
