@@ -2333,3 +2333,35 @@ The party committed to the far door. Moves (roll-history / IC #in-character 08:2
 **Combat build recipe (ready to fire the instant they confirm):** (1) build homebrew creature **"The Grey Man / Renegade Name-Keeper"** — solo boss vs 3×L4, **strong WIS save**, HP ~90–110, AC ~15–16, name-erasure abilities to unfold in play; (2) encounter template referencing him; (3) `POST /api/combat/start` with `character_ids` = **Vale `b6ca7f49…` / Forge `d2d98745…` / Windreth `b2c436da…`** + positions + `surprised_combatant_short_ids: []` (grey man is **not** surprised — canny, been reading them, saw through the disguise); (4) init auto-rolls; Vale runs `/cast hold person` on her turn. Play him per the spine: **he does not swing first** — Vale's cast is what breaks the peace. **Windreth stays unseen (hidden card)** unless he acts.
 
 **Await:** the party's commit — Vale confirms the strike (→ stand up combat + cue her cast) OR pivots back to talk (persuasion / deception / demand / ask the name) OR Forge/Windreth act first. Never roll/act/decide for the PCs.
+
+### The parley breaks — the party commits, the grey-man boss is built, combat starts (Round 1)
+
+**The commit (in #in-character).** Two player moves closed the pivot the prior "confirm-the-pivot" beat had opened:
+
+- **Windreth** (10:33Z, Winfroz): *"Windreth does not step out. He waits, breathing shallow, ready to strike the instant the grey man attacks Vale."* — he stays the hidden card and commits to striking as the violence breaks.
+- **Vale** (11:15Z, dewa): *"Vale does not want to talk first, she knows how dangerous this person is, hence the hold person cast."* — this directly answered the confirm beat: **she does not want to parley; she commits to the Hold Person.** Parley over.
+
+Party state at commit: Vale 31/31 (pact 2/2 @ L2), Forge 41/41, Windreth 31/31, no conditions — clean start.
+
+**Green-lit with the DM-owner.** Because this is the campaign's first face-to-face boss fight and required fabricating + injecting a permanent boss statblock the user hadn't seen, I surfaced the drafted statblock + plan and got an explicit "Fire it" before building. The players' in-fiction commit was already settled; the only open call was the boss build/difficulty (the DM-owner's to set).
+
+**How it was built — app-faithful, not raw SQL.** The Homebrew UI creature form exposes no `saving_throws` field, and the strong WIS save is the whole honesty knob, so I built through the app's own HTTP endpoints via an in-page authenticated DM `fetch` from the dashboard tab (same handlers the SPA buttons hit; same-origin session cookie; no CSRF gate). This keeps the app authoritative while letting me set the fields the minimal form omits. Four calls:
+
+1. `POST /api/maps/` → map **"Palewatch — the kept vault" `cc356cc4-1fa5-44d7-ac6e-75bbc2f3b884`** (14×10, server-generated blank grid).
+2. `POST /api/homebrew/creatures?campaign_id=…` → **"The Grey Man" `hb_ed8093e5cfe4`**.
+3. `POST /api/encounters/` → template **`f8b35091-a7f6-44bd-9ad9-ea50f3d78449`** (grey man `G1` at the vault, back-center).
+4. `POST /api/combat/start` → **encounter `2846a6ca-ab2a-4117-962d-808108dd4f83`**, Round 1.
+
+**The grey man's statblock (the honest boss).** Medium humanoid ex-warden; **AC 15**; **HP 104 (16d8+32)**; abilities STR 10 / DEX 14 / CON 14 / INT 18 / WIS 18 / CHA 16; **saving throws WIS +7, INT +7, CHA +6**; skills Arcana/Insight/Perception +7, Deception +6; **CR 6**. Attacks (INT-based spell attacks, +7 to hit): **Scouring Grasp** (melee, 2d8+4 psychic) and **Unspeaking Word** (ranged 60 ft, 3d8 psychic). Special: **"Sure of His Welcome"** (does not flee or strike from fear) and **"Unmaking"** (an escalating name-erasure — memory, then face, then self — the DM adjudicates in play; explicitly not a turn-one effect). **No Legendary Resistance, by design.**
+
+*Why these numbers are honest, not a fudge.* A generic SRD shell would have handed the arc-boss a weak WIS save (~+1), so Vale's DC-14 Hold Person would land ~65% of the time and hard-lock the campaign's first boss on round 1 — a curbstomp that betrays his design. A Name-Keeper is a warden of minds; a **strong WIS is core to what he is**, not a thumb on the scale. At **WIS +7** vs her **DC 14** he saves on a raw 7+ = **~70% save / ~30% he is paralyzed** — a real, exciting gamble either way. Deliberately **no Legendary Resistance**, so if he *does* fail, he is genuinely bound and Vale's gamble pays off honestly — nothing silently negates her one spell.
+
+**Positions.** Grey man `G1` at the vault (back-center). Party at the door mouth: Vale F8, Forge G8; Windreth flanking left in shadow at C6 (still unseen). Grey man **not** surprised (canny — he had been reading them). Empty `surprised_combatant_short_ids`.
+
+**Initiative — auto-rolled server-side, unfudged:** **Vale 18 → Forge 17 → Windreth 9 → the grey man 4.** The party seized the initiative: all three act before him, and **Vale goes first**, so her Hold Person leads exactly as she declared. This cleanly resolved the "does the peace-offerer act before the aggressor's spell?" worry — the dice, not the DM, gave the party the drop. His init/HP/AC stay secret from the players.
+
+**Narration — the snap into violence** (07-06 ~6:52 PM / 11:52Z; #the-story msg `1523657955252375713`, DB `a0f16caf`, `201`; via `/api/narration/post` in-page fetch; OOC coda first, read-aloud last, plain ESL). Coda: Round-1 order; **Vale cued to run `/cast hold person` and target the grey man** (his WIS save resolves on cast, rolled straight — fail = paralyzed + she must concentrate, make = he shrugs it and the fight is on); Forge's order-2 menu; Windreth's order-3 menu (still unseen — strike from the dark `/attack`, or `/ready`). Read-aloud froze on the binding word *reaching* him — his certainty cracking a half-beat late, the room waking — **cut before the save is decided; no outcome narrated.** Pronouns: Windreth he/him, Vale she/her, Forge he/him, grey man he/him.
+
+**No queue item** (the commit was RP in #in-character, not a `/check`/`/cast`).
+
+**Await:** Vale's `/cast hold person` on her turn → it creates a pending_save (COV-1) → I resolve the grey man's **WIS +7** save honestly → narrate paralyzed-or-not. Then Forge (order 2), Windreth (order 3), then I play the grey man (order 4). Never roll/act/decide for the PCs.
