@@ -1473,9 +1473,26 @@ initiator-flip + opponent-flip subtests). /simplify: 2 agents — both **ship it
 axes (roll-site fold affirmed as the right altitude; symmetric opponent fold + honest deferral
 comment judged higher-altitude than initiator-only special-casing). Gates met.
 
-**Still deferred (pre-existing, not a regression):** remaining ad-hoc skill/ability checks
-(Hide/stealth and other non-save d20 tests not routed through `internal/check`). Each just needs
-`ExhaustionD20Penalty` at its roll.
+**Hide (Stealth) sub-gap DONE 2026-07-07.** `/action hide` and `/bonus cunning-action hide` roll a
+Stealth check — a 2024 D20 Test — through the shared `combat.resolveHide` (`standard_actions.go`),
+which skipped exhaustion. Closed by folding `ExhaustionD20Penalty(int(cmd.Combatant.ExhaustionLevel))`
+into `stealthMod` at the roll site, right after `stealthModAndMode` returns (numeric-term fold, not
+in the mod resolver — same idiom as the ≈9 sibling sites incl. grapple/shove/escape in this same
+file). One fold at the single shared choke point covers **both** entrypoints (`Hide` and
+`CunningAction`→`resolveHide`); reads `cmd.Combatant.ExhaustionLevel` so it applies to creatures too.
+The passive-Perception opposition side is untouched (separate ruling on whether −2/level hits a
+non-rolled passive score — see deferred below). Test `exhaustion_hide_test.go`
+(`TestHide_Exhaustion` control + exhaustion-2 flip-to-spotted; `TestCunningActionHide_Exhaustion`
+raw-total proof of the bonus-action path). /simplify: 2 agents — both **clean on all four axes**
+(right helper, right altitude, minimal form; sole nit self-marked not-worth-acting-on). Gates met.
+
+**Still deferred (pre-existing, not a regression):** (a) passive checks — `PassiveCheck` /
+`PassiveCheckForCombatant` / `passivePerception` compute a non-rolled `10+modifier` and do not
+subtract exhaustion (a genuine 2024 ruling call on whether −2/level applies to passive D20 Tests);
+(b) `ContestedCheck` opponent side (blocked on `ResolveContestedOpponent` carrying exhaustion + the
+path being prod-wired); (c) any remaining ad-hoc non-save d20 tests not routed through
+`internal/check` or the combat roll sites. Each rolled site just needs `ExhaustionD20Penalty` at its
+roll; the passive-check case needs the ruling first.
 
 ---
 

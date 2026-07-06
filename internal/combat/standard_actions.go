@@ -362,6 +362,9 @@ func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, updatedTurn 
 		return HideResult{}, err
 	}
 
+	// 2024 exhaustion applies a flat -2/level penalty to the Stealth D20 Test.
+	stealthMod += ExhaustionD20Penalty(int(cmd.Combatant.ExhaustionLevel))
+
 	stealthResult, err := roller.RollD20(stealthMod, rollMode)
 	if err != nil {
 		return HideResult{}, fmt.Errorf("rolling stealth: %w", err)
