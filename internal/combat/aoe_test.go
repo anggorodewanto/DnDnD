@@ -2396,6 +2396,111 @@ func TestResolveAoEPendingSaves_AppliesConditionOnFailedSave(t *testing.T) {
 	assert.Equal(t, casterID.String(), conds[0].SourceCombatantID, "scoped to caster for concentration teardown")
 }
 
+// ISSUE-066: a single-target concentration save spell (Hold Person) whose SOLE
+// target SUCCEEDS on the save lands nothing — no one is paralyzed, so the caster
+// has nothing left to sustain. ResolveAoEPendingSaves must drop the now-
+// purposeless concentration. Regression: concentration is set at cast time and
+// was never cleared on an all-saved resolution, leaving the caster
+// "concentrating on" an inert spell for the rest of combat.
+func TestResolveAoEPendingSaves_SoleTargetSaved_DropsConcentration(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	saverID := uuid.New()
+	spellID := "hold-person"
+	source := AoEPendingSaveSource(spellID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeHoldPerson(), nil }
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: saverID, Source: source, Ability: "wis", Dc: 14, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: casterID, EncounterID: encounterID, DisplayName: "Vale", Conditions: json.RawMessage(`[]`), ConcentrationSpellID: sql.NullString{String: spellID, Valid: true}, ConcentrationSpellName: sql.NullString{String: "Hold Person", Valid: true}},
+			{ID: saverID, EncounterID: encounterID, DisplayName: "Grey Man", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, EncounterID: encounterID, DisplayName: "Vale"}, nil
+	}
+	store.getCombatantConcentrationFn = func(_ context.Context, _ uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+		return refdata.GetCombatantConcentrationRow{
+			ConcentrationSpellID:   sql.NullString{String: spellID, Valid: true},
+			ConcentrationSpellName: sql.NullString{String: "Hold Person", Valid: true},
+		}, nil
+	}
+	var clearedCasterID uuid.UUID
+	clearCalls := 0
+	store.clearCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) error {
+		clearedCasterID = id
+		clearCalls++
+		return nil
+	}
+	var condUpdates []refdata.UpdateCombatantConditionsParams
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		condUpdates = append(condUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, dice.NewRoller(func(_ int) int { return 4 }))
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	assert.Empty(t, condUpdates, "sole target saved → nothing is conditioned")
+	require.Equal(t, 1, clearCalls, "the whiffed concentration must be cleared exactly once")
+	assert.Equal(t, casterID, clearedCasterID, "the caster's concentration is the one dropped")
+}
+
+// ISSUE-066 guard: an AREA concentration spell (Web-shaped) whose zone persists
+// regardless of saves must KEEP concentration even when every in-area target
+// makes its save. Only single-target save-negates spells drop on an all-saved
+// resolution; the !hasAreaOfEffect gate protects zone spells.
+func TestResolveAoEPendingSaves_AoEConcentrationAllSaved_KeepsConcentration(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	saverID := uuid.New()
+	spellID := "web"
+	source := AoEPendingSaveSource(spellID)
+
+	webSpell := refdata.Spell{
+		ID:                "web",
+		Name:              "Web",
+		Level:             2,
+		SaveAbility:       sql.NullString{String: "dex", Valid: true},
+		Concentration:     sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode:    "auto",
+		ConditionsApplied: []string{"restrained"},
+		AreaOfEffect:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"shape":"cube","size_ft":20}`), Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return webSpell, nil }
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: saverID, Source: source, Ability: "dex", Dc: 14, Status: "rolled", RollResult: sql.NullInt32{Int32: 19, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: casterID, EncounterID: encounterID, DisplayName: "Wizard", Conditions: json.RawMessage(`[]`), ConcentrationSpellID: sql.NullString{String: spellID, Valid: true}, ConcentrationSpellName: sql.NullString{String: "Web", Valid: true}},
+			{ID: saverID, EncounterID: encounterID, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	cleared := false
+	store.clearCombatantConcentrationFn = func(_ context.Context, _ uuid.UUID) error {
+		cleared = true
+		return nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, dice.NewRoller(func(_ int) int { return 4 }))
+	require.NoError(t, err)
+	assert.False(t, cleared, "an AoE concentration zone persists even when everyone saves")
+}
+
 // COV-2 + COV-1 together: a single-target save+damage+condition spell (Ray of
 // Sickness) applies BOTH the damage and the condition on a failed save. A made
 // save takes damage per its save_effect but gets no condition. The spell is

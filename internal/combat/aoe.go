@@ -1065,10 +1065,59 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 		return nil, err
 	}
 	res.ConditionMessages = condMsgs
+
+	// ISSUE-066: a single-target concentration save spell (Hold Person, Tasha's
+	// Hideous Laughter, ...) that lands NOTHING — its sole target made the save,
+	// so no condition took hold — leaves the caster concentrating on an inert
+	// spell. Nothing sustains it, so drop the concentration. Gated on
+	// !hasAreaOfEffect so a zone concentration spell (Web, Moonbeam), whose area
+	// persists regardless of any save, keeps concentration.
+	if spell.Concentration.Valid && spell.Concentration.Bool && !hasAreaOfEffect(spell) {
+		drop, derr := s.dropConcentrationIfAllSaved(ctx, encounterID, spell, spellRows)
+		if derr != nil {
+			return nil, derr
+		}
+		if drop != nil && drop.Broken {
+			res.ConditionMessages = append(res.ConditionMessages, drop.ConsolidatedMessage)
+		}
+	}
+
 	if err := s.markSavesApplied(ctx, toApply); err != nil {
 		return nil, err
 	}
 	return &res, nil
+}
+
+// dropConcentrationIfAllSaved ends the caster's concentration when a single-
+// target concentration save spell landed nothing: every resolved row made its
+// save, so no condition/effect took hold and there is nothing left to sustain
+// (ISSUE-066). Returns nil when any row failed or was forfeited (an effect
+// landed → concentration holds) or when no caster is tracked. A row counts as
+// "saved" only when Success is explicitly true, mirroring applyOnFailConditions'
+// "no benefit of the save" default so a forfeited (never-rolled) row keeps
+// concentration alive.
+func (s *Service) dropConcentrationIfAllSaved(ctx context.Context, encounterID uuid.UUID, spell refdata.Spell, rows []refdata.PendingSafe) (*BreakConcentrationFullyResult, error) {
+	for _, r := range rows {
+		if !(r.Success.Valid && r.Success.Bool) {
+			return nil, nil // a target failed/forfeited → effect landed → hold
+		}
+	}
+	casterID, err := s.casterConcentratingOn(ctx, encounterID, spell.ID)
+	if err != nil {
+		return nil, err
+	}
+	if casterID == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(casterID)
+	if err != nil {
+		return nil, fmt.Errorf("parsing caster id %q for concentration drop: %w", casterID, err)
+	}
+	caster, err := s.store.GetCombatant(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("getting caster for concentration drop: %w", err)
+	}
+	return s.breakStoredConcentration(ctx, caster, "target saved")
 }
 
 // applyOnFailConditions lands each condition in spell.ConditionsApplied on
