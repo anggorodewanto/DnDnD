@@ -208,6 +208,16 @@ answer, and that's the point. Never resolve it *for* them.
   right-to-refuse / Vale's patron = rival collector all land there). Build each interior room **live** as they step into it; do **not**
   spring the renegade or force combat until the party commits to the far door.
 
+  **Down the hall → at the far door (07-06, #the-story ~3:17 PM / 08:17Z):** the party pressed forward together to the far door.
+  **Windreth Perception 6** (low) — studied the hall but it kept its secrets: no trap, no watcher, can't age the trail or place the
+  deep sound; a prickle of wrongness only (ambient rung 1, no reveal). **Vale cast Minor Illusion** (5 "wardens," cantrip, no check) —
+  adjudicated with the RAW image-only limits made fictional (stationary picture, convincing at a glance, breaks up close), a bluff aid
+  on her warden-face, not a wall/moving patrol. **Forge** rear-guarded — nothing followed (no ambush sprung). They now stand at the
+  **shut, heavier far door**; teased only a presence past it ("low and patient, something moves"). **Rung 4 STILL HELD, door still
+  shut** — the face-to-face reveal (renegade's scraped face + ex-warden link + right-to-refuse + Vale's patron = rival collector) lands
+  the **moment they open it**. Re-uses **rung 1**; **no new rung**. Do **not** open the door, reveal the renegade, or force combat
+  until the party commits.
+
 ---
 
 ## The clock (why speed matters — makes improv have stakes)
