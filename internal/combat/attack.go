@@ -482,6 +482,13 @@ type AttackInput struct {
 	// the feature, so ResolveAttack can treat a non-empty value as authoritative
 	// eligibility.
 	CunningStrike string
+	// BrutalStrike, when set to a known effect ("forceful"/…), signals an eligible
+	// Barbarian-9 Brutal Strike (feature present + using Reckless + STR melee,
+	// decided in populateAttackFES, which also injects the +1d10 rider).
+	// ResolveAttack treats a non-empty value as authoritative: it forgoes Advantage
+	// (AdvantageInput.ForgoAdvantage) and records the effect on the result for
+	// Service.Attack to resolve post-hit (applyBrutalStrike).
+	BrutalStrike string
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -594,6 +601,12 @@ type AttackResult struct {
 	CunningStrikeSaveDC int
 	CunningStrikeSaved  bool
 
+	// COV-8 Brutal Strike: BrutalStrikeChoice names the effect that fired
+	// ("forceful"/…), set in ResolveAttack from input.BrutalStrike (already
+	// eligibility-gated). The +1d10 rides the damage breakdown; the effect (e.g.
+	// Forceful Blow's push) is resolved on a hit by Service.Attack (applyBrutalStrike).
+	BrutalStrikeChoice string
+
 	// CleaveAttack carries the secondary attack resolution from the 2024
 	// Cleave mastery (nil when no cleave occurred). The service layer auto-
 	// resolves one extra attack with the same weapon against a second creature
@@ -649,6 +662,11 @@ type AttackCommand struct {
 	// (Trip → DEX save/Prone, Poison → CON save/Poisoned). Ignored unless the
 	// attacker carries the feature (see cunning_strike.go).
 	CunningStrike string
+	// BrutalStrike, when set to a known effect ("forceful"/…), is a Barbarian-9
+	// Brutal Strike request to forgo Advantage on this Strength melee attack for
+	// +1d10 damage and a forced-movement effect. Ignored unless the attacker
+	// carries the feature and is using Reckless Attack (see brutal_strike.go).
+	BrutalStrike string
 	// ReactionACBonus is AC the targeted PC gains against THIS attack from a
 	// reaction declared in the pre-roll window (e.g. Defensive Duelist +PB).
 	// ReactionReason names it for the log. Baked into effectiveAC by ResolveAttack.
@@ -838,6 +856,8 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		TargetCombatantID:   input.TargetCombatantID,
 		HasCrossbowExpert:   input.HasCrossbowExpert,
 		HasSharpshooter:     input.HasSharpshooter,
+		// COV-8 Brutal Strike forgoes all Advantage on this roll.
+		ForgoAdvantage: input.BrutalStrike != "",
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -884,6 +904,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 			result.OncePerTurnEffectNames = append(result.OncePerTurnEffectNames, re.FeatureName)
 		}
 	}
+
+	// COV-8 Brutal Strike: carry the eligibility-gated effect onto the result for
+	// all paths (auto-crit / miss / hit); Service.Attack resolves it on a hit
+	// (applyBrutalStrike). The +1d10 rider already rode input.Features above.
+	result.BrutalStrikeChoice = input.BrutalStrike
 
 	// Auto-crit: skip attack roll, auto-hit and auto-crit
 	if input.AutoCrit {
@@ -1258,6 +1283,16 @@ func FormatAttackLog(result AttackResult) string {
 		}
 	}
 
+	// COV-8 Brutal Strike: note the forgone Advantage and the effect that fired.
+	// The +1d10 already shows in the damage breakdown as a "Brutal Strike" rider.
+	if result.BrutalStrikeChoice == "forceful" {
+		if result.Hit {
+			fmt.Fprintf(&b, "\n    \u2192 \U0001f4aa Brutal Strike (Forceful Blow): Advantage forgone \u2014 %s pushed up to 15 ft", result.TargetName)
+		} else {
+			b.WriteString("\n    \u2192 \U0001f4aa Brutal Strike: Advantage forgone")
+		}
+	}
+
 	if result.InvisibilityBroken {
 		fmt.Fprintf(&b, "\n    \u2192 \U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.", result.AttackerName)
 	}
@@ -1511,6 +1546,13 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	// Poisoned). Gated by result.CunningStrikeChoice (set in ResolveAttack only when
 	// the feature is present, the hit landed, and Sneak Attack actually dealt damage).
 	if err := s.applyCunningStrike(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
+		return result, err
+	}
+
+	// COV-8 Brutal Strike: on a hit, resolve the chosen effect (Forceful Blow →
+	// push 15 ft). The +1d10 and the forgone Advantage were already applied in
+	// ResolveAttack; this is the forced-movement half.
+	if err := s.applyBrutalStrike(ctx, cmd.Attacker, cmd.Target, &result); err != nil {
 		return result, err
 	}
 
@@ -2606,6 +2648,17 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	if rider, ok := cunningStrikeRiders[cmd.CunningStrike]; ok && hasFeatureEffect(char.Features, cunningStrikeEffect) {
 		input.CunningStrike = cmd.CunningStrike
 		reduceSneakAttackDice(input.Features, rider.diceCost)
+	}
+
+	// COV-8 Brutal Strike (Barbarian 9): while using Reckless Attack, forgo the
+	// Advantage on a STR melee attack for +1d10 damage plus a forced-movement
+	// effect. When eligible, bake the choice into input.BrutalStrike (ResolveAttack
+	// forgoes Advantage via AdvantageInput.ForgoAdvantage and records the effect for
+	// applyBrutalStrike) and inject the +1d10 EffectExtraDamageDice rider. A
+	// non-eligible /attack brutal is inert (see brutalStrikeEligible).
+	if brutalStrikeEligible(cmd, char.Features, weapon, input.AbilityUsed) {
+		input.BrutalStrike = cmd.BrutalStrike
+		input.Features = append(input.Features, BrutalStrikeFeature(weapon.DamageType))
 	}
 
 	// SR-058: Sacred Weapon condition → inject CHA mod as modify_attack_roll.

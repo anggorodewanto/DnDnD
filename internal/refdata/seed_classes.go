@@ -31,6 +31,13 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{
 					{"name": "Primal Path", "description": "You choose a path that shapes the nature of your rage.", "mechanical_effect": "subclass_choice"},
 				},
+				// COV-8: Brutal Strike (2024 Barbarian L9). Wired in combat
+				// (brutal_strike.go): while using Reckless Attack you may forgo
+				// Advantage on a Strength melee attack for +1d10 and a forced-
+				// movement effect such as Forceful Blow (push 15 ft).
+				"9": []map[string]string{
+					{"name": "Brutal Strike", "description": "If you use Reckless Attack, you can forgo any Advantage on one Strength-based attack roll on your turn. The attack deals an extra 1d10 damage on a hit, and you can cause one Brutal Strike effect, such as Forceful Blow (push the target 15 feet away).", "mechanical_effect": "brutal_strike"},
+				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2}),
 			SubclassLevel:    3,

@@ -356,6 +356,45 @@ func TestIntegration_SeedRogueCunningStrikeFeature(t *testing.T) {
 	}
 }
 
+// TestIntegration_SeedBarbarianBrutalStrikeFeature locks the COV-8/COV-10 seed→present
+// link: the seeded Barbarian must carry the `brutal_strike` mechanical_effect at
+// level 9 so the level-gated derivation grants the feature and the combat gate
+// (brutalStrikeEligible → hasFeatureEffect) can enable /attack brutal:forceful.
+func TestIntegration_SeedBarbarianBrutalStrikeFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	barb, err := refdata.New(db).GetClass(ctx, "barbarian")
+	if err != nil {
+		t.Fatalf("GetClass(barbarian) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(barb.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["9"] {
+		if f.MechanicalEffect == "brutal_strike" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Barbarian L9 must seed the `brutal_strike` mechanical_effect; got %+v", byLevel["9"])
+	}
+}
+
 // TestIntegration_SeedFighterTacticalMasterFeature locks the COV-10/COV-8
 // seed→present link: the seeded Fighter must carry the `tactical_master`
 // mechanical_effect at level 9 so the level-gated derivation grants the feature,

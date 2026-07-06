@@ -40,7 +40,7 @@ func (s *Service) applyMasteryEffects(ctx context.Context, attacker, target refd
 	case "slow":
 		return s.applySlowedCondition(ctx, attacker, target)
 	case "push":
-		return s.applyPushEffect(ctx, attacker, target)
+		return s.applyPushEffect(ctx, attacker, target, 2) // Push mastery: 10 ft
 	default:
 		return nil
 	}
@@ -183,12 +183,14 @@ func (s *Service) applySlowedCondition(ctx context.Context, attacker, target ref
 	return nil
 }
 
-// applyPushEffect moves a Large-or-smaller target 10 ft (2 squares) straight
-// away from the attacker. Huge/Gargantuan targets are not pushed. The target
-// is moved square-by-square along the away vector, clamped to the encounter
-// map bounds and stopping before the first occupied square (reusing the
-// UpdateCombatantPosition store method the /shove push path already uses).
-func (s *Service) applyPushEffect(ctx context.Context, attacker, target refdata.Combatant) error {
+// applyPushEffect moves a Large-or-smaller target `squares` squares (5 ft each)
+// straight away from the attacker — 2 for the Push mastery / Repelling Blast
+// (10 ft), 3 for Brutal Strike's Forceful Blow (15 ft). Huge/Gargantuan targets
+// are not pushed. The target is moved square-by-square along the away vector,
+// clamped to the encounter map bounds and stopping before the first occupied
+// square (reusing the UpdateCombatantPosition store method the /shove push path
+// already uses).
+func (s *Service) applyPushEffect(ctx context.Context, attacker, target refdata.Combatant, squares int) error {
 	targetSize, err := s.resolveCombatantSize(ctx, target)
 	if err != nil {
 		return fmt.Errorf("resolving push target size: %w", err)
@@ -210,7 +212,7 @@ func (s *Service) applyPushEffect(ctx context.Context, attacker, target refdata.
 	destCol, destRow := computePushSquares(
 		colToInt(attacker.PositionCol), int(attacker.PositionRow),
 		colToInt(target.PositionCol), int(target.PositionRow),
-		2, width, height, occupied,
+		squares, width, height, occupied,
 	)
 
 	// No movement possible (blocked immediately or already at the edge).

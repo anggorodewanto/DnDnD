@@ -741,7 +741,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// Reuses the shared push machinery (Push mastery / /shove) and is
 	// auto-applied on a hit, mirroring the auto-resolved Push mastery.
 	if result.Hit && hasTarget && castTriggersRepellingBlast(spell, char) {
-		if err := s.applyPushEffect(ctx, caster, target); err != nil {
+		if err := s.applyPushEffect(ctx, caster, target, 2); err != nil { // Repelling Blast: 10 ft
 			return CastResult{}, fmt.Errorf("applying repelling blast push: %w", err)
 		}
 		result.RepellingBlastPushed = true

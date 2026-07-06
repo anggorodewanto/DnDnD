@@ -132,6 +132,14 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					},
 				},
 				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "brutal",
+					Description: "Brutal Strike (Barbarian 9): forgo Advantage while Reckless for +1d10 + an effect",
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "forceful (push 15 ft)", Value: "forceful"},
+					},
+				},
+				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "twohanded",
 					Description: "Use two-handed grip (versatile)",

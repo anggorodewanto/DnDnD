@@ -33,6 +33,12 @@ type AdvantageInput struct {
 	// TargetCombatantID is the ID of the combatant currently being attacked.
 	// SR-018: enables target-scoped condition checks (e.g. help_advantage).
 	TargetCombatantID string
+	// ForgoAdvantage, when true, discards ALL advantage sources on this roll (the
+	// attacker chose to give it up — 2024 Barbarian Brutal Strike). Disadvantage is
+	// unaffected. This is the attacker's OWN roll only; the Reckless "enemies have
+	// advantage against you" downside is a separate DetectAdvantage call (target
+	// conditions) and is untouched.
+	ForgoAdvantage bool
 }
 
 // DetectAdvantage examines attacker/target conditions, weapon properties, and combat
@@ -169,6 +175,13 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			// at the start of their next turn.
 			advReasons = append(advReasons, "target reckless")
 		}
+	}
+
+	// COV-8 Brutal Strike: the attacker forgoes ALL Advantage on this roll (RAW —
+	// not just the Reckless source). Disadvantage still applies. Cleared last so it
+	// overrides every advantage branch above.
+	if input.ForgoAdvantage {
+		advReasons = nil
 	}
 
 	return resolveMode(advReasons, disadvReasons), advReasons, disadvReasons

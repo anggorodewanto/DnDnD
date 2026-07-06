@@ -472,7 +472,7 @@ Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of 
 ---
 
 ### COV-8 — Cunning Strike / Brutal Strike / Tactical Master / Steady Aim
-**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06; Cunning Strike **Trip + Poison** DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
+**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06; Cunning Strike **Trip + Poison** DONE 2026-07-06; Brutal Strike **Forceful Blow** DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
 
 Four 2024 martial riders that each sit on already-wired machinery. Each is its own small
 item; split if picked up separately.
@@ -481,7 +481,8 @@ item; split if picked up separately.
   Rides the once/turn `SneakAttackFeature` (`feature_integration.go:89`). **Trip + Poison DONE 2026-07-06** — see the Shipped blocks below; Withdraw deferred (needs the movement/OA trigger).
 - **Brutal Strike (Barb L9):** forgo advantage → on-hit extra damage + effect. Mirrors the
   GWM on-hit rider (`GreatWeaponMasterFeature` `feature_integration.go:317`) and the mastery
-  on-hit pipeline (`mastery.go`).
+  on-hit pipeline (`mastery.go`). **Forceful Blow DONE 2026-07-06** — see the Shipped block below;
+  Hamstring Blow deferred (Speed −15 needs a new speed slug).
 - ~~**Tactical Master (Fighter L9):** swap in push/sap/slow on any mastery weapon.~~ **DONE 2026-07-06.**
 - ~~**Steady Aim (Rogue):** grant advantage this turn (speed 0).~~ **DONE 2026-07-05.**
 
@@ -629,12 +630,41 @@ RAW needs an expiry-keying change); Poisoner's Kit on Poison (a binary inventory
 most worth closing, no new infra); per-turn re-save on Poisoned (indefinite-until-teardown, COV-2 model).
 Coverage gates met (combat 91.32%, discord 86.22%, refdata 98.09%).
 
-**Blocker for the remaining Cunning effect + Brutal Strike (Barb L9):** Cunning **Trip + Poison** are now
-wired (Rogue L5 `cunning_strike`, the data-driven rider table). Only **Withdraw** remains of the Cunning
-effects — blocked on the movement/OA trigger system (add a separate non-save handler, per the seam analysis).
-Brutal Strike still needs its L9 seed key (see COV-10) added alongside the rider, and is more fragile: a
-"forgo the Reckless advantage" suppression in the shared `DetectAdvantage` (two sites) plus 15ft-push /
-−15-speed riders that don't reuse the hardcoded 10ft/−10 mastery values.
+**Shipped (Brutal Strike — Forceful Blow effect, 2026-07-06).** `/attack brutal:forceful`: a Barbarian-9
+using Reckless Attack forgoes ALL advantage on one STR melee attack → +1d10 (weapon type) on a hit, target
+pushed 15 ft straight away. New `internal/combat/brutal_strike.go`: `BrutalStrikeFeature(damageType)` (an
+`EffectExtraDamageDice`/`TriggerOnDamageRoll` rider, mirrors `HexFeature` → crit-doubles + gets the damage
+call-out free), `brutalStrikeEligible` (choice-first short-circuit → slug gate `hasFeatureEffect(...,
+"brutal_strike")` → Reckless [declared OR transient marker] → STR-melee), `applyBrutalStrike` (post-hit
+dispatch, mirrors `applyCunningStrike`). **Forgo-advantage is a NEW generic primitive:** `AdvantageInput.
+ForgoAdvantage` clears all `advReasons` at the tail of `DetectAdvantage` (RAW-correct: forgoes EVERY
+advantage source, not just Reckless; disadvantage + the separate target-side reckless-downside pass both
+survive) — chosen over gating the two reckless branches individually because it's simpler AND catches
+non-reckless advantage (e.g. a prone target). **Push generalized, not forked:** `applyPushEffect` gained a
+`squares int` param (mastery Push + Repelling Blast pass `2` = 10 ft, Forceful passes `3` = 15 ft) — the
+bounds/occupancy/vector infra was reused wholesale. Seed: Barbarian `features_by_level["9"]` +=
+`brutal_strike` (COV-10), guarded by `TestIntegration_SeedBarbarianBrutalStrikeFeature`. Discord: `/attack
+brutal` String option, one Choice; threaded like `cunning`/`tactical`. Tests: `TestBrutalStrikeFeature`,
+`TestDetectAdvantage_ForgoAdvantage` (adv→forgo→Normal; +disadv→Disadvantage), `TestBrutalStrikeEligible`
+(7 cases), 2 `Service.Attack` end-to-end (Forceful push B→E + 18 dmg / no-feature inert, advantage kept),
+`TestFormatAttackLog_BrutalStrike`. `/simplify`: 4 agents — reuse/efficiency **clean**, altitude **right
+depth on all 5 seams**; applied simplification's finding (inlined the 1-entry `brutalStrikeChoices` map to a
+literal `!= "forceful"` — no data to centralize, unlike `cunningStrikeRiders`). **DEFERRED (documented in
+`brutal_strike.go`):** Hamstring Blow (Speed −15 needs a new speed slug — the mastery Slow is a hardcoded
+−10 with no magnitude field); the "move 5 ft toward target" self-move (no attacker-follow movement infra);
+the L13 two-effects upgrade. **Two silent RAW gaps flagged by the altitude pass:** (1) 2024 "the chosen roll
+can't have Disadvantage" — eligibility is baked pre-`DetectAdvantage`, so a poisoned+reckless barbarian can
+forgo advantage into net-disadvantage and still collect +1d10; (2) once-per-turn cap (Extra Attack can
+declare brutal twice). **Do NOT close the cap by setting `OncePerTurn` on `BrutalStrikeFeature`:**
+`usedEffects` keys on the effect TYPE (`EffectExtraDamageDice`), which Sneak Attack + Hex share, so that
+would silently disable them — needs per-feature-name keying first. Coverage gates met (combat 91.3%, discord
+86.22%, refdata 98.09%).
+
+**Blocker for the remaining Cunning + Brutal effects:** Cunning **Trip + Poison** and Brutal **Forceful
+Blow** are now wired. Remaining: Cunning **Withdraw** (blocked on the movement/OA trigger system — add a
+separate non-save handler, per the seam analysis) and Brutal **Hamstring Blow** (blocked on a new speed slug —
+the −15 can't reuse the hardcoded −10/no-magnitude mastery Slow). Both remainders need NEW infra, not another
+rider row.
 
 ---
 
@@ -1068,12 +1098,14 @@ Brutal Strike (L9), ~~Tactical Master (L9)~~, Studied Attacks (L13), Cunning Str
 **This is the blocker under COV-3 and COV-8.** Extend the seed to the levels those items need
 (don't have to seed all 20 at once — seed the levels you wire).
 
-**Progress:** Fighter `features_by_level["9"]` carries `tactical_master` (Tactical Master, 2026-07-06)
-and Rogue `features_by_level["5"]` carries `cunning_strike` (Cunning Strike Trip, 2026-07-06) — the
+**Progress:** Fighter `features_by_level["9"]` carries `tactical_master` (Tactical Master, 2026-07-06),
+Rogue `features_by_level["5"]` carries `cunning_strike` (Cunning Strike Trip, 2026-07-06), and Barbarian
+`features_by_level["9"]` carries `brutal_strike` (Brutal Strike Forceful, 2026-07-06) — the
 pattern is proven: a sparse higher-level key is a clean map add, level-gated by `derive_stats.go`, and
 guarded seed→present by a `TestIntegration_Seed…Feature` test (mirrors the Evasion L7 / Uncanny Dodge L5
 seeds). Note Rogue L5 was already in the seeded 1–5 range (Uncanny Dodge), so Cunning Strike needed no new
-higher-level key. Still needed for the open COV-8 riders: Barbarian L9 (Brutal Strike).
+higher-level key. No open COV-8 rider now needs a seed key — the remainders (Cunning Withdraw, Brutal
+Hamstring) are blocked on other infra (movement/OA trigger, speed slug), not on seed levels.
 
 ### COV-11 — Subclass unlock levels pre-2024
 **Status:** OPEN · **Severity:** low · **Pkg:** `internal/refdata`

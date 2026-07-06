@@ -187,6 +187,7 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 		"reckless":     true,
 		"tactical":     "push",
 		"cunning":      "trip",
+		"brutal":       "forceful",
 		"twohanded":    true,
 	}))
 
@@ -211,6 +212,9 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 	}
 	if got.CunningStrike != "trip" {
 		t.Errorf("expected CunningStrike 'trip', got %q", got.CunningStrike)
+	}
+	if got.BrutalStrike != "forceful" {
+		t.Errorf("expected BrutalStrike 'forceful', got %q", got.BrutalStrike)
 	}
 	if !got.TwoHanded {
 		t.Error("expected TwoHanded=true")
