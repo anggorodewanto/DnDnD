@@ -135,6 +135,66 @@ answer, and that's the point. Never resolve it *for* them.
   party carries the **same name-stock the renegade collects** (a collector would want theirs too) —
   **but the letters still won't resolve** (decipherment kept for the Palewatch, per the withheld-payoff
   policy below). Both checks table-public; rung 4 un-spent.
+  **Departure + on-road wake (07-05, #the-story ~12:32 PM local — day one on the moor-road):** party set out for the
+  Palewatch (Vale *"move on to Palewatch?"* → Forge *"let's go"*). Day-one beat lands them at a **lone shepherd's
+  croft** = the renegade's wake again — the shepherd is **blanked** (can't recall his own name, doesn't know it's
+  gone) with a **greyed tally-cut on the doorpost** (same hand as the wayhouse, *"did not stop long"*). This **reuses
+  rung 1** (method's wake) + **rung 3** (Windreth reads the wrongness first) — **no new rung**; rung 4 still held. The
+  greyed mark keeps the **~3-night lead roughly holding**; the party's **stop-vs-push** choice (help/read the croft
+  and lose the evening, vs march on to gain ground) is the first place their **pace** starts moving the clock (per
+  "The clock" below — texture, their pace sets whether Palewatch is a heist-in-progress or a robbed cloister).
+  **Croft read (07-05, #the-story ~2:08 PM — party Stopped, 3 checks):** Vale **Arcana 9** (token on the shepherd) —
+  token *confirms* the same erasure power/hand but a weak roll can't force it; visitor-memory scraped clean, **no face
+  (rung 4 held)**, no restoration. Forge **Investigation 15** — taking was slow/unhurried, tally ~2–3 days weathered →
+  **~3-night lead holds**. Windreth **Insight 20** (best) — names taken as **stock/harvest for a ledger**, the man
+  **isn't finished and is still collecting in the open before the walls → a window to catch him on the road that shuts
+  at the Palewatch** (lights the party's stop/push pace-choice; still **no rung 4**). Established ruling: this erasure
+  **doesn't lift at the scene** — only reaching the source might (keeps Windreth's stolen-name hope pointed at the man,
+  not a quick fix). No new rung spent.
+  **Night-march closes the lead (07-06, #the-story ~9:27 AM — day-one grey dawn, cliff country):** the party PUSHED a forced
+  night-march after the croft. All three **failed** the CON save DC 12 (Vale 7 / Forge 8 / Windreth 4) → **1 level Exhaustion each**
+  (applied on the sheets via the character-overview status editor), but a forced march still makes its ground → the renegade's
+  **~3-night lead shrinks to ~2** — the clock finally *moves*, driven by the party's own pace (per "The clock" below). They crest
+  into salt-wind **cliff country** and the **Palewatch's towers come into view for the first time** across a gorge (~half-day+ of
+  switchbacks off). Re-uses **rung 3** (the grey man *"sure of his welcome,"* delivering not fleeing) — **no new rung; rung 4 still
+  held** (face / ex-warden link / right-to-refuse land at the Palewatch itself). Live pace-choice: **rest** (a long rest sheds a
+  level of exhaustion but hands a little lead back) vs **push on worn** — this sets whether they reach the Palewatch as a
+  heist-in-progress or a robbed cloister (don't pre-decide; let their choice set it).
+  **Rest chosen → Palewatch as a robbed cloister (07-06, #the-story ~10:32 AM — grey dawn, at the walls):** the party chose
+  **rest** over push — all three `/rest long` at a hidden camp off the trail (Exhaustion 1→0, full HP, unseen edge kept, no one
+  found them). Per "The clock," a full night's rest **hands ~a night back** → the renegade **reaches the Palewatch ahead of the
+  party**, and the open-road intercept (Windreth's Insight-20 "catch him before the walls" window) is **spent**. So the Palewatch
+  is now set as a **heist-in-progress / freshly-robbed cloister** — the party arrives to a place the grey man has already reached
+  (a **fresh ledger-tick at the shut gate** re-uses rungs 1/3, **no new rung**), traded for **clear eyes + intact stealth**. Their
+  approach — petition / scout / disguise (Vale's *Mask of Many Faces*) / split — is open and **theirs to choose**. **Rung 4
+  (ex-warden link / the Order's right-to-refuse) is still un-spent and lands AT the Palewatch itself.**
+  **Scout done (07-06, #the-story ~11:21 AM — Windreth Perception 13):** the robbed-cloister frame is now **player-visible** — they
+  can see the gate was **forced open quietly** (bar lifted, lock-wood split), the **posts are empty** (no wardens on the wall/slits),
+  **one traveller went in ahead of them** within the day, and there are **two ways in** (murder-hole front gate / windward cliff
+  goat-track). Still **DM-secret / not yet shown:** where the wardens went (fled / hiding / down), whether the renegade is **still
+  inside**, and everything behind **rung 4** (why an ex-warden defaces his own disc, the Order's right-to-refuse, Vale's patron =
+  rival collector). The empty posts also **gate Vale's disguise behind entry** — no warden face to *Mask* into until he sees a live
+  one inside. **No new rung spent.**
+  **Gate read (07-06, #the-story ~11:53 AM / 05:53Z — 3 checks at the threshold):** the party examined the forced gate before
+  committing. **Forge Investigation 11** — gatehouse **empty**, the **portcullis winch is cut** so the gate can't drop (rigged open),
+  murder-holes **unmanned**. **Windreth Investigation 14** (Expertise) — **one intruder, alone**, forced the lock **quiet + calm**
+  (*sure he'd get in*; **re-uses rung 3**), **nobody followed**, **paused just inside** then went **deep**, unhurried; a 14 can't ID
+  him or say if he's **still inside**. **Vale Perception 19** — the wardens **did not leave willingly** (dropped horn, torn cloak);
+  **one warden is still alive + hiding** = **a face Vale can *Mask* into once close** (this **unlocks her disguise**, the lead the
+  empty posts had gated — and it is an **ordinary warden, NOT the renegade** whose face stays scraped); a **cold erasure-trail** runs
+  to the **inner keep** where the scrap is hoarded (**re-uses rung 1**). **Still DM-secret / rung 4 un-spent:** the renegade's face +
+  ex-warden link, the Order's right-to-refuse, whether the intruder is **still inside** — all land when the party meets a warden
+  **face-to-face inside.** **No new rung spent.**
+
+  **Push-in / first contact (07-06, #the-story ~1:21 PM / 06:21Z — 3 checks, all failed):** the party went inside. **Vale** stepped
+  into the open to reach the surviving warden — *"hello? friend, travellers passing by, what happened here?"* — **Persuasion 6** (raw
+  2) + **Insight 4**, while **Windreth** flanked along the wall (**Stealth 9, natural 1**) and Forge held. Adjudged all fail: the
+  frightened survivor **won't trust a horned stranger walking up open** (no cooperation, grips a spear), Vale gets **no read**, and
+  Windreth's boot **skids a loose stone** — the quiet is broken. NPC beat: the warden flinches toward the inner keep and whispers
+  *"he will hear you"* — a **fear-signal, deliberately NOT a hard confirmation** the intruder is still inside (rung 4 held; he never
+  says *who*). **Re-uses rung 1** (erasure-wake) **+ rung 3** (walks like he owns the place); **no new rung spent.** Disguise **still
+  available** — Vale is close and has seen his face (Mask needs no consent). Held: **no combat triggered, fiction not advanced** — the
+  "something may have heard" is a live cliffhanger the party must answer.
 
 ---
 

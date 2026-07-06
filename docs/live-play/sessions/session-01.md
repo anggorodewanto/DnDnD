@@ -2000,3 +2000,252 @@ Resumed on `continue as dm`. Pulled the live picture first (`/api/dm/situation` 
 **Resolved both queue items** (`2244ada0` + `b251493d`) via `POST /dashboard/queue/<id>/resolve` → **204** each (ISSUE-059 button still dead; direct POST from the authed tab). DM Console `pending:0`, `next_step:""`. Forge's older pending short-rest heal is now **fully moot** (the long rest full-heals + returns Hit Dice) — logged resolved.
 
 **Where things stand:** out of combat, wayhouse **dawn** scene, party **rested** (full HP + all Hit Dice), queue clean, **arc rung 4 still held**. Both checks are table-public; the ex-warden/right-to-refuse deep and the decipherment stay withheld for the Palewatch. **Await the party's moves** — dawn departure up the sea-cliff road to the Palewatch, or more wayhouse RP. Never roll/act/decide for the PCs.
+
+### Departure — the party sets out for the Palewatch; day one ends at the blanked-shepherd croft (07-05)
+
+**Trigger — the party chose to move.** After the dawn beat handed the spotlight back with a menu, the players
+converged in #in-character on setting out: Vale (dewa, 12:05 PM) — *"so, vale says to the party as they eat
+breakfast, 'move on to Palewatch?'"*; Forge (JonathanEka, 12:11 PM) — *"'yeah, let's go', Forge already ate his
+meal quickly & bored since has nothing to do. waiting for the departure."* Windreth was already committed from the
+night before (07-04 7:54 PM IC: *"your mystery and mine just became the same road"*). DM Console clean going in
+(`pending:0`, `next_step:""`, `has_encounter:false`) — no open mechanics blocking the move.
+
+**DM beat — departure + day-one road, narrated 07-05 ~12:32 PM local, #the-story (DM author `1089351036650668143`,
+verified rendered, OOC-coda-first / read-aloud-box-last).** Structure:
+
+- **OOC coda / prompts (plain ESL English):** you set out; the Palewatch is ~3 days up the moor-road onto the
+  sea-cliffs; I'll move you along and stop where there's something to do. Two light hand-backs, neither forced:
+  - **Marching order + watch** — Vale offered to set it → asked her for front/middle/back + first night-watch
+    (default offered: Windreth up front if they'd rather just walk).
+  - **Pace** — normal ~3 days vs *push harder / march into the night* to close the faceless man's **three-night
+    lead** — but a forced march wears people down; decide on the road, not now.
+  - **Per-PC croft menu** (end of day one): **Stop** — Forge `/check investigation` (read what happened),
+    Windreth `/check insight`|`/check survival` (read the trail + the man), Vale `/check persuasion`|`/check
+    history` (speak to the shepherd / place the mark); **Push past** (keep daylight, gain ground); or **something
+    else**.
+- **Read-aloud box (the scene):** wayhouse falls behind by mid-morning; road climbs, grass → heath → bare grey
+  stone; by afternoon the sea *breathes* far below the cliff on the left, wind never stops, salt + cold rock. Good
+  time made. Dusk → the road bends past a **lone stone croft** (shepherd's place, pen, smoke). The shepherd meets
+  them — old, kind, offers floor + hot food — **but he is blanked**: asked his name he opens his mouth, stops,
+  doesn't have it, smiles embarrassed (*"Funny. It'll come to me."*), doesn't know anything is gone. **Windreth
+  reads the wrongness first** (same cold quiet as the wayhouse guest). On the doorpost, greyed by a day or two of
+  salt wind: **a single tally-mark — the same cut, the same hand as the wayhouse.** The man came through — and *did
+  not stop long*.
+
+**Grounding / secrets.** Beat is built from established, table-safe rungs only: campaign-arc **rung 1** (blank
+people / erased signs = the method's wake) + **rung 3** (Windreth recognizes the method) — both already delivered,
+reused here, no new reveal. The tally-cut is the renegade's established ledger-mark (he left one at the wayhouse).
+Clock kept as **texture, not stopwatch** (campaign-arc): the greyed mark + *"did not stop long"* signal the ~3-night
+lead still roughly holds, and the **stop-vs-push** choice is where the party's pace actually starts to move it.
+**Held (do NOT reveal):** renegade's face/identity + ex-warden link, the Order of the Pale Watch's right-to-refuse,
+Vale's patron = rival collector, the reassemble/scatter/hand-over choice. No dice rolled for the PCs; the croft is
+eerie/social, not a fight (the renegade leaves erased people, not monsters).
+
+**State after:** party is on the road, day one, at the croft; awaiting their move (the per-PC menu above) + Vale's
+marching-order + pace call. game-state Current-scene + Next-action retagged to match.
+
+### Day one, the croft — party Stops and reads it; three checks (Vale Arcana 9 / Forge Investigation 15 / Windreth Insight 20) (07-05)
+
+**Trigger — the party chose Stop** (over Push-past). Off the departure beat's per-PC menu, all three worked the
+croft. Only Vale posted RP framing (#in-character 2:03 PM: *"Vale took the shepherd's hands while holding the token.
+Asking him if there was recent visitor or traveller."*); Forge + Windreth rolled bare off the menu (as at dawn).
+Console pending → three `skill_check_narration` items. Skill→PC mapping unambiguous (distinct skill per PC in the
+menu): **Vale Arcana 9, Forge Investigation 15, Windreth Insight 20.**
+
+**DM beat — the croft reads, narrated 07-05 ~2:08 PM local, #the-story (DM author `1089351036650668143`, verified
+rendered, OOC-coda-first / read-aloud-box-last).** Adjudications, each grounded against campaign-arc:
+
+- **Vale — Arcana 9 (token on the shepherd, per her RP).** Weak roll. The token *wakes* — same cold pull as the
+  wayhouse, so it **confirms the same erasure power / same hand** — but a 9 can't force the door. The shepherd's
+  memory of the visitor is **scraped as clean as his name**: no face, no vision, just the cold and a near-miss (he
+  almost gives her a face/night/direction, then loses it). Consistent with the token ("opens forgotten things") on a
+  weak pull; **rung 4 (the man's face/identity) stays held.** No restoration — the blanking doesn't lift.
+- **Forge — Investigation 15 (read the scene).** Solid. Reads it like a workshop: the taking was **slow, unhurried,
+  nothing broken** (the man had time and used it — matches the "collector/clerk, delivering not fleeing" read). The
+  doorpost tally = **same tool + same hand** as the wayhouse (his dawn same-maker read holds), **~2–3 days of salt on
+  it** → the **~3-night lead still holds**. One cut, one name taken, gone the same night. No decipherment (Palewatch
+  payoff still withheld).
+- **Windreth — Insight 20 (his best; read the victim + the meaning).** The shepherd is **whole, not dying/cursed** —
+  just short the one thing that **never grows back on its own** (Windreth knows this personally; his own stolen name
+  never returned). The cold read: the name was taken from a man who owns nothing not out of grudge but as **stock** —
+  the faceless man is **harvesting names for a ledger up the whole road**, and **isn't finished**. Actionable kicker
+  (table-safe, no rung-4 leak): he's still doing it **in the open, before the Palewatch → there's a window to catch
+  him on the road that closes once he's behind the walls.** This is what lights the **camp-vs-push** tension.
+
+**Honest ruling surfaced:** nothing at the croft **restores** the shepherd — Vale's token can only confirm, not
+undo; only reaching the source (the man / whatever holds the names) might. So the party can't fix him here — moral
+weight + a reason to chase, no railroad. Croft is eerie/social, **not a fight** (the renegade leaves erased people,
+not monsters). No dice rolled for the PCs.
+
+**Handed back:** camp the night (watches, dawn start) / push on into the night (forced march to eat the lead — 2024
+exhaustion tracked if chosen) / anything for the shepherd / Vale's still-open marching order. All three queue items
+(`1b7e7ee2` Windreth Insight, `659601d9` Forge Investigation, `d0ea6f97` Vale Arcana) **resolved 204**; Console clean
+(`pending:0`, `next_step:""`). game-state Current-scene + Next-action retagged to match.
+
+### Day one, dusk — the party splits: Windreth scouts ahead; Vale/Forge camp-vs-push still open (07-05)
+
+After the croft-reads beat, **Windreth (Winfroz)** reacted IC in #in-character (07-05):
+
+- 4:11 PM — *"He is still taking names."* / *"But maybe we can stop him from taking the next one."*
+- 4:56 PM — *"I will scout ahead. Quietly."*
+
+He declared a **solo scout** up the moor-road into the dusk. **Vale (dewa)** and **Forge (JonathanEka)** stayed
+quiet on the camp-vs-push question from the prior beat — so the party is **split**: one PC moving ahead, two undecided.
+
+Reacted with a single #the-story beat (**~6:21 PM local**, Narrate editor, DM author `1089351036650668143`, verified
+rendered, OOC-coda-first / read-aloud-box-last; **no queue item** — this reacts to IC declarations, Console `pending:0`).
+It did three things:
+
+1. **Handed Windreth a pick-one check** — `/check stealth` (stay unseen/unheard), `/check survival` (read the road:
+   tracks, the next mile, where the man passed), or `/check perception` (watch the dark for movement). Players roll their
+   own — **no dice rolled for him**; the scout resolves on his number next turn.
+2. **Kept the clock honest** (no railroad, no false hope): ranging ahead tonight **won't** put the renegade in reach —
+   he's ~3 nights up the road. A lone scout buys *eyes on the road / early warning / a sign of where he stopped*. The only
+   thing that actually **eats the 3-night lead** is a **whole-party forced night-march** — so the real gap-closing decision
+   is still Vale + Forge's.
+3. **Left camp-vs-push open** for Vale + Forge — **Camp here** (hold the croft, split watches, first-light start) vs
+   **Break camp and push with him** (night-march to gain road; I'll track the 2024 forced-march exhaustion rule) — plus
+   anything for the shepherd before they go.
+
+Read-aloud: Windreth steps past the croft's firelight into the dark moor — the window shrinking to a warm coin behind him,
+the pale road running on ahead under a blue-to-black sky, sea-wind and hissing grass, three nights of lead somewhere up
+that dark. He stops, listens; the road waits.
+
+**DM-secrets held** (unchanged): the renegade's face/identity + ex-warden link, the Order of the Pale Watch's
+right-to-refuse / keep-it-scattered stance, Vale's patron = rival collector using her, the reassemble/scatter/hand-over
+choice. No new rung spent (rung 4 still locked). **Awaiting:** Windreth's chosen check + Vale/Forge's camp-vs-push.
+
+### Day one, night — the party pushes: Windreth's scout (Stealth 11 / Perception 22) + forced night-march (07-05)
+
+The camp-vs-push question resolved toward **push, together** (not a party split):
+
+- **Forge (JonathanEka)** 6:42 PM — *"Vale, let's follow Windreth from afar while he do the stealth."*
+- **Vale (dewa)** 6:44 PM — *"gonna be cold walk. Let's go."*
+- **Forge** 7:16 PM (to DM) — *"(to DM: do Forge & Vale need to roll check?)"*
+
+So Windreth scouts point, Vale + Forge trail from a distance, and the **whole party marches into the night** rather than
+camping at the croft.
+
+**Windreth's scout.** He rolled **both** checks the prior beat offered (I said pick one; he ran two) —
+**Stealth 11** + **Perception 22** (queue `514b447a` + `8b8762dc`, both **resolved 204**, Console `pending:0`). Adjudicated
+into one #the-story beat (**~7:56 PM local**, Narrate editor, DM author `1089351036650668143`, verified rendered,
+OOC-coda-first / read-aloud-box-last):
+
+- **Stealth 11** — moves quiet enough; nothing out here tonight tests it, so he slips up the road unseen. Flagged
+  honestly that an 11 would *not* have beaten a real watcher — planting that stealth will matter on a night when something
+  *is* looking.
+- **Perception 22** (the payoff) — reads the road like a page: the renegade's trail is **clear and easy to follow**; he
+  walks **alone, steady, unhurried, taking no care to hide** (he does not think he's chased); a **cold camp ~a night old**,
+  packed clerk-neat, with a fresh **ledger scratch-mark on a wayside stone** pointing on; the land climbing to the
+  **sea-cliffs** with one far light = the next roof up the road he'd have passed. Bottom line handed to the table: **he is
+  not running → the party can gain on him**; a hard march really does eat the lead. (Rung 4 held — no face, no identity,
+  nothing of the Order's inner nature; pure method + trail + pace.)
+
+**Ruling on Forge's question (forced march).** Following Windreth needs **no check** — nothing out there notices them
+tonight. But choosing to **march into the night instead of camping** is a **forced march (2024 rule)**, so all three —
+**Windreth, Forge, Vale** — roll **one Constitution saving throw**, `/roll 1d20+<CON mod>` (reason "forced march"),
+**DC 12**. Make it → push through the night fine; miss it → **1 level of exhaustion** (2024: −2 to all d20 tests + speed
+cut, stacks per level). **Payoff on success:** because the trail is clear and the man unhurried, the night-march **closes
+real ground** — the ~3-night lead starts shrinking toward ~2.
+
+Read-aloud: Windreth a shadow up the pale road; Vale + Forge trailing in their own dark; a cold sea-wind that never stops;
+the cold camp packed neat, the scratch on the stone, the far light on the climbing road; the man three nights ahead and in
+no hurry — *"the trail runs clear ahead, and the man on it does not yet know to run."*
+
+**Clock note:** the ~3-night lead is **not yet advanced** — it only moves once the saves land and the push succeeds
+(campaign-arc clock deliberately NOT edited this beat). **DM-secrets unchanged** (renegade's face/ex-warden link, Order's
+right-to-refuse, Vale's patron, the reassemble/scatter/hand-over choice); no new rung spent. **Awaiting:** the 3 CON saves
+→ then narrate where the night-march lands + apply any exhaustion + advance the clock.
+
+### Day one → grey dawn — the night-march LANDS: all three fail CON (exhaustion 1 each), lead ~3→~2, the Palewatch in sight (07-06)
+
+The three forced-march CON saves came in (#roll-history) — **all three missed DC 12**:
+
+- **Vale** — `/roll 1d20+2` = **7**. Miss.
+- **Forge** — `/roll 1d20+4` = **8**. Miss.
+- **Windreth** — `/roll 1d20+2` = **4**. Miss.
+
+**Adjudication.** A forced march's cost is exhaustion on a *failed* CON save — you still cover the ground. So all three **gain 1 level of Exhaustion** (2024: flat −2 to every d20 test + −5 ft speed, stacks per level; a long rest removes one level), and the **march itself succeeds** → the renegade's ~3-night lead shrinks toward **~2**. Ground for tiredness, a fair trade.
+
+**Mechanics applied (dashboard, out of combat).** Exhaustion 1 set on all three via the character-overview status editor — Vale + Windreth by their party-overview **Edit status** cards; **Forge by `POST /api/character-overview/d2d98745…/status`** (authed dashboard fetch) because his party-overview **card is missing**. Root cause found: Forge's `player_characters` row has been **`status=rejected` since the 07-03 L4 rework** (dm_feedback: "re-running your Level 4 through the DM level-up…") — a stale leftover, not a fresh anomaly; his character record plays fine (the bot still posts his rolls), and the status endpoint gates on **character-existence + campaign-DM + not-in-combat, not approval**, so it applied cleanly. DB-verified after: **Vale 31/31 exh 1, Forge 41/41 exh 1, Windreth 31/31 exh 1** (Forge's true max is 41, not the roster's stale "32").
+
+**Narrated** one beat (**07-06 ~9:27 AM local**, #the-story, DM author `1089351036650668143`, verified rendered OOC-first/box-last): OOC coda = the three misses, the exhaustion rule in plain ESL (−2 all d20 + −5 ft speed, long rest clears one), the trade (lead 3→2), and a **rest-vs-push** menu per PC. Read-aloud = the cold night-march, legs aching by grey dawn, the moor giving way to salt-wind **cliff country**, and the **Palewatch's pale towers showing across a gorge for the first time** (still a hard half-day of switchbacks off), the grey man a night's walk nearer on the same trail, *"sure of his welcome,"* unaware he's followed (**re-uses rung 3, no new rung; rung 4 held**).
+
+**Clock advanced:** renegade lead **~3 → ~2 nights** (the push paid off; campaign-arc updated). Party now into cliff country, Palewatch in view, **all three at Exhaustion 1**. **Await:** the rest-vs-push call — `/rest long` (sheds a level, hands a little lead back) vs press on worn toward the walls; Vale still holds marching order + first watch; anyone may scout the approach (`/check perception`|`/check stealth`) — all rolls at **−2** until they rest. DM-secrets held.
+
+**Forge's approval row repaired (07-06).** Root-caused the missing party-overview card: `player_characters` row `14b2edfe…` stuck at `status=rejected` since the 07-03 L4 rework. Confirmed no DB triggers on `player_characters` and that the flip touches only that one column, so — at the user's ask ("fix without anything changed") — did a guarded single-row repair: `UPDATE player_characters SET status='approved' WHERE id='14b2edfe…' AND status='rejected'`. Verified `characters.updated_at` (and HP/exhaustion) **unchanged** before/after → the character record (GWM, L4, HP 41/41, exh 1) was not touched. Party overview now lists all three; also un-breaks loot gold-split (`loot.SplitGold` only counts *approved* members, so Forge was silently excluded before). Mirrors the earlier one-time Windreth-DEX data-repair precedent.
+
+### Grey dawn — party chooses REST over push: hidden camp, long rest clears exhaustion, the Palewatch at the walls (07-06)
+
+The rest-vs-push call resolved in #in-character — **REST**, on Windreth's argument for keeping the edge:
+
+- **Windreth** (Winfroz, 9:49 AM): *"He still does not know we are behind him. That is our advantage. I would rather keep it with clear eyes than spend it stumbling."* + *"Let's rest first, we need to build camp hidden from the trail, so he will not be alerted."*
+- **Vale** (dewa, 9:50 AM): *"agreed... we are tired, we are close, we can still observe and rest. Chase again after."*
+- All three ran **`/rest long`** at a hidden camp (Vale 9:50 / Windreth 9:52 / Forge 9:59) → bot confirmed **"Long Rest Complete, Exhaustion: level 0"** for each.
+
+**Mechanics (engine, no DM action).** The long-rest path decremented exhaustion **1 → 0** for all three on its own (the COV-18 2024-exhaustion engine change did NOT break the rest decrement) and full-healed them. DB-verified: **Vale 31/31, Forge 41/41, Windreth 31/31, conditions `[]` (exhaustion 0)**. Their −2/−5 ft penalty is off. Nothing for the DM to set.
+
+**The trade honored (clock).** A full night's rest hands the grey man back roughly the night the march bought — so the **road-catch window closes** (Windreth's Insight-20 "catch him on the road before the walls" is spent) and the renegade reaches the Palewatch **ahead** of the party. Per the campaign-arc clock policy, the party's pace has now set the Palewatch as a **heist-in-progress / freshly-robbed cloister** rather than an open-road intercept. They traded the intercept for **clear eyes + intact stealth** (the hidden camp held; no one found them).
+
+**Narrated** one beat (**07-06 ~10:32 AM local / 03:32Z**, #the-story, DM author `1089351036650668143`, Discord msg `1523531993638244454`, verified rendered OOC-first/box-last; `POST /api/narration/post → 201`). OOC coda = rest paid off (full health, exhaustion gone, −2 off), the honest lead-trade, and a per-PC **approach menu** (Windreth `/check stealth`|`/check perception`; Vale `/check persuasion` or *Mask of Many Faces* → `/check deception`, token may matter at a sealed door; Forge scrap-as-trade-bait or `/check investigation`; Anyone: knock / scout / split). Read-aloud = the hidden cold camp + watches, the grey-dawn *rested* wake, the switchback climb into salt-wind cliff country, the first close look at the **Palewatch** (pale towers on the drop's edge, shut gate, "a place built to forget on purpose"), and a **fresh ledger-tick scratched on a trailside stone** — the renegade came this way, already at the gate.
+
+**Posting note (self-inflicted, no bug).** First Post-to-#the-story click via element-ref did **not** fire the submit (textarea never cleared); a stale buffered `201` from the prior night-march post masked it. Re-checked the DB (`narration_posts` latest was still 02:27Z) → re-posted via a **coordinate** click on the button → genuine `201` + Discord id landed. Lesson reaffirmed (ISSUE / dashboard-reflow memory): verify the DB/#the-story render, never trust a buffered network `201`; coordinate-click the Post button when the ref-click no-ops.
+
+**Clock:** renegade now **at/near the Palewatch ahead of the party** (rest gave ~a night back; lead no longer the point — he's arriving/arrived). Party rested, **Exhaustion 0**, full HP, at the walls. **Await:** how they enter (petition / scout / disguise / split) + Vale's marching order. **DM-secrets held** (renegade's face/ex-warden link, the Order's right-to-refuse, Vale's patron = rival collector, the reassemble/scatter/hand-over choice); **rung 4 still un-spent — it lands at the Palewatch itself.**
+
+### At the walls — Windreth scouts the gate (Perception 13): the Palewatch is already forced open, posts empty, one traveller in ahead of them (07-06)
+
+The approach resolved in #in-character — **scout first, do not knock:**
+
+- **Windreth** (Winfroz, 10:40 AM): *"I will get eyes on the gate. Watchers, murder holes, side paths, fresh tracks."* / *"Do not knock yet. Not until we know whether we are walking into a welcome or a trap."*
+- **Forge** (JonathanEka, 10:43 AM): *"understood"* — defers to the plan.
+- **Vale** (dewa, 11:15 AM): *"let me know the looks of the people, i can disguise into them"* — teeing up *Mask of Many Faces*, wants Windreth's recon to pick a face (a request for info, **not** a roll).
+- Windreth's scout came in as a **Perception 13** (dm-queue `a1fa1172…`, player_name Windreth, from #in-character).
+
+**Adjudication (Perception 13 — solid exterior read, big unknowns stay open).** A 13 confirms the outside picture but not the deep questions. What he gets: the wall-walk + tower slits are **empty — no watchers** (wrong for a place that guards a secret); the **gate is already open — forced quietly** (bar lifted and set aside, lock-wood split clean and fresh, one leaf ajar a hand's width); **one set of fresh boot-prints** ahead of the party's — a single light, fast traveller went in within the day (matches the trail-stone tally); and the **two ways in** — the front gate (open, but arrow-slits + a murder-hole gallery hang right over the threshold) and a thin **goat-track along the cliff shoulder** to the sea side (unwatched now, bare + windward). What a 13 does **not** give him: where the wardens went (fled / hiding / down) and whether the one who forced the gate is **still inside**. **Answered Vale honestly:** no faces to copy yet — posts empty; *Mask of Many Faces* needs a warden actually seen first → the disguise gates behind getting inside. (No DM-side roll — pure adjudication of the player's number; robbed-cloister clock made physical, no new rung; **rung 4 held**.)
+
+**Narrated** one beat (**07-06 ~11:21 AM local / 04:21Z**, #the-story, DM author `1089351036650668143`, Discord msg `1523544339135987713`, `POST /api/narration/post → 201`, DB row `673eea8b`, verified rendered OOC-first/box-last via **coordinate-click** Post). OOC coda = the confirmed read (empty posts / forced-open gate / one traveller in ahead / two ways in), the honest "what a 13 can't tell you," the Vale-disguise ruling, and a per-PC **entry menu** (Windreth `/check stealth` to slip in | `/check investigation` Expertise on the lock/tracks; Vale hold disguise for inside | `/check perception` on the slits; Forge take point | `/check perception`/`/check investigation` on the murder-holes; Anyone: front gate / goat-track / hang back). Read-aloud = Windreth belly-crawling the last rocks, the two pale towers + iron-banded gate, the blind empty posts, the quietly-forced door, the single set of boot-prints, the two ways in (murder-hole front vs windward goat-track), his creep back unseen: *"The door's already open. Someone beat us to it."*
+
+**Pronoun fix (user correction).** First post wrote Windreth as **she/her** — **wrong, Windreth is he/him** (matches `party/windreth.md`). No narration edit/delete endpoint exists and I won't delete the bot's Discord message unilaterally (destructive Discord op), so I **reposted the corrected read-aloud** via the dashboard with a one-line `(DM — correction.)` header (**04:24Z**, Discord msg `1523545253263708172`, `201`, DB row after `673eea8b`). The original wrong post remains above it in #the-story. Recorded in memory `reference_pc_pronouns` — do not default Windreth to she.
+
+**Queue resolved** (ISSUE-059 workaround): `POST /dashboard/queue/a1fa1172…/resolve` → **204**, DB `status=resolved` / `outcome=narrated` (the in-dashboard Resolve button still no-ops; authed fetch is the path).
+
+**Await:** how the party **enters** — front gate (under the murder-holes) vs the windward goat-track vs hang back + watch more; who goes first; whether Vale holds the disguise for inside. **DM-secrets held; rung 4 (ex-warden link / the Order's right-to-refuse) still lands inside the Palewatch.** Never roll/act/decide for the PCs.
+
+### Reading the forced gate — 3 checks at the threshold (Forge Inv 11 / Windreth Inv 14 / Vale Perc 19): gatehouse empty + rigged open, one skilled intruder went deep alone, one live warden still hiding inside (07-06)
+
+After the scout, the party closed on the forced gate and examined it before committing — three checks came in from #in-character (all resolved 204 `narrated`, DM Console `pending:[]`):
+
+- **Forge** (JonathanEka, 11:28 AM): *"maybe i'll try to inspect it"* — *"Forge trying to peek at the hole, using his darkvision."* → **Investigation 11** (dm-queue `4bacbdb2…`).
+- **Windreth** (Winfroz, 11:35 AM): *"I need to investigate on the forced lock, I want to know how fast he moved, whether he stopped, and whether anyone followed him in."* → **Investigation 14** (Expertise; dm-queue `4fd7dc70…`).
+- **Vale** (dewa): *"let me know the looks of the people, i can disguise into them"* → **Perception 19** (dm-queue `9d29f31b…`) — scanning for a face to *Mask*.
+
+**Adjudication (scaled to each roll; robbed-cloister frame, re-uses rungs 1 + 3, NO new rung 4).**
+- **Forge (Inv 11)** — dwarf-sight into the dark gatehouse: it's **empty** (cold hearth, toppled stool); the **portcullis winch has its rope cut** so the iron gate **can't drop** (rigged open on purpose); the murder-hole gallery overhead is **dark + unmanned**. A plain 11 reads the empties + the cut winch, no finer detail.
+- **Windreth (Inv 14, Expertise) = he/him** — the forced lock talks: **one man, alone**, lifted the bar + split the lock **with a tool, quiet + calm** (not a panicked thief — a man **sure he'd get in**; re-uses rung 3, *"sure of his welcome / delivering not fleeing"*). **One set of prints in, no second set over them → nobody followed him.** He **paused just inside** (scuffed dust where he crouched + set something down), then walked on **deep into the yard, unhurried**. What a 14 does **not** give: his face/identity or whether he's **still inside** (rung 4 held).
+- **Vale (Perc 19 — the standout)** — she catches what the others miss: the wardens **did not march out** (a dropped watch-horn, a grey cloak torn on a nail — people left **fast or were taken**); and across the yard **one warden is still alive, hiding** (pale-grey coat, a small throat-disc) — **a face Vale can *Mask* into, once she gets close** (this **unlocks her disguise** — the lead the empty posts had gated; it is an **ordinary warden, NOT the renegade**, whose face stays scraped). Past him a **cold erasure-trail** runs across the stones toward the **inner keep** where the Order hoards its scrap (re-uses rung 1, the method's wake).
+
+**Narrated** one beat (**07-06 ~11:53 AM local / 05:53Z**, #the-story, DM author `1089351036650668143`, Discord msg `1523567610103336961`, `POST /api/narration/post → 201`, DB row `9f24b3d0`, verified rendered OOC-first/box-last via **coordinate-click** Post; **Windreth he/him** throughout — checked in preview + the #the-story render). OOC coda = the three roll-reads + a per-PC **push-in menu** (go in + follow the trail `/move`; reach the live warden `/check stealth`|`/check persuasion`|`/check insight`; Vale get close then take the face; watch the gallery `/check perception`|`/ready`; or back out to the goat-track). Read-aloud = leaning into the wound in the door — Forge's dark-sight empty gatehouse + cut winch, Windreth reading the lone unhurried intruder (*"He walks like he owns the place."*), Vale spotting the taken wardens + the one live hider + the cold trail to the inner keep: *"The way is open. The man is ahead. And someone in here is still alive."*
+
+**Queue resolved** (ISSUE-059 workaround): `POST /dashboard/queue/{4bacbdb2…,4fd7dc70…,9d29f31b…}/resolve` → **204** each, DB `status=resolved`, DM Console `pending:[]`. (Vale's id fat-fingered on the first batch → 404; re-fetched the exact id + re-posted → 204.)
+
+**Await:** how the party **pushes in** — follow the trail toward the inner keep / reach the live warden first (ally? witness? Vale's face) / Vale closes to take the face / watch the murder-hole gallery on the way / or fall back to the windward goat-track; + who leads. **Build the Palewatch interior LIVE.** **DM-secrets held** (renegade's face + ex-warden link, the Order's right-to-refuse, Vale's patron = rival collector); **rung 4 still un-spent — it lands when they meet a warden face-to-face inside.** Never roll/act/decide for the PCs.
+
+### Pushing in — contact with the hiding warden (Vale Persuasion 6 / Insight 4, Windreth Stealth 9 nat 1)
+
+The party committed and went inside. They split: **Vale** stepped into the open to reach the survivor; **Windreth** moved along the wall to stay unseen; **Forge** held. Three checks came in (roll-history 12:58 PM local / 06:21Z; all resolved 204 `narrated`, DM Console `pending:[]`):
+
+- **Vale** (dewa, 12:57 PM): *"Vale points out the hiding warden to the party, but signaling them to stay put. She approaches gently, calling out to the warden, 'hello? Hi there, friend. We are travellers passing by. What happened here?'"* → **Persuasion `d20+4 = 2+4 = 6`** (dm-queue `11564d02…`) + **Insight `d20+0 = 4`** (`b727ce10…`, reading him).
+- **Windreth** (Winfroz): no IC text — bare `/check stealth` → **Stealth `d20+8 = 1+8 = 9`** (natural **1**; `9ef0ad62…`), slipping along the wall while Vale parleyed.
+
+**Adjudication (all fail; scaled to the low/fumble rolls; re-uses rungs 1 + 3, NO new rung 4).**
+- **Vale (Persuasion 6, raw d20 = 2)** — the gentle approach does **not** land. The warden is a terrified survivor who just watched his order erased; a horned, red-skinned stranger walking up in the open is too much. He **does not trust her**, shrinks into his wall-crack, grips a broken spear, and warns her to be quiet. No cooperation, no info.
+- **Vale (Insight 4)** — she gets **no read** on him: fear, hate, or the edge of bolting — his face gives her nothing. She can't gauge friend/threat/flight.
+- **Windreth (Stealth 9, natural 1)** — a **fumble**: his boot skids a loose stone and the scrape carries in the dead-silent keep. Combined with Vale's calling out, **the quiet is now broken.**
+- **NPC reaction (DM-side):** the warden flinches toward the **dark mouth of the inner keep** and whispers *"Quiet. Quiet, you fools. He will hear you."* — deliberately a **fear-signal, not a hard confirmation** the intruder is still inside (kept ambiguous, rung 4 held; he never says *who*). Re-uses **rung 1** (erasure-wake: *"the way a man stares at the thing that already took everyone he knew"*) + **rung 3** (the intruder *walks like he owns the place*, already table-canon). **Disguise stays available** — Vale is now close and has seen his face; Mask of Many Faces needs no consent, so the earlier unlock is not retracted by the failed parley.
+
+**Narrated** one beat (**07-06 ~1:21 PM local / 06:21Z**, #the-story, DM author `1089351036650668143`, Discord msg `1523574621268611103`, `POST /api/narration/post → 201`, DB row `6706085c`, verified rendered OOC-first/box-last via **coordinate-click** Post; **Windreth he/him, Vale she/her, warden he/him** — checked in preview + the #the-story render, cleared the network buffer first to avoid a stale 201). OOC coda = the three roll-reads (calling out the raw 2 + the natural 1) + a per-PC **reaction menu** (calm/press `/check persuasion`|`/check intimidation`|`/check insight`; stop him bolting `/check athletics`|`/check sleight of hand`; Vale takes his face now; go still + listen `/check perception`|`/ready`; push in fast `/move` toward the inner keep; pull back to the gate). Read-aloud = Vale's warm-but-loud call, the warden refusing to soften and gripping his spear, Windreth's skidding boot *"like a dropped plate in an empty church,"* and the warden's cracked warning toward the dark: *"the quiet is broken now — and somewhere in this keep, something may have just heard you."*
+
+**Queue resolved** (ISSUE-059 workaround): `POST /dashboard/queue/{11564d02…,b727ce10…,9ef0ad62…}/resolve` with outcome bodies → **204** each, DB `status=resolved`, DM Console `pending:[]`.
+
+**Await:** the party's reaction to the **spooked warden + broken quiet** — calm or press him / stop him bolting / Vale takes his face / go still and listen for what heard the noise / push in fast after the intruder / pull back to the gate; + who acts. **I do not trigger combat or advance the fiction until they act** — the "something may have heard" is a live cliffhanger, not a declared threat. **DM-secrets held; rung 4 still lands only at a warden face-to-face inside.** Never roll/act/decide for the PCs.
