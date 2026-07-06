@@ -472,7 +472,7 @@ Blade (attack with pact weapon, use CHA), Pact of the Chain (familiar), Pact of 
 ---
 
 ### COV-8 — Cunning Strike / Brutal Strike / Tactical Master / Steady Aim
-**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
+**Status:** IN PROGRESS (Steady Aim DONE 2026-07-05; Tactical Master DONE 2026-07-06) · **Severity:** medium · **Pkg:** `internal/combat` (+ seed for the levels)
 
 Four 2024 martial riders that each sit on already-wired machinery. Each is its own small
 item; split if picked up separately.
@@ -482,9 +482,45 @@ item; split if picked up separately.
 - **Brutal Strike (Barb L9):** forgo advantage → on-hit extra damage + effect. Mirrors the
   GWM on-hit rider (`GreatWeaponMasterFeature` `feature_integration.go:317`) and the mastery
   on-hit pipeline (`mastery.go`).
-- **Tactical Master (Fighter L9):** swap in push/sap/slow on any mastery weapon. Sits
-  directly on `onHitMastery` (`attack.go:602`) / `mastery.go`.
+- ~~**Tactical Master (Fighter L9):** swap in push/sap/slow on any mastery weapon.~~ **DONE 2026-07-06.**
 - ~~**Steady Aim (Rogue):** grant advantage this turn (speed 0).~~ **DONE 2026-07-05.**
+
+**Shipped (Tactical Master).** Wired as `/attack tactical:<push|sap|slow>`: a Fighter-9 replaces
+the weapon's own mastery with Push/Sap/Slow for that attack. This is almost pure wiring over the
+fully-built mastery pipeline — **zero new effect code**. New `tactical_master.go`:
+`tacticalMasteryOverride(choice, input, features)` returns the substitute slug (or "") only when
+(a) the choice ∈ {push, sap, slow} (`tacticalMasterySlugs`), (b) `masteryActive(input)` is already
+true — the RAW "a weapon whose mastery property you **can use**" gate, so it can only *replace* a
+usable mastery, never fabricate one on a mastery-less weapon or one the fighter isn't proficient
+with — and (c) the fighter carries the feature (`hasFeatureEffect(features, "tactical_master")` —
+**slug** detection, mirroring the Evasion / Uncanny Dodge class-feature gates and this item's own
+level-9 seed guard, so a name rewording can't silently break it). `Service.Attack` applies it by
+mutating `input.Weapon.Mastery` (the weapon **value copy**, leak-free) right after the known-mastery
+parse and before `resolveAndPersistAttack`; from there the swapped slug flows through the existing
+`onHitMastery` + `applyMasteryEffects` (push/sap/slow all resolve end-to-end). Swapping a `cleave`
+weapon to `push` correctly suppresses Cleave that attack (no double-effect). Absent the feature (or
+on a mastery-less/unknown weapon) it **silently falls back** to the weapon's own mastery — safe
+because the fallback is always a mastery the fighter can already use, unlike the gwm/reckless power
+toggles that hard-error on misuse (disclosed in a code comment). **Seed (COV-10):** Fighter
+`features_by_level["9"]` now carries `{mechanical_effect:"tactical_master"}` — the first higher-level
+seed key added for a COV-8 rider (sparse map add, level-gated by `derive_stats.go`; guarded by
+`TestIntegration_SeedFighterTacticalMasterFeature` against the dead-data anti-pattern). Discord:
+`/attack tactical` String option with push/sap/slow Choices + `optionString` parse + `TacticalMastery`
+threaded into `AttackCommand`. **Altitude (why name/pre-resolution seam, not FES):** the effect is a
+*pre-resolution mastery swap*, not a roll-time modifier — the FES trigger vocabulary
+(`on_attack_roll`/`on_damage_roll`/…) has **no way to express "replace the weapon's mastery
+property"**, so the pre-resolution `input.Weapon.Mastery` mutation is the correct depth (modeling it
+as a `FeatureDefinition` would be a category error). Tests: `tactical_master_test.go`
+(`TestTacticalMasteryOverride` table — valid push/sap/slow, non-substitutable/cleave/empty choice,
+no-feature, unknown-mastery, mastery-less weapon; two `Service.Attack` tests — feature swaps sap→push
+and the target is pushed / no-feature keeps the weapon's own sap) + `attack_handler_test.go` option
+threading + the seed guard. `/simplify`: 4 agents — efficiency/altitude CLEAN (the `char.Features`
+unmarshal is correctly short-circuited behind the leading slug check, so the no-tactical hot path
+never parses); applied 2 fixes: **name→slug detection** (the seed guard asserts the slug, so the
+runtime now reads the slug too — reconciles both sides with the Evasion/UD pattern) and **folded the
+`char != nil` guard** (removed a temp). SKIPPED (noted): `tacticalMasterySlugs` map→switch (stylistic,
+not SSOT drift) and the `tacticalMasterMockStore`↔`pushMockStore` test-scaffold overlap (a shared-helper
+refactor that would couple the existing push tests for marginal gain). Coverage gates met.
 
 **Shipped (Steady Aim).** Wired as `/bonus steady-aim`: a bonus-action self-advantage on the
 rogue's attack this turn. New `Service.SteadyAim` (`steady_aim.go`, gate/spend shape mirrors
@@ -515,9 +551,13 @@ per-turn movement-budget gate exists to enforce them (the same infra gap that de
 Polearm-OA); disclosed in the combat log, code comment, seed comment, catalog summary, and help
 text so the table honors it. Coverage gates met (combat 91.37%, discord 86.22%, refdata 97.9%).
 
-**Blocker for the remaining three:** the level's feature must exist in seed data — see COV-10
-(`features_by_level` only 1–3 today; Cunning L5 / Brutal L9 / Tactical L9 all need higher levels
-seeded, unlike Steady Aim which fit at L2).
+**Blocker for the remaining two (Cunning L5 / Brutal L9):** the level's feature must exist in seed
+data — see COV-10. Tactical Master (Fighter L9) is now seeded + wired; Cunning L5 / Brutal L9 still
+need their higher-level seed key added alongside the rider (each a two-part slice — seed + rider).
+Both riders are also more fragile than Tactical Master was: Cunning Strike needs new
+sneak-attack-dice-reduction plumbing + per-rider save resolvers + the withdraw/OA movement gap;
+Brutal Strike needs a "forgo the Reckless advantage" suppression in the shared `DetectAdvantage`
+(two sites) plus 15ft-push / −15-speed riders that don't reuse the hardcoded 10ft/−10 mastery values.
 
 ---
 
@@ -943,13 +983,19 @@ damage halved before HP write.
 ## Tier 4 — Stale 2024 data (rules drift, no engine change)
 
 ### COV-10 — `features_by_level` only seeds levels 1–3
-**Status:** OPEN · **Severity:** medium · **Pkg:** `internal/refdata`
+**Status:** IN PROGRESS (Fighter L9 seeded 2026-07-06) · **Severity:** medium · **Pkg:** `internal/refdata`
 
 Every class's `features_by_level` populates only L1–3 (plus one subclass), so **all
 higher-level 2024 signature features are absent from the data model**, not just the engine:
-Brutal Strike (L9), Tactical Master (L9), Studied Attacks (L13), Cunning Strike (L5), etc.
+Brutal Strike (L9), ~~Tactical Master (L9)~~, Studied Attacks (L13), Cunning Strike (L5), etc.
 **This is the blocker under COV-3 and COV-8.** Extend the seed to the levels those items need
 (don't have to seed all 20 at once — seed the levels you wire).
+
+**Progress:** Fighter `features_by_level["9"]` now carries `tactical_master` (added with the
+COV-8 Tactical Master wiring, 2026-07-06) — the pattern is proven: a sparse higher-level key is a
+clean map add, level-gated by `derive_stats.go`, and guarded seed→present by a
+`TestIntegration_Seed…Feature` test (mirrors the Evasion L7 / Uncanny Dodge L5 seeds). Still needed
+for the open COV-8 riders: Rogue L5 (Cunning Strike) and Barbarian L9 (Brutal Strike).
 
 ### COV-11 — Subclass unlock levels pre-2024
 **Status:** OPEN · **Severity:** low · **Pkg:** `internal/refdata`

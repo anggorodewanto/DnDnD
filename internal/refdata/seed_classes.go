@@ -169,6 +169,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{
 					{"name": "Martial Archetype", "description": "You choose an archetype that you strive to emulate in your combat styles and techniques.", "mechanical_effect": "subclass_choice"},
 				},
+				// COV-10/COV-8: seed the level a wired martial rider needs. Tactical
+				// Master (2024, Fighter 9) is consumed by combat via /attack tactical.
+				"9": []map[string]string{
+					{"name": "Tactical Master", "description": "When you attack with a weapon whose mastery property you can use, you can replace that property with the Push, Sap, or Slow property for that attack.", "mechanical_effect": "tactical_master"},
+				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2, "11": 3, "20": 4}),
 			SubclassLevel:    3,

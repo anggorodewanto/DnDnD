@@ -188,6 +188,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 	gwm2024 := optionBool(interaction, "gwm2024")
 	sharpshooter := optionBool(interaction, "sharpshooter")
 	reckless := optionBool(interaction, "reckless")
+	tactical := optionString(interaction, "tactical")
 	twoHanded := optionBool(interaction, "twohanded")
 	offhand := optionBool(interaction, "offhand")
 	thrown := optionBool(interaction, "thrown")
@@ -253,18 +254,19 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 		}
 
 		cmd := combat.AttackCommand{
-			Attacker:       attacker,
-			Target:         *target,
-			Turn:           turn,
-			WeaponOverride: weapon,
-			GWM:            gwm,
-			GWM2024:        gwm2024,
-			Sharpshooter:   sharpshooter,
-			Reckless:       reckless,
-			TwoHanded:      twoHanded,
-			Thrown:         thrown,
-			IsImprovised:   improvised,
-			Walls:          walls,
+			Attacker:        attacker,
+			Target:          *target,
+			Turn:            turn,
+			WeaponOverride:  weapon,
+			GWM:             gwm,
+			GWM2024:         gwm2024,
+			Sharpshooter:    sharpshooter,
+			Reckless:        reckless,
+			TacticalMastery: tactical,
+			TwoHanded:       twoHanded,
+			Thrown:          thrown,
+			IsImprovised:    improvised,
+			Walls:           walls,
 		}
 
 		result, err := h.combatService.Attack(ctx, cmd, h.roller)

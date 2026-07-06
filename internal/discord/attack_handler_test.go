@@ -185,6 +185,7 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 		"gwm":          true,
 		"sharpshooter": false,
 		"reckless":     true,
+		"tactical":     "push",
 		"twohanded":    true,
 	}))
 
@@ -203,6 +204,9 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 	}
 	if !got.Reckless {
 		t.Error("expected Reckless=true")
+	}
+	if got.TacticalMastery != "push" {
+		t.Errorf("expected TacticalMastery 'push', got %q", got.TacticalMastery)
 	}
 	if !got.TwoHanded {
 		t.Error("expected TwoHanded=true")

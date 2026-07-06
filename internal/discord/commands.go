@@ -113,6 +113,16 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Description: "Use Reckless Attack (Barbarian)",
 				},
 				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tactical",
+					Description: "Tactical Master (Fighter 9): replace this weapon's mastery with push/sap/slow",
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "push", Value: "push"},
+						{Name: "sap", Value: "sap"},
+						{Name: "slow", Value: "slow"},
+					},
+				},
+				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "twohanded",
 					Description: "Use two-handed grip (versatile)",

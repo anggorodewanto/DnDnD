@@ -619,6 +619,11 @@ type AttackCommand struct {
 	GWM2024             bool // Great Weapon Master 2024: +proficiency bonus damage (heavy melee, 1/turn)
 	Sharpshooter        bool // Sharpshooter flag
 	Reckless            bool // Reckless Attack flag
+	// TacticalMastery, when "push"/"sap"/"slow", is a Fighter-9 Tactical Master
+	// request to replace the weapon's own mastery with that property for this
+	// attack. Ignored unless the attacker carries the feature and already uses
+	// the weapon's own mastery (see tacticalMasteryOverride).
+	TacticalMastery string
 	// ReactionACBonus is AC the targeted PC gains against THIS attack from a
 	// reaction declared in the pre-roll window (e.g. Defensive Duelist +PB).
 	// ReactionReason names it for the log. Baked into effectiveAC by ResolveAttack.
@@ -1395,6 +1400,20 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	// missing/invalid character_data.
 	if char != nil && char.CharacterData.Valid {
 		input.WeaponMasteries = parseWeaponMasteries(char.CharacterData.RawMessage)
+	}
+
+	// 2024 Tactical Master (Fighter 9) — the /attack tactical option replaces the
+	// weapon's own mastery with Push/Sap/Slow for this attack. Gated so it only
+	// substitutes a mastery the fighter already uses (never fabricates one); the
+	// swapped slug flows through onHitMastery + applyMasteryEffects unchanged.
+	// Absent the feature (or on a mastery-less/unknown weapon) it silently falls
+	// back to the weapon's own mastery — safe because the fallback is always a
+	// mastery the fighter can already use, unlike the gwm/reckless power toggles
+	// that hard-error on misuse.
+	if char != nil {
+		if slug := tacticalMasteryOverride(cmd.TacticalMastery, input, char.Features); slug != "" {
+			input.Weapon.Mastery = slug
+		}
 	}
 
 	// Monk martial arts: set monk level for DEX/STR auto-select and die upgrade

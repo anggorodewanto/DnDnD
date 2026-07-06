@@ -315,3 +315,44 @@ func TestIntegration_SeedRogueUncannyDodgeFeature(t *testing.T) {
 		t.Errorf("Rogue L5 must seed the `uncanny_dodge` mechanical_effect; got %+v", byLevel["5"])
 	}
 }
+
+// TestIntegration_SeedFighterTacticalMasterFeature locks the COV-10/COV-8
+// seed→present link: the seeded Fighter must carry the `tactical_master`
+// mechanical_effect at level 9 so the level-gated derivation grants the feature,
+// which is what makes the wired /attack tactical override (tacticalMasteryOverride
+// → onHitMastery push/sap/slow swap) fire. A seed reshuffle that drops this key
+// would silently make Tactical Master dead (the dead-data anti-pattern COV-3 exposed).
+func TestIntegration_SeedFighterTacticalMasterFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	fighter, err := refdata.New(db).GetClass(ctx, "fighter")
+	if err != nil {
+		t.Fatalf("GetClass(fighter) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(fighter.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["9"] {
+		if f.MechanicalEffect == "tactical_master" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Fighter L9 must seed the `tactical_master` mechanical_effect; got %+v", byLevel["9"])
+	}
+}
