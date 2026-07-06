@@ -473,6 +473,9 @@ type AttackInput struct {
 	// (e.g. the target's Defensive Duelist +PB) into the hit test.
 	ReactionACBonus int
 	ReactionReason  string
+	// ExhaustionLevel is the attacker's current exhaustion. 2024 rules apply a
+	// flat -2/level penalty to the attack roll (folded into the to-hit modifier).
+	ExhaustionLevel int
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -768,6 +771,10 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		atkMod -= 5
 		gwmSharpshooterBonus = 10
 	}
+
+	// 2024 exhaustion: -2 to hit per level, folded into the to-hit modifier just
+	// like the GWM/Sharpshooter -5 above.
+	atkMod += ExhaustionD20Penalty(input.ExhaustionLevel)
 
 	result := AttackResult{
 		AttackerName:    input.AttackerName,
@@ -2306,6 +2313,7 @@ func buildAttackInput(
 		AttackerHidden:      !attacker.IsVisible,
 		TargetHidden:        !target.IsVisible,
 		TargetCombatantID:   target.ID.String(),
+		ExhaustionLevel:     int(attacker.ExhaustionLevel),
 	}
 }
 

@@ -127,7 +127,7 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 	}
 
 	// Apply condition effects (including exhaustion)
-	autoFail, condMode, reasons := combat.CheckAbilityCheckWithExhaustion(
+	autoFail, condMode, exhaustionPenalty, reasons := combat.CheckAbilityCheckWithExhaustion(
 		input.Conditions, input.ConditionCtx, input.ExhaustionLevel,
 	)
 
@@ -151,7 +151,8 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 		finalMode = dice.CombineRollModes(finalMode, dice.Advantage)
 	}
 
-	d20, err := s.roller.RollD20(modifier, finalMode)
+	// 2024 exhaustion applies a flat -2/level penalty to the ability check.
+	d20, err := s.roller.RollD20(modifier+exhaustionPenalty, finalMode)
 	if err != nil {
 		return SingleCheckResult{}, fmt.Errorf("rolling d20: %w", err)
 	}

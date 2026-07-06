@@ -207,7 +207,7 @@ func IsIncapacitatedRaw(conditions json.RawMessage) bool {
 
 // EffectiveSpeedWithExhaustion returns the effective speed after both condition
 // and exhaustion effects. Conditions (grappled/restrained) override to 0;
-// exhaustion level 5+ overrides to 0; exhaustion level 2+ halves.
+// exhaustion then reduces the remaining speed by 5 ft per level (floored at 0).
 func EffectiveSpeedWithExhaustion(baseSpeed int, conditions []CombatCondition, exhaustionLevel int) int {
 	speed := EffectiveSpeed(baseSpeed, conditions)
 	if speed == 0 {
@@ -216,48 +216,37 @@ func EffectiveSpeedWithExhaustion(baseSpeed int, conditions []CombatCondition, e
 	return ExhaustionEffectiveSpeed(speed, exhaustionLevel)
 }
 
-// CheckSaveWithExhaustion extends CheckSaveConditionEffects with exhaustion effects.
-// Exhaustion level 3+ adds disadvantage on saving throws.
-func CheckSaveWithExhaustion(conditions []CombatCondition, ability string, exhaustionLevel int) (bool, dice.RollMode, []string) {
-	autoFail, mode, reasons := CheckSaveConditionEffects(conditions, ability)
+// CheckSaveWithExhaustion extends CheckSaveConditionEffects with 2024 exhaustion
+// effects. Each level of exhaustion applies a flat -2 penalty to the saving
+// throw (returned as penalty); it no longer imposes disadvantage. The roll mode
+// still reflects any condition-driven advantage/disadvantage (e.g. restrained).
+func CheckSaveWithExhaustion(conditions []CombatCondition, ability string, exhaustionLevel int) (autoFail bool, mode dice.RollMode, penalty int, reasons []string) {
+	autoFail, mode, reasons = CheckSaveConditionEffects(conditions, ability)
 	if autoFail {
-		return autoFail, mode, reasons
+		return autoFail, mode, 0, reasons
 	}
 
-	_, _, saveDisadv := ExhaustionRollEffect(exhaustionLevel)
-	if saveDisadv {
-		reasons = append(reasons, "exhaustion (level 3+): disadvantage on saving throws")
-		mode = applyDisadvantage(mode)
+	penalty = ExhaustionD20Penalty(exhaustionLevel)
+	if penalty != 0 {
+		reasons = append(reasons, fmt.Sprintf("exhaustion %d: %d to saving throws", exhaustionLevel, penalty))
 	}
-	return false, mode, reasons
+	return false, mode, penalty, reasons
 }
 
-// CheckAbilityCheckWithExhaustion extends CheckAbilityCheckEffects with exhaustion effects.
-// Exhaustion level 1+ adds disadvantage on ability checks.
-func CheckAbilityCheckWithExhaustion(conditions []CombatCondition, ctx AbilityCheckContext, exhaustionLevel int) (bool, dice.RollMode, []string) {
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conditions, ctx)
+// CheckAbilityCheckWithExhaustion extends CheckAbilityCheckEffects with 2024
+// exhaustion effects. Each level of exhaustion applies a flat -2 penalty to the
+// ability check (returned as penalty); it no longer imposes disadvantage.
+func CheckAbilityCheckWithExhaustion(conditions []CombatCondition, ctx AbilityCheckContext, exhaustionLevel int) (autoFail bool, mode dice.RollMode, penalty int, reasons []string) {
+	autoFail, mode, reasons = CheckAbilityCheckEffects(conditions, ctx)
 	if autoFail {
-		return autoFail, mode, reasons
+		return autoFail, mode, 0, reasons
 	}
 
-	checkDisadv, _, _ := ExhaustionRollEffect(exhaustionLevel)
-	if checkDisadv {
-		reasons = append(reasons, "exhaustion (level 1+): disadvantage on ability checks")
-		mode = applyDisadvantage(mode)
+	penalty = ExhaustionD20Penalty(exhaustionLevel)
+	if penalty != 0 {
+		reasons = append(reasons, fmt.Sprintf("exhaustion %d: %d to ability checks", exhaustionLevel, penalty))
 	}
-	return false, mode, reasons
-}
-
-// applyDisadvantage adds disadvantage to an existing roll mode.
-func applyDisadvantage(current dice.RollMode) dice.RollMode {
-	switch current {
-	case dice.Advantage:
-		return dice.AdvantageAndDisadvantage
-	case dice.Normal:
-		return dice.Disadvantage
-	default:
-		return current // already disadvantage or cancel
-	}
+	return false, mode, penalty, reasons
 }
 
 // StandFromProneCost returns the movement cost to stand from prone,

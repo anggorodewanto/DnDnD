@@ -372,7 +372,7 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 	}
 
 	// Apply each hit through the ApplyDamage wrapper so Phase 42 (R/I/V,
-	// temp HP, exhaustion HP-halving / level-6 death) and Phase 118
+	// temp HP, exhaustion level-6 death) and Phase 118
 	// (concentration save, unconscious-at-0-HP) both fire per strike. The
 	// returned summary aggregates the post-R/I/V damage per target.
 	for _, hit := range hits {

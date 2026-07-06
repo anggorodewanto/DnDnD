@@ -1312,7 +1312,7 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 		}
 
 		// 4. Route through ApplyDamage so Phase 42 (R/I/V, temp HP,
-		// exhaustion HP-halving / level-6 death) applies before the
+		// exhaustion level-6 death) applies before the
 		// underlying applyDamageHP write. ApplyDamage in turn fires the
 		// Phase 118 concentration save / unconscious-at-0-HP hooks.
 		hpBefore := int(combatant.HpCurrent)

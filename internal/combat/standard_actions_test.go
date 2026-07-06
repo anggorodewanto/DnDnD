@@ -288,8 +288,8 @@ func TestDash_UpdateTurnActionsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "updating turn actions")
 }
 
-// TDD Cycle C-H04: Dash with exhaustion level 2 halves the dash bonus
-func TestDash_ExhaustionLevel2_HalvesDashBonus(t *testing.T) {
+// TDD Cycle C-H04: Dash with exhaustion level 2 adds the 2024-reduced speed
+func TestDash_ExhaustionLevel2_AddsReducedSpeed(t *testing.T) {
 	encounterID, combatantID, charID, ms := makeStdTestSetup()
 	combatant := makePCCombatant(combatantID, encounterID, charID, "Kael")
 	combatant.ExhaustionLevel = 2
@@ -303,14 +303,15 @@ func TestDash_ExhaustionLevel2_HalvesDashBonus(t *testing.T) {
 
 	svc := NewService(ms)
 	turn := makeBasicTurn()
-	turn.MovementRemainingFt = 15 // already halved by turn start
+	turn.MovementRemainingFt = 20 // 2024: base 30 - 10 (exhaustion 2) at turn start
 
 	cmd := DashCommand{Combatant: combatant, Turn: turn, Encounter: encounter}
 	result, err := svc.Dash(context.Background(), cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, int32(15), result.AddedMovement, "exhaustion 2 should halve dash bonus")
-	assert.Equal(t, int32(30), result.Turn.MovementRemainingFt, "15 remaining + 15 dash = 30")
+	// 2024: exhaustion 2 = base 30 - 10 = 20 ft added by Dash.
+	assert.Equal(t, int32(20), result.AddedMovement, "exhaustion 2 reduces dash bonus by 10 ft")
+	assert.Equal(t, int32(40), result.Turn.MovementRemainingFt, "20 remaining + 20 dash = 40")
 }
 
 // =====================

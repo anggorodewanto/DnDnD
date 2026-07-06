@@ -1178,6 +1178,38 @@ or refills expended feature-use pools (S3). COV-17 CLOSED.
 
 ---
 
+## Tier 6 — Ruleset drift in a wired engine (2014 mechanics still running)
+
+### COV-18 — Exhaustion engine was 2014, campaign is 2024
+**Status:** DONE (in-scope command paths) 2026-07-06 · **Severity:** medium · **Pkg:** `internal/combat`, `internal/save`, `internal/check`, `internal/refdata`
+
+Exhaustion was the one condition still running the **2014** ladder (L1 disadv-on-checks, L2
+speed-halved, L3 disadv-on-attacks/saves, L4 HP-max-halved, L5 speed-0, L6 death) while the
+campaign is 2024 everywhere else. Worse, the **attack path ignored exhaustion entirely** — a
+real gap even vs 2014.
+
+**Fixed to 2024:** each level applies a flat **−2 × level to every d20 test** and reduces
+**Speed by 5 ft × level** (floored at 0); **L6 = death** kept. Mechanics:
+- `ExhaustionD20Penalty(level) = -2*level` is the SSOT (damage.go). `ExhaustionEffectiveSpeed`
+  now `base − 5*level` floored at 0. Deleted `ExhaustionRollEffect` + `ExhaustionEffectiveMaxHP`
+  and the ApplyDamage HP-cap block (no HP-max halving in 2024).
+- `CheckSaveWithExhaustion` / `CheckAbilityCheckWithExhaustion` return a numeric `penalty`
+  (4th value) instead of imposing disadvantage; `applyDisadvantage` deleted. Consumed by
+  `save.Save` and `check.SingleCheck` into the roll modifier.
+- **Closed the attack gap:** `AttackInput.ExhaustionLevel` (plumbed in `buildAttackInput`) folds
+  the penalty into `atkMod` — covers weapon `/attack`, off-hand, and mastery riders uniformly.
+  Spell `/cast` attack rolls patched at `spellcasting.go` too.
+- Seeded reference text (`seeder.go`) rewritten to the 2024 rule.
+
+**Deferred (pre-existing gaps — these d20 tests never consumed exhaustion, not a regression):**
+initiative (`initiative.go`, a 2024 Dex check), concentration / effect CON saves
+(`monk.go`, `mastery.go`, AoE `ResolveAoESaves`), contested & skill checks
+(grapple/shove, escape, Hide/stealth in `standard_actions.go` / `grapple_shove.go`), and
+death saves (`deathsave.go` takes a pre-rolled value). Full-2024 coverage would inject
+`ExhaustionD20Penalty` at each; out of scope for the command-path fix.
+
+---
+
 ## Quick verification commands
 
 ```sh

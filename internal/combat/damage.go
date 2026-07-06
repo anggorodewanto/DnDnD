@@ -77,37 +77,22 @@ func GrantTempHP(currentTempHP int, newTempHP int) int {
 }
 
 // ExhaustionEffectiveSpeed returns effective speed after exhaustion effects.
-// Level 2: speed halved. Level 5+: speed reduced to 0.
+// 2024 rules: every level of exhaustion reduces speed by 5 ft (floored at 0).
 func ExhaustionEffectiveSpeed(baseSpeed int, exhaustionLevel int) int {
-	if exhaustionLevel >= 5 {
+	if exhaustionLevel <= 0 {
+		return baseSpeed
+	}
+	return max(0, baseSpeed-5*exhaustionLevel)
+}
+
+// ExhaustionD20Penalty returns the flat penalty applied to every d20 test
+// (ability checks, attack rolls, and saving throws) under the 2024 exhaustion
+// rules: -2 for each level of exhaustion. Level 0 yields no penalty.
+func ExhaustionD20Penalty(exhaustionLevel int) int {
+	if exhaustionLevel <= 0 {
 		return 0
 	}
-	if exhaustionLevel >= 2 {
-		return baseSpeed / 2
-	}
-	return baseSpeed
-}
-
-// ExhaustionEffectiveMaxHP returns effective max HP after exhaustion effects.
-// Level 4+: max HP halved.
-func ExhaustionEffectiveMaxHP(baseMaxHP int, exhaustionLevel int) int {
-	if exhaustionLevel >= 4 {
-		return baseMaxHP / 2
-	}
-	return baseMaxHP
-}
-
-// ExhaustionRollEffect returns the roll effects from exhaustion.
-// Level 1+: disadvantage on ability checks.
-// Level 3+: disadvantage on attack rolls and saving throws.
-func ExhaustionRollEffect(exhaustionLevel int) (checkDisadv bool, attackDisadv bool, saveDisadv bool) {
-	if exhaustionLevel >= 3 {
-		return true, true, true
-	}
-	if exhaustionLevel >= 1 {
-		return true, false, false
-	}
-	return false, false, false
+	return -2 * exhaustionLevel
 }
 
 // IsExhaustedToDeath returns true if exhaustion level is 6 (death).
@@ -123,7 +108,7 @@ func CheckConditionImmunity(conditionName string, immunities []string) bool {
 // ApplyDamageInput holds inputs for the centralized damage pipeline. Every
 // production damage call site funnels through Service.ApplyDamage with this
 // struct so that Phase 42 (resistance / immunity / vulnerability, temp HP,
-// exhaustion HP-halving and exhaustion-6 death) is uniformly applied before
+// exhaustion-6 death) is uniformly applied before
 // the underlying applyDamageHP write.
 type ApplyDamageInput struct {
 	EncounterID uuid.UUID
@@ -172,8 +157,7 @@ type ApplyDamageResult struct {
 
 // ApplyDamage is the single seam for every production damage write. It
 // resolves the target's resistances / immunities / vulnerabilities, runs
-// temp-HP absorption, applies exhaustion HP-halving (level 4+) and
-// exhaustion-6 death, then funnels the resulting HP delta through
+// temp-HP absorption, applies exhaustion-6 death, then funnels the resulting HP delta through
 // applyDamageHP so concentration saves and unconscious-at-0-HP still fire.
 //
 // For PCs, R/I/V default to empty (the PC schema does not yet carry
@@ -210,17 +194,8 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		}, nil
 	}
 
-	// Cap currentHP to the exhaustion-effective max (level 4+ halves max HP).
-	// The cap only applies when exhaustion is in the halving band; we never
-	// rewrite HP based on HpMax outside that case (test fixtures may leave
-	// HpMax=0 without expecting a cap).
+	// 2024: exhaustion no longer halves max HP, so current HP is taken as-is.
 	currentHP := int(target.HpCurrent)
-	if int(target.ExhaustionLevel) >= 4 {
-		effectiveMaxHP := ExhaustionEffectiveMaxHP(int(target.HpMax), int(target.ExhaustionLevel))
-		if currentHP > effectiveMaxHP {
-			currentHP = effectiveMaxHP
-		}
-	}
 
 	adjusted := input.RawDamage
 	reason := ""

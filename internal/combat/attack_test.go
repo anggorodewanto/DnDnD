@@ -324,6 +324,35 @@ func TestResolveAttack_BasicHit(t *testing.T) {
 	assert.Equal(t, "slashing", result.DamageType)
 }
 
+// 2024 exhaustion applies a flat -2/level to attack rolls. Previously the
+// attack path ignored exhaustion entirely — this closes that gap.
+func TestResolveAttack_ExhaustionPenaltyOnToHit(t *testing.T) {
+	// d20 rolls 14: without exhaustion the total is 14+3(STR)+2(prof) = 19.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 14
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        14,
+		Weapon:          makeLongsword(),
+		Scores:          AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		Cover:           CoverNone,
+		ExhaustionLevel: 3, // -6 to hit
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.Equal(t, 13, result.D20Roll.Total, "14 + 3(STR) + 2(prof) - 6(exhaustion 3)")
+	assert.False(t, result.Hit, "13 vs AC 14 is a miss; without exhaustion (19) it would hit")
+}
+
 func TestResolveAttack_BasicMiss(t *testing.T) {
 	// d20 rolls 5, total = 5+3+2 = 10 vs AC 15 => miss
 	roller := dice.NewRoller(func(max int) int {

@@ -223,8 +223,8 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 	exhaustion := int(combatant.ExhaustionLevel)
 
 	if combatant.IsNpc || !combatant.CharacterID.Valid {
-		// C-42: NPC speed must also reflect exhaustion (level 2+ halves,
-		// level 5+ zeroes). Conditions still take precedence (grappled /
+		// C-42: NPC speed must also reflect exhaustion (2024: -5 ft per level,
+		// floored at 0). Conditions still take precedence (grappled /
 		// restrained -> 0) via EffectiveSpeedWithExhaustion.
 		return int32(EffectiveSpeedWithExhaustion(30, conds, exhaustion)), 1, nil
 	}

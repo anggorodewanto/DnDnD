@@ -764,6 +764,47 @@ func TestCast_SpellAttackRoll(t *testing.T) {
 	assert.Equal(t, result.AttackRoll+7, result.AttackTotal)
 }
 
+// 2024 exhaustion applies a flat -2/level penalty to spell attack rolls.
+func TestCast_SpellAttackRoll_ExhaustionPenalty(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.ExhaustionLevel = 2 // -4 to the spell attack roll
+	target := makeSpellTarget()
+	target.PositionRow = 6 // close
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeFireBolt(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fire-bolt",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.True(t, result.IsAttack)
+	// prof(3) + INT mod(+4) - exhaustion(4) = +3
+	assert.Equal(t, result.AttackRoll+3, result.AttackTotal)
+}
+
 // TDD Cycle 14: Cast bonus action spell uses bonus action resource
 func TestCast_BonusActionSpell(t *testing.T) {
 	charID := uuid.New()

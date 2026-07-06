@@ -61,7 +61,7 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 	modifier := character.SavingThrowModifier(input.Scores, ability, input.ProficientSaves, input.ProfBonus)
 
 	// Check condition effects (including exhaustion)
-	autoFail, condMode, reasons := combat.CheckSaveWithExhaustion(input.Conditions, ability, input.ExhaustionLevel)
+	autoFail, condMode, exhaustionPenalty, reasons := combat.CheckSaveWithExhaustion(input.Conditions, ability, input.ExhaustionLevel)
 
 	result := SaveResult{
 		Ability:          ability,
@@ -100,7 +100,8 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 	finalMode := dice.CombineRollModes(input.RollMode, condMode)
 	finalMode = dice.CombineRollModes(finalMode, featureMode)
 
-	totalModifier := modifier + result.FeatureBonus
+	// 2024 exhaustion applies a flat -2/level penalty to the saving throw.
+	totalModifier := modifier + result.FeatureBonus + exhaustionPenalty
 
 	d20, err := s.roller.RollD20(totalModifier, finalMode)
 	if err != nil {

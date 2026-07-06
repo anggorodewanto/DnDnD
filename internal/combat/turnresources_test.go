@@ -501,8 +501,8 @@ func TestResolveTurnResources_MulticlassHighestWins(t *testing.T) {
 }
 
 // C-42: ResolveTurnResources must consult ExhaustionLevel when computing speed.
-// Level 2+ halves; level 5+ zeroes.
-func TestResolveTurnResources_ExhaustionLevel2HalvesSpeed(t *testing.T) {
+// 2024: each level of exhaustion reduces speed by 5 ft (floored at 0).
+func TestResolveTurnResources_ExhaustionLevel2Reduces10ft(t *testing.T) {
 	charID := uuid.New()
 	combatant := refdata.Combatant{
 		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
@@ -517,10 +517,10 @@ func TestResolveTurnResources_ExhaustionLevel2HalvesSpeed(t *testing.T) {
 	svc := NewService(store)
 	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
 	assert.NoError(t, err)
-	assert.Equal(t, int32(15), speed, "exhaustion 2 must halve max speed")
+	assert.Equal(t, int32(20), speed, "exhaustion 2 reduces speed by 10 ft")
 }
 
-func TestResolveTurnResources_ExhaustionLevel5ZeroesSpeed(t *testing.T) {
+func TestResolveTurnResources_ExhaustionLevel5Reduces25ft(t *testing.T) {
 	charID := uuid.New()
 	combatant := refdata.Combatant{
 		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
@@ -535,10 +535,10 @@ func TestResolveTurnResources_ExhaustionLevel5ZeroesSpeed(t *testing.T) {
 	svc := NewService(store)
 	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
 	assert.NoError(t, err)
-	assert.Equal(t, int32(0), speed, "exhaustion 5 must zero speed")
+	assert.Equal(t, int32(5), speed, "exhaustion 5 reduces speed by 25 ft")
 }
 
-func TestResolveTurnResources_NPCExhaustionLevel2HalvesSpeed(t *testing.T) {
+func TestResolveTurnResources_NPCExhaustionLevel2Reduces10ft(t *testing.T) {
 	combatant := refdata.Combatant{
 		IsNpc:           true,
 		ExhaustionLevel: 2,
@@ -548,10 +548,10 @@ func TestResolveTurnResources_NPCExhaustionLevel2HalvesSpeed(t *testing.T) {
 	svc := NewService(store)
 	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
 	assert.NoError(t, err)
-	assert.Equal(t, int32(15), speed, "NPC exhaustion 2 must halve default 30 speed")
+	assert.Equal(t, int32(20), speed, "NPC exhaustion 2 reduces default 30 speed by 10 ft")
 }
 
-func TestResolveTurnResources_ExhaustionLevel1Unchanged(t *testing.T) {
+func TestResolveTurnResources_ExhaustionLevel1Reduces5ft(t *testing.T) {
 	charID := uuid.New()
 	combatant := refdata.Combatant{
 		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
@@ -566,7 +566,7 @@ func TestResolveTurnResources_ExhaustionLevel1Unchanged(t *testing.T) {
 	svc := NewService(store)
 	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
 	assert.NoError(t, err)
-	assert.Equal(t, int32(30), speed, "exhaustion 1 leaves speed unchanged")
+	assert.Equal(t, int32(25), speed, "exhaustion 1 reduces speed by 5 ft")
 }
 
 func TestResolveTurnResources_InvalidAttacksPerActionJSON(t *testing.T) {

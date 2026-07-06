@@ -147,27 +147,31 @@ func TestSave_DodgeAdvDEX(t *testing.T) {
 	}
 }
 
-func TestSave_ExhaustionLevel3Disadv(t *testing.T) {
+func TestSave_ExhaustionLevel3Penalty(t *testing.T) {
 	svc := NewService(fixedRoller(10))
 
 	result, err := svc.Save(SaveInput{
-		Scores:          character.AbilityScores{WIS: 10},
+		Scores:          character.AbilityScores{WIS: 10}, // +0
 		Ability:         "wis",
 		ExhaustionLevel: 3,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.D20Result.Mode != dice.Disadvantage {
-		t.Errorf("expected disadvantage from exhaustion 3+, got %v", result.D20Result.Mode)
+	// 2024: exhaustion applies a flat -2/level, not disadvantage.
+	if result.D20Result.Mode != dice.Normal {
+		t.Errorf("expected normal roll mode (2024 penalty is numeric), got %v", result.D20Result.Mode)
+	}
+	if result.Total != 4 { // 10 roll + 0 WIS - 6 exhaustion
+		t.Errorf("expected total 4 (10 - 6 exhaustion), got %d", result.Total)
 	}
 }
 
-func TestSave_ExhaustionLevel2NoEffect(t *testing.T) {
+func TestSave_ExhaustionLevel2Penalty(t *testing.T) {
 	svc := NewService(fixedRoller(10))
 
 	result, err := svc.Save(SaveInput{
-		Scores:          character.AbilityScores{WIS: 10},
+		Scores:          character.AbilityScores{WIS: 10}, // +0
 		Ability:         "wis",
 		ExhaustionLevel: 2,
 	})
@@ -176,6 +180,9 @@ func TestSave_ExhaustionLevel2NoEffect(t *testing.T) {
 	}
 	if result.D20Result.Mode != dice.Normal {
 		t.Errorf("expected normal for exhaustion 2, got %v", result.D20Result.Mode)
+	}
+	if result.Total != 6 { // 10 roll + 0 WIS - 4 exhaustion
+		t.Errorf("expected total 6 (10 - 4 exhaustion), got %d", result.Total)
 	}
 }
 

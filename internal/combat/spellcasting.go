@@ -688,6 +688,8 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// 12. Spell attack roll
 	if spell.AttackType.Valid && spell.AttackType.String != "" {
 		attackMod := SpellAttackModifier(int(char.ProficiencyBonus), spellAbilityScore)
+		// 2024 exhaustion: -2/level penalty applies to spell attack rolls too.
+		attackMod += ExhaustionD20Penalty(int(caster.ExhaustionLevel))
 		d20Result, err := roller.RollD20(attackMod, cmd.SpellAttackRollMode)
 		if err != nil {
 			return CastResult{}, fmt.Errorf("rolling spell attack: %w", err)

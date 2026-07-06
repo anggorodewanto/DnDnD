@@ -172,19 +172,23 @@ func TestSingleCheck_ConditionAutoFail(t *testing.T) {
 	}
 }
 
-func TestSingleCheck_ExhaustionDisadvantage(t *testing.T) {
+func TestSingleCheck_ExhaustionPenalty(t *testing.T) {
 	svc := NewService(fixedRoller(10))
 
 	result, err := svc.SingleCheck(SingleCheckInput{
-		Scores:          character.AbilityScores{STR: 10},
+		Scores:          character.AbilityScores{STR: 10}, // +0
 		Skill:           "athletics",
 		ExhaustionLevel: 1,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.D20Result.Mode != dice.Disadvantage {
-		t.Errorf("expected disadvantage from exhaustion, got %v", result.D20Result.Mode)
+	// 2024: exhaustion is a flat -2/level penalty, not disadvantage.
+	if result.D20Result.Mode != dice.Normal {
+		t.Errorf("expected normal roll mode (2024 penalty is numeric), got %v", result.D20Result.Mode)
+	}
+	if result.Total != 8 { // 10 roll + 0 STR - 2 exhaustion
+		t.Errorf("expected total 8 (10 - 2 exhaustion), got %d", result.Total)
 	}
 }
 

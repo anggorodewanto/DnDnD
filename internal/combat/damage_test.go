@@ -200,118 +200,60 @@ func TestGrantTempHP_FromZero(t *testing.T) {
 	assert.Equal(t, 10, result)
 }
 
-// --- TDD Cycle 21: ExhaustionEffectiveSpeed - level 0 ---
+// --- 2024 exhaustion: speed drops 5 ft per level (floored at 0) ---
 
 func TestExhaustionEffectiveSpeed_Level0(t *testing.T) {
 	assert.Equal(t, 30, ExhaustionEffectiveSpeed(30, 0))
 }
 
-// --- TDD Cycle 22: ExhaustionEffectiveSpeed - level 1 (no effect) ---
-
 func TestExhaustionEffectiveSpeed_Level1(t *testing.T) {
-	assert.Equal(t, 30, ExhaustionEffectiveSpeed(30, 1))
+	assert.Equal(t, 25, ExhaustionEffectiveSpeed(30, 1))
 }
-
-// --- TDD Cycle 23: ExhaustionEffectiveSpeed - level 2 halved ---
 
 func TestExhaustionEffectiveSpeed_Level2(t *testing.T) {
-	assert.Equal(t, 15, ExhaustionEffectiveSpeed(30, 2))
+	assert.Equal(t, 20, ExhaustionEffectiveSpeed(30, 2))
 }
-
-// --- TDD Cycle 24: ExhaustionEffectiveSpeed - level 3 still halved ---
 
 func TestExhaustionEffectiveSpeed_Level3(t *testing.T) {
 	assert.Equal(t, 15, ExhaustionEffectiveSpeed(30, 3))
 }
 
-// --- TDD Cycle 25: ExhaustionEffectiveSpeed - level 4 still halved ---
-
 func TestExhaustionEffectiveSpeed_Level4(t *testing.T) {
-	assert.Equal(t, 15, ExhaustionEffectiveSpeed(30, 4))
+	assert.Equal(t, 10, ExhaustionEffectiveSpeed(30, 4))
 }
-
-// --- TDD Cycle 26: ExhaustionEffectiveSpeed - level 5 zero ---
 
 func TestExhaustionEffectiveSpeed_Level5(t *testing.T) {
-	assert.Equal(t, 0, ExhaustionEffectiveSpeed(30, 5))
+	assert.Equal(t, 5, ExhaustionEffectiveSpeed(30, 5))
 }
-
-// --- TDD Cycle 27: ExhaustionEffectiveSpeed - level 6 zero ---
 
 func TestExhaustionEffectiveSpeed_Level6(t *testing.T) {
 	assert.Equal(t, 0, ExhaustionEffectiveSpeed(30, 6))
 }
 
-// --- TDD Cycle 28: ExhaustionEffectiveMaxHP - level 0 ---
-
-func TestExhaustionEffectiveMaxHP_Level0(t *testing.T) {
-	assert.Equal(t, 100, ExhaustionEffectiveMaxHP(100, 0))
+// A slow creature's speed cannot be driven below 0.
+func TestExhaustionEffectiveSpeed_FloorsAtZero(t *testing.T) {
+	assert.Equal(t, 0, ExhaustionEffectiveSpeed(20, 5))
 }
 
-// --- TDD Cycle 29: ExhaustionEffectiveMaxHP - level 3 no effect ---
+// --- 2024 exhaustion: -2 per level to every d20 test ---
 
-func TestExhaustionEffectiveMaxHP_Level3(t *testing.T) {
-	assert.Equal(t, 100, ExhaustionEffectiveMaxHP(100, 3))
+func TestExhaustionD20Penalty_Level0(t *testing.T) {
+	assert.Equal(t, 0, ExhaustionD20Penalty(0))
 }
 
-// --- TDD Cycle 30: ExhaustionEffectiveMaxHP - level 4 halved ---
-
-func TestExhaustionEffectiveMaxHP_Level4(t *testing.T) {
-	assert.Equal(t, 50, ExhaustionEffectiveMaxHP(100, 4))
+func TestExhaustionD20Penalty_Level1(t *testing.T) {
+	assert.Equal(t, -2, ExhaustionD20Penalty(1))
 }
 
-// --- TDD Cycle 31: ExhaustionEffectiveMaxHP - level 5 halved ---
-
-func TestExhaustionEffectiveMaxHP_Level5(t *testing.T) {
-	assert.Equal(t, 50, ExhaustionEffectiveMaxHP(100, 5))
+func TestExhaustionD20Penalty_Level3(t *testing.T) {
+	assert.Equal(t, -6, ExhaustionD20Penalty(3))
 }
 
-// --- TDD Cycle 32: ExhaustionRollEffect - level 0 ---
-
-func TestExhaustionRollEffect_Level0(t *testing.T) {
-	check, attack, save := ExhaustionRollEffect(0)
-	assert.False(t, check)
-	assert.False(t, attack)
-	assert.False(t, save)
+func TestExhaustionD20Penalty_Level5(t *testing.T) {
+	assert.Equal(t, -10, ExhaustionD20Penalty(5))
 }
 
-// --- TDD Cycle 33: ExhaustionRollEffect - level 1 ---
-
-func TestExhaustionRollEffect_Level1(t *testing.T) {
-	check, attack, save := ExhaustionRollEffect(1)
-	assert.True(t, check)
-	assert.False(t, attack)
-	assert.False(t, save)
-}
-
-// --- TDD Cycle 34: ExhaustionRollEffect - level 2 ---
-
-func TestExhaustionRollEffect_Level2(t *testing.T) {
-	check, attack, save := ExhaustionRollEffect(2)
-	assert.True(t, check)
-	assert.False(t, attack)
-	assert.False(t, save)
-}
-
-// --- TDD Cycle 35: ExhaustionRollEffect - level 3 ---
-
-func TestExhaustionRollEffect_Level3(t *testing.T) {
-	check, attack, save := ExhaustionRollEffect(3)
-	assert.True(t, check)
-	assert.True(t, attack)
-	assert.True(t, save)
-}
-
-// --- TDD Cycle 36: ExhaustionRollEffect - level 5 ---
-
-func TestExhaustionRollEffect_Level5(t *testing.T) {
-	check, attack, save := ExhaustionRollEffect(5)
-	assert.True(t, check)
-	assert.True(t, attack)
-	assert.True(t, save)
-}
-
-// --- TDD Cycle 37: IsExhaustedToDeath ---
+// --- IsExhaustedToDeath (unchanged in 2024: level 6 = death) ---
 
 func TestIsExhaustedToDeath_Level6(t *testing.T) {
 	assert.True(t, IsExhaustedToDeath(6))
@@ -376,19 +318,13 @@ func TestAbsorbTempHP_ZeroDamage(t *testing.T) {
 	assert.Equal(t, 10, newTemp)
 }
 
-// --- TDD Cycle 43: Odd speed with exhaustion ---
+// --- 2024 exhaustion: 5 ft per level applies to any base speed ---
 
-func TestExhaustionEffectiveSpeed_OddSpeed(t *testing.T) {
-	assert.Equal(t, 12, ExhaustionEffectiveSpeed(25, 2)) // 25/2 = 12
+func TestExhaustionEffectiveSpeed_NonThirtyBase(t *testing.T) {
+	assert.Equal(t, 15, ExhaustionEffectiveSpeed(25, 2)) // 25 - 10 = 15
 }
 
-// --- TDD Cycle 44: Odd max HP with exhaustion ---
-
-func TestExhaustionEffectiveMaxHP_OddMaxHP(t *testing.T) {
-	assert.Equal(t, 50, ExhaustionEffectiveMaxHP(101, 4)) // 101/2 = 50
-}
-
-// --- TDD Cycle 45: Different damage types don't trigger resistance ---
+// --- Different damage types don't trigger resistance ---
 
 func TestApplyDamageResistances_DifferentType(t *testing.T) {
 	dmg, reason := ApplyDamageResistances(10, "cold",
@@ -414,80 +350,96 @@ func TestEffectiveSpeedWithExhaustion_GrappledOverridesExhaustion(t *testing.T) 
 	assert.Equal(t, 0, EffectiveSpeedWithExhaustion(30, conds, 0))
 }
 
-func TestEffectiveSpeedWithExhaustion_ExhaustionLevel2Halves(t *testing.T) {
-	assert.Equal(t, 15, EffectiveSpeedWithExhaustion(30, nil, 2))
+func TestEffectiveSpeedWithExhaustion_ExhaustionLevel2Reduces10ft(t *testing.T) {
+	assert.Equal(t, 20, EffectiveSpeedWithExhaustion(30, nil, 2))
 }
 
-func TestEffectiveSpeedWithExhaustion_ExhaustionLevel5Zero(t *testing.T) {
-	assert.Equal(t, 0, EffectiveSpeedWithExhaustion(30, nil, 5))
+func TestEffectiveSpeedWithExhaustion_ExhaustionLevel5Reduces25ft(t *testing.T) {
+	assert.Equal(t, 5, EffectiveSpeedWithExhaustion(30, nil, 5))
 }
 
 func TestEffectiveSpeedWithExhaustion_NoEffects(t *testing.T) {
 	assert.Equal(t, 30, EffectiveSpeedWithExhaustion(30, nil, 0))
 }
 
-// --- TDD Cycle 48: CheckSaveWithExhaustion integrates exhaustion level 3+ ---
+// --- 2024 CheckSaveWithExhaustion: flat -2/level penalty, no disadvantage ---
 
-func TestCheckSaveWithExhaustion_Level3DisadvOnSave(t *testing.T) {
-	_, mode, reasons := CheckSaveWithExhaustion(nil, "wis", 3)
-	assert.Equal(t, dice.Disadvantage, mode)
-	assert.Contains(t, reasons, "exhaustion (level 3+): disadvantage on saving throws")
+func TestCheckSaveWithExhaustion_Level3Penalty(t *testing.T) {
+	_, mode, penalty, reasons := CheckSaveWithExhaustion(nil, "wis", 3)
+	assert.Equal(t, dice.Normal, mode, "2024 exhaustion is a numeric penalty, not disadvantage")
+	assert.Equal(t, -6, penalty)
+	assert.Contains(t, reasons, "exhaustion 3: -6 to saving throws")
 }
 
-func TestCheckSaveWithExhaustion_Level2NoSaveEffect(t *testing.T) {
-	_, mode, reasons := CheckSaveWithExhaustion(nil, "wis", 2)
+func TestCheckSaveWithExhaustion_Level2Penalty(t *testing.T) {
+	// 2024: even below the old level-3 threshold there is a -4 penalty.
+	_, mode, penalty, reasons := CheckSaveWithExhaustion(nil, "wis", 2)
 	assert.Equal(t, dice.Normal, mode)
+	assert.Equal(t, -4, penalty)
+	assert.Contains(t, reasons, "exhaustion 2: -4 to saving throws")
+}
+
+func TestCheckSaveWithExhaustion_Level0NoPenalty(t *testing.T) {
+	_, mode, penalty, reasons := CheckSaveWithExhaustion(nil, "wis", 0)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Equal(t, 0, penalty)
 	assert.Empty(t, reasons)
 }
 
-func TestCheckSaveWithExhaustion_Level3PlusConditions(t *testing.T) {
+func TestCheckSaveWithExhaustion_ConditionDisadvantageStillApplies(t *testing.T) {
 	conds := []CombatCondition{{Condition: "restrained"}}
-	// Restrained: disadv on DEX save. Exhaustion 3: disadv on saves.
-	// Both disadvantage -> still disadvantage.
-	_, mode, _ := CheckSaveWithExhaustion(conds, "dex", 3)
+	// Restrained still imposes disadvantage on the DEX save; exhaustion rides
+	// alongside as a numeric -6 without touching the roll mode.
+	_, mode, penalty, _ := CheckSaveWithExhaustion(conds, "dex", 3)
 	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Equal(t, -6, penalty)
 }
 
 func TestCheckSaveWithExhaustion_AutoFailTrumpsExhaustion(t *testing.T) {
 	conds := []CombatCondition{{Condition: "paralyzed"}}
-	autoFail, _, _ := CheckSaveWithExhaustion(conds, "str", 3)
+	autoFail, _, penalty, _ := CheckSaveWithExhaustion(conds, "str", 3)
 	assert.True(t, autoFail)
+	assert.Equal(t, 0, penalty, "auto-fail short-circuits before the penalty")
 }
 
-// --- TDD Cycle 49: CheckAbilityCheckWithExhaustion ---
+// --- 2024 CheckAbilityCheckWithExhaustion: flat -2/level penalty ---
 
-func TestCheckAbilityCheckWithExhaustion_Level1Disadv(t *testing.T) {
-	_, mode, reasons := CheckAbilityCheckWithExhaustion(nil, AbilityCheckContext{}, 1)
-	assert.Equal(t, dice.Disadvantage, mode)
-	assert.Contains(t, reasons, "exhaustion (level 1+): disadvantage on ability checks")
-}
-
-func TestCheckAbilityCheckWithExhaustion_Level0NoEffect(t *testing.T) {
-	_, mode, _ := CheckAbilityCheckWithExhaustion(nil, AbilityCheckContext{}, 0)
+func TestCheckAbilityCheckWithExhaustion_Level1Penalty(t *testing.T) {
+	_, mode, penalty, reasons := CheckAbilityCheckWithExhaustion(nil, AbilityCheckContext{}, 1)
 	assert.Equal(t, dice.Normal, mode)
+	assert.Equal(t, -2, penalty)
+	assert.Contains(t, reasons, "exhaustion 1: -2 to ability checks")
+}
+
+func TestCheckAbilityCheckWithExhaustion_Level0NoPenalty(t *testing.T) {
+	_, mode, penalty, _ := CheckAbilityCheckWithExhaustion(nil, AbilityCheckContext{}, 0)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Equal(t, 0, penalty)
 }
 
 func TestCheckAbilityCheckWithExhaustion_Level1PlusPoisoned(t *testing.T) {
 	conds := []CombatCondition{{Condition: "poisoned"}}
-	_, mode, reasons := CheckAbilityCheckWithExhaustion(conds, AbilityCheckContext{}, 1)
+	// Poisoned imposes disadvantage; exhaustion adds the -2 penalty on top.
+	_, mode, penalty, reasons := CheckAbilityCheckWithExhaustion(conds, AbilityCheckContext{}, 1)
 	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Equal(t, -2, penalty)
 	assert.Len(t, reasons, 2) // both poisoned and exhaustion
 }
 
 func TestCheckAbilityCheckWithExhaustion_AutoFailStillReturnsAutoFail(t *testing.T) {
 	conds := []CombatCondition{{Condition: "blinded"}}
-	autoFail, _, _ := CheckAbilityCheckWithExhaustion(conds, AbilityCheckContext{RequiresSight: true}, 3)
+	autoFail, _, penalty, _ := CheckAbilityCheckWithExhaustion(conds, AbilityCheckContext{RequiresSight: true}, 3)
 	assert.True(t, autoFail)
+	assert.Equal(t, 0, penalty)
 }
 
-// --- TDD Cycle 51: applyDisadvantage with Advantage mode ---
-
-func TestApplyDisadvantage_AdvantageBecomesCancel(t *testing.T) {
-	// Test through CheckSaveWithExhaustion: dodge gives advantage on DEX save,
-	// exhaustion 3 adds disadvantage -> cancel
+// Advantage-granting conditions survive exhaustion — the 2024 penalty is
+// numeric and never cancels advantage into a mixed roll.
+func TestCheckSaveWithExhaustion_AdvantageKeptWithPenalty(t *testing.T) {
 	conds := []CombatCondition{{Condition: "dodge"}}
-	_, mode, _ := CheckSaveWithExhaustion(conds, "dex", 3)
-	assert.Equal(t, dice.AdvantageAndDisadvantage, mode)
+	_, mode, penalty, _ := CheckSaveWithExhaustion(conds, "dex", 3)
+	assert.Equal(t, dice.Advantage, mode)
+	assert.Equal(t, -6, penalty)
 }
 
 // --- TDD Cycle 50: ApplyCondition with condition immunity ---
@@ -724,12 +676,12 @@ func TestApplyDamage_ResistanceAppliedBeforeTempHP(t *testing.T) {
 	assert.Equal(t, int32(0), captured.TempHp)
 }
 
-func TestApplyDamage_ExhaustionLevel4HalvesMaxHP(t *testing.T) {
+func TestApplyDamage_ExhaustionLevel4NoMaxHPCap(t *testing.T) {
 	encounterID := uuid.New()
 	ms, captured := applyDamageMockStore()
 	svc := NewService(ms)
-	// Exhaustion 4: effective max HP is halved (40/2 = 20). Current HP is 35
-	// (above the new effective max), so it must be capped to 20 before damage.
+	// 2024: exhaustion no longer halves max HP. Current HP is taken as-is and
+	// only the incoming damage is subtracted (35 - 5 = 30), no cap.
 	target := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID,
 		HpMax: 40, HpCurrent: 35, IsAlive: true, IsNpc: false,
@@ -741,8 +693,7 @@ func TestApplyDamage_ExhaustionLevel4HalvesMaxHP(t *testing.T) {
 		EncounterID: encounterID, Target: target, RawDamage: 5, DamageType: "slashing",
 	})
 	assert.NoError(t, err)
-	// Effective HP = min(35, 20) = 20 -> 20 - 5 = 15.
-	assert.Equal(t, int32(15), captured.HpCurrent)
+	assert.Equal(t, int32(30), captured.HpCurrent)
 	assert.Equal(t, 5, res.FinalDamage)
 }
 
