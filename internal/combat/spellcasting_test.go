@@ -381,6 +381,24 @@ func TestFormatCastLog(t *testing.T) {
 		assert.Contains(t, log, "Miss")
 	})
 
+	t.Run("spell attack hides the target's AC (enemy AC is secret)", func(t *testing.T) {
+		result := CastResult{
+			CasterName:  "Gandalf",
+			SpellName:   "Fire Bolt",
+			SpellLevel:  0,
+			IsAttack:    true,
+			AttackRoll:  18,
+			AttackTotal: 24,
+			TargetAC:    15,
+			Hit:         true,
+			TargetName:  "Goblin",
+		}
+		log := FormatCastLog(result)
+		assert.Contains(t, log, "Hit")
+		assert.NotContains(t, log, "AC 15", "enemy AC must not be revealed in the combat log")
+		assert.NotContains(t, log, "vs AC", "enemy AC must not be revealed in the combat log")
+	})
+
 	t.Run("save-based spell", func(t *testing.T) {
 		result := CastResult{
 			CasterName:  "Gandalf",

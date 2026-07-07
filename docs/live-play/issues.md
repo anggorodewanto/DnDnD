@@ -270,6 +270,29 @@ Durable, non-obvious traps that keep recurring — read before touching combat /
 - **Effort: LARGE.** Files: `CharacterBuilder.svelte` (state + picker UI), `builder-draft.js` (draft fields), new `portal/svelte/src/lib/` module (invocation prereqs/level gates), `builder_service.go` (submission fields + resolution), `derive_stats.go` (choice → features), NEW `internal/refdata/seed_pact_boons.go` + `seed_eldritch_invocations.go` (and possibly migrations/tables). Prereq validation (e.g. Agonizing Blast needs Eldritch Blast; some invocations gate on level or Pact of the Blade/Tome) is the hard part. A first cut could scope to Warlock-only + a curated invocation subset, reusing the Expertise UI pattern (→ MEDIUM).
 - **Workaround (this session, chosen path):** set Vale's boon + 2 invocations directly on her sheet once the player picks, adding any granted spells/cantrips to her spell list so they're castable via slash commands. Player still chooses; DM never picks for them. Note Vale has **no Eldritch Blast**, so Agonizing Blast is moot for her; her theme (storyteller/deceiver, Fiend) points at Mask of Many Faces / Beguiling Influence / Misty Visions / Devil's Sight and Pact of the Tome or Chain.
 
+### ISSUE-068 — Warlock Agonizing Blast silently dropped on a legacy-format character sheet — RESOLVED (data repair)
+- **Date:** 2026-07-07
+- **Area:** combat / character features (eldritch invocation matching)
+- **Severity:** major (a PC loses earned damage, silently, every cast)
+- **Status:** RESOLVED 2026-07-07 (data repair; engine already correct)
+- **Repro:** Vale (Warlock 4, Fiend, CHA 18, has Agonizing Blast) runs `/cast eldritch-blast` at the grey man → dealt only `1d10` (rolled 2), no `+4` CHA. Grey man 29 → 27.
+- **Expected:** each Eldritch Blast beam adds the caster's CHA modifier (+4). At L4 = 1 beam → `1d10+4`.
+- **Actual:** no CHA modifier added.
+- **Root cause:** `agonizingBlastBonus` (`internal/combat/agonizing_blast.go`) gates on `HasInvocation(char.Features, "agonizing_blast")` → `hasFeatureEffect` (`internal/combat/attack.go:38-42`) does an **exact** `strings.EqualFold(mechanical_effect, "agonizing_blast")`. Vale's persisted `features` were legacy-shape: a single bundled "Eldritch Invocations" feature with `mechanical_effect: "invocation_agonizing_blast,invocation_mask_of_many_faces"` (comma-joined + `invocation_` prefix) — which never equals the clean slug. The **current** builder emits a discrete `{mechanical_effect:"agonizing_blast"}` feature per invocation (post-ISSUE-060), so freshly-built warlocks fire correctly; Vale's sheet predated that shape.
+- **Fix:** guarded additive DB repair — appended the discrete feature `{"name":"Agonizing Blast","source":"invocation","mechanical_effect":"agonizing_blast"}` to Vale's `features` (6→7 entries; idempotent guard on `features @> [{"mechanical_effect":"agonizing_blast"}]`). `Service.Cast` reloads the sheet each cast, so the next `/cast eldritch-blast` picks up `+4`. The already-landed cast's owed `+4` was backfilled (grey man 27 → 23) per the same precedent as the COV-19 re-save backfill. No redeploy needed.
+- **Notes / latent gap (NOT fixed):** `hasFeatureEffect`'s exact match silently drops any effect packed into a comma-joined / prefixed legacy `mechanical_effect` string (Vale's "Infernal Legacy" also comma-joins `cantrip_thaumaturgy,level3_hellish_rebuke,level5_darkness`). Current builder emits clean discrete features, so new/rebuilt sheets are fine — left as a possible engine-robustness follow-up if other legacy sheets misbehave.
+
+### ISSUE-069 — Spell-attack combat log leaked the target's AC (enemy AC is secret) — RESOLVED
+- **Date:** 2026-07-07
+- **Area:** combat / combat-log rendering (`FormatCastLog`)
+- **Severity:** minor (information leak — enemy AC exposed to players)
+- **Status:** RESOLVED 2026-07-07 (code fix, redeployed)
+- **Repro:** a PC casts an attack spell (`/cast eldritch-blast`, `fire-bolt`, …) at an enemy → the public `#combat-log` line read `🎯 Attack: d20(18) + mod = 24 vs AC 15 — Hit!`, revealing the target's AC.
+- **Expected:** show the roll + hit/miss only, never the enemy's AC (enemy AC/HP are secret — see `dm-rules.md`).
+- **Actual:** `vs AC %d` printed `result.TargetAC` unconditionally for every target.
+- **Root cause:** the attack line in `FormatCastLog` (`internal/combat/spellcasting.go:266`) included `vs AC %d`; `TargetAC` is set unconditionally at `spellcasting.go:706` for any target. Weapon-attack lines already omit AC — this cast path was the only leak.
+- **Fix:** dropped the `vs AC %d` fragment; the line is now `🎯 Attack: d20(%d) + mod = %d — %s!`. Red/green: `TestFormatCastLog/spell attack hides the target's AC`. The `TargetAC` field is retained (the hit calc + many tests use it as input) — only the display changed. Rebuilt + redeployed (`docker compose up -d --build app`).
+
 <!-- Append a section per issue:
 
 ### ISSUE-001 — <short title>

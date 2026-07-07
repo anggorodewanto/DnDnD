@@ -263,8 +263,9 @@ func FormatCastLog(result CastResult) string {
 		if result.Hit {
 			hitMiss = "Hit"
 		}
-		fmt.Fprintf(&b, "\U0001f3af Attack: d20(%d) + mod = %d vs AC %d — %s!\n",
-			result.AttackRoll, result.AttackTotal, result.TargetAC, hitMiss)
+		// Enemy AC is secret — show the roll and hit/miss, never the target's AC.
+		fmt.Fprintf(&b, "\U0001f3af Attack: d20(%d) + mod = %d — %s!\n",
+			result.AttackRoll, result.AttackTotal, hitMiss)
 	}
 
 	// Save DC
