@@ -32,6 +32,12 @@ import (
 type AoESaveResolver interface {
 	RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
 	ResolveAoEPendingSavesForSpell(ctx context.Context, encounterID uuid.UUID, spellID string) error
+	// ResolveEndOfTurnResave resolves a "save ends" end-of-turn repeat save on
+	// the player's combatant (Hold Person, etc.) from the player's own /save
+	// roll — removing the condition (and dropping the enemy caster's
+	// concentration) on a success. Returns nil when no save-ends condition
+	// matches the rolled ability. (COV-19)
+	ResolveEndOfTurnResave(ctx context.Context, encounterID, combatantID uuid.UUID, ability string, total int, autoFail bool) (*combat.EndOfTurnResaveResult, error)
 }
 
 // AoESaveServiceAdapter wraps a CastCombatService-grade combat service +
@@ -41,6 +47,7 @@ type AoESaveServiceAdapter struct {
 	svc interface {
 		RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
 		ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*combat.AoEDamageResult, error)
+		ResolveEndOfTurnResave(ctx context.Context, encounterID, combatantID uuid.UUID, ability string, total int, autoFail bool) (*combat.EndOfTurnResaveResult, error)
 	}
 	roller *dice.Roller
 }
@@ -50,6 +57,7 @@ type AoESaveServiceAdapter struct {
 func NewAoESaveServiceAdapter(svc interface {
 	RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
 	ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*combat.AoEDamageResult, error)
+	ResolveEndOfTurnResave(ctx context.Context, encounterID, combatantID uuid.UUID, ability string, total int, autoFail bool) (*combat.EndOfTurnResaveResult, error)
 }, roller *dice.Roller) *AoESaveServiceAdapter {
 	return &AoESaveServiceAdapter{svc: svc, roller: roller}
 }
@@ -63,6 +71,11 @@ func (a *AoESaveServiceAdapter) RecordAoEPendingSaveRoll(ctx context.Context, co
 func (a *AoESaveServiceAdapter) ResolveAoEPendingSavesForSpell(ctx context.Context, encounterID uuid.UUID, spellID string) error {
 	_, err := a.svc.ResolveAoEPendingSaves(ctx, encounterID, spellID, a.roller)
 	return err
+}
+
+// ResolveEndOfTurnResave passes through to the wrapped service. (COV-19)
+func (a *AoESaveServiceAdapter) ResolveEndOfTurnResave(ctx context.Context, encounterID, combatantID uuid.UUID, ability string, total int, autoFail bool) (*combat.EndOfTurnResaveResult, error) {
+	return a.svc.ResolveEndOfTurnResave(ctx, encounterID, combatantID, ability, total, autoFail)
 }
 
 // SaveHandler handles the /save slash command.
@@ -248,10 +261,46 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 		})
 	}
 
+	// COV-19: resolve a "save ends" end-of-turn repeat save (Hold Person, etc.)
+	// on this player's combatant. A distinct condition-clearing lane, tried
+	// before the AoE path: it removes the condition and drops the enemy caster's
+	// concentration on a success.
+	h.maybeResolveEndOfTurnResave(ctx, interaction, char, ability, result)
+
 	// E-59: resolve any AoE pending_saves row matching this player's
 	// combatant + ability. When this was the last outstanding save for the
 	// spell, the resolver fires damage application via ResolveAoESaves.
 	h.maybeResolveAoESave(ctx, interaction, char, ability, result)
+}
+
+// maybeResolveEndOfTurnResave resolves a "save ends" end-of-turn repeat save on
+// the rolling player's combatant (COV-19). It looks up the player's combatant in
+// their active encounter and asks the resolver to apply the outcome using the
+// player's own rolled total; on a hit it mirrors the result line(s) to the
+// encounter's combat log. Best-effort: any wiring gap (no resolver, no
+// encounter, no matching combatant, no save-ends condition) is a silent no-op.
+func (h *SaveHandler) maybeResolveEndOfTurnResave(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, ability string, result save.SaveResult) {
+	if h.aoeSaveResolver == nil || h.encounterProvider == nil || h.combatantLookup == nil {
+		return
+	}
+	userID := discordUserID(interaction)
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
+	if err != nil {
+		return
+	}
+	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	combatant, ok := findCombatantByCharID(combatants, char.ID)
+	if !ok {
+		return
+	}
+	res, err := h.aoeSaveResolver.ResolveEndOfTurnResave(ctx, encounterID, combatant.ID, strings.ToLower(ability), result.Total, result.AutoFail)
+	if err != nil || res == nil {
+		return
+	}
+	h.maybeMirrorToCombatLog(ctx, interaction, strings.Join(res.Messages, "\n"))
 }
 
 // maybeMirrorToCombatLog mirrors the player's own /save result to the

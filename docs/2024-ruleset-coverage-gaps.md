@@ -184,10 +184,10 @@ the log lines. Tests: `TestCast_SingleTargetConditionSaveSpell_CreatesPendingSav
 `TestResolveAoEPendingSaves_AppliesDamageAndConditionOnFail`. Coverage: combat 91.5%.
 
 **Deferred follow-ups (new COV items when picked up):**
-- **Per-turn re-saves & timed expiry** — save-or-suck conditions apply indefinitely; the
-  2024 end-of-turn repeat save (paralyzed/frightened/etc.) and non-concentration duration
-  expiry (Blindness/Deafness = 1 min) are not modeled. Cleared only by concentration
-  teardown, combat end, or the DM editor.
+- **Per-turn re-saves** — ✅ **DONE 2026-07-07 (COV-19)** for the end-of-turn repeat save
+  (paralyzed by Hold Person / Hold Monster). **Timed expiry still deferred:** non-concentration
+  duration expiry (Blindness/Deafness = 1 min) is not modeled — those conditions still clear only
+  via combat end / the DM editor.
 - **Condition riders** — landing the condition is step one; whether the engine enforces
   each rider (paralyzed = auto-crit in melee ≤5ft; frightened = disadvantage + no-approach)
   is a separate audit.
@@ -1493,6 +1493,49 @@ subtract exhaustion (a genuine 2024 ruling call on whether −2/level applies to
 path being prod-wired); (c) any remaining ad-hoc non-save d20 tests not routed through
 `internal/check` or the combat roll sites. Each rolled site just needs `ExhaustionD20Penalty` at its
 roll; the passive-check case needs the ruling first.
+
+---
+
+## Tier 6 — Ruleset drift (continued)
+
+### COV-19 — Save-ends conditions apply forever; no 2024 end-of-turn repeat save
+**Status:** ✅ DONE 2026-07-07 · **Severity:** medium · **Pkg:** `internal/combat` (+ `internal/discord`, `cmd/dndnd` glue)
+
+**The hole.** A single-target save-or-suck condition (paralyzed by Hold Person) was applied with
+`DurationRounds=0` (indefinite) and re-saved *nowhere*: `AdvanceTurn` silently auto-skipped the
+incapacitated bearer, and the only end-of-turn hook (`condition.go` `processExpiredConditions`) is a
+round-count timer, not a saving throw. So a held creature stayed held until concentration teardown,
+combat end, or the DM editor — never getting the 2024 "at the end of each of its turns, the target
+repeats the save; on a success the spell ends on it" repeat. **Important RAW nuance:** the repeat is a
+property of the *spell* (Hold Person), not the *condition* (a monster's paralytic-touch Paralyzed
+grants no repeat) — so the flag keys off the source spell, never the bare condition.
+
+**What shipped.**
+- **SSOT (no migration):** `endOfTurnResaveSpells` map + `spellResavesAtEndOfTurn` in `metamagic.go`
+  (curated slug set — `hold-person`, `hold-monster` — mirroring `incapacitatingConditions`; a Spell DB
+  column would need a migration + testdb/MigrateDown churn).
+- **Self-contained condition:** `applyOnFailConditions` (`aoe.go`) stamps `SaveEndsAbility` +
+  `SaveEndsDC` (frozen from the pending-save DC) onto the `CombatCondition` when the source spell
+  re-saves. The condition now carries everything the turn engine needs.
+- **Activate, don't skip:** `skipOrActivate` (`initiative.go`) gives a save-ends bearer an ACTIVE turn
+  flagged `TurnInfo.ResavePending` — mirroring the dying-PC `DeathSavePending` special-case — placed
+  *before* the `IsIncapacitated` skip. Plain incapacitation (no metadata) still auto-skips.
+- **Resolution (`resave.go`):** `applySaveEndsOutcome` removes the condition on a success and, when no
+  other combatant still bears the source-spell condition (last held target), drops the caster's
+  concentration via `breakStoredConcentration`; a fail persists it. `rollNPCEndOfTurnResave` (honest
+  server d20 + `resolveCombatantSaveBonus`) and `resolveEndOfTurnResaveForCombatant` (player total)
+  share it. Saving throws don't crit in 2024, so success is a plain total-vs-DC.
+- **Triggers:** NPC — `ExecuteEnemyTurn` rolls it after `ActionUsed` persists (DM triggers by running
+  the turn). PC — the `/save` handler routes the player's own roll through `ResolveEndOfTurnResave`
+  (`ErrPlayerSaveViaDiscord` split preserved). A PC-only `/save` cue is appended to the #your-turn ping.
+
+**Still deferred:** multi-cast collision (first concentrating caster wins, inherited from COV-1);
+timed-expiry conditions (Blindness/Deafness); non-Hold save-ends spells (Tasha's, Fear, Dominate) —
+just add their slug to `endOfTurnResaveSpells` and confirm the condition + DC path.
+
+**Tests:** `resave_test.go` (helper, stamping, outcome success/fail/multi-target, NPC roll
+success/fail/noop, PC path, skip-vs-activate, `ExecuteEnemyTurn` integration) +
+`TestSaveHandler_ResolvesEndOfTurnResave`. `make cover-check` green.
 
 ---
 

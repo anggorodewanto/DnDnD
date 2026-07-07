@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -429,6 +430,27 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 	turn.ActionUsed = true
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
 		return nil, fmt.Errorf("updating turn actions: %w", err)
+	}
+
+	// COV-19: end-of-turn repeat save. A creature held by a "save ends" condition
+	// (e.g. paralyzed by Hold Person) re-rolls its save at the end of each of its
+	// turns; for an NPC the DM triggers this by running its turn, so roll it here
+	// (honest, server-side) and end the condition — dropping the caster's
+	// concentration — on a success. A no-op for NPCs holding no save-ends condition.
+	resave, rerr := s.rollNPCEndOfTurnResave(ctx, encounterID, combatant)
+	if rerr != nil {
+		return nil, fmt.Errorf("rolling end-of-turn re-save: %w", rerr)
+	}
+	if resave != nil {
+		resaveLog := strings.Join(resave.Messages, "\n")
+		if combatLog == "" {
+			combatLog = resaveLog
+		} else {
+			combatLog = combatLog + "\n" + resaveLog
+		}
+		if lerr := s.logConditionMessages(ctx, resave.Messages, "condition_resave", combatant.ID, encounterID, turn.ID); lerr != nil {
+			return nil, fmt.Errorf("logging end-of-turn re-save: %w", lerr)
+		}
 	}
 
 	// ISSUE-057: this NPC's turn is now taken — cancel its enemy_turn_ready

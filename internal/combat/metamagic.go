@@ -64,6 +64,27 @@ func hasConditions(spell refdata.Spell) bool {
 	return len(spell.ConditionsApplied) > 0
 }
 
+// endOfTurnResaveSpells lists the spell IDs whose applied condition grants the
+// 2024 "at the end of each of its turns, the target repeats the saving throw;
+// on a success the spell ends on it" repeat save (save ends). Kept as a curated
+// set (like incapacitatingConditions) rather than a Spell DB column so no
+// migration is needed — extend it by adding a slug when a new save-ends spell
+// is seeded. The condition itself is what re-saves; a plain paralysis (a
+// monster's paralytic touch) grants no repeat, which is why this keys off the
+// source spell, not the condition. (COV-19)
+var endOfTurnResaveSpells = map[string]bool{
+	"hold-person":  true,
+	"hold-monster": true,
+}
+
+// spellResavesAtEndOfTurn reports whether the condition(s) spell applies grant a
+// repeat saving throw at the end of each of the target's turns (save ends).
+// When true, applyOnFailConditions stamps SaveEndsAbility / SaveEndsDC onto the
+// applied condition so the turn engine can re-roll it.
+func spellResavesAtEndOfTurn(spell refdata.Spell) bool {
+	return endOfTurnResaveSpells[spell.ID]
+}
+
 func validateCarefulSpell(spell refdata.Spell) error {
 	if !hasAreaOfEffect(spell) {
 		return fmt.Errorf("Careful Spell requires a spell with an area of effect")

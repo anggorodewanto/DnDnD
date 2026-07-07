@@ -1368,6 +1368,13 @@ func (n *turnStartPingNotifier) NotifyTurnStart(ctx context.Context, encounterID
 	// unlinked characters keep the plain name).
 	mention := n.resolveMention(ctx, enc.CampaignID, combatant)
 	content := combat.FormatTurnStartPromptWithImpact(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant, impactSummary, mention)
+	// COV-19: a PC held by a "save ends" condition (paralyzed by Hold Person,
+	// etc.) is prompted to roll its 2024 end-of-turn repeat save. PC-only: an
+	// NPC's re-save is DM-rolled when the DM runs its turn, and telling players
+	// to roll for an enemy would both misfire and leak that the enemy is holdable.
+	if ti.ResavePending && !combatant.IsNpc {
+		content += fmt.Sprintf("\n\n🔒 You're **%s** — you can't act, but roll `/save %s` to break free at the end of your turn.", ti.ResaveConditionName, ti.ResaveAbility)
+	}
 	_, _ = n.session.ChannelMessageSend(yourTurnCh, content)
 }
 

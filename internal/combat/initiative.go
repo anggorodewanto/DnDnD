@@ -92,6 +92,14 @@ type CombatCondition struct {
 	// SR-018: Help action sets this to the named target's ID so the
 	// help_advantage grant is consumed only on an attack against that target.
 	TargetCombatantID string `json:"target_combatant_id,omitempty"`
+	// SaveEndsAbility, when non-empty, marks a "save ends" condition (2024): at
+	// the end of each of the bearer's turns it repeats a saving throw of this
+	// ability (e.g. "wis") against SaveEndsDC, and on a success the condition —
+	// and, for the last-held target of a concentration spell, that spell's
+	// concentration — ends. Stamped at apply-time by applyOnFailConditions from
+	// the source spell (COV-19). SaveEndsDC is the frozen save DC.
+	SaveEndsAbility string `json:"save_ends_ability,omitempty"`
+	SaveEndsDC      int    `json:"save_ends_dc,omitempty"`
 }
 
 // SurprisedCondition returns the standard surprised condition struct.
@@ -381,6 +389,15 @@ type TurnInfo struct {
 	// throw (/deathsave) at the correct initiative spot. Without this, the
 	// downed PC's turn advanced silently with no death save (the live bug).
 	DeathSavePending bool
+	// ResavePending is true when this active turn belongs to a creature held by
+	// a "save ends" condition (e.g. paralyzed by Hold Person). Like the dying-PC
+	// case, the turn is activated — not skipped as "incapacitated" — so the
+	// bearer gets its 2024 end-of-turn repeat save: a PC rolls it via /save, an
+	// NPC's is rolled when the DM runs its turn. ResaveAbility / ResaveConditionName
+	// carry the prompt details (e.g. "wis" / "paralyzed"). (COV-19)
+	ResavePending       bool
+	ResaveAbility       string
+	ResaveConditionName string
 }
 
 // MarkSurprised adds the surprised condition to a combatant.
@@ -581,6 +598,25 @@ func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, rou
 			return TurnInfo{}, nil, err
 		}
 		info.DeathSavePending = true
+		info.SkippedCombatants = priorSkipped
+		return info, nil, nil
+	}
+
+	// COV-19: a creature held by a "save ends" condition (e.g. paralyzed by Hold
+	// Person) gets an ACTIVE turn — not the silent incapacitated skip below — so
+	// it can take its 2024 end-of-turn repeat save (a PC via /save, an NPC when
+	// the DM runs its turn). This gate mirrors the dying-PC DeathSavePending
+	// special-case above and must precede the IsIncapacitated skip, since a
+	// paralyzed creature is incapacitated and would otherwise be skipped with no
+	// re-save. Plain incapacitation (no save-ends metadata) still auto-skips.
+	if saveEnds, ok := firstSaveEndsCondition(conds); ok {
+		info, err := s.createActiveTurn(ctx, encounterID, roundNumber, combatant)
+		if err != nil {
+			return TurnInfo{}, nil, err
+		}
+		info.ResavePending = true
+		info.ResaveAbility = saveEnds.SaveEndsAbility
+		info.ResaveConditionName = saveEnds.Condition
 		info.SkippedCombatants = priorSkipped
 		return info, nil, nil
 	}

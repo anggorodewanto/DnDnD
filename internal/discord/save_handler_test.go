@@ -102,6 +102,21 @@ type mockAoESaveResolver struct {
 	resolveSpellID string
 	resolveResult  *struct{ totalDamage int }
 	resolveErr     error
+
+	resaveCalls       int
+	resaveCombatantID uuid.UUID
+	resaveAbility     string
+	resaveTotal       int
+	resaveResult      *combat.EndOfTurnResaveResult
+	resaveErr         error
+}
+
+func (m *mockAoESaveResolver) ResolveEndOfTurnResave(_ context.Context, _, combatantID uuid.UUID, ability string, total int, _ bool) (*combat.EndOfTurnResaveResult, error) {
+	m.resaveCalls++
+	m.resaveCombatantID = combatantID
+	m.resaveAbility = ability
+	m.resaveTotal = total
+	return m.resaveResult, m.resaveErr
 }
 
 func (m *mockAoESaveResolver) RecordAoEPendingSaveRoll(_ context.Context, combatantID uuid.UUID, ability string, total int, success bool) (string, bool, error) {
@@ -173,6 +188,56 @@ func TestSaveHandler_RecordsAndResolvesAoEPendingSaves(t *testing.T) {
 	}
 	if resolver.resolveSpellID != "fireball" {
 		t.Errorf("expected resolver to drive damage on fireball, got %q", resolver.resolveSpellID)
+	}
+}
+
+// COV-19: when a paralyzed-by-Hold-Person player rolls their end-of-turn
+// /save, the handler routes it to ResolveEndOfTurnResave with their own
+// combatant + rolled total so the condition can end on a success.
+func TestSaveHandler_ResolvesEndOfTurnResave(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+
+	combatantID := uuid.New()
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	resolver := &mockAoESaveResolver{
+		resaveResult: &combat.EndOfTurnResaveResult{Resolved: true, Success: true, Condition: "paralyzed", Messages: []string{"✨ freed"}},
+	}
+
+	roller := dice.NewRoller(func(_ int) int { return 12 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, CharacterID: uuid.NullUUID{UUID: char.ID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetAoESaveResolver(resolver)
+	h.Handle(makeSaveInteraction("wis", false, false))
+
+	if resolver.resaveCalls != 1 {
+		t.Fatalf("expected ResolveEndOfTurnResave called once, got %d", resolver.resaveCalls)
+	}
+	if resolver.resaveCombatantID != combatantID {
+		t.Errorf("expected re-save routed to combatant %s, got %s", combatantID, resolver.resaveCombatantID)
+	}
+	if resolver.resaveAbility != "wis" {
+		t.Errorf("expected ability=wis, got %q", resolver.resaveAbility)
 	}
 }
 
@@ -271,6 +336,10 @@ func (m *mockAoESaveAdapterBackend) RecordAoEPendingSaveRoll(_ context.Context, 
 func (m *mockAoESaveAdapterBackend) ResolveAoEPendingSaves(_ context.Context, _ uuid.UUID, _ string, r *dice.Roller) (*combat.AoEDamageResult, error) {
 	m.resolveCalls++
 	m.lastRoller = r
+	return nil, nil
+}
+
+func (m *mockAoESaveAdapterBackend) ResolveEndOfTurnResave(_ context.Context, _, _ uuid.UUID, _ string, _ int, _ bool) (*combat.EndOfTurnResaveResult, error) {
 	return nil, nil
 }
 

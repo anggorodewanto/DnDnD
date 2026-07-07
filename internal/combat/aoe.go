@@ -1150,11 +1150,19 @@ func (s *Service) applyOnFailConditions(ctx context.Context, encounterID uuid.UU
 			continue // made the save — no condition
 		}
 		for _, name := range spell.ConditionsApplied {
-			_, applied, aerr := s.ApplyCondition(ctx, r.CombatantID, CombatCondition{
+			cond := CombatCondition{
 				Condition:         name,
 				SourceSpell:       spell.ID,
 				SourceCombatantID: casterID,
-			})
+			}
+			// COV-19: stamp the end-of-turn repeat save (save ends) so the turn
+			// engine can re-roll it. The DC is frozen from the pending-save row
+			// (the caster's spell save DC at cast time).
+			if spellResavesAtEndOfTurn(spell) {
+				cond.SaveEndsAbility = spell.SaveAbility.String
+				cond.SaveEndsDC = int(r.Dc)
+			}
+			_, applied, aerr := s.ApplyCondition(ctx, r.CombatantID, cond)
 			if aerr != nil {
 				return msgs, fmt.Errorf("applying %q from %s: %w", name, spell.ID, aerr)
 			}
