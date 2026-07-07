@@ -39,6 +39,22 @@ func (s *Service) GetImpactSummary(ctx context.Context, encounterID uuid.UUID, c
 	return BuildImpactSummary(logs)
 }
 
+// FormatResaveCue returns the PC-facing end-of-turn repeat-save cue (COV-19) to
+// append to the turn-start prompt for a bearer of a "save ends" condition. An
+// incapacitating condition (paralyzed by Hold Person) prevents acting; a
+// non-incapacitating one (frightened by Fear) leaves the bearer free to take a
+// normal turn — so the cue must NOT tell a frightened player they can't act.
+// Returns "" when conditionName is empty.
+func FormatResaveCue(conditionName, ability string, incapacitated bool) string {
+	if conditionName == "" {
+		return ""
+	}
+	if incapacitated {
+		return fmt.Sprintf("\n\n\U0001f512 You're **%s** — you can't act, but roll `/save %s` to break free at the end of your turn.", conditionName, ability)
+	}
+	return fmt.Sprintf("\n\n\U0001f628 You're **%s** — you can still act; roll `/save %s` at the end of your turn to shake it off.", conditionName, ability)
+}
+
 // FormatTurnStartPromptWithImpact produces the turn start notification
 // with an optional impact summary line inserted between the ping and resources.
 func FormatTurnStartPromptWithImpact(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, impactSummary string, discordUserID ...string) string {

@@ -1529,9 +1529,29 @@ grants no repeat) — so the flag keys off the source spell, never the bare cond
   the turn). PC — the `/save` handler routes the player's own roll through `ResolveEndOfTurnResave`
   (`ErrPlayerSaveViaDiscord` split preserved). A PC-only `/save` cue is appended to the #your-turn ping.
 
+**Fear extension DONE 2026-07-07.** `fear` added to `endOfTurnResaveSpells` — the first
+**non-incapacitating** save-ends spell (frightened, not paralyzed). Confirmed the machinery is
+condition-agnostic end-to-end: `skipOrActivate` (`initiative.go:612`) and the NPC trigger
+(`rollNPCEndOfTurnResave`) both key off `firstSaveEndsCondition` (stamped `SaveEndsAbility`), not
+incapacitation, so a frightened Fear-target gets its end-of-turn WIS re-save through the same path a
+paralyzed Hold Person-target does — no new trigger code. `applyOnFailConditions` stamps the WIS
+ability + frozen DC + concentrating-caster scope onto the frightened condition; multi-target Fear keeps
+concentration until the last frightened creature saves (`anyCombatantBearsSpellCondition`). Fear was
+chosen as the *uniquely clean* single addition because it applies **no** recurring end-of-turn damage —
+unlike Phantasmal Killer / Weird, whose 4d10-psychic-per-turn tick the resave machinery doesn't model
+(adding those needs a recurring-damage mechanic first, so they stay deferred). **`/simplify` altitude
+caught a real user-facing bug this surfaced:** the PC turn-start cue hardcoded "you can't act" (written
+when every save-ends spell was paralyzing) — false for a frightened PC, who still takes a normal turn.
+Fixed by extracting a tested pure `combat.FormatResaveCue(conditionName, ability, incapacitated)` that
+branches the copy, with the adapter (`cmd/dndnd/discord_adapters.go`) passing
+`combat.IsIncapacitatedRaw(combatant.Conditions)`. Tests: `TestResolveAoEPendingSaves_Fear_StampsSaveEnds`,
+`TestFormatResaveCue`, + the `spellResavesAtEndOfTurn(makeFear())` assertion.
+
 **Still deferred:** multi-cast collision (first concentrating caster wins, inherited from COV-1);
-timed-expiry conditions (Blindness/Deafness); non-Hold save-ends spells (Tasha's, Fear, Dominate) —
-just add their slug to `endOfTurnResaveSpells` and confirm the condition + DC path.
+timed-expiry conditions (Blindness/Deafness); recurring-damage save-ends spells (Phantasmal Killer,
+Weird — need an end-of-turn damage tick modeled first); other save-ends spells (Tasha's, Dominate) —
+add their slug to `endOfTurnResaveSpells` and confirm the condition + DC path (Dominate re-saves on
+damage, not end-of-turn, so it needs a different trigger).
 
 **Tests:** `resave_test.go` (helper, stamping, outcome success/fail/multi-target, NPC roll
 success/fail/noop, PC path, skip-vs-activate, `ExecuteEnemyTurn` integration) +

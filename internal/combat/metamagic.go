@@ -75,6 +75,14 @@ func hasConditions(spell refdata.Spell) bool {
 var endOfTurnResaveSpells = map[string]bool{
 	"hold-person":  true,
 	"hold-monster": true,
+	// Fear: a frightened target repeats the WIS save at the end of each of its
+	// turns, ending the effect on itself on a success (2024). The frightened
+	// condition is non-incapacitating, so the bearer keeps taking normal turns —
+	// the end-of-turn re-save machinery is condition-agnostic (keys off the
+	// stamped SaveEndsAbility, not incapacitation), so this needs no new code.
+	// Fear applies no recurring damage, so unlike Phantasmal Killer / Weird it
+	// wires cleanly with the re-save alone. (COV-19)
+	"fear": true,
 }
 
 // spellResavesAtEndOfTurn reports whether the condition(s) spell applies grant a

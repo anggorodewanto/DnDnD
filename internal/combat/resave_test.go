@@ -19,6 +19,7 @@ import (
 // Ray of Sickness does not.
 func TestSpellResavesAtEndOfTurn(t *testing.T) {
 	assert.True(t, spellResavesAtEndOfTurn(makeHoldPerson()), "Hold Person is save-ends")
+	assert.True(t, spellResavesAtEndOfTurn(makeFear()), "Fear is save-ends (frightened repeats at end of turn)")
 	assert.False(t, spellResavesAtEndOfTurn(makeRayOfSickness()), "Ray of Sickness is not save-ends")
 }
 
@@ -79,6 +80,91 @@ func TestResolveAoEPendingSaves_HoldPerson_StampsSaveEnds(t *testing.T) {
 	assert.Equal(t, "paralyzed", conds[0].Condition)
 	assert.Equal(t, "wis", conds[0].SaveEndsAbility, "re-save ability stamped from the spell")
 	assert.Equal(t, 14, conds[0].SaveEndsDC, "re-save DC frozen from the pending save")
+}
+
+// makeFear is a concentration AoE-cone save-or-condition spell: WIS save for no
+// effect, frightened on a failed save. Unlike Hold Person the applied condition
+// (frightened) is NOT incapacitating — the bearer still takes normal turns — so
+// this exercises the COV-19 machinery on a non-incapacitating save-ends spell.
+func makeFear() refdata.Spell {
+	return refdata.Spell{
+		ID:                "fear",
+		Name:              "Fear",
+		Level:             3,
+		CastingTime:       "1 action",
+		RangeType:         "self",
+		SaveAbility:       sql.NullString{String: "wis", Valid: true},
+		SaveEffect:        sql.NullString{String: "no_effect", Valid: true},
+		Concentration:     sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode:    "auto",
+		ConditionsApplied: []string{"frightened"},
+	}
+}
+
+// A failed Fear save stamps the applied frightened condition with the re-save
+// ability + DC (frozen from the pending save) AND scopes it to the concentrating
+// caster — so the turn engine re-rolls it each end of turn and concentration
+// teardown can strip it. Proves the COV-19 path generalizes past the Hold spells
+// to a non-incapacitating, AoE-cone, concentration condition.
+func TestResolveAoEPendingSaves_Fear_StampsSaveEnds(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	failerID := uuid.New()
+	spellID := "fear"
+	source := AoEPendingSaveSource(spellID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeFear(), nil }
+	store.listSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: failerID, Source: source, Ability: "wis", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 7, Valid: true}, Success: sql.NullBool{Bool: false, Valid: true}},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: casterID, DisplayName: "Vale", ConcentrationSpellID: sql.NullString{String: spellID, Valid: true}},
+		}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "Ogre", Conditions: json.RawMessage(`[]`)}, nil
+	}
+	var condUpdates []refdata.UpdateCombatantConditionsParams
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		condUpdates = append(condUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, dice.NewRoller(func(_ int) int { return 4 }))
+	require.NoError(t, err)
+
+	require.Len(t, condUpdates, 1)
+	conds, err := ListConditions(condUpdates[0].Conditions)
+	require.NoError(t, err)
+	require.Len(t, conds, 1)
+	assert.Equal(t, "frightened", conds[0].Condition)
+	assert.Equal(t, "wis", conds[0].SaveEndsAbility, "re-save ability stamped from the spell")
+	assert.Equal(t, 15, conds[0].SaveEndsDC, "re-save DC frozen from the pending save")
+	assert.Equal(t, casterID.String(), conds[0].SourceCombatantID, "scoped to the concentrating caster")
+}
+
+// FormatResaveCue must tell an incapacitated bearer (paralyzed by Hold Person)
+// they can't act, but must NOT tell a non-incapacitating save-ends bearer
+// (frightened by Fear) they can't act — a frightened creature still takes a
+// normal turn. COV-19 (Fear is the first non-incapacitating save-ends spell).
+func TestFormatResaveCue(t *testing.T) {
+	held := FormatResaveCue("paralyzed", "wis", true)
+	assert.Contains(t, held, "paralyzed")
+	assert.Contains(t, held, "/save wis")
+	assert.Contains(t, held, "can't act")
+
+	frightened := FormatResaveCue("frightened", "wis", false)
+	assert.Contains(t, frightened, "frightened")
+	assert.Contains(t, frightened, "/save wis")
+	assert.NotContains(t, frightened, "can't act", "a frightened creature can still act")
+	assert.Contains(t, frightened, "can still act")
+
+	assert.Empty(t, FormatResaveCue("", "wis", false), "no condition name → no cue")
 }
 
 // A non-save-ends spell (Ray of Sickness) applies its condition WITHOUT re-save
