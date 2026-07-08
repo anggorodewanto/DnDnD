@@ -24,6 +24,15 @@ big-party technique is in [`big-party.md`](big-party.md).
   [`runbook.md`](runbook.md) §6); use Discord for the human/roleplay layer the
   generated views miss. The user pasting bot output back is now a fallback, not the
   only path.
+- **Also read #roll-history — not every roll makes a `dm_queue_items` row.** When you
+  pull the board, check the **#roll-history** channel in Discord alongside the queue
+  and #in-character. A `/check` that carries a spotlight creates a queue item, but
+  **supplementary / helper rolls post to #roll-history and generate NO queue row** —
+  e.g. a *Guidance* `1d4` a player rolls to add to another PC's check, a damage die,
+  an initiative roll. (Seen 07-08: Windreth's Survival 20 had Vale's Guidance d4
+  posted in #roll-history; the queue only held the 20.) It rarely changes a clear
+  success, but the total, crits, and near-DC calls depend on it — **read
+  #roll-history before adjudicating so the reported number is the whole number.**
 - **Reading is open; typing in Discord is not.** Claude observes any Discord channel
   through the browser, but **never types in Discord** — no slash commands (Discord
   forbids bot-to-bot invocation) and no messages. The human types `/` commands;

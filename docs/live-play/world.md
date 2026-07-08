@@ -135,6 +135,62 @@ Durable geography established in play so far — build the rest live as they tra
   party feels, though unconfirmed on either side. Still sealed: **where** the Order runs,
   **what** exactly the Watch keeps, and whether **Windreth's stolen name** is the prize the
   buyer wants — earned only layer by layer as they keep Mave's trust.
+  **The night confession, deeper — the patron named + the scatter-doctrine (07-08):** answering Mave,
+  **Vale named her patron — *"The Lorekeeper"*** (he never gave a real name; he wanted to be called that)
+  and pressed back for *who* the hand is and *where* the Order runs. The name **chills Mave**: a *keeper of
+  lore* — a thing that **hoards** what the Pale Watch **drown** — is the exact shape of the enemy the Order
+  was founded against, so it *"fits like a glove,"* yet she **cannot swear** it is the same hand that bought
+  the renegade (the **patron ↔ rival-collector** question sharpens but stays **unconfirmed**). On *where* they
+  hide she cracked the **method, not a place**: the Order does not hide in a place — they **scatter**, carry
+  the pieces apart, drown a name in a crowd so a long-reaching hand can close on only one thing at a time. And
+  the local edge, as a warning: the biggest crowd out this way is **Sesh** — where the party already rides, and
+  where the renegade's harvest was bound — so the wardens scatter *that* way too, and *"every piece you carry
+  toward that market you may be carrying to it, not away."* **Still sealed:** *what* exactly the Watch keeps,
+  the deeper why, the scatter/reassemble/hand-over choice, and whether **Windreth's stolen name** is the prize —
+  earned only as the party keeps Mave's trust (Windreth naming his own lifted name is the strongest remaining key).
+  **The strongest key, played and primed (07-08):** woken by the word *leash*, **Windreth** showed Mave the
+  **warded scrap** and admitted the renegade had cut *his* name too, pressing her to say what the buyer wants —
+  but rolled low. The reveal **landed** (Mave, moved: *"they took yours too"* — common cause is now real, and a
+  living warden now knows Windreth is name-cut and carries a kept living name), yet the **answer did not come**:
+  Mave is only a low warden — *"what the hand wants, down to the true shape, lives higher than me, with the ones
+  who read the kept names, the ones I ran from too"* — so the deep *why*/​*what* re-point **higher** in the Order,
+  not to her. She **would not read the scrap** to comfort him (*"I will not pretend to read it to give you peace"*),
+  warning that a living name unwrapped by firelight to *make* it yours is how it is lost — the only way to know
+  whose it is is a **proper reading by someone who can**, and *the buyer wants it read too*, so *"be careful who
+  you let near it — your friend's patron, even me."* So Windreth's stolen-name thread is now **known to a living
+  warden and primed**, but whose the scrap is stays sealed, waiting on a proper reading — not a grab.
+  **Morning pointers — the Sesh field-craft Mave gave (07-08):** at first light, camp breaking, **Vale asked Mave
+  over breakfast for pointers** — who/what to watch for in Sesh re the invisible hand + how to get Windreth's scrap
+  read true (RP, no roll). Rewarded for the kept trust, Mave gave usable warden **field-craft** (deep core still held):
+  the buyer **has no face** — in a market of faces you hunt its **money, not a man** (someone paying too well, buying
+  up curios/scraps *no one can read aloud*, asking after the Watch or fresh-cut names; quiet coin is its shadow, so
+  *"you see where its purse has been, not the hand"*); and a **proper name-reading exists in Sesh** — the face-merchants
+  read kept names for a trade — **but the reader who *can* is also the thief who *might*, and the buyer wants it read
+  too**, so the one tell: *a true keeper reads a name and hands it back; the moment they won't, walk.* **Windreth**
+  (Insight 6, low) watched Mave rather than pressing and got **no clean read** — her fear reads plain, but whether guilt
+  or grief hides under it stays unreadable, so his caution holds. Still sealed: *what* the Watch keeps + whose the scrap
+  is (a proper reading, not a grab). This gives the party a concrete Sesh plan (hunt the purse; find a reader who hands
+  it back) to carry into the Mask Market.
+  **Mave's one thing — why a whole warded name is dangerous at Sesh (07-08):** camp breaking, **Forge asked the road**
+  (time + danger to Sesh) → **many days across open, exposed ash** (four–five if the horse holds; no inn, no well, water
+  carried; the danger is *exposure* — one visible thing under an empty sky — not bandits, and Sesh grows more-watched the
+  nearer you come). **Windreth then read Mave (`/check insight` → 22)** and, pressing gently + once, earned both a **clean
+  read** (she is **fear + shame, not the buyer's tool** — the honest confirmation the murky Insight-6 couldn't give) and her
+  **one held warning** (faithful warden field-doctrine, deep core still sealed): a **kept name held WHOLE can *surface*** (scattered
+  it drowns in a crowd — the scatter-doctrine's *why*); the **ward on the scrap is a blanket over a candle, not a lock**; and
+  **Sesh is a place made of reading** whose name-reading **thins a ward** like wind at a covered flame → carried onto the market
+  floor unready it *sings* and **the hand feels it show.** Her rule: **read it once, clean, by a keeper who hands it back — or keep
+  it wrapped, deep, off the floor; pick reader AND ground first.** This makes the Sesh prize-reading both **urgent and dangerous**;
+  whose the scrap is stays sealed, opening only on a **proper reading**, never a grab.
+  **On the ash-road — water, pace, and the wardens' trail (07-08):** the party rode out from Mave's fire onto the open
+  waste for Sesh. **Windreth's Survival 20** (with Vale's *Guidance*) found a **clean seep** to top the skins and set a
+  **smart travel pace** off Mave's road-craft (ride the cold hours, rest the noon glare, move again at dusk), and **read the
+  road** — the wardens who rode out ahead left **fresh tracks: five horses, hard pace, ~half a day ahead, the same road to
+  Sesh** (the clock-hook, now visible). **Water on the waste is scarce but manageable for the first leg:** a found seep +
+  Forge's scrubbed bucket, plus a DM-ruled **Prestidigitation dew-trick** — chill a cup or blade and the cold pre-dawn air
+  beads **a cup or two a night** where there's any moisture, near-nothing in the deep-dry stretches (a supplement, not a
+  resupply). The ash-waste stays honestly dry and exposed; the road is now live-build territory, with the **five-rider
+  trail** as the party's first choice (close the gap / hang back / ride their own pace).
 - **The party's rig:** a shaggy high-road horse + a sound old wagon, **rigged, silent,
   and packed to hide what matters** — Windreth's Sleight-of-hand 25 lashed the load to
   ride near-silent and stashed the warded prize-scrap + valuables in a hidden nook
