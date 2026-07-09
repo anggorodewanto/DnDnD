@@ -685,6 +685,57 @@ func TestServiceOffhandAttack_NickDoesNotConsumeBonusAction(t *testing.T) {
 	}
 }
 
+// A Nick off-hand attack is absorbed into the Attack action and costs no bonus
+// action, so it must succeed even when the bonus action was ALREADY spent this
+// turn (e.g. a Rogue who used Steady Aim / Cunning Action). Regression for the
+// bug where OffhandAttack rejected up-front on a spent bonus action before the
+// Nick free-detection ran.
+func TestServiceOffhandAttack_NickFreeEvenWhenBonusActionSpent(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := nickChar(charID, "shortsword", "dagger", `{"weapon_masteries":["dagger"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "dagger":
+			return makeNickDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	// Bonus action already spent (Steady Aim etc.) yet the attack was taken this
+	// turn — the Nick off-hand swing must still resolve.
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: nickAttacker(charID, attackerID, encounterID),
+		Target:   nickTarget(targetID, encounterID),
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 0, BonusActionUsed: true},
+	}, roller)
+	require.NoError(t, err, "Nick off-hand needs no bonus action, so a spent bonus action must not block it")
+	assert.True(t, result.Hit, "the off-hand attack still resolves normally")
+}
+
 func TestServiceOffhandAttack_NonNickConsumesBonusAction(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()

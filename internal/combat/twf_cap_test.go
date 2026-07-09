@@ -213,13 +213,16 @@ func TestOffhandAttack_PlainTWFStillOneOffhand(t *testing.T) {
 	require.NotNil(t, r1.RemainingTurn)
 	assert.True(t, r1.RemainingTurn.BonusActionUsed, "plain TWF off-hand consumes the bonus action")
 
-	// Second off-hand with the bonus action now spent → rejected by the
-	// existing resource gate (not the Dual Wielder cap).
+	// Second off-hand this turn → rejected by the once-per-turn off-hand cap
+	// (ISSUE-062): a plain TWF character gets exactly one off-hand swing, and only
+	// the Dual Wielder feat grants a second. The bonus action is also spent, but
+	// the cap is the primary, more specific rejection now that Nick's free swing
+	// no longer sits behind an up-front bonus-action gate.
 	_, err = svc.OffhandAttack(ctx, OffhandAttackCommand{
 		Attacker: nickAttacker(charID, attackerID, encounterID),
 		Target:   nickTarget(targetID, encounterID),
 		Turn:     mkTurn(r1.RemainingTurn.BonusActionUsed),
 	}, roller)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bonus action")
+	assert.Contains(t, err.Error(), "already made your off-hand")
 }

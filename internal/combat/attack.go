@@ -1728,9 +1728,12 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 // It uses the bonus action, validates both weapons are light, and resolves the off-hand attack
 // with 0 damage modifier (unless the character has the Two-Weapon Fighting fighting style).
 func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, roller *dice.Roller) (AttackResult, error) {
-	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
-		return AttackResult{}, err
-	}
+	// NOTE: the bonus-action availability check is deliberately NOT done here.
+	// The 2024 Nick mastery absorbs the off-hand swing into the Attack action so
+	// it costs no bonus action — a Nick attacker who already spent their bonus
+	// action (Steady Aim, Cunning Action, Fast Hands) may still swing. The
+	// bonus action is validated + spent only on the non-Nick path below, via the
+	// conditional UseResource(ResourceBonusAction) after nickFree is known.
 
 	// C-40: a charmed combatant cannot attack the source of its charm.
 	if err := validateCharmedAttack(cmd.Attacker, cmd.Target); err != nil {

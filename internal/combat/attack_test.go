@@ -1696,13 +1696,27 @@ func TestServiceOffhandAttack_HappyPath_WithTWFStyle(t *testing.T) {
 
 func TestServiceOffhandAttack_BonusActionAlreadyUsed(t *testing.T) {
 	ctx := context.Background()
-	svc := NewService(defaultMockStore())
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	encounterID := uuid.New()
+
+	// Non-Nick off-hand (shortsword, mastery not known) so the bonus action is
+	// genuinely required — with it already spent, the swing is rejected. A Nick
+	// weapon would be free and must NOT be rejected (that path is covered by
+	// TestServiceOffhandAttack_NickFreeEvenWhenBonusActionSpent).
+	char := nickChar(charID, "shortsword", "shortsword", "")
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) { return char, nil }
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) { return makeShortsword(), nil }
+
+	svc := NewService(ms)
 	roller := dice.NewRoller(func(max int) int { return 10 })
 
 	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
-		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Conditions: json.RawMessage(`[]`)},
-		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
-		Turn:     refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+		Attacker: nickAttacker(charID, attackerID, encounterID),
+		Target:   nickTarget(targetID, encounterID),
+		Turn:     refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 0, BonusActionUsed: true},
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bonus action")
