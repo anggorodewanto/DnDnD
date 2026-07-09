@@ -191,6 +191,39 @@ Durable geography established in play so far — build the rest live as they tra
   beads **a cup or two a night** where there's any moisture, near-nothing in the deep-dry stretches (a supplement, not a
   resupply). The ash-waste stays honestly dry and exposed; the road is now live-build territory, with the **five-rider
   trail** as the party's first choice (close the gap / hang back / ride their own pace).
+  **Reading the wardens' trail — the five ride afraid, and they ride apart (07-08):** at first dusk the party rode up onto
+  the five-horse trail and read it three ways (**Windreth Survival 20** + Vale *Guidance*, **Vale Insight 20**, **Forge
+  Perception 12**). The ground says the five ride **afraid** — pushed hard, no rest, straight through the noon glare they'd
+  normally hide from — with **one horse carrying heavy** (a double load or a hurt rider held in the saddle) and the whole
+  trail **hugging cover**, hiding the way the party hides. The motive reads off the Watch's own scatter-doctrine: the five
+  ride **ahead to stay apart** (pieces kept from travelling as one), and **Mave sent them first so the party's load and
+  theirs never share the road**; one rider keeps **watching the backtrail**, expecting a follower. And at a low rise, Forge
+  half-caught a **second, fainter, non-horse trail** cutting toward the same road *after* the five passed — unread in the
+  failing light (a seed: the waste isn't as empty as it looked; the hand's long reach may already be on the road). Nothing
+  here touches the seal — ground, doctrine, and tracks only; whose the scrap is still opens only on a **proper reading**.
+  The party's live fork sharpens: **close the gap on the five, hang back and stay unseen, chase the second trail, or make
+  cold camp.**
+  **Something walks with them — the second trail, part-read (07-08):** Forge stepped off the wagon at first dusk and read
+  the fainter mark Windreth's trail-read had half-caught. It is **not horses** — a single narrow line of prints running
+  beside the five-horse trail but never joining it, **on foot yet wrong**: the stride too long and too even, the weight too
+  light, as if the walker does not press down the way a person should — and **as fresh as the riders' trail or fresher**,
+  something afoot keeping pace with horses. How many, what it is, and whether it walks ahead of the wardens or behind them
+  stayed hidden in the failing light. The waste is not empty: the follower the wardens already feared now has a shape on
+  the road, if not yet a name. **Nature knows no such beast (07-09):** Vale knelt over the same prints and ran them against
+  every animal she knows — wolf, cat, ape, bear, marsh lizard — and none fit; the weight too light, the stride too even, as
+  if the thing were counting its steps. She could not name it. Whatever leaves this trail is not in the natural bestiary she
+  carries — a wrongness confirmed, not explained.
+  **A firelight in the dark (07-09):** the party pressed on into full night, and a fresh
+  scout came up empty — Vale's arcane reach for the follower found no clean signature, and
+  Windreth's watch of the road ahead found no shape of the five nor glimpse of the pacer.
+  Then a single point of firelight showed far up the ash-road: steady, alone, low on the
+  road. Whose it is stays unread — the five wardens camped at last, or a trap set for
+  whoever follows. The road now has a light on it, and a question at the end of it.
+  All three of the party see in the dark (elf / dwarf / tiefling darkvision, 60 ft each),
+  so the near road reads in shades of grey — but the firelight sits **far past 60 feet**,
+  beyond even their eyes, and stays only a point of light until they close the gap. In the
+  grey between, sight is dim-light dim: looking carefully is at disadvantage unless they
+  strike a light (which the fire would see) or spot for one another.
 - **The party's rig:** a shaggy high-road horse + a sound old wagon, **rigged, silent,
   and packed to hide what matters** — Windreth's Sleight-of-hand 25 lashed the load to
   ride near-silent and stashed the warded prize-scrap + valuables in a hidden nook
