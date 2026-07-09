@@ -725,6 +725,40 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 				SourceName: "Agonizing Blast", Amount: bonus, DamageType: result.DamageType,
 			})
 		}
+		// Hex / Hunter's Mark on-hit riders — parity with the weapon-attack path
+		// (populateAttackFES). A spell attack that hits a target carrying the
+		// caster's own source-tagged marker adds the concentration die: Hex +1d6
+		// necrotic, Hunter's Mark +1d6 force. Gating by the marker means only the
+		// caster concentrating on that spell against THIS target gets it.
+		//
+		// The die folds into `raw` so it reaches the target's HP (as Agonizing
+		// Blast does); the DamageComponent still records the true damage type for
+		// the log, even though ApplyDamage applies the lump under the spell's
+		// primary type — this matches the weapon path, which likewise applies its
+		// mixed-type total under one damage type (attack.go applyHitDamage).
+		// Eldritch Blast is resolved here as one lumped attack, so the rider is
+		// added once (like Agonizing Blast), not per beam — a pre-existing
+		// engine simplification, not introduced here.
+		if targetHexedBy(target.Conditions, caster.ID) {
+			hexRoll, err := roller.Roll("1d6")
+			if err != nil {
+				return CastResult{}, fmt.Errorf("rolling hex damage: %w", err)
+			}
+			raw += hexRoll.Total
+			result.DamageBreakdown = append(result.DamageBreakdown, DamageComponent{
+				SourceName: "Hex", Amount: hexRoll.Total, DamageType: "necrotic",
+			})
+		}
+		if targetHuntersMarkedBy(target.Conditions, caster.ID) {
+			hmRoll, err := roller.Roll("1d6")
+			if err != nil {
+				return CastResult{}, fmt.Errorf("rolling hunter's mark damage: %w", err)
+			}
+			raw += hmRoll.Total
+			result.DamageBreakdown = append(result.DamageBreakdown, DamageComponent{
+				SourceName: "Hunter's Mark", Amount: hmRoll.Total, DamageType: "force",
+			})
+		}
 		result.DamageTotal = raw
 		_, err = s.ApplyDamage(ctx, ApplyDamageInput{
 			EncounterID: target.EncounterID,
