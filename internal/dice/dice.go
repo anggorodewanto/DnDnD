@@ -20,7 +20,10 @@ type Expression struct {
 	Raw      string
 }
 
-var diceGroupRe = regexp.MustCompile(`(\d+)d(\d+)`)
+// diceGroupRe matches an NdM dice group. The count is optional: a bare "d20"
+// (no leading count) is a common shorthand players type — and the /roll help
+// text advertises it — so an empty count defaults to 1 in ParseExpression.
+var diceGroupRe = regexp.MustCompile(`(\d*)d(\d+)`)
 
 // ParseExpression parses a dice expression string like "2d6+1d4+3" into an Expression.
 func ParseExpression(input string) (Expression, error) {
@@ -39,7 +42,12 @@ func ParseExpression(input string) (Expression, error) {
 
 	for _, match := range matches {
 		// Regex guarantees these are digit-only strings, so Atoi cannot fail.
-		count, _ := strconv.Atoi(input[match[2]:match[3]])
+		// The count group is `\d*`, so an omitted count (bare "d20") yields an
+		// empty string — treat that as the implied count of 1.
+		count := 1
+		if countStr := input[match[2]:match[3]]; countStr != "" {
+			count, _ = strconv.Atoi(countStr)
+		}
 		sides, _ := strconv.Atoi(input[match[4]:match[5]])
 		if count < 1 || sides < 1 {
 			return Expression{}, fmt.Errorf("invalid dice expression: count and sides must be >= 1, got %dd%d", count, sides)

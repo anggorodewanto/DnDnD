@@ -45,6 +45,45 @@ func TestParseExpression_MultipleGroups(t *testing.T) {
 	assert.Equal(t, 3, expr.Modifier)
 }
 
+func TestParseExpression_BareDieDefaultsCountToOne(t *testing.T) {
+	expr, err := ParseExpression("d20")
+	require.NoError(t, err)
+	require.Len(t, expr.Groups, 1)
+	assert.Equal(t, 1, expr.Groups[0].Count)
+	assert.Equal(t, 20, expr.Groups[0].Sides)
+	assert.Equal(t, 0, expr.Modifier)
+}
+
+func TestParseExpression_BareDieWithModifier(t *testing.T) {
+	expr, err := ParseExpression("d20+2")
+	require.NoError(t, err)
+	require.Len(t, expr.Groups, 1)
+	assert.Equal(t, 1, expr.Groups[0].Count)
+	assert.Equal(t, 20, expr.Groups[0].Sides)
+	assert.Equal(t, 2, expr.Modifier)
+}
+
+func TestParseExpression_BareDieMultipleGroups(t *testing.T) {
+	expr, err := ParseExpression("d6+d4+1")
+	require.NoError(t, err)
+	require.Len(t, expr.Groups, 2)
+	assert.Equal(t, 1, expr.Groups[0].Count)
+	assert.Equal(t, 6, expr.Groups[0].Sides)
+	assert.Equal(t, 1, expr.Groups[1].Count)
+	assert.Equal(t, 4, expr.Groups[1].Sides)
+	assert.Equal(t, 1, expr.Modifier)
+}
+
+func TestRoll_BareDieWithModifier(t *testing.T) {
+	roller := NewRoller(fixedRand(15))
+	result, err := roller.Roll("d20+2")
+	require.NoError(t, err)
+
+	assert.Equal(t, 17, result.Total) // 15+2
+	assert.Equal(t, 1, result.Groups[0].Count)
+	assert.Equal(t, "[15] + 2 = 17", result.Breakdown)
+}
+
 func TestParseExpression_Invalid(t *testing.T) {
 	_, err := ParseExpression("")
 	assert.Error(t, err)
