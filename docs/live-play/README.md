@@ -29,6 +29,13 @@ folder is for *actually playing*.
 3. **[`game-state.md`](game-state.md)** — the save file: durable IDs, ops snapshot,
    current scene, **Next action** (DM intent). *For the live board — round/turn/HP/
    positions — read the DM Console, not this file.*
+   > **Pending one-off cleanup (do in isolation, not mid-beat):** the `_Last updated:`
+   > banner has grown into a single ~5 KB line that accretes every beat — risky to edit
+   > surgically and clobber-prone when a concurrent agent is also writing these docs. Cap
+   > it at a short current-state pointer (one or two sentences) and keep beat history in
+   > the numbered **Next action** bullets / [`sessions/`](sessions/) (already the pattern).
+   > A structural cleanup for a quiet moment, **not** while a live beat is in flight
+   > (DMH-5 in [`combat-ops-improvements.md`](combat-ops-improvements.md)).
 4. **[`party/roster.md`](party/roster.md)** — the party's durable identity + kit
    (live HP/positions/conditions via the DM Console).
 5. **[`sessions/`](sessions/)** — skim the **latest** session log for recent beats.

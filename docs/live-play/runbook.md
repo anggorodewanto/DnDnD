@@ -98,6 +98,56 @@ paint a **Spawn Zone** at the PCs' entry edge so encounter token placement has a
 Existing maps for this campaign are listed in [`game-state.md`](game-state.md) "Maps" — reuse
 or build alongside them.
 
+### Starting a live combat (player-authoritative initiative)
+
+**Read the verified facts first — do not re-investigate the API live.** The start-body
+shape, the `Position.Col` letter format, the override contract, and the turn-ordering
+rules are all pinned in memory ([[project_combat_start_pc_init_seat_repair]],
+[[project_liveplay_build_combat_via_api]]) and in the **Appendix** of
+[`combat-ops-improvements.md`](combat-ops-improvements.md) ("execute, don't
+re-investigate"). Read those, then run the checklist below. Only re-investigate if the
+code has changed under them.
+
+1. **Build the encounter DM-side** (map + homebrew creature + template + tokens) — the
+   Homebrew form omits `saving_throws`, so a boss's save proficiencies must go in via the
+   API path (see [[project_liveplay_build_combat_via_api]]). Place tokens with
+   `character_positions` where **`col` is a LETTER** (`A=0, B=1, …`) and **`row` is
+   1-based** — sending a numeric `col` 400s with a bare `"invalid JSON body"` (APP-4).
+2. **Prompt each player to roll their OWN initiative with exact, per-player syntax that
+   includes their fixed modifier.** Give each their literal string — e.g. "Forge:
+   `/roll 1d20+2 reason:initiative`", "Windreth: `/roll 1d20+4 reason:initiative`" — and
+   say "include your +N; I read the total." An ambiguous prompt got mixed bare-`1d20` and
+   `1d20+4` rolls this session and forced hand-added modifiers. Verify the `/roll` form
+   parses before you post it (see [`dm-rules.md`](dm-rules.md) "Verify every slash
+   command's syntax"). **Never roll a PC's die**; adding a player's *fixed, known* init
+   modifier to a die they reported is legitimate adjudication (a deterministic stat, not a
+   re-roll). Collect the totals from **#roll-history and #in-character both** — helper
+   rolls (Guidance, a bare die) land in #roll-history with no queue row.
+3. **Start combat — but know `POST /api/combat/start` auto-rolls ALL initiative, PCs
+   included, with no opt-out** (APP-1), and seats the first turn on the app's own highest
+   roll. So after the call:
+   - **Discard the app's PC rolls** (they are not the players' dice).
+   - **DM-override every combatant** to the players' real totals + the derived order via
+     `POST /api/combat/{enc}/override/combatant/{cb}/initiative` — always send **both**
+     `initiative_roll` and `initiative_order` (omitting order writes `0` → jumps to front,
+     APP-3). Order = roll desc, then DEX-mod desc, then name — the app's own tie-break,
+     applied honestly. Keep any **NPC** auto-roll (a legitimate DM-side die).
+   - **If `start` seated the wrong round-1 actor**, re-seat with a guarded one-off `UPDATE`
+     (no re-seat endpoint exists yet, APP-2) — see the **DB-repair exception** in
+     [`dm-rules.md`](dm-rules.md): a single tightly-`WHERE`d `UPDATE turns SET
+     combatant_id=<real order-1>, movement_remaining_ft=<their `characters.speed_ft`> WHERE
+     id=<the auto-seated turn row>`, verified after; **never a `DELETE`**.
+4. **Verify the seat**: read back round / order / first-turn combatant from the DM Console
+   (or the DB — `encounters.current_turn_id` → `turns`, `combatants.initiative_order` ASC).
+   The displaced combatant should have no turn row and get picked at its correct order next.
+5. **Narrate round 1 + the first actor's turn**, then run the render + stat-leak check (§8).
+
+> **This whole discard → override → seat-repair dance is a workaround for missing product
+> capability**, tracked as **APP-1 / APP-2 / APP-5** in
+> [`combat-ops-improvements.md`](combat-ops-improvements.md). When those ship (player-supplied
+> initiative at `start` + a set-active-turn endpoint + an `/initiative` command) this
+> collapses to a single clean start with zero overrides and no DB write.
+
 ### Resolving a monster's saving throw (AoE save spells)
 
 When a PC casts an **AoE save-for-half** spell (Shatter, Fireball, Thunderwave…)
@@ -209,6 +259,20 @@ Useful tables: `campaigns` (settings JSONB has channel IDs), `characters` +
 (turn order / whose turn), `dm_queue_items` (pending approvals/whispers),
 `action_log`. Or read state from the dashboard combat workspace in the browser.
 
+**DB schema cheat-sheet (column names that cost round-trips — reference before querying):**
+
+- `combatants`: **no speed column** — speed lives on `characters.speed_ft`. Ability scores
+  are `characters.ability_scores` as **scores** (`{"dex":18,…}`), not modifiers.
+  `position_col` is a **letter**, `position_row` is **1-based**.
+- `turns`: the status column is **`status`** (not `is_complete`); also has
+  `movement_remaining_ft`, `attacks_remaining`, `action_used`; `completed_at` is nullable.
+- `encounters.current_turn_id` points at the active `turns.id`.
+- `narration_posts` timestamp column is **`posted_at`** (not `created_at`).
+- `dm_queue_items.status` ∈ `pending | resolved | cancelled`.
+
+The [`combat-ops-improvements.md`](combat-ops-improvements.md) Appendix has the same list
+plus the combat-start / override / turn-engine facts, verified 2026-07-09.
+
 ## 7. Common slash commands (the player types these)
 
 `/register`, `/create-character`, `/character`, `/inventory`, `/equip`,
@@ -245,4 +309,54 @@ id) — e.g. the Hold Person beat is `narration_posts` row at 13:51:18 UTC, msg 
 > DM *mutation* — must go through the dashboard driven by Chrome (claude-in-chrome),
 > never raw SQL / curl. The mutation endpoints are behind `dmAuthMw`; only the
 > logged-in dashboard tab can authenticate. Postgres is for *reads/observation* (§6).
+
+### Render + stat-leak check (run before every post)
+
+Before posting, verify the beat renders **OOC coda first / read-aloud box last** and leaks
+no secret stat. The renderer ([`dashboard/svelte/src/lib/narration.js`](../../dashboard/svelte/src/lib/narration.js))
+splits the source into a message `body` (the OOC coda — renders first) and one or more
+`:::read-aloud` **embeds** (the boxed prose — render last). Don't re-author the check each
+beat — paste the composed source and run this snippet (mentally, or via the browser
+`javascript_tool` against the Narrate preview):
+
+```js
+// paste the exact narration source you're about to post:
+const src = `...OOC coda...\n:::read-aloud\n...boxed prose...\n:::`;
+
+// 1) split body vs read-aloud boxes (mirrors narration.js)
+const lines = src.split('\n');
+const body = [], boxes = []; let box = null;
+for (const ln of lines) {
+  const t = ln.trim();
+  if (t === ':::read-aloud') { box = []; continue; }
+  if (box && t === ':::') { boxes.push(box.join('\n')); box = null; continue; }
+  (box ?? body).push(ln);
+}
+const coda = body.join('\n').trim();
+
+// 2) structure: OOC coda present + non-empty, and ≥1 read-aloud box (OOC-first / box-last)
+const structureOK = coda.length > 0 && boxes.length >= 1;
+
+// 3) stat-leak scan over the WHOLE rendered text.
+//    Leaks = internal numbers/ids. NOT leaks: board coords (D5), targeting short-ids (F1) —
+//    those are table-visible in the tracker and used in /cast target:F1.
+const all = [coda, ...boxes].join('\n');
+const leaks = [
+  [/\bAC\b/i,            'exact AC'],
+  [/\b\d+\s*\/\s*\d+\b/, 'HP fraction (e.g. 15/22)'],
+  [/\bhp\b\s*[:=]?\s*\d/i,'quoted HP number'],
+  [/\bCR\s*\d/i,         'challenge rating'],
+  [/\bhb_[0-9a-f]{6,}/i, 'homebrew creature id'],
+  [/\b[0-9a-f]{8}-[0-9a-f]{4}-/i, 'internal UUID'],
+].filter(([re]) => re.test(all)).map(([, why]) => why);
+
+console.log(structureOK && leaks.length === 0
+  ? 'PASS — OOC-first/box-last, no stat leak'
+  : `FAIL — structure ${structureOK}, leaks: ${leaks.join(', ') || 'none'}`);
+```
+
+**Pass criteria:** structure `true` (a non-empty OOC coda **and** at least one read-aloud
+box) **and** zero leaks. Describe enemy state in prose (*"staggers, bloodied"*) — never quote
+`AC` / an HP fraction / `CR` / an `hb_…` or UUID id. This is the "Enemy HP and AC are secret"
+and OOC-first/box-last rules from [`dm-rules.md`](dm-rules.md) made mechanical.
 </content>

@@ -55,6 +55,24 @@ big-party technique is in [`big-party.md`](big-party.md).
   auth anyway, and the dashboard tab is the authenticated DM session. *Reads /
   observation* via Postgres stay fine (see [`runbook.md`](runbook.md) §6); only
   *acting* must go through the dashboard.
+- **DB-repair exception — a guarded one-off `UPDATE`, never a blind `DELETE`.** When the
+  game reaches a correct state the app has **no endpoint** to express (this session: no
+  way to re-seat the round-1 first actor after `start` mis-seated it), a single hand-run
+  SQL write is the allowed last resort — but only under these guards, every time:
+  1. **Never `DELETE` a live game row without explicit user confirmation.** Prefer a
+     non-destructive `UPDATE` that reshapes the existing row; a `DELETE` (or a
+     `TRUNCATE`/cascade) on encounter / combat / character / turn data is a destructive op
+     and needs the user's go-ahead first (global rule: always ask before destructive DB ops).
+  2. **Scope every write with a tight `WHERE` on ids** — target exactly one known row by its
+     primary key, never a broad predicate that could sweep siblings.
+  3. **Read-verify immediately after** (re-`SELECT` the touched row) to confirm the write did
+     exactly what was intended, and record it in the beat notes.
+  Prefer any real endpoint over SQL; reach for a write only when none exists. (Real
+  correction 07-09: the seat repair was one tightly-`WHERE`d `UPDATE turns SET
+  combatant_id=…, movement_remaining_ft=… WHERE id=<the one auto-seated turn row>` on a
+  fresh, un-acted row — no `DELETE`, verified after. That is the correct bar. When APP-1 /
+  APP-2 ship — see [`combat-ops-improvements.md`](combat-ops-improvements.md) — this repair
+  is retired entirely.)
 - **Wrap #the-story narration in a read-aloud block.** When posting DM story prose
   to #the-story via the Narrate editor, wrap the prose in a `:::read-aloud … :::`
   block (use the editor's **Insert Read-Aloud Block** button). See
@@ -89,7 +107,11 @@ big-party technique is in [`big-party.md`](big-party.md).
   or *"AC is 12"*. Confirm hit/miss outcomes (a hit implies you cleared its AC)
   without stating the AC value, and never hand out the precise HP fraction. (Real
   correction: a damage whisper-reply once leaked a ghoul's `15/22` HP **and** `AC
-  12` to the player — exactly the kind of slip this rule prevents.)
+  12` to the player — exactly the kind of slip this rule prevents.) Before you post a
+  narration beat, run the **render + stat-leak check** recipe in
+  [`runbook.md`](runbook.md) §8 — it confirms OOC-first / read-aloud-box-last and scans the
+  rendered text for a leaked `AC` / HP fraction / `CR` / internal creature id, so you don't
+  re-author the check each beat.
 - **Don't narrate player choices.** Player-controlled PCs decide and speak for
   themselves; narrate their *arrival / the world's reaction*, not their decisions or
   dialogue. (See per-PC sheets in [`party/`](party/).)
@@ -109,6 +131,16 @@ big-party technique is in [`big-party.md`](big-party.md).
   read-aloud box **last**, so the coda is the lead-in, not the reveal. (Player feedback
   07-02: *"I like the way you use OOC nudge and hint to players on what they can do and
   roll — do that more often, especially if an RP phase is dragging."*)
+- **Verify every slash command's syntax BEFORE you put it in a coda.** Any exact `/command`
+  you advertise to players must first be confirmed against the real command table —
+  grep `internal/discord/commands.go` for the command name and its option names and
+  match the argument shape exactly. A wrong form doesn't fail silently for the player: it
+  throws a private "Couldn't read that" error and stalls them. (Real correction 07-09: the
+  initiative coda told players `/roll d20+2` — the exact form the parser then rejected
+  (bare `d` with no count); a player who typed it got the error. The parser was later fixed
+  in `e967364`, but the rule stands: **confirm the syntax, then prompt.** The
+  verify-before-prompt done for `/move` / `/bonus` / `/action` later that same cycle is the
+  standard — make it the rule, not the exception.)
 - **Write the story in plain, simple English.** The players asked for this directly. Keep
   #the-story narration easy to read: pick the common word over the fancy one, keep sentences
   short, favor concrete images over ornate phrasing, and drop the archaic / purple / clause-

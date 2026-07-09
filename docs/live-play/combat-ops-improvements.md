@@ -141,7 +141,12 @@ one guarded DB write. Most of that is avoidable.
 
 ## Part B — DM harness improvements (how the agent should operate)
 
-### DMH-1 (P1) — Verify slash-command syntax **before** prompting players
+> **Status (2026-07-09): Part B encoded.** DMH-1/-4/-6 → [`dm-rules.md`](dm-rules.md);
+> DMH-2/-3/-6/-7 → [`runbook.md`](runbook.md); DMH-5 noted as a deferred one-off in
+> [`README.md`](README.md) (banner surgery held back — a concurrent DM agent was live on
+> `game-state.md`). Part A (APP-1…8) is still open for the product track.
+
+### DMH-1 (P1) — Verify slash-command syntax **before** prompting players — ✅ DONE (encoded in [`dm-rules.md`](dm-rules.md), "At the table" → *Verify every slash command's syntax BEFORE you put it in a coda*)
 - **What went wrong:** the Beat-18 initiative prompt told players `/roll d20+2` — the exact
   broken form. A player who tried it got a private "Couldn't read" error.
 - **Fix:** before putting any exact slash command in an OOC coda, grep
@@ -150,7 +155,7 @@ one guarded DB write. Most of that is avoidable.
   it the standard, not the exception.)
 - **Encode in:** [`dm-rules.md`](dm-rules.md) ("Nudging with OOC hints" / command-menu rule).
 
-### DMH-2 (P1) — Prompt initiative with exact, unambiguous syntax
+### DMH-2 (P1) — Prompt initiative with exact, unambiguous syntax — ✅ DONE (encoded in [`runbook.md`](runbook.md) §4 "Starting a live combat", step 2)
 - **What went wrong:** Vale and Forge rolled bare `1d20` (no modifier); Windreth rolled
   `1d20+4`. The inconsistency came from an ambiguous prompt (and the roll bug). The DM then
   had to add the missing modifiers by hand.
@@ -161,7 +166,7 @@ one guarded DB write. Most of that is avoidable.
   stays within "never roll a PC's die" — but avoid needing to by prompting cleanly.
 - **Encode in:** [`runbook.md`](runbook.md) (combat-start how-to).
 
-### DMH-3 (P1) — Follow the documented combat-start procedure; do not re-investigate
+### DMH-3 (P1) — Follow the documented combat-start procedure; do not re-investigate — ✅ DONE (encoded in [`runbook.md`](runbook.md) §4 "Starting a live combat" checklist, linking the Appendix + memory)
 - **What went wrong (cost, not error):** the start body shape, `Position.Col` letter format,
   the override contract, and the turn-ordering rules were all re-derived live via subagents
   and file reads.
@@ -171,7 +176,7 @@ one guarded DB write. Most of that is avoidable.
 - **Encode in:** [`runbook.md`](runbook.md) — add a "Start a live combat" checklist that
   links the Appendix.
 
-### DMH-4 (P2) — Minimize live DB writes; non-destructive UPDATE, never a blind DELETE
+### DMH-4 (P2) — Minimize live DB writes; non-destructive UPDATE, never a blind DELETE — ✅ DONE (encoded in [`dm-rules.md`](dm-rules.md), "How DM actions must be performed" → *DB-repair exception*)
 - **What went right (keep it):** the seat repair was a single, tightly WHERE-scoped
   `UPDATE` on a fresh, un-acted turn row — no `DELETE`, verified after. That is the correct
   bar for the standing "guarded one-off repair when no endpoint exists" allowance.
@@ -180,7 +185,7 @@ one guarded DB write. Most of that is avoidable.
   APP-1/APP-2 ship, drop the repair entirely.
 - **Encode in:** [`dm-rules.md`](dm-rules.md) (the DB-repair exception clause).
 
-### DMH-5 (P2) — Refactor the `game-state.md` banner (concurrent-edit hazard)
+### DMH-5 (P2) — Refactor the `game-state.md` banner (concurrent-edit hazard) — ◻ NOTED, refactor DEFERRED (cleanup task recorded in [`README.md`](README.md) resume item 3; the actual banner surgery is left for a quiet moment — a concurrent DM agent was holding `game-state.md` when this was picked up, and blind-editing that live file is the exact clobber hazard this item warns about)
 - **Problem:** the `_Last updated:` banner is a single ~5 KB line that accretes every beat.
   It is risky to edit surgically and clobber-prone when a concurrent agent is also writing
   the live-play docs; this session the banner's current-state pointer was nearly edited
@@ -190,14 +195,14 @@ one guarded DB write. Most of that is avoidable.
   pattern). A structural cleanup a future agent can do in isolation.
 - **Encode in:** a one-off cleanup task; note in [`README.md`](README.md) resume order.
 
-### DMH-6 (P3) — Package the render-verification + stat-leak check
+### DMH-6 (P3) — Package the render-verification + stat-leak check — ✅ DONE (reusable snippet + pass criteria in [`runbook.md`](runbook.md) §8 "Render + stat-leak check"; pointer added in [`dm-rules.md`](dm-rules.md) "Enemy HP and AC are secret")
 - **Problem:** after every narration the DM hand-writes a JS structural check (embed follows
   content, reveal present, no `AC/HP/CR/id` leak). Re-authoring it each time is wasteful and
   drift-prone.
 - **Fix:** capture the exact snippet + the pass criteria as a reusable checklist in
   [`dm-rules.md`](dm-rules.md) "Keep the record straight" / a `runbook.md` recipe.
 
-### DMH-7 (P3) — Keep a DB schema cheat-sheet for DM reads
+### DMH-7 (P3) — Keep a DB schema cheat-sheet for DM reads — ✅ DONE (cheat-sheet added to [`runbook.md`](runbook.md) §6; the Appendix below remains the fuller reference)
 - **Problem:** several read queries failed on column-name guesses (`is_complete`,
   `speed_ft`, `speed`), costing round-trips.
 - **Fix:** the corrected names are in the Appendix; reference it before querying.
