@@ -159,12 +159,26 @@ type Position struct {
 	Row int32  `json:"row"`
 }
 
+// InitiativeInput is a caller-supplied initiative for one player character at
+// combat start (APP-1). Roll is the player's own total (their reported d20 plus
+// their modifier); the app uses it verbatim and does NOT auto-roll that PC.
+// Order optionally pins the combatant to a specific 1-based seat; when nil the
+// seat is derived from the rolls (roll DESC → DEX → name → uuid).
+type InitiativeInput struct {
+	Roll  int32  `json:"roll"`
+	Order *int32 `json:"order,omitempty"`
+}
+
 // StartCombatInput holds parameters for the StartCombat flow.
 type StartCombatInput struct {
 	TemplateID         uuid.UUID              `json:"template_id"`
 	CharacterIDs       []uuid.UUID            `json:"character_ids"`
 	CharacterPositions map[uuid.UUID]Position `json:"character_positions"`
 	SurprisedShortIDs  []string               `json:"surprised_short_ids,omitempty"`
+	// CharacterInitiatives, keyed by character UUID, supplies player-authoritative
+	// initiative for PCs so the DM never rolls a player's die (APP-1). Combatants
+	// without an entry (NPCs, and any un-supplied PC) auto-roll as before.
+	CharacterInitiatives map[uuid.UUID]InitiativeInput `json:"character_initiatives,omitempty"`
 }
 
 // StartCombatResult holds the result of the StartCombat flow.

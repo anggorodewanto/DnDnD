@@ -75,6 +75,59 @@ type InitiativeEntry struct {
 	DisplayName string
 	Roll        int
 	DexMod      int
+	// ExplicitOrder, when non-nil, pins this combatant to a specific 1-based
+	// seat (APP-1 player-authoritative initiative). nil = derive the seat from
+	// the rolls via SortByInitiative.
+	ExplicitOrder *int32
+}
+
+// ErrInvalidInitiativeOrder is returned when caller-supplied initiative orders
+// are duplicated or fall outside [1, N]. Handlers surface it as a 400.
+var ErrInvalidInitiativeOrder = errors.New("invalid initiative order")
+
+// AssignInitiativeOrder returns entries in final seat order (index 0 = order 1).
+// Entries without an ExplicitOrder are ranked by SortByInitiative (roll DESC →
+// DEX → name → uuid) and fill the seats not claimed by explicit orders. Explicit
+// orders must be unique and within [1, len(entries)] or ErrInvalidInitiativeOrder
+// is returned.
+func AssignInitiativeOrder(entries []InitiativeEntry) ([]InitiativeEntry, error) {
+	n := len(entries)
+	seats := make([]*InitiativeEntry, n)
+	for i := range entries {
+		e := &entries[i]
+		if e.ExplicitOrder == nil {
+			continue
+		}
+		ord := int(*e.ExplicitOrder)
+		if ord < 1 || ord > n {
+			return nil, fmt.Errorf("%w: seat %d out of range [1,%d]", ErrInvalidInitiativeOrder, ord, n)
+		}
+		if seats[ord-1] != nil {
+			return nil, fmt.Errorf("%w: seat %d claimed twice", ErrInvalidInitiativeOrder, ord)
+		}
+		seats[ord-1] = e
+	}
+
+	// Rank the un-pinned entries and drop them into the open seats in order.
+	var rest []InitiativeEntry
+	for i := range entries {
+		if entries[i].ExplicitOrder == nil {
+			rest = append(rest, entries[i])
+		}
+	}
+	SortByInitiative(rest)
+
+	out := make([]InitiativeEntry, n)
+	ri := 0
+	for i := range n {
+		if seats[i] != nil {
+			out[i] = *seats[i]
+			continue
+		}
+		out[i] = rest[ri]
+		ri++
+	}
+	return out, nil
 }
 
 // CombatCondition represents a condition applied to a combatant.
@@ -288,9 +341,28 @@ func (s *Service) getInitiativeModifiers(ctx context.Context, c refdata.Combatan
 	return 0, exhaustionPenalty, nil
 }
 
+// suppliedInitiative looks up a combatant's caller-supplied initiative by its
+// character UUID. NPCs (no character) never match, so they always auto-roll.
+func suppliedInitiative(c refdata.Combatant, supplied map[uuid.UUID]InitiativeInput) (InitiativeInput, bool) {
+	if len(supplied) == 0 || !c.CharacterID.Valid {
+		return InitiativeInput{}, false
+	}
+	in, ok := supplied[c.CharacterID.UUID]
+	return in, ok
+}
+
 // RollInitiative rolls initiative for all combatants in an encounter, sorts them,
 // assigns initiative_order, sets round to 1 and status to "active".
 func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, roller *dice.Roller) ([]refdata.Combatant, error) {
+	return s.rollInitiative(ctx, encounterID, roller, nil)
+}
+
+// rollInitiative is the shared implementation. supplied, keyed by character
+// UUID, carries player-authoritative initiative (APP-1): for a combatant whose
+// character is present, the given total is used verbatim and the auto-roll is
+// skipped; every other combatant (NPCs, un-supplied PCs) auto-rolls as before.
+// An optional per-entry Order pins that combatant's seat.
+func (s *Service) rollInitiative(ctx context.Context, encounterID uuid.UUID, roller *dice.Roller, supplied map[uuid.UUID]InitiativeInput) ([]refdata.Combatant, error) {
 	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		return nil, fmt.Errorf("listing combatants: %w", err)
@@ -312,23 +384,33 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 
 	entries := make([]InitiativeEntry, len(rollable))
 	for i, c := range rollable {
+		// DEX mod is always needed for the tie-break, even when the roll total
+		// is caller-supplied.
 		dexMod, rollBonus, err := s.getInitiativeModifiers(ctx, c)
 		if err != nil {
 			return nil, err
 		}
+
+		entry := InitiativeEntry{CombatantID: c.ID, DisplayName: c.DisplayName, DexMod: dexMod}
+		if in, ok := suppliedInitiative(c, supplied); ok {
+			entry.Roll = int(in.Roll)
+			entry.ExplicitOrder = in.Order
+			entries[i] = entry
+			continue
+		}
+
 		result, err := roller.RollD20(dexMod+rollBonus, dice.Normal)
 		if err != nil {
 			return nil, fmt.Errorf("rolling initiative for %s: %w", c.DisplayName, err)
 		}
-		entries[i] = InitiativeEntry{
-			CombatantID: c.ID,
-			DisplayName: c.DisplayName,
-			Roll:        result.Total,
-			DexMod:      dexMod,
-		}
+		entry.Roll = result.Total
+		entries[i] = entry
 	}
 
-	SortByInitiative(entries)
+	entries, err = AssignInitiativeOrder(entries)
+	if err != nil {
+		return nil, err
+	}
 
 	result := make([]refdata.Combatant, len(entries))
 	for i, e := range entries {

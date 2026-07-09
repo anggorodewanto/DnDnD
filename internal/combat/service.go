@@ -69,6 +69,7 @@ type Store interface {
 	GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 	CompleteTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	ReseatTurn(ctx context.Context, arg refdata.ReseatTurnParams) (refdata.Turn, error)
 
 	// Action Log. Phase 119: errors moved out of action_log into the
 	// dedicated error_log table, so action_log columns turn_id/encounter_id/
@@ -1209,8 +1210,9 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		return StartCombatResult{}, err
 	}
 
-	// Step 4: Roll initiative
-	sortedCombatants, err := s.RollInitiative(ctx, enc.ID, roller)
+	// Step 4: Roll initiative. Supplied PC values (APP-1) are used verbatim;
+	// only combatants without one auto-roll.
+	sortedCombatants, err := s.rollInitiative(ctx, enc.ID, roller, input.CharacterInitiatives)
 	if err != nil {
 		return StartCombatResult{}, fmt.Errorf("rolling initiative: %w", err)
 	}

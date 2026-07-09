@@ -38,10 +38,18 @@ one guarded DB write. Most of that is avoidable.
 
 ## Part A — App improvements
 
-### APP-1 (P1) — Player-authoritative initiative at combat start
-- **Problem:** `POST /api/combat/start` always auto-rolls initiative for **all** combatants,
-  PCs included, with no opt-out, and seats the first turn on the app's highest roll. There
-  is no way to start combat from player-supplied initiative values.
+### APP-1 (P1) — Player-authoritative initiative at combat start — ✅ DONE 2026-07-09
+- **Shipped:** `POST /api/combat/start` now accepts an optional `character_initiatives`
+  map (`{ "<charID>": { "roll": 19, "order": 1 } }`, order optional). Supplied PCs skip the
+  auto-roll and their reported total is used verbatim; only combatants without an entry
+  (NPCs, un-supplied PCs) auto-roll. Seat order is derived from the rolls (roll → DEX →
+  name → uuid via the new pure `AssignInitiativeOrder`) or pinned by the optional `order`.
+  Malformed orders (non-positive / duplicated) 400 before any DB write; an out-of-range
+  seat is rejected in `AssignInitiativeOrder`. `RollInitiative` kept its signature via a
+  thin wrapper over the new private `rollInitiative(…, supplied)`.
+- **Problem (original):** `POST /api/combat/start` always auto-rolls initiative for **all**
+  combatants, PCs included, with no opt-out, and seats the first turn on the app's highest
+  roll. There is no way to start combat from player-supplied initiative values.
 - **Evidence:** this session the app auto-rolled Windreth to 22 and seated him first; the DM
   had to override all four combatants to the players' real totals (Forge 19 / Windreth 14 /
   Vale 14 / Follower 5) and then repair the seat.
@@ -53,9 +61,20 @@ one guarded DB write. Most of that is avoidable.
 - **Acceptance:** start with supplied PC inits → tracker order and `first_turn` match the
   supplied values with **zero** override calls and **no** DB touch.
 
-### APP-2 (P1) — A re-seat / set-active-turn capability
-- **Problem:** the initiative-override writes `initiative_order` but never moves the
-  current-turn pointer, and no endpoint rewinds or re-seats the active turn (only
+### APP-2 (P1) — A re-seat / set-active-turn capability — ✅ DONE 2026-07-09
+- **Shipped:** new `POST /api/combat/{enc}/set-active-turn { combatant_id }` (chose design
+  variant a). It reseats **in place**: guards (encounter has an un-acted active turn; target
+  is a living, non-summon combatant in the encounter that hasn't already acted this round;
+  target ≠ current), then reassigns the current active turn row to the target via a new
+  `ReseatTurn` sqlc query that resets every per-turn column (movement/attacks/action flags/
+  timer). Because the row is reassigned, `current_turn_id` already points at it — no pointer
+  write, no double active row, no FK/delete hazard. The displaced combatant loses its turn
+  row and is picked again at its true initiative order. Guard conflicts → 409, missing target
+  → 404; route added to BOTH `RegisterRoutes` + `mountCombatDashboardRoutes` (parity test
+  green). Enemy-turn-ready stub hygiene handled; zone/summon/death-save side effects
+  intentionally out of scope for a pre-action seat-repair.
+- **Problem (original):** the initiative-override writes `initiative_order` but never moves
+  the current-turn pointer, and no endpoint rewinds or re-seats the active turn (only
   `advance-turn` forward and `undo-last-action` for in-turn effects). So when `start` seats
   the wrong first actor, the only fix is a raw DB write.
 - **Evidence:** `UPDATE turns SET combatant_id=<Forge>, movement_remaining_ft=25 WHERE
@@ -144,7 +163,8 @@ one guarded DB write. Most of that is avoidable.
 > **Status (2026-07-09): Part B encoded.** DMH-1/-4/-6 → [`dm-rules.md`](dm-rules.md);
 > DMH-2/-3/-6/-7 → [`runbook.md`](runbook.md); DMH-5 noted as a deferred one-off in
 > [`README.md`](README.md) (banner surgery held back — a concurrent DM agent was live on
-> `game-state.md`). Part A (APP-1…8) is still open for the product track.
+> `game-state.md`). **Part A: APP-1 + APP-2 DONE 2026-07-09** (together they retire the
+> discard/override/DB-repair dance); APP-3…8 still open for the product track.
 
 ### DMH-1 (P1) — Verify slash-command syntax **before** prompting players — ✅ DONE (encoded in [`dm-rules.md`](dm-rules.md), "At the table" → *Verify every slash command's syntax BEFORE you put it in a coda*)
 - **What went wrong:** the Beat-18 initiative prompt told players `/roll d20+2` — the exact

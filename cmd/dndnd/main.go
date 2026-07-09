@@ -518,6 +518,8 @@ func mountCombatDashboardRoutes(
 	}
 	dm := combat.NewDMDashboardHandlerWithDeps(svc, db, poster)
 	router.Post("/api/combat/{encounterID}/advance-turn", dm.AdvanceTurn)
+	// APP-2: re-seat the active turn (in-app seat-repair).
+	router.Post("/api/combat/{encounterID}/set-active-turn", dm.SetActiveTurn)
 	router.Get("/api/combat/{encounterID}/pending-actions", dm.ListPendingActions)
 	router.Post("/api/combat/{encounterID}/pending-actions/{actionID}/resolve", dm.ResolvePendingAction)
 	router.Get("/api/combat/{encounterID}/action-log", dm.ListActionLogViewer)

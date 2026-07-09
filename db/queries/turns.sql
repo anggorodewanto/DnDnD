@@ -106,3 +106,34 @@ WHERE encounter_id = $1
   AND status IN ('completed', 'skipped')
 ORDER BY completed_at DESC
 LIMIT 1;
+
+-- name: ReseatTurn :one
+-- Reassigns an existing (un-acted) active turn row to a different combatant and
+-- resets its per-turn state, so the current-turn pointer moves without a raw DB
+-- write (APP-2). The displaced combatant loses its turn row and is picked again
+-- at its true initiative order later in the round.
+UPDATE turns SET
+    combatant_id = $2,
+    status = 'active',
+    movement_remaining_ft = $3,
+    attacks_remaining = $4,
+    started_at = $5,
+    timeout_at = $6,
+    completed_at = NULL,
+    action_used = false,
+    bonus_action_used = false,
+    bonus_action_spell_cast = false,
+    action_spell_cast = false,
+    reaction_used = false,
+    free_interact_used = false,
+    has_disengaged = false,
+    action_surged = false,
+    has_stood_this_turn = false,
+    nudge_sent_at = NULL,
+    warning_sent_at = NULL,
+    dm_decision_sent_at = NULL,
+    dm_decision_deadline = NULL,
+    wait_extended = false,
+    auto_resolved = false
+WHERE id = $1
+RETURNING *;

@@ -68,10 +68,11 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 
 // startCombatRequest is the JSON request body for starting combat.
 type startCombatRequest struct {
-	TemplateID                 string              `json:"template_id"`
-	CharacterIDs               []string            `json:"character_ids"`
-	CharacterPositions         map[string]Position `json:"character_positions"`
-	SurprisedCombatantShortIDs []string            `json:"surprised_combatant_short_ids,omitempty"`
+	TemplateID                 string                     `json:"template_id"`
+	CharacterIDs               []string                   `json:"character_ids"`
+	CharacterPositions         map[string]Position        `json:"character_positions"`
+	SurprisedCombatantShortIDs []string                   `json:"surprised_combatant_short_ids,omitempty"`
+	CharacterInitiatives       map[string]InitiativeInput `json:"character_initiatives,omitempty"`
 }
 
 // startCombatResponse is the JSON response for the start combat flow.
@@ -199,6 +200,27 @@ func toCombatantResponses(combatants []refdata.Combatant) []combatantResponse {
 	return resp
 }
 
+// validateSuppliedOrders rejects caller-supplied initiative seats that are
+// non-positive or claimed by more than one character. It runs before any DB
+// write so a malformed payload cannot leave a half-created encounter behind.
+func validateSuppliedOrders(inits map[uuid.UUID]InitiativeInput) error {
+	seen := make(map[int32]bool, len(inits))
+	for _, in := range inits {
+		if in.Order == nil {
+			continue
+		}
+		ord := *in.Order
+		if ord < 1 {
+			return fmt.Errorf("%w: seat %d must be >= 1", ErrInvalidInitiativeOrder, ord)
+		}
+		if seen[ord] {
+			return fmt.Errorf("%w: seat %d claimed twice", ErrInvalidInitiativeOrder, ord)
+		}
+		seen[ord] = true
+	}
+	return nil
+}
+
 // StartCombat handles POST /api/combat/start.
 func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 	var req startCombatRequest
@@ -233,15 +255,38 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		positions[id] = v
 	}
 
+	inits := make(map[uuid.UUID]InitiativeInput, len(req.CharacterInitiatives))
+	for k, v := range req.CharacterInitiatives {
+		id, err := uuid.Parse(k)
+		if err != nil {
+			http.Error(w, "invalid character initiative key: "+k, http.StatusBadRequest)
+			return
+		}
+		inits[id] = v
+	}
+	// Reject malformed explicit orders (non-positive or duplicated) up front, so
+	// the common bad-input cases 400 before StartCombat commits an encounter. The
+	// upper bound (order <= total combatants) is only knowable after the roster
+	// is built and is enforced in AssignInitiativeOrder.
+	if err := validateSuppliedOrders(inits); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	input := StartCombatInput{
-		TemplateID:         templateID,
-		CharacterIDs:       charIDs,
-		CharacterPositions: positions,
-		SurprisedShortIDs:  req.SurprisedCombatantShortIDs,
+		TemplateID:           templateID,
+		CharacterIDs:         charIDs,
+		CharacterPositions:   positions,
+		SurprisedShortIDs:    req.SurprisedCombatantShortIDs,
+		CharacterInitiatives: inits,
 	}
 
 	result, err := h.svc.StartCombat(r.Context(), input, h.roller)
 	if err != nil {
+		if errors.Is(err, ErrInvalidInitiativeOrder) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -40,6 +40,7 @@ type mockStore struct {
 	getTurnFn                          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	getActiveTurnByEncounterIDFn       func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 	completeTurnFn                     func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	reseatTurnFn                       func(ctx context.Context, arg refdata.ReseatTurnParams) (refdata.Turn, error)
 	createActionLogFn                  func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
 	listActionLogByEncounterIDFn       func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
 	listActionLogByTurnIDFn            func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
@@ -341,6 +342,9 @@ func (m *mockStore) GetActiveTurnByEncounterID(ctx context.Context, encounterID 
 }
 func (m *mockStore) CompleteTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
 	return m.completeTurnFn(ctx, id)
+}
+func (m *mockStore) ReseatTurn(ctx context.Context, arg refdata.ReseatTurnParams) (refdata.Turn, error) {
+	return m.reseatTurnFn(ctx, arg)
 }
 func (m *mockStore) CreateActionLog(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
 	if m.createActionLogFn == nil {
@@ -901,6 +905,9 @@ func defaultMockStore() *mockStore {
 		},
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, Status: "active"}, nil
+		},
+		reseatTurnFn: func(ctx context.Context, arg refdata.ReseatTurnParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID, CombatantID: arg.CombatantID, Status: "active", MovementRemainingFt: arg.MovementRemainingFt, AttacksRemaining: arg.AttacksRemaining}, nil
 		},
 		completeTurnFn: func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: id, Status: "completed"}, nil

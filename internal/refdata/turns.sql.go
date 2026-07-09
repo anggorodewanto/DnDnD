@@ -624,6 +624,88 @@ func (q *Queries) ListTurnsTimedOut(ctx context.Context) ([]Turn, error) {
 	return items, nil
 }
 
+const reseatTurn = `-- name: ReseatTurn :one
+UPDATE turns SET
+    combatant_id = $2,
+    status = 'active',
+    movement_remaining_ft = $3,
+    attacks_remaining = $4,
+    started_at = $5,
+    timeout_at = $6,
+    completed_at = NULL,
+    action_used = false,
+    bonus_action_used = false,
+    bonus_action_spell_cast = false,
+    action_spell_cast = false,
+    reaction_used = false,
+    free_interact_used = false,
+    has_disengaged = false,
+    action_surged = false,
+    has_stood_this_turn = false,
+    nudge_sent_at = NULL,
+    warning_sent_at = NULL,
+    dm_decision_sent_at = NULL,
+    dm_decision_deadline = NULL,
+    wait_extended = false,
+    auto_resolved = false
+WHERE id = $1
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+type ReseatTurnParams struct {
+	ID                  uuid.UUID    `json:"id"`
+	CombatantID         uuid.UUID    `json:"combatant_id"`
+	MovementRemainingFt int32        `json:"movement_remaining_ft"`
+	AttacksRemaining    int32        `json:"attacks_remaining"`
+	StartedAt           sql.NullTime `json:"started_at"`
+	TimeoutAt           sql.NullTime `json:"timeout_at"`
+}
+
+// Reassigns an existing (un-acted) active turn row to a different combatant and
+// resets its per-turn state, so the current-turn pointer moves without a raw DB
+// write (APP-2). The displaced combatant loses its turn row and is picked again
+// at its true initiative order later in the round.
+func (q *Queries) ReseatTurn(ctx context.Context, arg ReseatTurnParams) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, reseatTurn,
+		arg.ID,
+		arg.CombatantID,
+		arg.MovementRemainingFt,
+		arg.AttacksRemaining,
+		arg.StartedAt,
+		arg.TimeoutAt,
+	)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
 const resetTurnNudgeAndWarning = `-- name: ResetTurnNudgeAndWarning :one
 UPDATE turns SET nudge_sent_at = NULL, warning_sent_at = NULL, dm_decision_sent_at = NULL, dm_decision_deadline = NULL WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `

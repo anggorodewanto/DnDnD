@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,6 +49,8 @@ func NewDMDashboardHandlerWithDeps(svc *Service, db TxBeginner, poster CombatLog
 func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/combat", func(r chi.Router) {
 		r.Post("/{encounterID}/advance-turn", h.AdvanceTurn)
+		// APP-2: re-seat the active turn (in-app seat-repair).
+		r.Post("/{encounterID}/set-active-turn", h.SetActiveTurn)
 		r.Get("/{encounterID}/pending-actions", h.ListPendingActions)
 		r.Post("/{encounterID}/pending-actions/{actionID}/resolve", h.ResolvePendingAction)
 		r.Get("/{encounterID}/action-log", h.ListActionLogViewer)
@@ -158,6 +161,64 @@ func (h *DMDashboardHandler) AdvanceTurn(w http.ResponseWriter, r *http.Request)
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	writeJSON(w, http.StatusOK, turnInfoResponse{
+		TurnID:      info.Turn.ID.String(),
+		CombatantID: info.CombatantID.String(),
+		RoundNumber: info.RoundNumber,
+		Skipped:     info.Skipped,
+	})
+}
+
+// setActiveTurnRequest is the JSON body for POST .../set-active-turn.
+type setActiveTurnRequest struct {
+	CombatantID string `json:"combatant_id"`
+}
+
+// SetActiveTurn handles POST /api/combat/{encounterID}/set-active-turn (APP-2):
+// re-seat the active turn onto the given combatant. This is the in-app
+// replacement for the manual DB seat-repair used when combat-start seated the
+// wrong first actor. Guard conflicts return 409; a missing target returns 404.
+func (h *DMDashboardHandler) SetActiveTurn(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := parseEncounterID(r)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	var req setActiveTurnRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	combatantID, err := uuid.Parse(req.CombatantID)
+	if err != nil {
+		http.Error(w, "invalid combatant_id", http.StatusBadRequest)
+		return
+	}
+
+	info, err := h.svc.ReseatActiveTurn(r.Context(), encounterID, combatantID)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrNoActiveTurn),
+			errors.Is(err, ErrAlreadyActiveTurn),
+			errors.Is(err, ErrTurnAlreadyActed),
+			errors.Is(err, ErrCombatantAlreadyActed),
+			errors.Is(err, ErrCombatantNotAlive),
+			errors.Is(err, ErrCombatantNotInEncounter):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if h.poster != nil {
+		h.poster.PostCorrection(r.Context(), encounterID,
+			"⚠️ **DM Correction:** active turn re-seated.")
 	}
 
 	writeJSON(w, http.StatusOK, turnInfoResponse{
