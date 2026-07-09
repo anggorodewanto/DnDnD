@@ -504,6 +504,9 @@ func TestOverrideCombatantInitiative(t *testing.T) {
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{ID: id, DisplayName: "Fighter", InitiativeRoll: 12, InitiativeOrder: 3}, nil
 		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{{ID: combatantID, InitiativeOrder: 3}}, nil
+		},
 		updateCombatantInitiativeFn: func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
 			got = arg
 			return refdata.Combatant{ID: arg.ID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder}, nil
@@ -804,6 +807,11 @@ func turnOnlyStore(turnID, encounterID uuid.UUID) *mockStore {
 	return &mockStore{
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
+		},
+		// Benign default so the APP-3 duplicate-order check on the initiative
+		// override has a list to scan (no combatants → never a conflict).
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
 		},
 	}
 }

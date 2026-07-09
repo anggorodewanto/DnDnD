@@ -19,9 +19,29 @@ const (
 	maxRollDieSides  = 1000
 )
 
+// rollExampleExprs is the single source of truth for the dice expressions
+// advertised to players. Every entry is asserted parseable by
+// TestAdvertisedRollExamples_AllParse, so the forms shown in help can never
+// drift from what ParseExpression accepts (the /roll d20 regression, e967364).
+var rollExampleExprs = []string{"1d20+4", "2d6", "d20", "4d6+2"}
+
 // rollExamples is appended to error replies so a player who fat-fingers an
-// expression sees valid forms immediately.
-const rollExamples = "try `1d20+4`, `2d6`, `d20`, or `4d6+2`."
+// expression sees valid forms immediately. Built from rollExampleExprs so the
+// advertised forms stay in lockstep with the tested set.
+var rollExamples = "try " + joinRollExamples(rollExampleExprs) + "."
+
+// joinRollExamples renders the examples as a backtick-quoted, comma-separated
+// list with an Oxford "or" before the last (e.g. "`a`, `b`, or `c`").
+func joinRollExamples(exprs []string) string {
+	quoted := make([]string, len(exprs))
+	for i, e := range exprs {
+		quoted[i] = "`" + e + "`"
+	}
+	if len(quoted) < 2 {
+		return strings.Join(quoted, "")
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + ", or " + quoted[len(quoted)-1]
+}
 
 // rollUsageHelp is shown when no dice expression is supplied.
 const rollUsageHelp = "🎲 Tell me what to roll — e.g. `/roll dice:1d20+4` or `/roll dice:2d6 reason:fire damage`."

@@ -86,6 +86,22 @@ func TestHandler_CreateCreature_UnknownField(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// APP-7: a decode type mismatch names the offending field.
+func TestHandler_CreateCreature_TypeMismatchNamesField(t *testing.T) {
+	r := newTestRouter(newFakeStore())
+	req := httptest.NewRequest(http.MethodPost, "/api/homebrew/creatures?campaign_id="+uuid.NewString(),
+		strings.NewReader(`{"name": 123}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "name", "the offending field is named")
+	assert.Contains(t, body, "wrong type", "the friendly field-level phrasing is used")
+	assert.NotContains(t, body, "UpsertCreatureParams", "the internal Go type must not leak")
+}
+
 func TestHandler_CreateCreature_EmptyName(t *testing.T) {
 	r := newTestRouter(newFakeStore())
 	rec := do(t, r, http.MethodPost, "/api/homebrew/creatures?campaign_id="+uuid.NewString(),

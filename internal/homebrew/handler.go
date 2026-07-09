@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/httpjson"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -191,7 +192,7 @@ func decodeBody(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return fmt.Errorf("invalid request body: %w", err)
+		return errors.New(httpjson.DecodeError(err))
 	}
 	return nil
 }

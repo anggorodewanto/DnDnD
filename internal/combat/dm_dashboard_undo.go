@@ -12,6 +12,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/httpjson"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -295,11 +296,23 @@ type overrideConditionsRequest struct {
 	Reason     string          `json:"reason"`
 }
 
+// overrideInitiativeRequest is the JSON body for
+// POST .../override/combatant/{combatantID}/initiative.
+//
+// InitiativeRoll and InitiativeOrder are pointers so an omitted field means
+// "leave that value unchanged" (APP-3). Before this, both were plain int32, so
+// omitting initiative_order silently wrote 0 — jumping that combatant to the
+// front of the order.
 type overrideInitiativeRequest struct {
-	InitiativeRoll  int32  `json:"initiative_roll"`
-	InitiativeOrder int32  `json:"initiative_order"`
+	InitiativeRoll  *int32 `json:"initiative_roll"`
+	InitiativeOrder *int32 `json:"initiative_order"`
 	Reason          string `json:"reason"`
 }
+
+// errOverrideConflict marks an override request that conflicts with existing
+// combat state (e.g. a duplicate initiative_order). runOverride maps it to a
+// 409 instead of the default 500.
+var errOverrideConflict = errors.New("override conflict")
 
 // overrideSlotsRequest is the JSON body for POST .../override/character/{characterID}/slots.
 // A nil SpellSlots or PactMagicSlots pointer means "leave that store untouched";
@@ -373,7 +386,7 @@ func (h *DMDashboardHandler) runOverride(
 		return
 	}
 	if err := decode(); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		http.Error(w, httpjson.DecodeError(err), http.StatusBadRequest)
 		return
 	}
 	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
@@ -384,7 +397,11 @@ func (h *DMDashboardHandler) runOverride(
 	if err := h.withTurnLock(r.Context(), turn.ID, func() error {
 		return apply(r.Context(), encounterID, combatantID, turn.ID)
 	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, errOverrideConflict) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -514,6 +531,24 @@ func (h *DMDashboardHandler) OverrideCombatantConditions(w http.ResponseWriter, 
 	)
 }
 
+// rejectDuplicateInitiativeOrder returns errOverrideConflict when another
+// combatant in the encounter already holds initiative_order `order`. The
+// combatant being edited (self) is excluded so re-sending its own order is a
+// no-op (APP-3). A store error is surfaced as-is (mapped to 500).
+func (h *DMDashboardHandler) rejectDuplicateInitiativeOrder(ctx context.Context, encounterID, selfID uuid.UUID, order int32) error {
+	combatants, err := h.svc.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return err
+	}
+	for _, other := range combatants {
+		if other.ID == selfID || other.InitiativeOrder != order {
+			continue
+		}
+		return fmt.Errorf("%w: initiative_order %d is already used by %s", errOverrideConflict, order, other.DisplayName)
+	}
+	return nil
+}
+
 // OverrideCombatantInitiative handles POST .../override/combatant/{combatantID}/initiative.
 func (h *DMDashboardHandler) OverrideCombatantInitiative(w http.ResponseWriter, r *http.Request) {
 	var req overrideInitiativeRequest
@@ -524,22 +559,34 @@ func (h *DMDashboardHandler) OverrideCombatantInitiative(w http.ResponseWriter, 
 			if err != nil {
 				return err
 			}
+			// A nil field leaves the current value unchanged (APP-3).
+			roll := c.InitiativeRoll
+			if req.InitiativeRoll != nil {
+				roll = *req.InitiativeRoll
+			}
+			order := c.InitiativeOrder
+			if req.InitiativeOrder != nil {
+				order = *req.InitiativeOrder
+				if err := h.rejectDuplicateInitiativeOrder(ctx, encounterID, combatantID, order); err != nil {
+					return err
+				}
+			}
 			before, _ := json.Marshal(map[string]int32{
 				"initiative_roll":  c.InitiativeRoll,
 				"initiative_order": c.InitiativeOrder,
 			})
 			if _, err := h.svc.store.UpdateCombatantInitiative(ctx, refdata.UpdateCombatantInitiativeParams{
-				ID: combatantID, InitiativeRoll: req.InitiativeRoll, InitiativeOrder: req.InitiativeOrder,
+				ID: combatantID, InitiativeRoll: roll, InitiativeOrder: order,
 			}); err != nil {
 				return err
 			}
 			after, _ := json.Marshal(map[string]int32{
-				"initiative_roll":  req.InitiativeRoll,
-				"initiative_order": req.InitiativeOrder,
+				"initiative_roll":  roll,
+				"initiative_order": order,
 			})
 			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
 
-			base := fmt.Sprintf("⚠️ **DM Correction:** %s initiative adjusted to %d", c.DisplayName, req.InitiativeRoll)
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s initiative adjusted to %d", c.DisplayName, roll)
 			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
 			return nil
 		},

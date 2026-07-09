@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/httpjson"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -225,7 +226,7 @@ func validateSuppliedOrders(inits map[uuid.UUID]InitiativeInput) error {
 func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 	var req startCombatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		http.Error(w, httpjson.DecodeError(err), http.StatusBadRequest)
 		return
 	}
 

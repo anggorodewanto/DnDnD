@@ -75,6 +75,22 @@ func TestHandler_StartCombat_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// APP-7: a decode type mismatch names the offending field, not a bare
+// "invalid JSON body".
+func TestHandler_StartCombat_TypeMismatchNamesField(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	// template_id is a string; sending a number must name the field.
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start",
+		bytes.NewReader([]byte(`{"template_id": 123}`)))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "template_id", "the offending field is named")
+}
+
 // --- TDD Cycle 36: POST /api/combat/start invalid template_id ---
 
 func TestHandler_StartCombat_InvalidTemplateID(t *testing.T) {
