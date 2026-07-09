@@ -224,6 +224,23 @@ Durable geography established in play so far — build the rest live as they tra
   beyond even their eyes, and stays only a point of light until they close the gap. In the
   grey between, sight is dim-light dim: looking carefully is at disadvantage unless they
   strike a light (which the fire would see) or spot for one another.
+  As the party closed the gap at a hard pace, Forge kept the flank + rear watch and caught
+  what the earlier scouts missed: the road behind is empty of riders — the five are all
+  ahead, toward the fire — but **one low, ground-bound shape paces the wagon on the left
+  flank**, right at the edge of dwarf-sight, matching their speed and keeping itself unseen.
+  Not mounted, deliberate, unwilling to show its face; too far and too dark to name it a
+  beast, a person, or something wearing one. This is the body of the second, non-horse trail
+  the party had only half-read — present now, on the flank, keeping pace. The road ahead has
+  a fire on it; the dark beside them has a walker.
+  **The follower breaks cover (07-09):** riding pincered between the far firelight and the
+  flanking walker, Vale chose not to wait — she gathered a thin, cold light in her hand and
+  loosed it at the shape on the left. For one heartbeat the light showed it plain: a thing
+  too tall and grey as old ash, standing wrong on long, light-footed legs, and where a face
+  should be, nothing — smooth and blank, no eyes to meet. Then it moved, the horses screamed,
+  and the quiet broke. The walker on the flank now has a shape, if not yet a name: it fits
+  every clue the second trail left — on foot, too light, a long and even stride, keeping pace
+  with horses — and it wears no face. What made it, and what it hunts, stay unknown; the
+  party knows only that it is real, it is close, and the fighting has begun.
 - **The party's rig:** a shaggy high-road horse + a sound old wagon, **rigged, silent,
   and packed to hide what matters** — Windreth's Sleight-of-hand 25 lashed the load to
   ride near-silent and stashed the warded prize-scrap + valuables in a hidden nook
