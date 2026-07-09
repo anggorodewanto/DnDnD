@@ -1242,10 +1242,20 @@ func FormatAttackLog(result AttackResult) string {
 		return b.String()
 	}
 
-	// Attack roll line
+	// Attack roll line. On advantage/disadvantage the D20 result holds both raw
+	// dice (Rolls) plus the kept one (Chosen); surface both so the log reveals
+	// every die rolled, not only the one that counted.
 	rollStr := fmt.Sprintf("%d (%d + %d)", result.D20Roll.Total, result.D20Roll.Chosen, result.D20Roll.Modifier)
+	if len(result.D20Roll.Rolls) == 2 {
+		rollStr = fmt.Sprintf("%d (%d / %d \u2192 %d + %d)",
+			result.D20Roll.Total, result.D20Roll.Rolls[0], result.D20Roll.Rolls[1],
+			result.D20Roll.Chosen, result.D20Roll.Modifier)
+	}
 	if result.CriticalHit {
 		b.WriteString("\n    \u2192 Roll to hit: \U0001f3af NAT 20 \u2014 CRITICAL HIT!")
+		if len(result.D20Roll.Rolls) == 2 {
+			fmt.Fprintf(&b, " (%d / %d)", result.D20Roll.Rolls[0], result.D20Roll.Rolls[1])
+		}
 	} else if result.Hit {
 		fmt.Fprintf(&b, "\n    \u2192 Roll to hit: %s \u2014 HIT", rollStr)
 	} else {

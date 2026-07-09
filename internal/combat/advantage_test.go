@@ -373,6 +373,71 @@ func TestFormatAttackLog_AdvDisadvCancel(t *testing.T) {
 	assert.Contains(t, log, "normal roll")
 }
 
+// On advantage/disadvantage the combat log must surface BOTH raw d20s (kept +
+// discarded), not just the die that counted, so players can see every roll.
+func TestFormatAttackLog_Advantage_ShowsBothDice(t *testing.T) {
+	result := AttackResult{
+		AttackerName:     "Aria",
+		TargetName:       "Goblin #1",
+		WeaponName:       "Longsword",
+		DistanceFt:       5,
+		IsMelee:          true,
+		Hit:              true,
+		D20Roll:          dice.D20Result{Chosen: 15, Total: 20, Modifier: 5, Rolls: []int{8, 15}, Mode: dice.Advantage},
+		DamageTotal:      10,
+		DamageType:       "slashing",
+		DamageDice:       "1d8+5",
+		RollMode:         dice.Advantage,
+		AdvantageReasons: []string{"target blinded"},
+	}
+
+	log := FormatAttackLog(result)
+	assert.Contains(t, log, "8 / 15", "both raw d20s must appear")
+	assert.Contains(t, log, "20 (8 / 15 → 15 + 5)")
+}
+
+func TestFormatAttackLog_Disadvantage_ShowsBothDice(t *testing.T) {
+	result := AttackResult{
+		AttackerName:        "Aria",
+		TargetName:          "Goblin #1",
+		WeaponName:          "Longbow",
+		DistanceFt:          200,
+		IsMelee:             false,
+		Hit:                 false,
+		D20Roll:             dice.D20Result{Chosen: 5, Total: 11, Modifier: 6, Rolls: []int{15, 5}, Mode: dice.Disadvantage},
+		EffectiveAC:         13,
+		RollMode:            dice.Disadvantage,
+		DisadvantageReasons: []string{"hostile within 5ft"},
+	}
+
+	log := FormatAttackLog(result)
+	assert.Contains(t, log, "15 / 5", "both raw d20s must appear")
+	assert.Contains(t, log, "11 (15 / 5 → 5 + 6)")
+}
+
+// A crit on advantage should still reveal the discarded die.
+func TestFormatAttackLog_CritAdvantage_ShowsBothDice(t *testing.T) {
+	result := AttackResult{
+		AttackerName:     "Aria",
+		TargetName:       "Goblin #1",
+		WeaponName:       "Longsword",
+		DistanceFt:       5,
+		IsMelee:          true,
+		Hit:              true,
+		CriticalHit:      true,
+		D20Roll:          dice.D20Result{Chosen: 20, Total: 25, Modifier: 5, Rolls: []int{3, 20}, Mode: dice.Advantage, CriticalHit: true},
+		DamageTotal:      18,
+		DamageType:       "slashing",
+		DamageDice:       "2d8+5",
+		RollMode:         dice.Advantage,
+		AdvantageReasons: []string{"reckless attack"},
+	}
+
+	log := FormatAttackLog(result)
+	assert.Contains(t, log, "CRITICAL HIT!")
+	assert.Contains(t, log, "3 / 20", "both raw d20s must appear even on a crit")
+}
+
 func TestServiceAttack_AdvantageFromTargetCondition(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()
