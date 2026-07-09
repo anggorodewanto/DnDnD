@@ -1896,6 +1896,26 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	input.AttackerObscurement = attackerObs
 	input.TargetObscurement = targetObs
 
+	// Both hands hold a weapon during a two-weapon swing — flag it so the FES
+	// OneHandedMeleeOnly check stays false (no spurious Dueling +2 on the off-hand).
+	input.OffHandOccupied = true
+
+	// Wire the full Feature Effect System for the off-hand swing, exactly as the
+	// main Attack path (the populateAttackFES call in Service.Attack) and
+	// GWMBonusAttack do. Before this, OffhandAttack built a bare AttackInput and
+	// skipped every FES rider, so a two-weapon swing silently dropped Hex /
+	// Hunter's Mark, magic-weapon +X, Sneak Attack, Savage Attacker, etc. The
+	// two-weapon "no ability modifier to the off-hand damage" rule is still
+	// enforced by the explicit OverrideDmgMod set in buildAttackInput above —
+	// populateAttackFES never touches OverrideDmgMod and ResolveAttack keeps it
+	// (see the OverrideDmgMod branch) — so the riders ride on top of the correct
+	// off-hand base damage. A minimal AttackCommand carries the only fields
+	// populateAttackFES reads.
+	fesCmd := AttackCommand{Attacker: cmd.Attacker, Target: cmd.Target, Turn: updatedTurn}
+	if err := s.populateAttackFES(ctx, &input, fesCmd, &char, offWeapon, scores); err != nil {
+		return AttackResult{}, err
+	}
+
 	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 	if err != nil {
 		return result, err
@@ -1903,6 +1923,12 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
 		return result, err
 	}
+	// Persist any once-per-turn rider that fired on the off-hand swing (Sneak
+	// Attack, Savage Attacker) so a later attack this same turn — including a
+	// reaction on another creature's turn — can't re-fire it. Mirrors the
+	// markUsedEffects(result.OncePerTurnEffectsFired) calls in Service.Attack and
+	// GWMBonusAttack; the off-hand path previously omitted it.
+	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
 
 	// 2024 Weapon Mastery — apply the on-hit effect that fired on the off-hand
 	// swing (Vex/Sap/Topple/Slow/Push), mirroring the main-hand Attack path
