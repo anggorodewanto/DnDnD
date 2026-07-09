@@ -2442,6 +2442,29 @@ func TestClearCombatConditions_PreservesNonCombat(t *testing.T) {
 	assert.Equal(t, "disease", conds[1].Condition)
 }
 
+// --- ClearCombatConditions also drops turn-scoped transient markers ---
+//
+// Buff/advantage markers (steady_aim_advantage, reckless, vex, help_advantage,
+// …) are not in the named combat-only set, but each carries an ExpiresOn timing
+// ("start_of_turn" / "end_of_turn"). They are meaningless once combat — and its
+// turns — end, so they must be dropped here; otherwise the End-Combat carry-back
+// (ISSUE-038) leaks a stale advantage buff onto the character sheet.
+func TestClearCombatConditions_DropsTransientExpiresOnMarkers(t *testing.T) {
+	input := json.RawMessage(`[
+		{"condition":"steady_aim_advantage","expires_on":"start_of_turn","duration_rounds":1,"started_round":0},
+		{"condition":"reckless","expires_on":"start_of_turn"},
+		{"condition":"vex","expires_on":"end_of_turn"},
+		{"condition":"curse","duration_rounds":0,"started_round":0}
+	]`)
+	result, err := ClearCombatConditions(input)
+	require.NoError(t, err)
+
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(result, &conds))
+	require.Len(t, conds, 1, "only the persistent, non-turn-scoped condition survives")
+	assert.Equal(t, "curse", conds[0].Condition)
+}
+
 // --- TDD Cycle 48: AllHostilesDefeated returns true when all NPCs dead ---
 
 func TestAllHostilesDefeated_AllDead(t *testing.T) {
@@ -2780,6 +2803,59 @@ func TestEndCombat_CarriesOutPCStatusToCharacterRow(t *testing.T) {
 	var cd map[string]any
 	require.NoError(t, json.Unmarshal(got.CharacterData.RawMessage, &cd))
 	assert.Equal(t, "bar", cd["foo"], "existing character_data keys are preserved")
+}
+
+// EndCombat must not leak a turn-scoped transient buff marker onto the sheet.
+// Regression: Windreth ended a fight still carrying steady_aim_advantage
+// (expires_on start_of_turn); the carry-back wrote it onto his character row,
+// where it would grant a spurious advantage at the start of the next combat.
+func TestEndCombat_CarriesOutPCStatus_StripsTransientMarkers(t *testing.T) {
+	encounterID := uuid.New()
+	charID := uuid.New()
+	pcCombatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 3}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 3}, nil
+	}
+	store.updateCombatantConditionsFn = func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:          pcCombatantID,
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				IsNpc:       false,
+				IsAlive:     true,
+				HpMax:       31,
+				HpCurrent:   31,
+				DisplayName: "Windreth",
+				Conditions:  json.RawMessage(`[{"condition":"steady_aim_advantage","expires_on":"start_of_turn","duration_rounds":1,"started_round":0}]`),
+			},
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, HpMax: 31, HpCurrent: 31}, nil
+	}
+
+	var carried []refdata.UpdateCharacterVitalsParams
+	store.updateCharacterVitalsFn = func(_ context.Context, arg refdata.UpdateCharacterVitalsParams) (refdata.Character, error) {
+		carried = append(carried, arg)
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+
+	require.Len(t, carried, 1)
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(carried[0].Conditions, &conds))
+	assert.Empty(t, conds, "the transient steady_aim_advantage marker must not carry onto the sheet")
 }
 
 func TestEndCombat_CarryOut_GetCharacterError(t *testing.T) {

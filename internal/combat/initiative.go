@@ -205,6 +205,13 @@ var combatOnlyConditions = map[string]bool{
 // ClearCombatConditions removes combat-only conditions (stunned, frightened, charmed,
 // restrained, grappled, prone, incapacitated, paralyzed, blinded, deafened, surprised)
 // while preserving non-combat conditions like exhaustion, curse, disease.
+//
+// It also drops any turn-scoped transient marker — one carrying an ExpiresOn
+// timing ("start_of_turn" / "end_of_turn"), e.g. steady_aim_advantage, reckless,
+// vex, help_advantage. These are not in the named combatOnlyConditions set but
+// are meaningless once combat — and its turns — end, so leaving them would let
+// the End-Combat carry-back (ISSUE-038) leak a stale advantage buff onto the
+// character sheet, where it could mis-fire at the start of the next combat.
 func ClearCombatConditions(conditions json.RawMessage) (json.RawMessage, error) {
 	conds, err := parseConditions(conditions)
 	if err != nil {
@@ -212,9 +219,10 @@ func ClearCombatConditions(conditions json.RawMessage) (json.RawMessage, error) 
 	}
 	filtered := make([]CombatCondition, 0, len(conds))
 	for _, c := range conds {
-		if !combatOnlyConditions[c.Condition] {
-			filtered = append(filtered, c)
+		if combatOnlyConditions[c.Condition] || c.ExpiresOn != "" {
+			continue
 		}
+		filtered = append(filtered, c)
 	}
 	return json.Marshal(filtered)
 }
