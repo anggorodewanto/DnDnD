@@ -51,6 +51,8 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/advance-turn", h.AdvanceTurn)
 		// APP-2: re-seat the active turn (in-app seat-repair).
 		r.Post("/{encounterID}/set-active-turn", h.SetActiveTurn)
+		// APP-8: read-side tracker snapshot (round + combatant order/hp/active).
+		r.Get("/{encounterID}/state", h.CombatState)
 		r.Get("/{encounterID}/pending-actions", h.ListPendingActions)
 		r.Post("/{encounterID}/pending-actions/{actionID}/resolve", h.ResolvePendingAction)
 		r.Get("/{encounterID}/action-log", h.ListActionLogViewer)

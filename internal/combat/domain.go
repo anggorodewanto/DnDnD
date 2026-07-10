@@ -86,6 +86,20 @@ func (tc *TemplateCreature) UnmarshalJSON(data []byte) error {
 // Strings pass through; non-negative numbers map via the 0-based index→label
 // convention (0→"A"); null/missing yields "".
 func normalizeTemplateCol(raw json.RawMessage) (string, error) {
+	col, err := normalizeColValue(raw)
+	if err != nil {
+		return "", fmt.Errorf("position_col %w", err)
+	}
+	return col, nil
+}
+
+// normalizeColValue converts a JSON column value — either a letter label ("D")
+// or a 0-based integer index (3 → "D") — to its letter label. Strings pass
+// through; non-negative numbers map via the 0-based index→label convention;
+// null/missing yields "". Shared by encounter-template creature placement and
+// combat-start positions (APP-4) so both endpoints accept the same coordinate
+// model. Errors are field-name-agnostic; callers prefix the field.
+func normalizeColValue(raw json.RawMessage) (string, error) {
 	if len(raw) == 0 {
 		return "", nil
 	}
@@ -100,11 +114,11 @@ func normalizeTemplateCol(raw json.RawMessage) (string, error) {
 		return val, nil
 	case float64:
 		if val < 0 {
-			return "", fmt.Errorf("position_col index must be non-negative, got %v", val)
+			return "", fmt.Errorf("index must be non-negative, got %v", val)
 		}
 		return indexToColLabel(int(val)), nil
 	default:
-		return "", fmt.Errorf("position_col must be a string or integer, got %T", val)
+		return "", fmt.Errorf("must be a column letter or a 0-based index, got %T", val)
 	}
 }
 

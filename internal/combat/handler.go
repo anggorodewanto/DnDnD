@@ -71,9 +71,36 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 type startCombatRequest struct {
 	TemplateID                 string                     `json:"template_id"`
 	CharacterIDs               []string                   `json:"character_ids"`
-	CharacterPositions         map[string]Position        `json:"character_positions"`
+	CharacterPositions         map[string]positionRequest `json:"character_positions"`
 	SurprisedCombatantShortIDs []string                   `json:"surprised_combatant_short_ids,omitempty"`
 	CharacterInitiatives       map[string]InitiativeInput `json:"character_initiatives,omitempty"`
+}
+
+// positionRequest is the wire form of a character_positions entry. col accepts
+// either a column letter ("D") or a 0-based integer index (3) — the same
+// coordinate model encounter-template creature placement accepts (APP-4) — so a
+// DM can reuse the coordinates they'd write in a template. row is 1-based.
+type positionRequest struct {
+	Col json.RawMessage `json:"col"`
+	Row int32           `json:"row"`
+}
+
+// resolvePositionRequest normalizes a wire position into the internal Position,
+// rejecting an empty col or a non-positive row with a field-level error (APP-4).
+// The old non-pointer struct silently wrote row 0, mis-placing the token onto
+// an off-map tile the renderer skips.
+func resolvePositionRequest(v positionRequest) (Position, error) {
+	col, err := normalizeColValue(v.Col)
+	if err != nil {
+		return Position{}, fmt.Errorf("col %w", err)
+	}
+	if col == "" {
+		return Position{}, errors.New(`col is required (a column letter like "D" or a 0-based index)`)
+	}
+	if v.Row < 1 {
+		return Position{}, fmt.Errorf("row must be >= 1 (1-based), got %d", v.Row)
+	}
+	return Position{Col: col, Row: v.Row}, nil
 }
 
 // startCombatResponse is the JSON response for the start combat flow.
@@ -253,7 +280,12 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid character position key: "+k, http.StatusBadRequest)
 			return
 		}
-		positions[id] = v
+		pos, err := resolvePositionRequest(v)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("character %s position: %s", k, err), http.StatusBadRequest)
+			return
+		}
+		positions[id] = pos
 	}
 
 	inits := make(map[uuid.UUID]InitiativeInput, len(req.CharacterInitiatives))

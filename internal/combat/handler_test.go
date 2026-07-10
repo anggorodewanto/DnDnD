@@ -147,6 +147,104 @@ func TestHandler_StartCombat_InvalidPositionKey(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// APP-4: character_positions col accepts a 0-based integer (the same coordinate
+// model the encounter-template creature placement accepts), not only a letter.
+func TestHandler_StartCombat_NumericColAccepted(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := startCombatMockStore(templateID, encounterID, charID)
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]any{
+		"template_id":   templateID.String(),
+		"character_ids": []string{charID.String()},
+		"character_positions": map[string]any{
+			charID.String(): map[string]any{"col": 3, "row": 5}, // 3 == column "D"
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+// APP-4: a supplied position with row < 1 is rejected with a field-level 400
+// naming the offending character. The old non-pointer struct silently wrote
+// row 0, mis-placing the token onto an off-map tile.
+func TestHandler_StartCombat_RowZeroRejected(t *testing.T) {
+	charID := uuid.New()
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]any{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{charID.String()},
+		"character_positions": map[string]any{
+			charID.String(): map[string]any{"col": "D", "row": 0},
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "row", "the offending field is named")
+	assert.Contains(t, rec.Body.String(), charID.String(), "the offending character is named")
+}
+
+// APP-4: a bad col type (a JSON object/bool) is rejected with a field-level 400
+// that names the character, not a bare "invalid JSON body".
+func TestHandler_StartCombat_BadColTypeRejected(t *testing.T) {
+	charID := uuid.New()
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]any{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{charID.String()},
+		"character_positions": map[string]any{
+			charID.String(): map[string]any{"col": true, "row": 1},
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "col", "the offending field is named")
+	assert.Contains(t, rec.Body.String(), charID.String(), "the offending character is named")
+}
+
+// APP-4: an empty/missing col on a supplied position is rejected (a position
+// entry means an explicit tile, which needs a column).
+func TestHandler_StartCombat_MissingColRejected(t *testing.T) {
+	charID := uuid.New()
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]any{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{charID.String()},
+		"character_positions": map[string]any{
+			charID.String(): map[string]any{"row": 4},
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "col")
+}
+
 // --- TDD Cycle 39: POST /api/combat/start service error ---
 
 func TestHandler_StartCombat_ServiceError(t *testing.T) {
