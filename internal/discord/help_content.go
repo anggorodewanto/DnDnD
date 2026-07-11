@@ -309,6 +309,8 @@ const helpSave = `/save — Make a Saving Throw
 
 Usage:
   /save [ability]                     Roll a saving throw (e.g. /save dex, /save wis)
+  /save [ability] adv:true            Roll with advantage
+  /save [ability] disadv:true         Roll with disadvantage
   /save [ability] bonus:[dice]        Add effect dice (e.g. 1d4 Bless, 1d8 Bardic Inspiration)
 
 Proficiency and modifiers are applied automatically.`

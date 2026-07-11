@@ -446,6 +446,16 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Required:    true,
 				},
 				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "adv",
+					Description: "Roll with advantage",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "disadv",
+					Description: "Roll with disadvantage",
+				},
+				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "bonus",
 					Description: "Extra effect dice added to the roll (e.g. 1d4 Bless, 1d8 Bardic Inspiration)",

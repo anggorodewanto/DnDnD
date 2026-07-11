@@ -87,6 +87,8 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"check", "target", discordgo.ApplicationCommandOptionString, false},
 		{"check", "bonus", discordgo.ApplicationCommandOptionString, false},
 		{"save", "ability", discordgo.ApplicationCommandOptionString, true},
+		{"save", "adv", discordgo.ApplicationCommandOptionBoolean, false},
+		{"save", "disadv", discordgo.ApplicationCommandOptionBoolean, false},
 		{"save", "bonus", discordgo.ApplicationCommandOptionString, false},
 		{"rest", "type", discordgo.ApplicationCommandOptionString, true},
 		{"whisper", "message", discordgo.ApplicationCommandOptionString, true},
