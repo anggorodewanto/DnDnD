@@ -353,6 +353,68 @@ func TestResolveAttack_ExhaustionPenaltyOnToHit(t *testing.T) {
 	assert.False(t, result.Hit, "13 vs AC 14 is a miss; without exhaustion (19) it would hit")
 }
 
+// A player-declared effect die (Bless / Bardic Inspiration) is added to the
+// to-hit total and can flip a miss into a hit, while the d20 breakdown stays
+// bonus-free.
+func TestResolveAttack_BonusDiceToHit(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10 // to-hit raw = 10 + 3(STR) + 2(prof) = 15
+		}
+		if max == 4 {
+			return 4 // the 1d4 bonus die
+		}
+		return 6 // damage
+	})
+
+	input := AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin #1",
+		TargetAC:     17, // 15 misses; 15 + 4 bonus = 19 hits
+		Weapon:       makeLongsword(),
+		Scores:       AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:    2,
+		DistanceFt:   5,
+		Cover:        CoverNone,
+		BonusDice:    "1d4",
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit, "15 + 4 bonus = 19 vs AC 17 hits")
+	assert.Equal(t, 15, result.D20Roll.Total, "d20 breakdown stays bonus-free")
+	assert.Equal(t, 4, result.BonusTotal)
+	assert.Equal(t, "1d4", result.BonusExpression)
+	require.Len(t, result.BonusRolls, 1)
+	assert.Equal(t, 4, result.BonusRolls[0].Die)
+}
+
+// A nat 1 auto-misses regardless of any effect-dice bonus.
+func TestResolveAttack_BonusDiceCannotSaveNat1(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 1 // natural 1 → auto-miss
+		}
+		return 6 // bonus die + damage
+	})
+
+	input := AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin #1",
+		TargetAC:     5, // low AC: without the nat-1 rule the bonus'd total would hit
+		Weapon:       makeLongsword(),
+		Scores:       AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:    2,
+		DistanceFt:   5,
+		Cover:        CoverNone,
+		BonusDice:    "1d4",
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit, "natural 1 auto-misses even with a to-hit bonus")
+}
+
 func TestResolveAttack_BasicMiss(t *testing.T) {
 	// d20 rolls 5, total = 5+3+2 = 10 vs AC 15 => miss
 	roller := dice.NewRoller(func(max int) int {

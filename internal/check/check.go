@@ -101,6 +101,12 @@ type SingleCheckInput struct {
 	// When set, SingleCheck enforces adjacency and (when InCombat)
 	// action-availability before rolling. (F-15)
 	Target *TargetContext
+	// BonusDice, when non-empty, is a player-declared effect-die expression
+	// (e.g. "1d4" for Guidance / Bless, "1d8" for Bardic Inspiration) added to
+	// the check total. SingleCheck parses + rolls it; an invalid expression
+	// returns dice.ErrInvalidBonus. It is not rolled when the check auto-fails.
+	// Works identically in and out of combat.
+	BonusDice string
 }
 
 // SingleCheckResult holds the result of a single ability/skill check.
@@ -111,12 +117,26 @@ type SingleCheckResult struct {
 	AutoFail         bool
 	ConditionReasons []string
 	D20Result        dice.D20Result
+	// Effect-dice bonus (Guidance, Bless, Bardic Inspiration, ...). Zero-valued
+	// when no BonusDice was supplied. BonusTotal is folded into Total; D20Result
+	// stays bonus-free. BonusRolls carries the per-die results for roll logging.
+	BonusExpression string
+	BonusTotal      int
+	BonusRolls      []dice.GroupResult
 }
 
 // SingleCheck performs a single ability or skill check.
 func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error) {
 	if err := validateTargetContext(input.Target); err != nil {
 		return SingleCheckResult{}, err
+	}
+
+	// Validate the optional effect-die expression up front so a typo is
+	// reported even when the check would auto-fail (it isn't rolled below).
+	if input.BonusDice != "" {
+		if err := dice.ValidateBonusExpression(input.BonusDice); err != nil {
+			return SingleCheckResult{}, err
+		}
 	}
 
 	skill := strings.ToLower(input.Skill)
@@ -159,6 +179,20 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 
 	result.D20Result = d20
 	result.Total = d20.Total
+
+	// Add player-declared effect dice (already validated above). The d20
+	// breakdown stays bonus-free; only the grand Total folds the bonus in.
+	if input.BonusDice != "" {
+		bonus, berr := s.roller.Roll(input.BonusDice)
+		if berr != nil {
+			return SingleCheckResult{}, fmt.Errorf("%w: %v", dice.ErrInvalidBonus, berr)
+		}
+		result.BonusExpression = input.BonusDice
+		result.BonusTotal = bonus.Total
+		result.BonusRolls = bonus.Groups
+		result.Total += bonus.Total
+	}
+
 	return result, nil
 }
 
@@ -329,6 +363,11 @@ type ContestedParticipant struct {
 	// ExhaustionLevel drives the 2024 flat -2/level d20-Test penalty on this
 	// participant's roll (mirrors SingleCheck). 0 = no penalty.
 	ExhaustionLevel int
+	// BonusDice, when non-empty, is an effect-die expression (e.g. "1d4"
+	// Guidance / Bless, "1d8" Bardic Inspiration) added to this participant's
+	// total. Callers must pre-validate with dice.ValidateBonusExpression; an
+	// unparseable expression here is silently skipped (no bonus).
+	BonusDice string
 }
 
 // ContestedCheckInput holds parameters for a contested check.
@@ -345,6 +384,12 @@ type ContestedCheckResult struct {
 	OpponentTotal  int
 	Winner         string // name of winner, empty on tie
 	Tie            bool
+	// Initiator effect-dice bonus (Guidance / Bless / Bardic Inspiration).
+	// Zero-valued when none supplied. InitiatorBonusTotal is folded into
+	// InitiatorTotal; InitiatorD20 stays bonus-free.
+	InitiatorBonusExpression string
+	InitiatorBonusTotal      int
+	InitiatorBonusRolls      []dice.GroupResult
 }
 
 // ContestedCheck performs a contested check between two participants.
@@ -360,9 +405,21 @@ func (s *Service) ContestedCheck(input ContestedCheckInput) ContestedCheckResult
 		OpponentTotal:  oppD20.Total,
 	}
 
-	if initD20.Total > oppD20.Total {
+	// Fold the initiator's effect dice (Guidance / Bless / Bardic Inspiration)
+	// into their total before deciding the winner. Guidance applies to the
+	// roller's own check, so only the initiator side takes a bonus here.
+	if input.Initiator.BonusDice != "" {
+		if bonus, err := s.roller.Roll(input.Initiator.BonusDice); err == nil {
+			result.InitiatorBonusExpression = input.Initiator.BonusDice
+			result.InitiatorBonusTotal = bonus.Total
+			result.InitiatorBonusRolls = bonus.Groups
+			result.InitiatorTotal += bonus.Total
+		}
+	}
+
+	if result.InitiatorTotal > result.OpponentTotal {
 		result.Winner = input.Initiator.Name
-	} else if oppD20.Total > initD20.Total {
+	} else if result.OpponentTotal > result.InitiatorTotal {
 		result.Winner = input.Opponent.Name
 	} else {
 		result.Tie = true

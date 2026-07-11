@@ -1,6 +1,8 @@
 package save
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -443,5 +445,82 @@ func TestSave_BasicNoProficiency(t *testing.T) {
 	}
 	if result.Ability != "dex" {
 		t.Errorf("expected ability dex, got %s", result.Ability)
+	}
+}
+
+// --- Bonus effect dice (Bless / Bardic Inspiration) ---
+
+func TestSave_BonusDiceAddedToTotal(t *testing.T) {
+	svc := NewService(fixedRoller(3)) // d20 = 3, every bonus die = 3
+
+	result, err := svc.Save(SaveInput{
+		Scores:    character.AbilityScores{DEX: 14}, // +2 mod
+		Ability:   "dex",
+		BonusDice: "1d4",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// d20=3, DEX mod=2 => base 5; bonus 1d4=3 => grand total 8.
+	if result.Total != 8 {
+		t.Errorf("expected total 8 (5 + 3 bonus), got %d", result.Total)
+	}
+	if result.BonusTotal != 3 || result.BonusExpression != "1d4" {
+		t.Errorf("expected bonus 3 (1d4), got %d (%q)", result.BonusTotal, result.BonusExpression)
+	}
+	if len(result.BonusRolls) != 1 || result.BonusRolls[0].Die != 4 {
+		t.Errorf("expected one d4 bonus group, got %+v", result.BonusRolls)
+	}
+	// The pure d20 breakdown stays bonus-free.
+	if result.D20Result.Total != 5 {
+		t.Errorf("expected d20 total 5 (bonus-free), got %d", result.D20Result.Total)
+	}
+}
+
+func TestSave_InvalidBonusDiceReturnsError(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	_, err := svc.Save(SaveInput{
+		Scores:    character.AbilityScores{DEX: 14},
+		Ability:   "dex",
+		BonusDice: "not-dice",
+	})
+	if !errors.Is(err, dice.ErrInvalidBonus) {
+		t.Fatalf("expected dice.ErrInvalidBonus, got %v", err)
+	}
+}
+
+func TestSave_AutoFailIgnoresBonusDice(t *testing.T) {
+	svc := NewService(fixedRoller(3))
+	result, err := svc.Save(SaveInput{
+		Scores:     character.AbilityScores{DEX: 14},
+		Ability:    "dex",
+		Conditions: []combat.CombatCondition{{Condition: "paralyzed"}},
+		BonusDice:  "1d4",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.AutoFail {
+		t.Fatalf("expected auto-fail")
+	}
+	if result.Total != 0 || result.BonusTotal != 0 {
+		t.Errorf("expected total 0 and no bonus on auto-fail, got total=%d bonus=%d", result.Total, result.BonusTotal)
+	}
+}
+
+func TestFormatSaveResult_WithBonusDice(t *testing.T) {
+	result := SaveResult{
+		Ability:         "dex",
+		Total:           18,
+		D20Result:       dice.D20Result{Total: 15, Breakdown: "12 + 3 = 15", Mode: dice.Normal},
+		BonusExpression: "1d4",
+		BonusTotal:      3,
+	}
+	msg := FormatSaveResult("Aria", result)
+	if !strings.Contains(msg, "**18**") {
+		t.Errorf("expected grand total 18, got: %s", msg)
+	}
+	if !strings.Contains(msg, "+3 (1d4)") {
+		t.Errorf("expected bonus fragment '+3 (1d4)', got: %s", msg)
 	}
 }

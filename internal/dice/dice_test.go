@@ -459,3 +459,24 @@ func TestParseExpression_RejectsZeroSidesOrCount(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBonusExpression(t *testing.T) {
+	// Valid single-die and multi-group expressions pass.
+	require.NoError(t, ValidateBonusExpression("1d4"))
+	require.NoError(t, ValidateBonusExpression("1d8"))
+	require.NoError(t, ValidateBonusExpression("2d6+1"))
+
+	// Unparseable input is rejected as ErrInvalidBonus.
+	err := ValidateBonusExpression("banana")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidBonus)
+
+	// A count over MaxBonusDice is rejected.
+	over := ValidateBonusExpression("999d6")
+	require.Error(t, over)
+	assert.ErrorIs(t, over, ErrInvalidBonus)
+
+	// Exactly MaxBonusDice is allowed; one more is not.
+	require.NoError(t, ValidateBonusExpression("20d4"))
+	assert.ErrorIs(t, ValidateBonusExpression("21d4"), ErrInvalidBonus)
+}

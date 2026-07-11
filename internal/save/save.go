@@ -36,6 +36,11 @@ type SaveInput struct {
 	ExhaustionLevel int
 	FeatureEffects  []combat.FeatureDefinition
 	EffectCtx       combat.EffectContext
+	// BonusDice, when non-empty, is a player-declared effect-die expression
+	// (e.g. "1d4" Bless, "1d8" Bardic Inspiration) added to the save total.
+	// Save validates + rolls it; an invalid expression returns
+	// dice.ErrInvalidBonus. It is not rolled when the save auto-fails.
+	BonusDice string
 }
 
 // SaveResult holds the result of a saving throw.
@@ -48,6 +53,12 @@ type SaveResult struct {
 	ConditionReasons []string
 	FeatureReasons   []string
 	D20Result        dice.D20Result
+	// Effect-dice bonus (Bless, Bardic Inspiration, ...). Zero-valued when no
+	// BonusDice supplied. BonusTotal is folded into Total; D20Result stays
+	// bonus-free. BonusRolls carries the per-die results for roll logging.
+	BonusExpression string
+	BonusTotal      int
+	BonusRolls      []dice.GroupResult
 }
 
 // Save performs a saving throw.
@@ -56,6 +67,14 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 
 	if !validAbilities[ability] {
 		return SaveResult{}, fmt.Errorf("unknown ability: %q", ability)
+	}
+
+	// Validate the optional effect-die expression up front so a typo is
+	// reported even when the save would auto-fail (it isn't rolled below).
+	if input.BonusDice != "" {
+		if err := dice.ValidateBonusExpression(input.BonusDice); err != nil {
+			return SaveResult{}, err
+		}
 	}
 
 	modifier := character.SavingThrowModifier(input.Scores, ability, input.ProficientSaves, input.ProfBonus)
@@ -110,5 +129,19 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 
 	result.D20Result = d20
 	result.Total = d20.Total
+
+	// Add player-declared effect dice (already validated above). The d20
+	// breakdown stays bonus-free; only the grand Total folds the bonus in.
+	if input.BonusDice != "" {
+		bonus, berr := s.roller.Roll(input.BonusDice)
+		if berr != nil {
+			return SaveResult{}, fmt.Errorf("%w: %v", dice.ErrInvalidBonus, berr)
+		}
+		result.BonusExpression = input.BonusDice
+		result.BonusTotal = bonus.Total
+		result.BonusRolls = bonus.Groups
+		result.Total += bonus.Total
+	}
+
 	return result, nil
 }

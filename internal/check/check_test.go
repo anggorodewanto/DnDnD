@@ -857,3 +857,141 @@ func TestFormatGroupCheckResult_Failure(t *testing.T) {
 		t.Errorf("expected FAILURE, got: %s", msg)
 	}
 }
+
+// --- Bonus effect dice (Guidance / Bless / Bardic Inspiration) ---
+
+func TestSingleCheck_BonusDiceAddedToTotal(t *testing.T) {
+	svc := NewService(fixedRoller(3)) // d20 = 3, every bonus die = 3
+
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:    character.AbilityScores{WIS: 16}, // +3 mod
+		Skill:     "perception",
+		ProfBonus: 2, // not proficient here, so unused
+		BonusDice: "1d4",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// d20=3, WIS mod=3 => base 6; bonus 1d4=3 => grand total 9.
+	if result.Total != 9 {
+		t.Errorf("expected total 9 (6 + 3 bonus), got %d", result.Total)
+	}
+	if result.BonusTotal != 3 {
+		t.Errorf("expected bonus total 3, got %d", result.BonusTotal)
+	}
+	if result.BonusExpression != "1d4" {
+		t.Errorf("expected bonus expression 1d4, got %q", result.BonusExpression)
+	}
+	if len(result.BonusRolls) != 1 || result.BonusRolls[0].Die != 4 {
+		t.Errorf("expected one d4 bonus group, got %+v", result.BonusRolls)
+	}
+	// The pure d20 breakdown must stay bonus-free; only Total folds the bonus in.
+	if result.D20Result.Total != 6 {
+		t.Errorf("expected d20 total 6 (bonus-free), got %d", result.D20Result.Total)
+	}
+}
+
+func TestSingleCheck_NoBonusDiceLeavesResultUnchanged(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:    character.AbilityScores{WIS: 16},
+		Skill:     "perception",
+		ProfBonus: 2,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.BonusTotal != 0 || result.BonusExpression != "" || len(result.BonusRolls) != 0 {
+		t.Errorf("expected no bonus fields, got total=%d expr=%q rolls=%+v", result.BonusTotal, result.BonusExpression, result.BonusRolls)
+	}
+	if result.Total != 13 { // d20 10 + WIS 3
+		t.Errorf("expected total 13, got %d", result.Total)
+	}
+}
+
+func TestSingleCheck_InvalidBonusDiceReturnsError(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	_, err := svc.SingleCheck(SingleCheckInput{
+		Scores:    character.AbilityScores{WIS: 16},
+		Skill:     "perception",
+		BonusDice: "not-dice",
+	})
+	if !errors.Is(err, dice.ErrInvalidBonus) {
+		t.Fatalf("expected dice.ErrInvalidBonus, got %v", err)
+	}
+}
+
+func TestSingleCheck_BonusDiceCountCapEnforced(t *testing.T) {
+	svc := NewService(fixedRoller(1))
+	_, err := svc.SingleCheck(SingleCheckInput{
+		Scores:    character.AbilityScores{WIS: 16},
+		Skill:     "perception",
+		BonusDice: "999d6",
+	})
+	if !errors.Is(err, dice.ErrInvalidBonus) {
+		t.Fatalf("expected dice.ErrInvalidBonus for oversized bonus, got %v", err)
+	}
+}
+
+func TestSingleCheck_AutoFailIgnoresBonusDice(t *testing.T) {
+	// A blinded creature auto-fails a sight-based check; Guidance can't rescue
+	// an auto-fail, so no bonus die is rolled and Total stays 0.
+	svc := NewService(fixedRoller(3))
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:       character.AbilityScores{WIS: 16},
+		Skill:        "perception",
+		Conditions:   []combat.CombatCondition{{Condition: "blinded"}},
+		ConditionCtx: combat.AbilityCheckContext{RequiresSight: true},
+		BonusDice:    "1d4",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.AutoFail {
+		t.Fatalf("expected auto-fail")
+	}
+	if result.Total != 0 || result.BonusTotal != 0 {
+		t.Errorf("expected total 0 and no bonus on auto-fail, got total=%d bonus=%d", result.Total, result.BonusTotal)
+	}
+}
+
+func TestContestedCheck_InitiatorBonusDice(t *testing.T) {
+	svc := NewService(fixedRoller(3)) // every die = 3
+	result := svc.ContestedCheck(ContestedCheckInput{
+		Initiator: ContestedParticipant{Name: "Aria", Modifier: 2, BonusDice: "1d4"},
+		Opponent:  ContestedParticipant{Name: "Goblin", Modifier: 0},
+	})
+	// initiator: d20=3 +mod2 +bonus3 = 8; opponent: d20=3 +0 = 3
+	if result.InitiatorTotal != 8 {
+		t.Errorf("expected initiator total 8, got %d", result.InitiatorTotal)
+	}
+	if result.OpponentTotal != 3 {
+		t.Errorf("expected opponent total 3, got %d", result.OpponentTotal)
+	}
+	if result.InitiatorBonusTotal != 3 || result.InitiatorBonusExpression != "1d4" {
+		t.Errorf("expected initiator bonus 3 (1d4), got %d (%q)", result.InitiatorBonusTotal, result.InitiatorBonusExpression)
+	}
+	if len(result.InitiatorBonusRolls) != 1 || result.InitiatorBonusRolls[0].Die != 4 {
+		t.Errorf("expected one d4 bonus group, got %+v", result.InitiatorBonusRolls)
+	}
+	if result.Winner != "Aria" {
+		t.Errorf("expected Aria to win with the bonus, got %q", result.Winner)
+	}
+}
+
+func TestFormatSingleCheckResult_WithBonusDice(t *testing.T) {
+	result := SingleCheckResult{
+		Skill:           "perception",
+		Total:           22,
+		D20Result:       dice.D20Result{Total: 19, Breakdown: "14 + 5 = 19", Mode: dice.Normal},
+		BonusExpression: "1d4",
+		BonusTotal:      3,
+	}
+	msg := FormatSingleCheckResult("Aria", result)
+	if !strings.Contains(msg, "**22**") {
+		t.Errorf("expected grand total 22, got: %s", msg)
+	}
+	if !strings.Contains(msg, "+3 (1d4)") {
+		t.Errorf("expected bonus fragment '+3 (1d4)', got: %s", msg)
+	}
+}

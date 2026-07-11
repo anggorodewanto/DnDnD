@@ -163,10 +163,18 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 
-	ability, adv, disadv := h.parseOptions(data.Options)
+	ability, adv, disadv, bonus := h.parseOptions(data.Options)
 	if ability == "" {
 		respondEphemeral(h.session, interaction, "Please specify an ability (e.g. `/save dex`).")
 		return
+	}
+
+	// Reject a bad effect-dice expression up front (mirrors /check).
+	if bonus != "" {
+		if err := dice.ValidateBonusExpression(bonus); err != nil {
+			respondEphemeral(h.session, interaction, invalidBonusDiceMessage(bonus))
+			return
+		}
 	}
 
 	campaign, err := h.campaignProvider.GetCampaignByGuildID(ctx, interaction.GuildID)
@@ -201,6 +209,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 		ProficientSaves: charData.Saves,
 		ProfBonus:       int(char.ProficiencyBonus),
 		RollMode:        rollMode,
+		BonusDice:       bonus,
 	}
 
 	// med-33 / Phase 82: populate FeatureEffects + EffectCtx so Aura of
@@ -248,15 +257,23 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	// of combat we post nothing extra (the ephemeral above is enough).
 	h.maybeMirrorToCombatLog(ctx, interaction, msg)
 
-	// Log to roll history
+	// Log to roll history, folding any effect dice into the logged roll.
 	if h.rollLogger != nil && !result.AutoFail {
+		diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}}
+		expression := fmt.Sprintf("d20+%d", result.Modifier+result.FeatureBonus)
+		breakdown := result.D20Result.Breakdown
+		if result.BonusExpression != "" {
+			diceRolls = append(diceRolls, result.BonusRolls...)
+			expression += "+" + result.BonusExpression
+			breakdown += result.BonusFragment()
+		}
 		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-			DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}},
+			DiceRolls:  diceRolls,
 			Total:      result.Total,
-			Expression: fmt.Sprintf("d20+%d", result.Modifier+result.FeatureBonus),
+			Expression: expression,
 			Roller:     char.Name,
 			Purpose:    fmt.Sprintf("%s save", strings.ToUpper(result.Ability)),
-			Breakdown:  result.D20Result.Breakdown,
+			Breakdown:  breakdown,
 			Timestamp:  result.D20Result.Timestamp,
 		})
 	}
@@ -358,8 +375,9 @@ func (h *SaveHandler) maybeResolveAoESave(ctx context.Context, interaction *disc
 	_ = h.aoeSaveResolver.ResolveAoEPendingSavesForSpell(ctx, encounterID, spellID)
 }
 
-// parseOptions extracts ability, adv, disadv from command options.
-func (h *SaveHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (ability string, adv, disadv bool) {
+// parseOptions extracts ability, adv, disadv, and bonus (effect dice) from
+// command options.
+func (h *SaveHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (ability string, adv, disadv bool, bonus string) {
 	for _, opt := range opts {
 		switch opt.Name {
 		case "ability":
@@ -368,6 +386,8 @@ func (h *SaveHandler) parseOptions(opts []*discordgo.ApplicationCommandInteracti
 			adv = opt.BoolValue()
 		case "disadv":
 			disadv = opt.BoolValue()
+		case "bonus":
+			bonus = opt.StringValue()
 		}
 	}
 	return

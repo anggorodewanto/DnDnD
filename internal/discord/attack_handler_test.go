@@ -227,6 +227,38 @@ func TestAttackHandler_DispatchesAttackWithFlags(t *testing.T) {
 	}
 }
 
+func TestAttackHandler_ThreadsBonusDice(t *testing.T) {
+	h, _, svc, _ := setupAttackHandler()
+
+	h.Handle(makeAttackInteraction(map[string]any{
+		"target": "OS",
+		"bonus":  "1d4",
+	}))
+
+	if len(svc.attackCalls) != 1 {
+		t.Fatalf("expected 1 attack call, got %d", len(svc.attackCalls))
+	}
+	if got := svc.attackCalls[0].BonusDice; got != "1d4" {
+		t.Errorf("expected BonusDice '1d4' threaded to the command, got %q", got)
+	}
+}
+
+func TestAttackHandler_InvalidBonusDiceRejected(t *testing.T) {
+	h, sess, svc, _ := setupAttackHandler()
+
+	h.Handle(makeAttackInteraction(map[string]any{
+		"target": "OS",
+		"bonus":  "banana",
+	}))
+
+	if len(svc.attackCalls) != 0 {
+		t.Errorf("expected no attack call on invalid bonus, got %d", len(svc.attackCalls))
+	}
+	if !strings.Contains(strings.ToLower(sess.lastResponse.Data.Content), "bonus") {
+		t.Errorf("expected an invalid-bonus rejection mentioning bonus, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
 func TestAttackHandler_OffhandRoutesToOffhandService(t *testing.T) {
 	h, sess, svc, _ := setupAttackHandler()
 

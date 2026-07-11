@@ -43,6 +43,18 @@ func makeSaveInteraction(ability string, adv, disadv bool) *discordgo.Interactio
 	}
 }
 
+// makeSaveInteractionWithBonus builds a /save interaction carrying a bonus
+// effect-die expression (e.g. "1d4" Bless).
+func makeSaveInteractionWithBonus(ability, bonus string) *discordgo.Interaction {
+	inter := makeSaveInteraction(ability, false, false)
+	data := inter.Data.(discordgo.ApplicationCommandInteractionData)
+	data.Options = append(data.Options, &discordgo.ApplicationCommandInteractionDataOption{
+		Name: "bonus", Value: bonus, Type: discordgo.ApplicationCommandOptionString,
+	})
+	inter.Data = data
+	return inter
+}
+
 func makeTestCharacterWithSaves() refdata.Character {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
 	profs, _ := json.Marshal(map[string]any{
@@ -84,6 +96,52 @@ func setupSaveHandler(sess *MockSession) (*SaveHandler, *mockCheckRollLogger) {
 		logger,
 	)
 	return h, logger
+}
+
+func TestSaveHandler_BonusDiceAppliedAndLogged(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, logger := setupSaveHandler(sess)
+	// setupSaveHandler's roller returns 12 for any die, so 1d4 "rolls" 12.
+	h.Handle(makeSaveInteractionWithBonus("wis", "1d4"))
+
+	if !strings.Contains(responded, "+12 (1d4)") {
+		t.Errorf("expected bonus fragment '+12 (1d4)' in response, got: %s", responded)
+	}
+	if len(logger.logged) != 1 {
+		t.Fatalf("expected 1 roll logged, got %d", len(logger.logged))
+	}
+	entry := logger.logged[0]
+	if len(entry.DiceRolls) != 2 {
+		t.Errorf("expected d20 + bonus die logged (2 groups), got %d", len(entry.DiceRolls))
+	}
+	if !strings.Contains(entry.Expression, "1d4") {
+		t.Errorf("expected roll-log expression to include the bonus die, got %q", entry.Expression)
+	}
+}
+
+func TestSaveHandler_InvalidBonusDiceRejected(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, logger := setupSaveHandler(sess)
+	h.Handle(makeSaveInteractionWithBonus("wis", "banana"))
+
+	if !strings.Contains(strings.ToLower(responded), "bonus") {
+		t.Errorf("expected an invalid-bonus error mentioning bonus, got: %s", responded)
+	}
+	if len(logger.logged) != 0 {
+		t.Errorf("expected no roll logged on invalid bonus, got %d", len(logger.logged))
+	}
 }
 
 // --- E-59 AoE pending-save resolver tests ---

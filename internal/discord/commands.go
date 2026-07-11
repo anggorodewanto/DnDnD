@@ -159,6 +159,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "improvised",
 					Description: "Improvised weapon (1d4 bludgeoning)",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "bonus",
+					Description: "Extra effect dice on the to-hit roll (e.g. 1d4 Bless, 1d8 Bardic Inspiration)",
+				},
 			},
 		},
 		{
@@ -423,6 +428,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "dc",
 					Description: "Difficulty Class — used for trivial nat 1/nat 20 outcomes",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "bonus",
+					Description: "Extra effect dice added to the roll (e.g. 1d4 Guidance, 1d8 Bardic Inspiration)",
+				},
 			},
 		},
 		{
@@ -434,6 +444,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "ability",
 					Description: "Ability to save with (e.g. dex, wis)",
 					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "bonus",
+					Description: "Extra effect dice added to the roll (e.g. 1d4 Bless, 1d8 Bardic Inspiration)",
 				},
 			},
 		},

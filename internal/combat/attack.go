@@ -489,6 +489,11 @@ type AttackInput struct {
 	// (AdvantageInput.ForgoAdvantage) and records the effect on the result for
 	// Service.Attack to resolve post-hit (applyBrutalStrike).
 	BrutalStrike string
+	// BonusDice, when non-empty, is a player-declared effect-die expression
+	// (e.g. "1d4" Bless, "1d8" Bardic Inspiration) added to the to-hit total.
+	// Nat 20 / nat 1 semantics key off the raw die and are unaffected; the
+	// D20Roll breakdown stays bonus-free.
+	BonusDice string
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -504,6 +509,12 @@ type AttackResult struct {
 	AutoCrit            bool
 	AutoCritReason      string
 	D20Roll             dice.D20Result
+	// Effect-dice bonus added to the to-hit roll (Bless / Bardic Inspiration).
+	// Zero-valued when none supplied. BonusTotal is folded into the hit
+	// comparison; D20Roll stays bonus-free. BonusRolls carries per-die results.
+	BonusExpression     string
+	BonusTotal          int
+	BonusRolls          []dice.GroupResult
 	EffectiveAC         int
 	DamageTotal         int
 	DamageType          string
@@ -678,6 +689,10 @@ type AttackCommand struct {
 	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
 	// creature-granted cover still applies via the encounter's combatant list.
 	Walls []renderer.WallSegment
+	// BonusDice, when non-empty, is a player-declared effect-die expression
+	// (e.g. "1d4" Bless, "1d8" Bardic Inspiration) added to the to-hit roll.
+	// Applies to the primary swing only (cleared on Cleave/Monk secondaries).
+	BonusDice string
 }
 
 // masteryActive reports whether the attacker knows this weapon's mastery
@@ -943,6 +958,21 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 	result.D20Roll = d20
 
+	// Player-declared effect dice (Bless / Bardic Inspiration) add to the
+	// to-hit total. Nat 20 / nat 1 key off the raw die and are unaffected; the
+	// D20Roll breakdown stays bonus-free — only the hit comparison folds it in.
+	bonusToHit := 0
+	if input.BonusDice != "" {
+		bonus, berr := roller.Roll(input.BonusDice)
+		if berr != nil {
+			return AttackResult{}, fmt.Errorf("%w: %v", dice.ErrInvalidBonus, berr)
+		}
+		result.BonusExpression = input.BonusDice
+		result.BonusTotal = bonus.Total
+		result.BonusRolls = bonus.Groups
+		bonusToHit = bonus.Total
+	}
+
 	// Nat 20 always hits and crits; nat 1 always misses
 	if d20.CriticalHit {
 		result.Hit = true
@@ -950,7 +980,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	} else if d20.CriticalFail {
 		result.Hit = false
 	} else {
-		result.Hit = d20.Total >= effectiveAC
+		result.Hit = d20.Total+bonusToHit >= effectiveAC
 	}
 
 	if !result.Hit {
@@ -1244,12 +1274,18 @@ func FormatAttackLog(result AttackResult) string {
 
 	// Attack roll line. On advantage/disadvantage the D20 result holds both raw
 	// dice (Rolls) plus the kept one (Chosen); surface both so the log reveals
-	// every die rolled, not only the one that counted.
-	rollStr := fmt.Sprintf("%d (%d + %d)", result.D20Roll.Total, result.D20Roll.Chosen, result.D20Roll.Modifier)
+	// every die rolled, not only the one that counted. Any effect-dice bonus
+	// (Bless / Bardic Inspiration) is added to the leading to-hit total and
+	// shown as a trailing fragment; the d20 breakdown stays bonus-free.
+	toHitTotal := result.D20Roll.Total + result.BonusTotal
+	rollStr := fmt.Sprintf("%d (%d + %d)", toHitTotal, result.D20Roll.Chosen, result.D20Roll.Modifier)
 	if len(result.D20Roll.Rolls) == 2 {
 		rollStr = fmt.Sprintf("%d (%d / %d \u2192 %d + %d)",
-			result.D20Roll.Total, result.D20Roll.Rolls[0], result.D20Roll.Rolls[1],
+			toHitTotal, result.D20Roll.Rolls[0], result.D20Roll.Rolls[1],
 			result.D20Roll.Chosen, result.D20Roll.Modifier)
+	}
+	if result.BonusExpression != "" {
+		rollStr += fmt.Sprintf(" +%d (%s)", result.BonusTotal, result.BonusExpression)
 	}
 	if result.CriticalHit {
 		b.WriteString("\n    \u2192 Roll to hit: \U0001f3af NAT 20 \u2014 CRITICAL HIT!")
@@ -1485,6 +1521,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.Reckless = cmd.Reckless
 	input.ReactionACBonus = cmd.ReactionACBonus
 	input.ReactionReason = cmd.ReactionReason
+	input.BonusDice = cmd.BonusDice
 	input.Cover = coverLevel
 
 	// 2024 Weapon Mastery: thread the attacker's known masteries (weapon ids)

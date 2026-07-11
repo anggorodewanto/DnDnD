@@ -107,7 +107,8 @@ Options:
   sharpshooter:true   Sharpshooter: -5 to hit, +10 damage (ranged only)
   reckless:true       Reckless Attack: advantage on melee STR attacks, enemies get
                       advantage against you until next turn (Barbarian only, first attack)
-  thrown:true         Throw a weapon with the thrown property (or improvised, range 20/60)
+  thrown:true         Throw a thrown-property weapon (range 20/60)
+  bonus:[dice]        Effect dice on the to-hit roll (e.g. 1d4 Bless, 1d8 Bardic)
 
 Extra Attack:
   Each /attack resolves one swing. Your remaining attacks are shown after each hit.
@@ -300,6 +301,7 @@ Usage:
   /check [skill] disadv:true          Roll with disadvantage
   /check [skill] target:[id]          Check against a specific creature
   /check [skill] dc:[N]               Set a difficulty class
+  /check [skill] bonus:[dice]         Add effect dice (e.g. 1d4 Guidance, 1d8 Bardic Inspiration)
 
 Proficiency, expertise, and modifiers are applied automatically.`
 
@@ -307,6 +309,7 @@ const helpSave = `/save — Make a Saving Throw
 
 Usage:
   /save [ability]                     Roll a saving throw (e.g. /save dex, /save wis)
+  /save [ability] bonus:[dice]        Add effect dice (e.g. 1d4 Bless, 1d8 Bardic Inspiration)
 
 Proficiency and modifiers are applied automatically.`
 

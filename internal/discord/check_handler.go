@@ -221,10 +221,19 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 
 	// Parse options
-	skill, adv, disadv, dc, hasDC, target := h.parseOptions(data.Options)
+	skill, adv, disadv, dc, hasDC, target, bonus := h.parseOptions(data.Options)
 	if skill == "" {
 		respondEphemeral(h.session, interaction, "Please specify a skill or ability (e.g. `/check perception`).")
 		return
+	}
+
+	// Validate any effect-dice bonus once, up front, so every downstream path
+	// (single, targeted, contested) rejects a bad expression consistently.
+	if bonus != "" {
+		if err := dice.ValidateBonusExpression(bonus); err != nil {
+			respondEphemeral(h.session, interaction, invalidBonusDiceMessage(bonus))
+			return
+		}
 	}
 
 	// Resolve campaign and character
@@ -273,6 +282,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		JackOfAllTrades:  charData.JackOfAllTrades,
 		ProfBonus:        int(char.ProficiencyBonus),
 		RollMode:         rollMode,
+		BonusDice:        bonus,
 	}
 
 	// Apply condition effects if in combat
@@ -411,7 +421,7 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 	initiatorMod := character.SkillModifier(input.Scores, input.Skill, input.ProficientSkills, input.ExpertiseSkills, input.JackOfAllTrades, input.ProfBonus)
 
 	contested := h.checkService.ContestedCheck(check.ContestedCheckInput{
-		Initiator: check.ContestedParticipant{Name: char.Name, Modifier: initiatorMod, RollMode: input.RollMode, ExhaustionLevel: input.ExhaustionLevel},
+		Initiator: check.ContestedParticipant{Name: char.Name, Modifier: initiatorMod, RollMode: input.RollMode, ExhaustionLevel: input.ExhaustionLevel, BonusDice: input.BonusDice},
 		// Opponent exhaustion is deferred: ResolveContestedOpponent returns only a
 		// precomputed modifier, and this contested path is not yet wired in prod
 		// (no SetOpponentResolver caller). ContestedCheck folds the opponent side
@@ -423,15 +433,24 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 	respondEphemeral(h.session, interaction, msg)
 
 	// Log the initiator's roll to roll history; opponent's roll is the DM's
-	// to log if they care. Mirrors logRollIfWanted semantics.
+	// to log if they care. Mirrors logRollIfWanted semantics, folding any
+	// effect dice into the logged roll.
 	if h.rollLogger != nil {
+		diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: contested.InitiatorD20.Rolls, Total: contested.InitiatorD20.Chosen}}
+		expression := fmt.Sprintf("d20+%d", initiatorMod)
+		breakdown := contested.InitiatorD20.Breakdown
+		if contested.InitiatorBonusExpression != "" {
+			diceRolls = append(diceRolls, contested.InitiatorBonusRolls...)
+			expression += "+" + contested.InitiatorBonusExpression
+			breakdown += contested.BonusFragment()
+		}
 		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-			DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: contested.InitiatorD20.Rolls, Total: contested.InitiatorD20.Chosen}},
+			DiceRolls:  diceRolls,
 			Total:      contested.InitiatorTotal,
-			Expression: fmt.Sprintf("d20+%d", initiatorMod),
+			Expression: expression,
 			Roller:     char.Name,
 			Purpose:    fmt.Sprintf("contested %s vs %s", input.Skill, oppName),
-			Breakdown:  contested.InitiatorD20.Breakdown,
+			Breakdown:  breakdown,
 			Timestamp:  contested.InitiatorD20.Timestamp,
 		})
 	}
@@ -526,11 +545,12 @@ func formatContestedCheckResult(skill string, r check.ContestedCheckResult) stri
 			r.OpponentD20.Breakdown, r.OpponentTotal,
 		)
 	}
+	initiatorBreakdown := r.InitiatorD20.Breakdown + r.BonusFragment()
 	return fmt.Sprintf(
 		"🎲 **Contested %s** — **%s wins**\n• Initiator rolled %d (%s)\n• Opponent rolled %d (%s)",
 		skillLabel,
 		r.Winner,
-		r.InitiatorTotal, r.InitiatorD20.Breakdown,
+		r.InitiatorTotal, initiatorBreakdown,
 		r.OpponentTotal, r.OpponentD20.Breakdown,
 	)
 }
@@ -613,20 +633,37 @@ func (h *CheckHandler) logRollIfWanted(char refdata.Character, result check.Sing
 	if h.rollLogger == nil || result.AutoFail {
 		return
 	}
+	diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}}
+	expression := fmt.Sprintf("d20+%d", result.Modifier)
+	breakdown := result.D20Result.Breakdown
+	// Fold any effect dice (Guidance, Bardic Inspiration, ...) into the log so
+	// #roll-history reflects the full roll, not just the d20.
+	if result.BonusExpression != "" {
+		diceRolls = append(diceRolls, result.BonusRolls...)
+		expression += "+" + result.BonusExpression
+		breakdown += result.BonusFragment()
+	}
 	_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-		DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}},
+		DiceRolls:  diceRolls,
 		Total:      result.Total,
-		Expression: fmt.Sprintf("d20+%d", result.Modifier),
+		Expression: expression,
 		Roller:     char.Name,
 		Purpose:    fmt.Sprintf("%s check", result.Skill),
-		Breakdown:  result.D20Result.Breakdown,
+		Breakdown:  breakdown,
 		Timestamp:  result.D20Result.Timestamp,
 	})
 }
 
-// parseOptions extracts skill, adv, disadv, dc, hasDC, and target from
-// command options. (med-32: target was previously parsed but discarded.)
-func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool, dc int, hasDC bool, target string) {
+// invalidBonusDiceMessage is the player-facing rejection shown when a /check,
+// /save, or /attack effect-dice expression fails dice.ValidateBonusExpression.
+func invalidBonusDiceMessage(bonus string) string {
+	return fmt.Sprintf("❌ Invalid bonus dice %q — use a dice expression like `1d4` (Guidance) or `1d8` (Bardic Inspiration).", bonus)
+}
+
+// parseOptions extracts skill, adv, disadv, dc, hasDC, target, and bonus
+// (effect dice) from command options. (med-32: target was previously parsed
+// but discarded.)
+func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool, dc int, hasDC bool, target, bonus string) {
 	for _, opt := range opts {
 		switch opt.Name {
 		case "skill":
@@ -640,6 +677,8 @@ func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteract
 			hasDC = true
 		case "target":
 			target = opt.StringValue()
+		case "bonus":
+			bonus = opt.StringValue()
 		}
 	}
 	return

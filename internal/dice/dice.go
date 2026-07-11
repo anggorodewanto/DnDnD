@@ -1,11 +1,42 @@
 package dice
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// ErrInvalidBonus is returned by ValidateBonusExpression when a player-supplied
+// effect-die expression (e.g. "1d4" Guidance / Bless, "1d8" Bardic Inspiration)
+// does not parse or exceeds MaxBonusDice. Callers map it to a player-facing
+// message.
+var ErrInvalidBonus = errors.New("invalid bonus dice expression")
+
+// MaxBonusDice caps how many effect dice a single roll may add, guarding the
+// roller against pathological input like "999d20". Real effect dice are a
+// single die, so 20 is generous.
+const MaxBonusDice = 20
+
+// ValidateBonusExpression ensures an effect-die expression parses and stays
+// within MaxBonusDice. Returns ErrInvalidBonus (wrapped) otherwise. Shared by
+// /check, /save, and /attack so every effect-dice rider rejects bad input the
+// same way.
+func ValidateBonusExpression(expr string) error {
+	parsed, err := ParseExpression(expr)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidBonus, err)
+	}
+	total := 0
+	for _, g := range parsed.Groups {
+		total += g.Count
+	}
+	if total > MaxBonusDice {
+		return fmt.Errorf("%w: at most %d dice", ErrInvalidBonus, MaxBonusDice)
+	}
+	return nil
+}
 
 // DiceGroup represents a single NdM component of a dice expression.
 type DiceGroup struct {

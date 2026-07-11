@@ -98,8 +98,11 @@ func (s *Service) applyCleaveAttack(ctx context.Context, attacker, primaryTarget
 	secondInput.TargetConditions = secondTargetConds
 	// The secondary attack is a fresh swing, not a once-per-turn FES carrier —
 	// it must not re-fire Sneak Attack etc. Strip FES so only the weapon die
-	// (and the negative-only ability mod) lands on the second creature.
+	// (and the negative-only ability mod) lands on the second creature. A
+	// player-declared to-hit effect die is likewise a one-shot for the primary
+	// swing, so clear it too.
 	secondInput.Features = nil
+	secondInput.BonusDice = ""
 
 	secondResult, err := ResolveAttack(secondInput, roller)
 	if err != nil {

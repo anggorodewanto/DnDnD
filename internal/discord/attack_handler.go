@@ -195,6 +195,15 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 	offhand := optionBool(interaction, "offhand")
 	thrown := optionBool(interaction, "thrown")
 	improvised := optionBool(interaction, "improvised")
+	bonus := optionString(interaction, "bonus")
+
+	// Reject a bad effect-dice expression up front (mirrors /check, /save).
+	if bonus != "" {
+		if err := dice.ValidateBonusExpression(bonus); err != nil {
+			respondEphemeral(h.session, interaction, invalidBonusDiceMessage(bonus))
+			return
+		}
+	}
 
 	userID := discordUserID(interaction)
 	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
@@ -271,6 +280,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 			Thrown:          thrown,
 			IsImprovised:    improvised,
 			Walls:           walls,
+			BonusDice:       bonus,
 		}
 
 		result, err := h.combatService.Attack(ctx, cmd, h.roller)
