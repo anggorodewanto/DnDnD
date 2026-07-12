@@ -468,6 +468,15 @@ type PendingDdbImport struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+type PendingInitiative struct {
+	ID          uuid.UUID `json:"id"`
+	CampaignID  uuid.UUID `json:"campaign_id"`
+	CharacterID uuid.UUID `json:"character_id"`
+	Roll        int32     `json:"roll"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type PendingSafe struct {
 	ID          uuid.UUID     `json:"id"`
 	EncounterID uuid.UUID     `json:"encounter_id"`

@@ -359,6 +359,40 @@ func suppliedInitiative(c refdata.Combatant, supplied map[uuid.UUID]InitiativeIn
 	return in, ok
 }
 
+// mergePendingInitiatives folds player-staged initiative (APP-5) into the
+// caller-supplied map. Players who ran /initiative before combat submitted their
+// own totals into a staging table; for each staged character that is actually in
+// this combat and has no explicit start-body value, the staged total is added as
+// an InitiativeInput (so the PC's reported total is used verbatim, no auto-roll).
+// An explicit start-body value (a DM override) always wins over a staged one.
+// Pure helper — StartCombat does the (best-effort) staging read/clear and passes
+// the rows in, so an empty/nil staged slice returns the supplied map unchanged.
+func mergePendingInitiatives(supplied map[uuid.UUID]InitiativeInput, charIDs []uuid.UUID, staged []refdata.ClearAndReturnPendingInitiativesRow) map[uuid.UUID]InitiativeInput {
+	if len(staged) == 0 {
+		return supplied
+	}
+
+	inCombat := make(map[uuid.UUID]bool, len(charIDs))
+	for _, id := range charIDs {
+		inCombat[id] = true
+	}
+
+	merged := supplied
+	if merged == nil {
+		merged = make(map[uuid.UUID]InitiativeInput, len(staged))
+	}
+	for _, p := range staged {
+		if !inCombat[p.CharacterID] {
+			continue
+		}
+		if _, ok := merged[p.CharacterID]; ok {
+			continue // an explicit start-body value wins over the staged one
+		}
+		merged[p.CharacterID] = InitiativeInput{Roll: p.Roll}
+	}
+	return merged
+}
+
 // RollInitiative rolls initiative for all combatants in an encounter, sorts them,
 // assigns initiative_order, sets round to 1 and status to "active".
 func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, roller *dice.Roller) ([]refdata.Combatant, error) {

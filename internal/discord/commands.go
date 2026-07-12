@@ -399,6 +399,22 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		// --- Checks & Saves ---
 		{
+			Name:        "initiative",
+			Description: "Submit your own initiative before combat so the DM doesn't roll it for you",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "roll",
+					Description: "Your initiative total (your d20 roll + your initiative modifier), e.g. 17",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "clear",
+					Description: "Remove the initiative you previously staged",
+				},
+			},
+		},
+		{
 			Name:        "check",
 			Description: "Make an ability or skill check",
 			Options: []*discordgo.ApplicationCommandOption{

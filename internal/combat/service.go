@@ -80,6 +80,10 @@ type Store interface {
 
 	// Initiative
 	UpdateCombatantInitiative(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
+	// Pending initiative (APP-5) — StartCombat reads and clears the campaign's
+	// player-staged initiative in one statement, folding it into the APP-1
+	// supplied map.
+	ClearAndReturnPendingInitiatives(ctx context.Context, campaignID uuid.UUID) ([]refdata.ClearAndReturnPendingInitiativesRow, error)
 	SkipTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	ListTurnsByEncounterAndRound(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
 
@@ -1211,8 +1215,17 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 	}
 
 	// Step 4: Roll initiative. Supplied PC values (APP-1) are used verbatim;
-	// only combatants without one auto-roll.
-	sortedCombatants, err := s.rollInitiative(ctx, enc.ID, roller, input.CharacterInitiatives)
+	// only combatants without one auto-roll. Player-staged initiative (APP-5,
+	// submitted via /initiative before combat) is read-and-cleared in one
+	// statement and folded into the supplied map so those PCs skip the auto-roll
+	// too. Best-effort: a staging read failure must not block a combat start.
+	staged, err := s.store.ClearAndReturnPendingInitiatives(ctx, enc.CampaignID)
+	if err != nil {
+		log.Printf("APP-5: reading staged initiatives for campaign %s failed: %v", enc.CampaignID, err)
+		staged = nil
+	}
+	initiatives := mergePendingInitiatives(input.CharacterInitiatives, input.CharacterIDs, staged)
+	sortedCombatants, err := s.rollInitiative(ctx, enc.ID, roller, initiatives)
 	if err != nil {
 		return StartCombatResult{}, fmt.Errorf("rolling initiative: %w", err)
 	}

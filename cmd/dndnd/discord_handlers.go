@@ -152,6 +152,7 @@ type discordHandlers struct {
 	distance          *discord.DistanceHandler
 	done              *discord.DoneHandler
 	check             *discord.CheckHandler
+	initiative        *discord.InitiativeHandler
 	save              *discord.SaveHandler
 	roll              *discord.RollHandler
 	rest              *discord.RestHandler
@@ -266,6 +267,12 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			deps.resolver,
 			combatantLookup,
 			deps.rollHistoryLogger,
+		),
+		initiative: discord.NewInitiativeHandler(
+			deps.session,
+			checkCampProv,
+			characterLookup,
+			newPendingInitiativeAdapter(deps.queries),
 		),
 		roll: discord.NewRollHandler(
 			deps.session,
@@ -804,6 +811,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetDistanceHandler(set.distance)
 	r.SetDoneHandler(set.done)
 	r.SetCheckHandler(set.check)
+	r.SetInitiativeHandler(set.initiative)
 	r.SetSaveHandler(set.save)
 	r.SetRollHandler(set.roll)
 	r.SetRestHandler(set.rest)
@@ -1679,6 +1687,50 @@ func newCheckCampaignProviderAdapter(q *refdata.Queries) *checkCampaignProviderA
 
 func (a *checkCampaignProviderAdapter) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {
 	return a.queries.GetCampaignByGuildID(ctx, guildID)
+}
+
+// pendingInitiativeAdapter satisfies discord.InitiativeStagingStore over
+// *refdata.Queries, bridging the handler's positional signature to the sqlc
+// Params structs (APP-5).
+type pendingInitiativeAdapter struct {
+	queries *refdata.Queries
+}
+
+func newPendingInitiativeAdapter(q *refdata.Queries) *pendingInitiativeAdapter {
+	if q == nil {
+		return nil
+	}
+	return &pendingInitiativeAdapter{queries: q}
+}
+
+func (a *pendingInitiativeAdapter) UpsertPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID, roll int32) error {
+	_, err := a.queries.UpsertPendingInitiative(ctx, refdata.UpsertPendingInitiativeParams{
+		CampaignID:  campaignID,
+		CharacterID: characterID,
+		Roll:        roll,
+	})
+	return err
+}
+
+func (a *pendingInitiativeAdapter) GetPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) (int32, bool, error) {
+	row, err := a.queries.GetPendingInitiative(ctx, refdata.GetPendingInitiativeParams{
+		CampaignID:  campaignID,
+		CharacterID: characterID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return row.Roll, true, nil
+}
+
+func (a *pendingInitiativeAdapter) DeletePendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) error {
+	return a.queries.DeletePendingInitiative(ctx, refdata.DeletePendingInitiativeParams{
+		CampaignID:  campaignID,
+		CharacterID: characterID,
+	})
 }
 
 // concentrationLookupAdapter satisfies discord.StatusConcentrationLookup over *refdata.Queries.

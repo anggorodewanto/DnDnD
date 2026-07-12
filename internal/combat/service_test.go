@@ -123,6 +123,9 @@ type mockStore struct {
 	cancelAllPendingSavesByCombatantFn func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 	forfeitPendingSaveFn               func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
 
+	// Pending Initiatives (APP-5) — player-staged pre-combat initiative
+	clearAndReturnPendingInitiativesFn func(ctx context.Context, campaignID uuid.UUID) ([]refdata.ClearAndReturnPendingInitiativesRow, error)
+
 	// Turn Timer
 	listTurnsNeedingNudgeFn             func(ctx context.Context) ([]refdata.Turn, error)
 	listTurnsNeedingWarningFn           func(ctx context.Context) ([]refdata.Turn, error)
@@ -693,6 +696,12 @@ func (m *mockStore) ForfeitPendingSave(ctx context.Context, id uuid.UUID) (refda
 		return m.forfeitPendingSaveFn(ctx, id)
 	}
 	return refdata.PendingSafe{ID: id, Status: "forfeited"}, nil
+}
+func (m *mockStore) ClearAndReturnPendingInitiatives(ctx context.Context, campaignID uuid.UUID) ([]refdata.ClearAndReturnPendingInitiativesRow, error) {
+	if m.clearAndReturnPendingInitiativesFn != nil {
+		return m.clearAndReturnPendingInitiativesFn(ctx, campaignID)
+	}
+	return nil, nil
 }
 func (m *mockStore) ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error) {
 	if m.listTurnsNeedingNudgeFn != nil {

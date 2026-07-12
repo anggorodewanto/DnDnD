@@ -119,6 +119,11 @@ func (r *CommandRouter) SetCheckHandler(h *CheckHandler) {
 	r.handlers["check"] = h
 }
 
+// SetInitiativeHandler registers the InitiativeHandler for the /initiative command.
+func (r *CommandRouter) SetInitiativeHandler(h *InitiativeHandler) {
+	r.handlers["initiative"] = h
+}
+
 // SetSaveHandler registers the SaveHandler for the /save command.
 func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
 	r.handlers["save"] = h
@@ -321,7 +326,7 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 	gameCommands := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
 		"interact", "done", "deathsave", "command", "reaction", "check",
-		"save", "rest", "whisper", "status", "equip", "undo", "inventory",
+		"initiative", "save", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
 		"character", "edit-character", "recap", "distance", "help",
 	}

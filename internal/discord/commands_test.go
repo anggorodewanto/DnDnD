@@ -81,6 +81,8 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"command", "creature_id", discordgo.ApplicationCommandOptionString, true},
 		{"command", "action", discordgo.ApplicationCommandOptionString, true},
 		{"command", "target", discordgo.ApplicationCommandOptionString, false},
+		{"initiative", "roll", discordgo.ApplicationCommandOptionInteger, false},
+		{"initiative", "clear", discordgo.ApplicationCommandOptionBoolean, false},
 		{"check", "skill", discordgo.ApplicationCommandOptionString, true},
 		{"check", "adv", discordgo.ApplicationCommandOptionBoolean, false},
 		{"check", "disadv", discordgo.ApplicationCommandOptionBoolean, false},
@@ -297,7 +299,7 @@ func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 	expected := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
 		"interact", "done", "map", "deathsave", "command", "reaction", "check",
-		"save", "roll", "rest", "whisper", "status", "equip", "undo", "inventory",
+		"initiative", "save", "roll", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
 		"register", "import", "create-character", "character", "edit-character", "recap",
 		"distance", "help", "setup",

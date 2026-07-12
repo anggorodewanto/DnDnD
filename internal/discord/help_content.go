@@ -18,6 +18,7 @@ const generalHelp = "\U0001F4D6 **DnDnD Command Reference**\n" +
 	"`/command [creature] [action]` \u2014 Command a companion creature\n" +
 	"`/reaction` \u2014 Declare, cancel, or clear reactions\n" +
 	"\n**Checks & Saves**\n" +
+	"`/initiative [total]` \u2014 Submit your own initiative before combat\n" +
 	"`/check [skill]` \u2014 Make an ability or skill check\n" +
 	"`/save [ability]` \u2014 Make a saving throw\n" +
 	"`/roll [dice]` \u2014 Roll any dice (e.g. 1d20+4, 2d6)\n" +
@@ -58,6 +59,7 @@ var helpTopics = map[string]string{
 	"metamagic":        helpMetamagic,
 	"cast":             helpCast,
 	"move":             helpMove,
+	"initiative":       helpInitiative,
 	"check":            helpCheck,
 	"save":             helpSave,
 	"roll":             helpRoll,
@@ -292,6 +294,21 @@ Usage:
 
 Movement costs are calculated automatically based on terrain and conditions.
 Prone characters are prompted to stand or crawl.`
+
+const helpInitiative = `/initiative — Submit Your Own Initiative
+
+Roll your own d20, add your initiative modifier, and report the total here BEFORE
+combat starts. The DM uses your number when they start the encounter, so nobody
+rolls your die for you. Works out of combat.
+
+Usage:
+  /initiative roll:[total]            Stage your initiative total (e.g. roll:17)
+  /initiative clear:true              Remove the initiative you staged
+  /initiative                         Show the initiative you currently have staged
+
+Notes:
+  • Re-run with a new roll: to change it — the latest value wins.
+  • Your staged value is cleared automatically once combat starts.`
 
 const helpCheck = `/check — Make an Ability or Skill Check
 
@@ -537,7 +554,7 @@ Usage:
   /help                               Show the full command list
   /help [topic]                       Show detailed help for a command or class
 
-Topics: attack, action, cast, move, check, save, rest, equip, inventory, bonus, done,
+Topics: attack, action, cast, move, initiative, check, save, rest, equip, inventory, bonus, done,
         status, ki, rogue, cleric, paladin, metamagic, and more.`
 
 const helpSetup = `/setup — Campaign Setup
