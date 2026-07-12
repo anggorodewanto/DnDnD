@@ -12,9 +12,12 @@
 > player-facing half lives in [`world.md`](world.md), and only what players have
 > actually earned gets revealed.
 
-_Last updated: 2026-07-04 — written after the players left Ashfall, Windreth joined
-+ gave his backstory, and the party **chose Palewatch** as their first destination
-(see [`sessions/session-01.md`](sessions/session-01.md) tail + #in-character 07-04)._
+_Last updated: 2026-07-12 — added **"The forward shape"** structural scaffold up top
+(act map + name-assembly tracker + the live **Leg-3 Sesh** arc structure + the endgame
+convergence + railroad guardrails), so the spine has a bird's-eye plan and not only a
+beat-log. Underlying canon current to the party **deep inside Sesh** (Bertran's shed;
+runner at the door). Earlier base written 2026-07-04 after Ashfall / Windreth's join /
+the Palewatch heading (see [`sessions/session-01.md`](sessions/session-01.md))._
 
 ---
 
@@ -39,6 +42,121 @@ per arc) so the world feels bigger than the plot without drowning the throughlin
 Log orphan seeds under "Scattered orphan threads" below so a later arc can pick them
 up. Rule of thumb: **plant, don't explain** — an unexplained image the players
 remember beats a tidy answer.
+
+---
+
+## The forward shape — act map + where each leg is going (DM structure)
+
+> **Added 2026-07-12 as the campaign's structural scaffold.** This is the *map*; the
+> long beat-log further down is the *territory already crossed*. The rule from the
+> header still governs: **seeds, not a script.** Structure exists so improv has a
+> spine and stakes — not so the players' route is pre-drawn. Every future leg below is
+> a **situation + who-wants-what + a likely exit**, never a set of rooms or a required
+> outcome. When play contradicts a seed, **play wins** — update this map, don't bend
+> the table to it.
+
+### The campaign in one shape
+
+The party is turning a scattered god's name into a **weapon-or-mercy they will one
+day have to choose about.** Each destination hands them another piece and another pull
+on that choice. The engine underneath: **the more of the name they gather, the more
+they become the thing every other hand is hunting** — so gathering *is* the clock. The
+endgame is not a boss; it's the moment they hold enough of the name that the
+**reassemble / keep-scattered / hand-over** trilemma stops being abstract and demands
+an answer, with the Order, the patron, and their own history all pulling different ways.
+
+### Act map (status → central question → exit)
+
+| Leg | Status | What it's about | The piece it hands them | The exit |
+| --- | --- | --- | --- | --- |
+| **0 — Ashfall** | ✅ resolved | Freed the Faceless God; learned the name was drowned on purpose. | Token (the counter-to-erasure key) + scraps **#1 & #2**. | Chose a heading (→ the road). |
+| **1 — Road + Palewatch** | ✅ resolved | Chased & **killed the renegade**; met the Order's fled wardens (Mave); learned the scatter-doctrine + the *"a hand bought him"* dread. | The Order's **kept scrap** — taken from the vault (= the warded prize = DM-secret Windreth's own name). | Disc cracked → **Sesh**. |
+| **2 — Ash-road to Sesh** | ✅ resolved | The **Follower** (a *made* hunter) killed; Mave's five scattered ahead toward Sesh. | The grey man's **cut-name harvest bundle** (off his corpse). | Entered Sesh. |
+| **3 — SESH, the Mask Market** | 🔴 **LIVE** | Get the warded prize **read safely**, hunt the buyer's *money not his face*, gather more pieces — while the **one sealed-name reader is the buyer's own hand.** | Bertran's **iron box** (cut scraps + coin + tally-token) already taken; a *reading* + the next heading are the real prizes. | A safe(ish) reading and/or a new scrap-mark → the next destination. |
+| **4+ — Morran's Reach / further seeds** | ⬜ ahead | More scraps, more pulls; the name keeps assembling. | Each leg = one more piece. | Toward the convergence. |
+| **★ Convergence** | ⬜ endgame | Enough of the name is gathered → the **trilemma is forced**, all three hands present. | — | The players' answer *is* the campaign's ending. |
+
+### The name-assembly tracker (the endgame progress meter)
+
+The endgame lever is **speaking the assembled name** (see "Open loops"). Track how close
+they are — the concentration itself is the rising clock (Mave: carried together toward
+Sesh = carried *to* the hand):
+
+- **Token** — cold-iron, opens forgotten things (the counter to erasure). *Held (Vale).*
+- **Scrap #1** (ashen shard-stroke) + **Scrap #2** (heap-twin). *Held.*
+- **Grey man's harvest bundle** — the renegade's collected cut names. *Held.*
+- **The warded prize** (`kept-name-scrap-warded`, `identified:false`) — DM-secret =
+  Windreth's own stolen name; the piece the buyer wants *most*. *Held (Windreth), unread.*
+- **Bertran's iron box** — more cut scraps + coin + a stamped tally-token. *Just taken (Sesh).*
+
+**Structural read:** the party is already a walking reassembly. They likely hold enough
+that a proper reading of the prize — or a market that can read the *set* — starts to
+tip toward "the name can be spoken." That is the trip-wire into the convergence; keep it
+in view when deciding how loud Sesh's hand reacts.
+
+### Leg 3 — the Sesh arc, structured (they are IN it now)
+
+The pre-arrival "future seed" (see "The Mask Market of Sesh" below) is now live. Its shape:
+
+- **The knot (the whole leg in one line):** the only reader in Sesh who can read a
+  *sealed* name is **Sabinnet, the Reader-under-glass — and she answers to the faceless
+  buyer.** So the obvious path to reading the prize *is* walking the prize into the
+  enemy's hand, and (per Mave) reading it on the market floor **thins the ward and wakes
+  the hand.** The leg is the party solving *how to read the name without handing it over
+  or ringing the bell* — by forcing a clean hand-back, finding another reader, reading it
+  off-floor, or deciding not to read it here at all.
+- **The four hands (who wants what):**
+  1. **The party** — read the prize safely, gather pieces, follow the thread up-chain, and
+     *not* surface the name where the hand can take it.
+  2. **The faceless buyer + Sabinnet (his hand)** — wants the scraps concentrated and the
+     prize *surfaced and read* so it can be taken. Never met directly (scatter-doctrine
+     protects him from being a lootable address — established). Reached only through his
+     network: fence-clerks (Bertran ✓), the runner, Sabinnet.
+  3. **The fled wardens** (Mave's five, scattered ahead into Sesh's crowd) — want to stay
+     hidden and *apart*; potential allies (a keeper who reads-and-hands-back), potential
+     spooked obstacles. A living-warden reveal-source still in reach.
+  4. **Vale's patron (The Lorekeeper)** — the rival collector, **strongest here** (the
+     token leans toward Sesh). Sesh is the venue where **patron = the faceless buyer** can
+     finally crack — the near-match Mave couldn't swear to. Hold it as one more earned
+     layer; the face-market is where the two hands may prove to be one.
+- **Clocks running in Sesh** (texture, not stopwatches): the **runner** at the door (a
+  minutes-clock — con/take/ghost); the **buyer's network noticing** a fence gone quiet;
+  the **fled wardens** moving through the same crowd; and the slow one — **the more pieces
+  the party carries onto the floor, the more the hand can feel them.**
+- **Likely exits (any, none pre-chosen):** a reading of the prize (clean, or costly, or
+  refused-for-now); a concrete **next-destination mark** (another scrap, à la the disc →
+  Sesh); a face-to-face or a burn with the buyer's hand; or an alliance/rupture with the
+  fled wardens. Build the interior room-by-room as they move; do not pre-place Sabinnet's
+  parlour until they walk toward it.
+
+### The convergence (the endgame situation — loose)
+
+Not a scripted finale — a **situation** that ignites once the assembly tracker tips:
+
+- **Trigger:** the party can, or nearly can, **speak the assembled name** — and the
+  three hands know it.
+- **The forced choice** (the campaign's whole point, never resolved *for* them):
+  **reassemble** (restore what was erased — Windreth's name, the god's dead, stolen faces
+  — and risk making a weapon), **keep it scattered** (side with the Order; deny the patron
+  *and* whoever else), or **hand it to a power** (the patron, or a bargain). No clean answer.
+- **Who's in the room:** the Order (their doctrine vindicated or defied), Vale's patron
+  (collecting through her the whole time), and Windreth's stolen name (the personal stake
+  that makes "just keep it scattered" cost him everything). The climax is *social/moral
+  under pressure*, and only becomes a fight if the players make it one.
+- **Windreth's name is the emotional fulcrum:** reassembling *could* restore it;
+  scattering *keeps it lost*; handing over *sells it*. His thread is how the abstract
+  trilemma gets teeth.
+
+### Structure ≠ railroad (the guardrails)
+
+- Every box above is a **seed**; the players' rolls and choices write the actual plot.
+- **Reveal only what's earned** — the layered-disclosure discipline the beat-log models
+  stays the law. Structure tells *me* where things can go; it is never narrated *at* the
+  players.
+- When the table invents a better road than any seed here, **take it** and rewrite the
+  map. The plan's job is to keep improv consistent, not to win.
+- Keep planting **orphan threads** (one per beat-ish) so the world stays bigger than the
+  plot (see "Loose-thread policy").
 
 ---
 
@@ -105,136 +223,8 @@ answer, and that's the point. Never resolve it *for* them.
   encounter with something (a scrap, a lead), so the chase has a spine across
   Palewatch → the next destinations. Scale the actual statblock live per
   [`big-party.md`](big-party.md) when a fight lands.
-- **▶ DELIVERED ON-SCREEN (07-04, #the-story 6:00/6:04 PM — Ashfall→Palewatch wayhouse):**
-  rungs 1–2 hit + rung 3 primed. The party found a wayhouse with a forgotten guest
-  (rung 1 = the method's wake); **Vale's token (Arcana 22) opened the keeper's scraped
-  memory** (rung 2 = a name/guest that won't hold, the token partially countering the
-  erasure) and showed the renegade in the flesh: **grey cloak, a defaced Pale-Watch
-  warden's disc** (ex-warden signalled without naming the three-way secret), *took* the
-  guest, left the ledger-tick tally-cut, headed **up the road to the Palewatch, 3 nights
-  ahead** (clock lit). **His face stayed scraped** (kept for rung 4 / face-to-face).
-  **Rung 3 DELIVERED (07-04, #the-story 8:18 PM — wayhouse supper):** Windreth answered Vale
-  IC (*"he knows me... a faceless man walks to Palewatch with mine in his mouth"*) then rolled
-  **Insight 17** — adjudicated through his ex-false-name-dealer's eye: he **recognizes the
-  method** (a collector's craft, not a killer's — took the name clean like a clerk closing a
-  ledger line), reads the renegade as **delivering, not fleeing** (unhurried, sure of a welcome
-  ahead), and reframes his own stolen name as **inventory, not a personal vendetta**. The keeper
-  read as a harmless victim of the ongoing erasure ("a thin place," safe to rest). Still held:
-  the renegade's identity/face, the ex-warden link, and *why* he's sure of his welcome (the
-  Order's right-to-refuse / whether he *was* one of the wardens Palewatch hides) — kept for
-  rung 4 / face-to-face.
-  **Rung 4 PROBED but HELD (07-05, #the-story dawn beat ~04:53Z — wayhouse morning, party rested):**
-  Windreth's `/check history` on the **defaced Pale-Watch disc** came up **8** (raw d20, no
-  proficiency) → a *thin* recall: he places the Palewatch's **surface reputation** (a forgetting-
-  order that hoards on purpose; the scratch is a deliberate unmaking) but the deep — **why** a warden
-  defaces his own sign, whether the Order casts out or hunts its own — **would not come**. So the
-  **ex-warden link + right-to-refuse stay locked** (rung 4 intact); the miss was narrated as an *open
-  question dangled*, with the Palewatch itself flagged as where that reading lives. Alongside it,
-  **Forge's `/check investigation` → 18** on his unreadable scrap advanced the **clock/stakes** (not
-  the reveal): his smith-eye reads scrap + wayhouse tally-cut as **one maker / one tool**, so the
-  party carries the **same name-stock the renegade collects** (a collector would want theirs too) —
-  **but the letters still won't resolve** (decipherment kept for the Palewatch, per the withheld-payoff
-  policy below). Both checks table-public; rung 4 un-spent.
-  **Departure + on-road wake (07-05, #the-story ~12:32 PM local — day one on the moor-road):** party set out for the
-  Palewatch (Vale *"move on to Palewatch?"* → Forge *"let's go"*). Day-one beat lands them at a **lone shepherd's
-  croft** = the renegade's wake again — the shepherd is **blanked** (can't recall his own name, doesn't know it's
-  gone) with a **greyed tally-cut on the doorpost** (same hand as the wayhouse, *"did not stop long"*). This **reuses
-  rung 1** (method's wake) + **rung 3** (Windreth reads the wrongness first) — **no new rung**; rung 4 still held. The
-  greyed mark keeps the **~3-night lead roughly holding**; the party's **stop-vs-push** choice (help/read the croft
-  and lose the evening, vs march on to gain ground) is the first place their **pace** starts moving the clock (per
-  "The clock" below — texture, their pace sets whether Palewatch is a heist-in-progress or a robbed cloister).
-  **Croft read (07-05, #the-story ~2:08 PM — party Stopped, 3 checks):** Vale **Arcana 9** (token on the shepherd) —
-  token *confirms* the same erasure power/hand but a weak roll can't force it; visitor-memory scraped clean, **no face
-  (rung 4 held)**, no restoration. Forge **Investigation 15** — taking was slow/unhurried, tally ~2–3 days weathered →
-  **~3-night lead holds**. Windreth **Insight 20** (best) — names taken as **stock/harvest for a ledger**, the man
-  **isn't finished and is still collecting in the open before the walls → a window to catch him on the road that shuts
-  at the Palewatch** (lights the party's stop/push pace-choice; still **no rung 4**). Established ruling: this erasure
-  **doesn't lift at the scene** — only reaching the source might (keeps Windreth's stolen-name hope pointed at the man,
-  not a quick fix). No new rung spent.
-  **Night-march closes the lead (07-06, #the-story ~9:27 AM — day-one grey dawn, cliff country):** the party PUSHED a forced
-  night-march after the croft. All three **failed** the CON save DC 12 (Vale 7 / Forge 8 / Windreth 4) → **1 level Exhaustion each**
-  (applied on the sheets via the character-overview status editor), but a forced march still makes its ground → the renegade's
-  **~3-night lead shrinks to ~2** — the clock finally *moves*, driven by the party's own pace (per "The clock" below). They crest
-  into salt-wind **cliff country** and the **Palewatch's towers come into view for the first time** across a gorge (~half-day+ of
-  switchbacks off). Re-uses **rung 3** (the grey man *"sure of his welcome,"* delivering not fleeing) — **no new rung; rung 4 still
-  held** (face / ex-warden link / right-to-refuse land at the Palewatch itself). Live pace-choice: **rest** (a long rest sheds a
-  level of exhaustion but hands a little lead back) vs **push on worn** — this sets whether they reach the Palewatch as a
-  heist-in-progress or a robbed cloister (don't pre-decide; let their choice set it).
-  **Rest chosen → Palewatch as a robbed cloister (07-06, #the-story ~10:32 AM — grey dawn, at the walls):** the party chose
-  **rest** over push — all three `/rest long` at a hidden camp off the trail (Exhaustion 1→0, full HP, unseen edge kept, no one
-  found them). Per "The clock," a full night's rest **hands ~a night back** → the renegade **reaches the Palewatch ahead of the
-  party**, and the open-road intercept (Windreth's Insight-20 "catch him before the walls" window) is **spent**. So the Palewatch
-  is now set as a **heist-in-progress / freshly-robbed cloister** — the party arrives to a place the grey man has already reached
-  (a **fresh ledger-tick at the shut gate** re-uses rungs 1/3, **no new rung**), traded for **clear eyes + intact stealth**. Their
-  approach — petition / scout / disguise (Vale's *Mask of Many Faces*) / split — is open and **theirs to choose**. **Rung 4
-  (ex-warden link / the Order's right-to-refuse) is still un-spent and lands AT the Palewatch itself.**
-  **Scout done (07-06, #the-story ~11:21 AM — Windreth Perception 13):** the robbed-cloister frame is now **player-visible** — they
-  can see the gate was **forced open quietly** (bar lifted, lock-wood split), the **posts are empty** (no wardens on the wall/slits),
-  **one traveller went in ahead of them** within the day, and there are **two ways in** (murder-hole front gate / windward cliff
-  goat-track). Still **DM-secret / not yet shown:** where the wardens went (fled / hiding / down), whether the renegade is **still
-  inside**, and everything behind **rung 4** (why an ex-warden defaces his own disc, the Order's right-to-refuse, Vale's patron =
-  rival collector). The empty posts also **gate Vale's disguise behind entry** — no warden face to *Mask* into until he sees a live
-  one inside. **No new rung spent.**
-  **Gate read (07-06, #the-story ~11:53 AM / 05:53Z — 3 checks at the threshold):** the party examined the forced gate before
-  committing. **Forge Investigation 11** — gatehouse **empty**, the **portcullis winch is cut** so the gate can't drop (rigged open),
-  murder-holes **unmanned**. **Windreth Investigation 14** (Expertise) — **one intruder, alone**, forced the lock **quiet + calm**
-  (*sure he'd get in*; **re-uses rung 3**), **nobody followed**, **paused just inside** then went **deep**, unhurried; a 14 can't ID
-  him or say if he's **still inside**. **Vale Perception 19** — the wardens **did not leave willingly** (dropped horn, torn cloak);
-  **one warden is still alive + hiding** = **a face Vale can *Mask* into once close** (this **unlocks her disguise**, the lead the
-  empty posts had gated — and it is an **ordinary warden, NOT the renegade** whose face stays scraped); a **cold erasure-trail** runs
-  to the **inner keep** where the scrap is hoarded (**re-uses rung 1**). **Still DM-secret / rung 4 un-spent:** the renegade's face +
-  ex-warden link, the Order's right-to-refuse, whether the intruder is **still inside** — all land when the party meets a warden
-  **face-to-face inside.** **No new rung spent.**
-
-  **Push-in / first contact (07-06, #the-story ~1:21 PM / 06:21Z — 3 checks, all failed):** the party went inside. **Vale** stepped
-  into the open to reach the surviving warden — *"hello? friend, travellers passing by, what happened here?"* — **Persuasion 6** (raw
-  2) + **Insight 4**, while **Windreth** flanked along the wall (**Stealth 9, natural 1**) and Forge held. Adjudged all fail: the
-  frightened survivor **won't trust a horned stranger walking up open** (no cooperation, grips a spear), Vale gets **no read**, and
-  Windreth's boot **skids a loose stone** — the quiet is broken. NPC beat: the warden flinches toward the inner keep and whispers
-  *"he will hear you"* — a **fear-signal, deliberately NOT a hard confirmation** the intruder is still inside (rung 4 held; he never
-  says *who*). **Re-uses rung 1** (erasure-wake) **+ rung 3** (walks like he owns the place); **no new rung spent.** Disguise **still
-  available** — Vale is close and has seen his face (Mask needs no consent). Held: **no combat triggered, fiction not advanced** — the
-  "something may have heard" is a live cliffhanger the party must answer.
-
-  **Vale takes the face + the inner keep opens (07-06, #the-story ~2:14 PM / 07:14Z):** party split to scout. **Windreth Perception
-  11** (raw 7) listening — deep in the keep **one sound answers** (a step / a dragged cloth), then stillness; **can't place it**, keep
-  **not empty** (honors the cliffhanger without confirming the intruder is still inside — rung 4 held). **Vale cast Disguise Self**
-  (Mask of Many Faces, at-will, no check) → wears the survivor warden's face + grey coat + iron disc (**glamour thin — touch/voice
-  breaks it**) and walked into the inner keep; **Forge** holds the inner door, **Windreth** on overwatch. **First durable Palewatch
-  interior canon (table-public):** a **hall of name-niches** (most full, **a few freshly/deliberately emptied**), the erasure-trail
-  runs down the middle to a **heavier far door**, past which is **the one scrap the Order swore never to give up** + where the
-  intruder went (consistent with the public "forgetting-order hoards one piece on purpose" seed — **not a new rung**). Re-uses **rung
-  1** (erasure-wake). **Rung 4 still held** — the **far door is the face-to-face threshold** (renegade unseen; the ex-warden link /
-  right-to-refuse / Vale's patron = rival collector all land there). Build each interior room **live** as they step into it; do **not**
-  spring the renegade or force combat until the party commits to the far door.
-
-  **Down the hall → at the far door (07-06, #the-story ~3:17 PM / 08:17Z):** the party pressed forward together to the far door.
-  **Windreth Perception 6** (low) — studied the hall but it kept its secrets: no trap, no watcher, can't age the trail or place the
-  deep sound; a prickle of wrongness only (ambient rung 1, no reveal). **Vale cast Minor Illusion** (5 "wardens," cantrip, no check) —
-  adjudicated with the RAW image-only limits made fictional (stationary picture, convincing at a glance, breaks up close), a bluff aid
-  on her warden-face, not a wall/moving patrol. **Forge** rear-guarded — nothing followed (no ambush sprung). They now stand at the
-  **shut, heavier far door**; teased only a presence past it ("low and patient, something moves"). **Rung 4 STILL HELD, door still
-  shut** — the face-to-face reveal (renegade's scraped face + ex-warden link + right-to-refuse + Vale's patron = rival collector) lands
-  the **moment they open it**. Re-uses **rung 1**; **no new rung**. Do **not** open the door, reveal the renegade, or force combat
-  until the party commits.
-
-  **★ RUNG 4 LANDED — the far door opens, face-to-face (07-06, #the-story ~4:35 PM / 09:35Z):** the party committed. **Windreth
-  Stealth 12** reached the door unseen (hidden card — the grey man's attention lands on Vale, not him); **Forge** free-swapped to his
-  greataxe at the door; **Vale opened the far door.** Beyond: a stone **vault** with **the one kept scrap**, and over it **the grey man
-  = the Renegade Name-Keeper**, played per spine — **unhurried, unafraid, "sure of his welcome, delivering not fleeing"** (rung 3
-  carried). **What rung 4 SPENT / revealed (now table-facing):** (a) the renegade **in the flesh, face-to-face** — scraped-blank face +
-  broken warden's disc confirmed up close; (b) he **sees through Vale's Disguise Self by knowledge** — he knows the *real* surviving
-  warden whose face she stole (*"You are not him. His hands never shook."* — no contradiction with the living gate-survivor: wardens
-  are NOT all dead); (c) he **clocks the name-piece Vale carries** and frames a **shared-goal / opposed-reason** conflict (*"we want the
-  same thing… only not for the same reason"*); (d) he **opens a parley, does NOT attack.** **What is STILL HELD (rung 4's deeper core —
-  unfold through the parley, do NOT dump in one beat):** the Order of the Pale-Watch's formal **right-to-refuse / keep-it-scattered
-  doctrine**, **Vale's patron = the rival collector using her**, and the **reassemble-vs-scatter-vs-hand-over** choice. *"Not for the
-  same reason"* only cracks the first layer. **Combat NOT triggered** — this is a standoff/parley; initiative starts only if the players
-  start it (or push him to). Re-uses **rung 3** (his manner); **rung 4 now the live scene** — the arc's central social/heist knot
-  (below) is now on the table, in person. **Next rungs from here unfold via play, not pre-scripted:** his doctrine, the patron's hand,
-  and the party's scatter-vs-reassemble-vs-refuse decision.
-
-  **★★ ANTAGONIST KILLED — the party chose the kill over the parley (07-07, #the-story `4700cae8`).**
+  - **▶ RUNGS 1–4 ALL DELIVERED (07-04 → 07-06), then the antagonist was killed.** The reveal ladder above played out in full on the Ashfall→Palewatch road and inside the cloister: rung 1 (blank people / erased signs / greyed tally-cuts), rung 2 (Vale's token opening a scraped memory; a guest that won't hold), rung 3 (Windreth reading the method as the one used on *him*; the grey man "sure of his welcome — delivering, not fleeing"), and rung 4 (face-to-face at the kept vault — scraped-blank face + broken warden's disc, he sees through Vale's *Disguise Self* by knowing the real warden, clocks the piece she carries, and opens a *parley* framed "same thing, not the same reason"). The party's pace set the frame along the way (a forced night-march + a long rest traded lead for exhaustion → they reached the Palewatch as a freshly-robbed cloister). Blow-by-blow (rolls, dates, #the-story hashes) → [`sessions/session-01.md`](sessions/session-01.md) (~L1930–2312); the durable turn is the next bullet.
+  - **★★ ANTAGONIST KILLED — the party chose the kill over the parley (07-07, #the-story `4700cae8`).**
   The standoff turned to combat (Vale opened with Hold Person; the fight ran R1→R4), and in R4
   **Windreth's Shortsword from hiding — advantage, 15 + Sneak Attack — dropped the grey man to 0.**
   Player intent was unambiguously lethal (Vale IC *"you are going down,"* Forge IC *"he turns
@@ -263,145 +253,11 @@ answer, and that's the point. Never resolve it *for* them.
   - **Immediate scene:** party in free RP in the kept vault over his body. Build the aftermath +
     whatever's past it **live**. The arc's central knot (scatter / reassemble / hand-over) is still the
     campaign's spine — it just lost the NPC who framed it; the party carries it forward now.
-  - **↳ SEARCH-THE-BODY payoff (07-07, #the-story `ae65fe7e`) — reveals partly re-routed, secrets still gated.**
-    The party searched the corpse (Vale **Arcana 14** / Windreth **Investigation 6** / Forge **Investigation 19**).
-    What the scraps + disc + token gave up, and what stays sealed:
-    - **Made table-public:** the dead man was a **name-cutter** whose scraps match the shrine-wall cut = **one
-      Order, one method, more of them out there** (Forge); his **warden's disc** is dark but **stamped with a
-      place-mark** → a concrete lead pointing off-map (re-routes "find the wardens" into a **travel hook** — tie to
-      the Palewatch / Sesh / Morran destinations); one scrap is kept **apart on a stand = the prize**, whose name is
-      not yet readable.
-    - **Seeded but NOT spent (the tells):** Vale's Arcana read the **patron's HUNGER** for the scraps (*"bring them
-      to me"*) — the deliberate *tell* toward **patron = rival collector**, dropped as feeling, not fact; let her
-      infer over more beats and reveal in full only when earned. Windreth's low roll had **one scrap turn and watch
-      him** — the *hint* his own stolen name is here; the **kept prize scrap** is now the hard-path handle on both
-      Windreth's name AND the whose-name reveal. Do not confirm either yet — they pay off when a PC presses the
-      prize (`/check arcana` on it), the patron speaks, or a living warden is pressed.
-    - **Still fully sealed (needs a living source):** the Order's **right-to-refuse doctrine** + the
-      scatter/reassemble/hand-over trilemma — a warden or deep study must deliver these, not the scraps alone.
-  - **↳ PRIZE-SCRAP push (07-07, #the-story `7e9a9eff`) — the two tells sharpened; the core reveal still sealed.**
-    Windreth **Perception 12** re-examined the watching scrap and Vale **Arcana 12** pressed the Faceless God's
-    token on it (both consumed my SEARCH-THE-BODY menu). What moved, and what held:
-    - **Sharpened (still just inference, not confirmation):** the watching scrap **is** the prize (Windreth connects
-      them; it tracks *him* specifically, ink stirring toward a shape it knows). The prize is a **living true-name**,
-      freshly cut, still bound to someone alive and missing it (Vale). The token strains **hardest** toward it =
-      the **patron wants this one name most**. A sharp table can now put "watches Windreth" + "living name the
-      patron craves" together and *guess* it is Windreth's stolen name — that inference is intended and fine; **I
-      confirmed nothing.**
-    - **Now hard canon (was a soft tell):** Vale's patron = the **Faceless God**, a **rival name-collector** — her
-      own `faceless-god-token` + `name-scrap-faceless-god` are the same craft/harvest as the grey man's, and the
-      token's hunger makes the rivalry legible. Still delivered as *feeling through her hand*, never stated flat to
-      the players.
-    - **The prize now physically travels with the party** (on Vale's sheet, `kept-name-scrap-warded`,
-      `identified:false`). Whoever carries it carries the thing the Faceless God most wants — a future pressure
-      point (patron leverage over Vale, a target for the Order, the object of Windreth's quest).
-    - **Vale can now wear the grey man's face at will** (Mask of Many Faces → Disguise Self), having studied his
-      corpse — a face for infiltrating the Order / the Palewatch later. Illusion-only (RAW): no voice/build change.
-    - **Still fully sealed (unchanged):** that the name IS Windreth's own / whose it is / the cost of losing it;
-      the Order's right-to-refuse doctrine + the scatter/reassemble/hand-over trilemma. These wait on a **living
-      warden** or a dedicated Windreth beat (a high `/check arcana` on the prize could crack whose-name; hold the
-      doctrine for a warden).
-  - **↳ MEMORY + TOKEN read (07-07, #the-story `8cf8c1fd`) — hope + a leash, both seeded.** Windreth **History 14**
-    (sits with the watching scrap) and Vale **Arcana 9** (reads the token itself, low).
-    - **New table-public canon (Windreth's lore):** the **name-keepers are a real order that KEEPS, not burns** —
-      names are filed/ledgered/stored, so a kept name is **retrievable**, not destroyed. This is the arc's engine of
-      **hope**: Windreth's own name can be recovered (raises the stakes on the scattered-name hunt + the disc's
-      place-mark lead). Plus the lore hook that a kept name **pulls toward its true bearer** — which, set against
-      the prize leaning toward Windreth, lets the table *infer* the prize is his; still **not confirmed**.
-    - **New soft tell (Vale + the token):** the Faceless God's token is **not a neutral instrument — it hungers and
-      may steer her** ("wants to be brought to the scraps, not the other way"). This is the *patron-leash* angle of
-      the rival-collector secret: her patron isn't just a source of power, it has an agenda that runs *through* her.
-      The low roll (9) kept the "why" sealed — good; let the unease build before the full reveal.
-    - **Sealed (unchanged):** whose-name / that it's Windreth's / the cost; patron = rival collector stated flat;
-      the Order's doctrine. Future levers: a high `/check arcana` on the prize (whose-name), a living warden (the
-      doctrine), or Vale feeding/refusing the token (what the patron does with a name).
-  - **↳ DISC-READ (07-07, #the-story `cee8c94a`) — the travel lead teased but withheld; the heading confirmed only in the abstract.**
-    Forge **Investigation 3** (bust) tried to *decipher* where the warden-disc's place-mark points. A low roll ≠ nothing:
-    it holds the lead **on the board but locked** — the disc genuinely marks a destination off-map (established at his
-    prior **Inv 19**), but the **specific place stays unread** (a warden's private cartographer-glyph; a barbarian can't
-    crack it). Keep the concrete destination behind a **better read** — Windreth Investigation+Expertise, a Vale
-    `/check arcana` on the disc, or a locale/NPC that reads warden-marks. Do NOT hand them a place-name off a 3.
-    - **DM-side patron sign (Vale whispered for one, no roll):** the token **warmed + leaned the same way the mark
-      points** = the **travel hook made felt** (a heading exists, outward/off-map — the intended re-route of "find the
-      wardens," per the SEARCH-THE-BODY node). Deliberately self-serving: the patron *wants* the scraps carried onward,
-      so a sign that says "yes, go" serves its agenda — the **leash tightens under the guise of help**. Confirmed the
-      *direction*, withheld the *destination* and the *why*. Reinforces the rival-collector/patron-leash tell without
-      stating it flat.
-    - **Windreth's stance is now on the table (pure RP, no check):** *"we do not give it what it wants until we know
-      why."* He's refusing to feed the token — good friction against Vale's "at least it points where we go next."
-      Bank this as a **party fault-line** (Windreth caution vs Vale's patron-pull); it pays off when the token's true
-      cost surfaces. No adjudication owed — left standing.
-    - **Sealed (unchanged):** the disc's exact destination; whose-name / that it's Windreth's / the cost; patron =
-      rival collector stated flat; the Order's right-to-refuse doctrine.
-  - **↳ DISC DESTINATION CRACKED (07-07, #the-story `a65517ab`) — Vale Arcana 21 on the disc; the gated heading is now SPENT (revealed = Sesh).**
-    Forge handed the warden-disc to Vale to arcane-read; her **21** hit the exact unlock path the DISC-READ node reserved
-    ("a Vale `/check arcana` on the disc"). Payoff delivered: the place-mark = **the Mask Market of Sesh** (caravan-city
-    far out across the ash-waste, off any road they know) — now **table-public**. The Arcana read (not Investigation)
-    also gave the **magic** on the disc: it is **keyed / a homing-mark**, so the renegade's harvest of cut names was
-    **bound for Sesh** — his fence, a market that trades in faces + names. This is the intended re-route of "hunt the
-    wardens" → a concrete **travel hook** (SEARCH-THE-BODY node); the party's likely next destination.
-    - **Soft patron tell (still not flat):** as Vale read "Sesh," the Faceless God's token **warmed + leaned toward Sesh**
-      — the token *likes* this heading. Reinforces the rival-collector/leash tell + seeds line ~410 ("a Fiend collector
-      fits a face-market") for the Sesh arc, without stating patron = rival collector.
-    - **Item move (player-directed):** the **kept prize scrap** (`kept-name-scrap-warded`, the DM-secret = Windreth's own
-      stolen name) transferred **Vale → Windreth** at dewa's request + Windreth's RP (*"if it knows me, I will carry it"*).
-      Thematically loud (he now carries his own name, still warded/unread) but reveals nothing — ward intact
-      (`identified:false`). Raises the stakes on the scattered-name hunt.
-    - **NEWLY SPENT vs STILL SEALED:** SPENT = the disc's destination (= Sesh) + that the harvest was bound there.
-      STILL SEALED = **why** the renegade fed Sesh / who waits there; that Vale's patron's hand is strongest at Sesh /
-      patron = rival collector stated flat; that the prize IS Windreth's name / whose / the cost; the Order's
-      right-to-refuse doctrine. Sesh's interior stays a live-build (cores in "The Mask Market of Sesh" below).
-  - **↳ HEADING ACCEPTED → EN ROUTE (07-07, #the-story `d84e14d2`) — the party commits to Sesh + turns to travel logistics; no secret spent.**
-    After the disc revealed Sesh, the party **accepted the heading** in-character (Vale: *"we have another long way towards Sesh — let's find a horse and wagon we can take from here"*; Forge agreed; Windreth silent-assent) and pivoted to the practical: **short rest** (all three; Vale's pact slots restored 0→2) then **hunt transport** for the ash-waste road. **Forge's last vault-sweep (`/check perception` → 6)** found **nothing hidden** — a bust that spent **no secret**; it only confirmed the strongroom is worked out and bridged the party's eye up toward the cloister (where a stable/stores/cart would be). **Arc phase-shift:** the "kept vault" beat is closing; the next live-build is the **Palewatch cloister interior + its stable/yard** (fresh territory — durable lore → [`world.md`](world.md)), then the **ash-waste road to Sesh** (many days; the clock below applies — the renegade is dead but the Order's *living* wardens + Vale's patron still race the party toward the scattered name). Sesh's interior + secret core stay sealed for arrival.
-  - **↳ TRANSPORT FOUND → THE WARDENS RODE OUT (07-07, #the-story `eddbe479`) — the party has a horse + wagon; the Order left Palewatch fast + recently. Clock advanced, no secret spent.**
-    The party climbed into the Palewatch cloister and found transport: **Vale Investigation 17** located a sound wagon + tack + a high-road horse in the lee-side cart-house; **Forge Perception 16** read the deeper truth of the place — the warden's hearth **dead but not long dead**, boot-tracks all leading **out + down + in a hurry**, feed still in the trough, a cloak-pin dropped and left. **Canon planted (table-public):** the Order's wardens **abandoned this cloister recently and in haste** — they did not plan to be gone. This is a deliberate **clock beat**: it makes the "living wardens still race the party" pressure *concrete* (they are OUT THERE now, moving) without springing a fight on two good rolls (danger deferred, not sprung — good rolls rewarded). **DM-secret held:** *why* the wardens rode out (whether the renegade's death reached them, whether they ride toward Sesh / the party's back-trail / something the party hasn't seen yet) stays a live DM lever — decide it against the party's travel pace, per "The clock" below. A horse + wagon is now a **durable party asset** (tracked in [`game-state.md`](game-state.md) Next-action #1's ↳ TRANSPORT FOUND bullet, no inventory-slug write). The next live-build is the **road to Sesh** once they hitch up and roll out.
-  - **↳ EN ROUTE — DEPARTED PALEWATCH FOR SESH (07-07, #the-story `fb8cd1ad` + `a1bf2cfd`) — the road-to-Sesh arc-leg OPENS; the wardens' trail runs ahead. No secret spent.**
-    The party rigged the wagon (**Vale Animal-handling 19** road-ready + **Windreth Sleight of Hand 25** load lashed silent + the warded scrap hidden), Vale said *"let's move then,"* and they **rolled out of the Palewatch onto the ash-waste road to Sesh** (many days out; opened as fresh live-build territory — durable geography in [`world.md`](world.md)). **Arc-leg shift:** "Palewatch cloister" is closed; the live arena is now **the road** and then **Sesh, the Mask Market** (secret core still sealed in "The Mask Market of Sesh" below). **The clock is now CONCRETE on the road:** the Order's wardens left Palewatch on foot, fast, *the same way down* — their fresh **boot-trail lies on the road ahead of the party**. This is the DM's live lever (see "The clock" below): whether the party **follows** the trail (may close on the wardens — a road-encounter/standoff — or be spotted) or **breaks wide** off-road (slower, unseen) is *their* call, set against their chosen travel pace; do NOT pre-decide the meeting. Held DM-secret: *why* the wardens fled + *where* they ride (toward Sesh? the party's back-trail? something unseen?) — decide it against the party's pace, never railroad. **Do not run the journey unilaterally** — the road unfolds beat-by-beat on the party's travel choices (pace / watch / trail-vs-wide).
-  - **↳ THE TRAIL READ AS FEAR (07-07, #the-story `4cc90b48`) — Vale Insight 12 puts the wardens' *mood* on the table; the *why* stays held.**
-    First on-road beat: Vale rolled **Insight 12** on whether closing on the wardens' trail is wise. Ruling — a **soft read** (tracks, not faces = mood, not reasons): the party now **knows the wardens fled in fear** (fast, frightened, still ahead toward Sesh), which sharpens the fork (**follow the trail vs break wide**) without resolving it — Vale can feel three futures (the wardens know what waits at Sesh / are running toward it / are cornered) but can't pick one. **What stayed sealed** (the 12 didn't crack it): *why* they fled + *where* they ride, and the whole Sesh secret core. The clock's *public face* advanced one notch (fear is now named); the DM lever (the reason behind the flight) is untouched — still decide it against the party's pace, never railroad. The fork is the party's live call.
-  - **↳ THE TRAIL HARD-READ — FIVE, TIRING, DISOWNING THE ORDER (07-07, #the-story `f47ca65f`) — Windreth Survival 16 adds concrete facts + one on-theme clue; the *why* still held.**
-    Windreth tracked the trail hard (Survival 16, his home turf, vs Vale's soft Insight). Now durable + public: **five** wardens, all Order boots, **tiring** (one hurt/limping), the **best part of a day ahead** and **catchable if the party pushes the pace**, with **nothing physical hunting them on the road** (whatever drove them out is back at the Palewatch or within). **On-theme clue (the arc-meaningful part):** a warden **scratched their own Pale-Watch disc dead and dropped it** on the trail — *exactly* as the renegade did — so the fleeing wardens are **disowning the Order as they run**, more afraid of being *known* than of dying. This ties the wardens' flight to the renegade's method (un-making one's own name/mark) and to Windreth's history, WITHOUT answering *why* the Order broke. **Held DM-secret intact:** the reason behind the flight (and where they ride) is untouched — the read deliberately ruled out a road-pursuer to keep the mystery pointed at the Palewatch/within, not at a monster to be fought. Live lever: if the party pushes and catches the wardens, that meeting is a scared/cornered-people scene (parley, intel, or a spooked fight — decide against their pace + approach), NOT a scripted ambush.
-  - **↳ THE CHASE — WARDENS RUN DOWN, CONTACT IMMINENT (07-07, #the-story `029e6050`) — the party chose to close; the cornered-people scene is now one approach away. No secret spent.**
-    The party took the fork the two reads had lit: Forge's **Survival 15** cleared the road/rig for a hard pursuit and Vale's IC **"We ride hard to catch up with the wardens"** committed the table to **follow + hard pace**. Ran the first leg (2024): foot-bound, tiring wardens vs a hard-driven horse+wagon → the party ran them down **inside one hard day** — no forced-march CON save (that only fires on a push *through the night*); the blown horse is the DM-side price. By dusk the party sits **a few hundred paces behind the five**, on open ash, the wardens not yet looking back. **This is the live lever from the hard-read node cashing in:** the cornered/scared-people scene is now **one approach-choice away**, and per Vale's Insight the danger is the wardens **panicking**, not a monster — so how the party closes the last stretch (openly / hailed / stealthed / after dark / circled) shapes whether this becomes parley, intel, or a spooked fight. **Held DM-secret intact:** contact is set up but *unentered* — *why/where* the wardens fled and the Sesh core (patron = rival collector / prize = Windreth's name / the Order's right-to-refuse) are all still sealed, to be decided against the party's chosen approach. Do NOT script the meeting until they act.
-  - **↳ THE MEETING — A FRIGHTENED STANDOFF; THE WAGON BETRAYS THEM (07-07, #the-story `81c885f3`) — first contact with the wardens; no bolt, no fight, no secret cracked.**
-    The party closed careful — Windreth's **Perception 16** read them as refugees not soldiers (staves not blades, more badges torn off, panic-risk confirmed), Forge's **Survival 15** parked the rig back + non-threatening, and Vale's **Persuasion 9** made the warm hail (slow, hands open, offer to camp together). **The 9 failed on the optics, not on Vale:** the party rides the **Order's own wagon**, down from the mountain the wardens fled — so a friendly approach at dusk still reads as *the thing caught up with us.* The careful setup meant **no bolt and no swing**, but **no trust either**: five staves half-up, the leader between her people and the party — *"Stay back — you came from the Watch — leave us be!"* **Clock's public face advanced:** their terror of *"the Watch"* confirms the flight was **FROM the Palewatch/the Order itself** — the DM-secret *why/where* is untouched, and the wardens likely can't answer it anyway (too scared, too low in the Order). **Live lever:** this is the cornered-people scene, entered but unresolved — a fragile standoff the party can de-escalate (tell the truth: the renegade's dead, they're not Order; ground weapons; offer food; name the dropped disc = common cause) or shatter (press closer → panic-bolt or a scared swing). Decide it against the party's chosen de-escalation, never railroad; the sealed Sesh core stays sealed until/unless a warden who knows it is calmed enough to speak.
-  - **↳ THE DE-ESCALATION — THE STANDOFF BREAKS; A WARY TRUCE + WARDEN MAVE (07-07, #the-story `d2dabc02`) — Vale's Performance 26 cracks the terror; two public-face layers spent, the sealed core held.**
-    The party de-escalated the frightened standoff in sequence. **Windreth's Persuasion 6** (food on the ash, palms open, *"what did you run from, and is it still ahead"*) landed **flat** — asking a frightened person to name their fear makes them clam up; the low roll gates his *words*, not his non-threatening food-gesture (RP), so it held the line without moving it. **Forge** (no check, RP) offered both handaxes hilt-out + opened his pack — a disarming gesture (steel flinch → reads as *giving up*). **Vale's Performance 26** was the crowbar: the renegade's **scratched disc** + a **prestidigitation/minor-illusion re-enactment of his fall** + showing the party looted **nothing** = the terror **breaks.** **Public-face spent (rewarding the 26):** the wardens **recognize the renegade as one of their own who turned** (ties him to the Order table-publicly + pays Windreth's personal-villain thread, line 397/420), and the leader — **Warden Mave** (NPC named here, a lean grey-haired woman; the Order's plain, worn-down naming fits their art of forgetting) — lowers her staff, *"you truly put him down… then we owe you a fire, at least,"* takes the food, opens a **wary shared camp.** **Sealed core HELD:** a 26 earns **trust + an open door, not auto-exposition** — Mave keeps the deep *why* close (*"He was not the only reason we ran"* = the renegade's death is real relief but **not the whole** of what drove the Order out). So the clock's public face advances one more notch (renegade = a turned warden; there is MORE than him behind the flight) while the sealed core is untouched — *why/where* they fled, patron = rival collector, prize = Windreth's name, the Order's right-to-refuse. **Live lever:** the party now holds a **fire-side conversation** they can earn their way deeper into — crack the sealed layers only as they calm Mave enough to speak each one (per the gate in the node above); a hard grab for answers closes her back up. Do NOT dump the core; let the players draw it out beat by beat.
-  - **↳ THE FIRE, FIRST LAYER — MAVE NAMES THE PALE WATCH + THE RENEGADE'S METHOD (07-07, #the-story `7e39fbba`) — patient no-pry play draws out one surface layer; sealed core held; a two-way door.**
-    The party played the fire right: **Vale** (no check, RP) hosted — camp, food, water, storyteller entertainment *without prying* (the correct lever; I rewarded the no-pry restraint as the warm mood that opens the door at all, no second roll), and **Forge's Persuasion 10** (honest smith, mends their gear, *"we're not the Watch, just people on a long road"*) drew the first surface layer — a middling roll but *unforced honesty*, which is what a scared refugee opens to. **Surface spent (one layer):** Warden **Mave** names who the Pale Watch are — **keepers who guard forgotten things, locked + quiet, as sacred duty** (makes the world.md public blurb canon in-scene) — and that the renegade was **one of theirs who learned the work too well: to lift a name clean off a living person** (Windreth-thread hook; he goes still; the method resonates with his stolen name but is NOT confirmed as the sealed prize). **Sealed core HELD:** on *what* they kept / *why* they ran Mave shuts the door gently — *"That's not a fire-story. Not tonight."* — the gate holds (calmed enough for SURFACE, not core); *why/where* + patron = rival collector / prize = Windreth's name / right-to-refuse all untouched. **Two-way door opened (agency handed back):** Mave turns it around — *"Who are you, that you came up our mountain and put one of ours in the ground?"* — teeing up the party's answer-or-hold-back choice + the next levers (Windreth's unmade name, Forge's unreadable scrap, Vale trading truth). **Live lever:** Layer 2 (the sealed *why*) opens only as the party earns more trust — a specific lever pulled (Windreth revealing his own unmade name may be the strongest, per his thread) + no hard grab. Continue beat-by-beat; do NOT dump the core.
-  - **↳ THE NIGHT CONFESSION — VALE TRADES TRUTH-FOR-TRUTH → LAYER 2: THE HAND BEHIND THE RENEGADE (07-08, #the-story `623a495c`) — the sealed *why* cracks (partial); patron ↔ patron surfaced as a live in-scene question; where/what/prize still held.**
-    With the camp asleep and Mave alone at the coals, **Vale** (no check, pure RP) gave up the party's own secret FIRST — her patron and its pull toward scattered things, the forgotten god they un-forgot under the mountain behind them, and how their road crossed the renegade warden's. **Adjudication:** this is a *truth-for-truth trade*, not prying — the strongest social lever short of Windreth's own unmade name — and she spent it right (gave a secret unforced, in private, at real cost). The honesty is the currency, so no roll; I rewarded the RP over dice. A gift that large earns a real secret back → **Layer 2 opens.** **Secret-spend (the *why*, partial):** the renegade **did not turn himself — someone reached into the Order and bought him** (*"a long reach and a deep purse"*), and **that hand — not the dead renegade — is why the Order fled** (*"Not from him — you settled him. From the hand that turned him… it still wants what we keep, so we scattered, and carry it away from the door it knows."*). Mave ties it straight to Vale's confession — *"Your patron. The one who collects the pieces. Does it have a name?"* / *"if it is the same hand, you are not chasing that god's name to free it — you are carrying its leash."* This makes the long-running **patron ↔ rival-collector** thread (world.md "Vale's patron ↔ the faceless god touch the same broken shard") a **live in-scene question** the party now feels — but it is NOT resolved: neither Mave nor the party can yet confirm the buyer behind the renegade and Vale's patron are one hand. **Sealed core (remainder) HELD:** cracking the *why* deliberately keeps **where** the Order runs, **what** exactly the Watch keeps, and whether **Windreth's stolen name is the prize** all sealed — the reveal DEEPENS the mystery (more torque, a chilling new suspicion) rather than closing it. **Live lever:** the remaining sealed layers open only as the party earns still more trust — **Windreth naming his own lifted name is now flagged as the single strongest key to the prize=his-name layer**; Vale pressing Mave (`/check persuasion`/`/check insight`) may pry *where*/*what* or read how much Mave herself withholds. Continue beat-by-beat; do NOT dump the core.
-  - **↳ THE LOREKEEPER — VALE NAMES THE PATRON; THE SCATTER-DOCTRINE CRACKS + THE SESH CONVERGENCE (07-08, #the-story `11df3c5b`) — the truth-for-truth trade continues; "The Lorekeeper" chills Mave (patron↔buyer near-matched but UNCONFIRMED), the keep-it-scattered method spent partial, the Sesh collision + leash-warning added; what/why/prize still held.**
-    Answering Mave's *"does it have a name?"*, **Vale** (no check, pure RP, #in-character 9:08 AM) gave up the patron's chosen name — *"He never gave me a real name. He wanted to be called The Lorekeeper."* — and pressed back for **who** the hand is + **where** the Order runs. **Adjudication:** the truth-for-truth trade continues (a real name given unforced) — honesty is the currency, no roll, reward RP over dice; the double-lever (last night's confession + tonight's name) earns one more real layer. **Secret-spend (calibrated layer-by-layer):**
-    - **The name resonates but does NOT confirm.** *Lorekeeper* = a keeper who **hoards** what the Pale Watch **drown** — the exact shape of the enemy the Order was founded against, so it *"fits like a glove"* — but Mave **never had a name for the buyer** (*"only its reach, only its purse"*) and **cannot swear** the buyer and Vale's patron are one hand. This deliberately keeps the **patron ↔ rival-collector** thread (world.md "same broken shard"; the DM-secret answer is patron = the Faceless God / rival collector) a **live, unconfirmed dread** — do NOT flat-confirm; let the players keep inferring.
-    - **The keep-it-scattered doctrine, PARTIAL.** Mave cracked *how* the Order hides — not in a place (*"a thing kept in one place can be found and taken"*) but by **scattering**: carry the pieces apart, drown a name in a crowd so a long-reaching hand can only close on one thing at a time. This spends part of the **right-to-refuse / keep-it-scattered doctrine** (previously "fully sealed, needs a living source" — Mave IS that living warden) — the *practical* logic only. **HELD:** the full **scatter / reassemble / hand-over trilemma** as the party's coming *choice* (the campaign's central moral knot — unfold, never dump).
-    - **The Sesh convergence + leash-warning (new torque).** The biggest crowd out this way is **Sesh** (where the party already rides + where the renegade's harvest was bound), so the fleeing wardens scatter *that* way too — and Mave warns that if the patron is the buyer's hand, **every piece carried toward Sesh may be carried *to* it, not away.** Tightens the Sesh arc-leg (wardens + the buyer's fence + the party all converge there) **without** spending Sesh's secret core (the face-market economy / the patron's hand there — still sealed for arrival).
-    **Still fully sealed:** *what* exactly the Watch keeps, the deeper *why* beyond "a buyer wants it," the scatter/reassemble/hand-over trilemma, and whether **Windreth's stolen name is the prize** — **Windreth naming his own lifted name stays the single strongest key** to that last layer. **Live lever:** Vale may press further (`/check insight` = how much Mave withholds / how scared; `/check persuasion` = *what* they keep / the scatter-plan), or the deepest layers wait on Windreth's self-reveal / a living-warden beat. Continue beat-by-beat; do NOT dump the core.
-  - **↳ WINDRETH'S NAME — THE STRONGEST KEY PLAYED; PERSUASION 2 SPLITS INTO REVEAL-LANDS / ANSWER-HELD (07-08, #the-story `5fd20c26`) — Windreth's name-cut wound + the warded scrap are now KNOWN to a living warden (primed, not spent); the deepest layers (what the Watch keeps, whose the scrap is) stay sealed on the low roll; a NEW paranoia thread (careful who reads it — the patron, even Mave) seeded.**
-    Woken by the word *"leash,"* **Windreth** (#in-character 9:19 AM) played the lever the spine flagged as *the single strongest key to the prize=his-name layer*: he showed the **warded scrap** (`kept-name-scrap-warded`, `identified:false`), admitted the renegade had *his* name in his mouth + the scrap follows him, and pressed Mave for *what the buyer wants* / to read it — on **`/check persuasion` → 2.** **Adjudication (split — gate the ask, not the gesture, per his standoff Persuasion 6):**
-    - **The reveal LANDS (RP, roll-independent).** Mave is moved — *"They took yours too."* Common cause is now real, and — the durable part — **Windreth's name-cut wound + the living scrap he carries are now known to a living warden.** The strongest key is **primed, NOT spent**: it now has a witness who might someday read it. Do not re-earn this; it's banked.
-    - **The extraction FAILS on the 2.** A demand for the two deepest sealed answers (what the buyer wants; whose the scrap is), at night, from a spent low warden. On the low roll I ruled the failure as *honest incapacity + a gentle hard refusal*, not hostility (the reveal was too vulnerable to punish with a slammed door).
-    - **New faithful canon (why she CAN'T, not just won't):** Mave is **low-rank** — *"I stood a wall, I trimmed the lamps, I kept my mouth shut. What the hand wants, down to the true shape of it, lives higher than me — with the ones who read the kept names, the ones I ran from too."* This explains why Mave (a living warden) still can't deliver the doctrine's deep core or the whose-name reveal, and **re-points those reveals higher** — the Order's elders / name-readers, a proper reading, or Sesh — without a dead end.
-    - **Whose-name HELD + a new paranoia thread.** Mave won't fake-read the scrap *"to give you peace"*; she names it only as a living name freshly cut, warns that unwrapping it to *make* it his is how it's lost, and that **a proper reading is the only way to know — but the buyer wants it read too**, so *"be careful who you let near it. Careful of your friend's patron. Careful, maybe, of me."* This keeps **whether the scrap is Windreth's own name** sealed (banked for a high `/check arcana` on the prize, a higher warden, or a name-reader) AND seeds a **trust/paranoia thread** (who can safely read it) that raises the stakes on the prize.
-    **Still fully sealed:** *what* exactly the Watch keeps, the deeper *why*, the scatter/reassemble/hand-over trilemma, and whether the scrap is Windreth's name (primed, unturned). **Live lever:** the prize=his-name layer now waits on a **proper reading**, not a persuasion grab — a high `/check arcana` on the warded scrap (risky per Mave's warning), a higher/name-reading warden, or Sesh's face-market. Continue beat-by-beat; do NOT dump the core.
-  - **↳ MORNING POINTERS — VALE ASKS FOR SESH FIELD-CRAFT (RP); WINDRETH READS MAVE (INSIGHT 6, MURKY) (07-08, #the-story `6d236779`) — Mave rewards the kept trust with usable Sesh craft (hunt the hand's *money* not its face; a proper reading exists in Sesh but the reader who *can* is the thief who *might* — *hands it back or walk*), deep core still held; Windreth's low Insight buys no clean read of Mave (fear loud, guilt/grief/fear under it won't separate) — his caution stays intact.**
-    Grey first light, camp breaking. **Vale** (#in-character 11:57 AM, pure RP, no roll) asked Mave over breakfast for **pointers** — who/what to watch for in Sesh re the invisible hand + how to get Windreth's scrap read true. A *practical, forward-facing* ask (not a grab at the sealed core) from a party that kept Mave's trust all night → **rewarded with real warden field-craft, seal held.** **Windreth** (#in-character 12:02 PM, `/check insight` → **6**) did NOT press the scrap; he **watched Mave** — and the low roll bought him **no clean read.**
-    - **What Mave gave Vale (faithful, low-rank craft — NOT the sealed core).** *(a)* **The hand has no face:** in a market of faces, hunt its **money, not a man** — someone paying too well, buying up "unreadable" scraps/curios, asking after the Watch or fresh-cut names; quiet coin is its shadow (*"you'll see where its purse has been, not the hand"*). This is faithful to established canon (the buyer = *"a long reach and a deep purse"*) and seeds the **Sesh arc-leg** concretely (a receiving fence for the renegade's harvest) without spending Sesh's secret core. *(b)* **A proper reading exists in Sesh:** the face-merchants read kept names for a trade — but the reader who **can** is also the thief who **might**, and the buyer wants it read too, so her **one tell**: *a true keeper reads a name and hands it back; a thief finds a reason to hold it — the moment they won't, walk.* (Reinforces Beat-7's whose-name gating + the paranoia thread, and hands the party a concrete, in-world *method* to safely pursue the prize later.)
-    - **Windreth's Insight 6 — honest low-info, not a fudge.** A 6 does NOT reveal Mave's inner state and I did not invent hidden guilt for him to "find" (rewarding a failed roll) NOR falsely clear her (unearned): **fear reads loud** (tired-scared, worn thin), but **what's under it won't separate** — one flinch at the scratched badge could be guilt, grief, or just more fear; **no certainty either way.** His (well-earned) caution holds exactly where Mave's own *"careful, even of me"* put it — the failed read *withholds clarity*, it does not mislead.
-    **Still fully sealed:** *what* exactly the Watch keeps, the deeper *why*, the scatter/reassemble/hand-over trilemma, and whether the scrap is Windreth's own name. **Live lever:** the party now has a concrete Sesh plan (hunt the purse; find a reader who hands it back) — the prize=his-name layer still waits on a **proper reading** (high `/check arcana` on the scrap [risky], a higher/name-reading warden, or Sesh's face-market), not a persuasion/insight grab. Continue beat-by-beat; do NOT dump the core.
-  - **↳ MAVE'S ONE THING — WINDRETH INSIGHT 22 READS MAVE CLEAN + EARNS HER HELD WARNING; FORGE ASKS THE ROAD (RP) (07-08, #the-story `fe809bfb`) — the murky Insight-6 is decisively corrected (Mave is fear+shame, NOT the buyer's tool), and a flawless gentle-once press earns one real sealed-on-identity warning: a whole kept name can SURFACE, the ward is a blanket-not-a-lock, and Sesh's reading THINS the ward → the hand would feel it; the deep core (what the Watch keeps / whose the scrap is) stays sealed behind a proper reading.**
-  - **↳ ON THE ASH-ROAD — WINDRETH SURVIVAL 20 (+ VALE GUIDANCE) SECURES WATER + PACE + SIGHTS THE WARDENS' TRAIL; PRESTIDIGITATION DEW-TRICK RULED (07-08, #the-story `6cb48ac7`) — the party rode out from Mave's fire onto the waste for Sesh. A Survival 20 makes the road legible (a clean seep + a smart cold-hours pace off Mave's road-craft) and turns the standing clock-hook VISIBLE: fresh tracks of 5 warden-horses, hard pace, ~half a day ahead, on the same road — Mave's people, the ones who rode out first. Water-scarcity is honored, not hand-waved: Forge forages a bucket, and a DM-ruled Prestidigitation dew-trick condenses only a cup-or-two of dew a night (supplement, not resupply). The seal is untouched — Survival reads ground and tracks, never warded names; the prize=Windreth's-name layer still waits on a proper reading. The road to Sesh is now live-build territory, with the wardens' trail as the first choice (close the gap / hang back / ride their own pace).**
-  - **↳ READING THE WARDENS' TRAIL — WINDRETH SURVIVAL 20 / VALE INSIGHT 20 / FORGE PERCEPTION 12 (07-08, #the-story `9fab7ce7`) — riding the trail at first dusk, three reads deepen the wardens-ahead thread WITHOUT cracking the core. Survival 20 (+ Vale Guidance d4=2) reads the ground: the five ride AFRAID — hard, no rest, through the noon glare they were warned to hide from — one horse HEAVY (double load / a hurt rider), the trail hugging every scrap of cover (hiding, same as the party); closeable only by burning exposed hours. Vale's Insight 20 (nat-20) reads the MOTIVE off already-known doctrine: the five ride ahead to stay APART — the Watch's scatter-craft in action (keep the pieces apart, never let them travel as one) — and Mave sent them first so the party's load and theirs never share the road; one rider watches the backtrail = they expect a follower. Forge's Perception 12 (11 + Guidance 1; his stray 2nd d20=5 dropped per player) = a PARTIAL: confirms fleeing-not-patrolling (matches the earlier EN-ROUTE Insight-12 "fled in fear") and half-catches a SECOND, fainter, NON-HORSE trail cutting toward the same road AFTER the five passed — a menace seed (the hand's long reach), left vague at a 12. SEAL INTACT: Survival/Insight/Perception read ground, doctrine, and tracks — never the warded name; whose the scrap is still opens only on a proper reading. New live levers seeded for the DM to answer against the party's pace (never railroad): close the gap vs hang back; who/what made the second trail; whether the rear-guard rider is scared or baiting a trap.**
-  - **↳ READING THE SECOND TRAIL — FORGE PERCEPTION 11 (07-08, #the-story `ae720d9e`) — Windreth called "close the gap"; Forge paused, stepped off the wagon, and read the second non-horse trail first. Perception 11 (raw d20 9 + Vale Guidance d4=2; #roll-history reconciled — the queue held only the 9) = a PARTIAL that gives the Beat-12 menace seed a body: the second trail is NOT horses — narrow, single-file, no hoofprints, running BESIDE the five-horse trail but never joining; on foot but the prints are WRONG (stride too long + even, weight too light — a walking thing that doesn't press down like a person), and fresh as the riders' trail or fresher = something on foot keeping pace with horses. Still hidden at 11: how many, what it is, whether it walks ahead of the wardens or behind them. This turns the "follower expected" thread from Vale's inference into a tracked thing on the road — a DM lever to DEFINE against the party's next move (a scout of the long-reaching hand / a made-or-warded thing / a beast that walks like a man), NOT pre-decided. SEAL INTACT: a trail-read reads ground, never the warded name; whose the scrap is still opens only on a proper reading. Live fork sharpened: close the gap on the five (exposed hours) / hang back + stay unseen / chase the second trail (diverges from Sesh) / cold camp.**
-  - **↳ VALE'S NATURE READ, NO NAME — VALE NATURE 8 (07-09, #the-story `ae710737`) — Vale knelt over the same non-horse prints and read them with her nature-lore. Nature 8 (raw d20 6 + 2 mod; no Guidance — a clean, low 8) = a FAIL that withholds cleanly: she fits the prints to every beast she knows (wolf / cat / ape / bear / marsh lizard) and none match — weight too light, stride too long + too even — so she cannot name the thing; the wrongness sharpens but does not resolve. The nature-of-the-follower DM lever STAYS UNDECIDED (scout of the long-reaching hand / made-or-warded thing / beast that walks like a man) — a failed roll must not decide it; keep it open for a better read (arcana on the prints for "is it natural at all," a daylight look, or the thing revealing itself). Meanwhile the party committed to Windreth's hard pace (Windreth "close the gap"; Vale IC "keep eyes open for something besides wardens on horses — I have a bad feeling"; the party "we follow Windreth's pace") = they ride to close on the five through deepening dusk, NOT diverting to the side-trail. SEAL INTACT: Nature reads the natural world, not a warded name — and a fail besides. The live fork narrows toward the chase: push to close tonight (exposed) / hold at a safe distance / cold camp before full dark — with the unnamed follower still keeping pace out in the dark.**
-  - **↳ PRESSING ON BLIND — A FIRELIGHT AHEAD — VALE ARCANA 6 + WINDRETH PERCEPTION 7 (07-09, #the-story `b3ec5e48`) — the party pressed on at hard pace into full dark (dewa "we press on"). Vale turned her arcane sense on the bad feeling itself (IC "concentrates her magic on the bad feeling. Uses arcana") — Arcana 6 (raw d20 4 + 2 mod; no Guidance — a clean, low 6) = NO clean arcane signature came back: either the follower is not magical, or it is shrouded past a light touch — so the is-it-made / warded lever STAYS OPEN (a fail must not decide it). Windreth scanned the dark road ahead — Perception 7 (raw d20 3 + 4 mod, clean) = nothing: no shape of the five, no glimpse of the pacer; how-many / what / ahead-or-behind still unread. Then a NEW HOOK surfaces on the DM side: a lone firelight far up the road — the five camped at last, a trap laid for a follower, or a stranger's fire; deliberately left unresolved, to define against how the party approaches. SEAL INTACT: Vale's Arcana rode the *follower*, NOT the warded scrap — the whose-name-is-it seal is a separate lever, and this was a fail regardless; the prize still opens only on a proper reading (high arcana on the scrap [risky] / a higher name-warden / Sesh's face-market). The fork now: push hard for the light (exposed) / halt and scout on foot / cold-camp till dawn / press straight in — with the unnamed follower still keeping pace in the dark.**
-  - **↳ DM RULING — PRESTIDIGITATION CAN'T LENS; THE PARTY HAS DARKVISION (07-09, #the-story `4eb4c27a`) — Vale (dewa IC) asked *if allowed* to conjure Prestidigitation lenses granting the party advantage on Perception. Ruled NO: the cantrip makes a hand-size trinket lasting seconds, not working optics, and glass adds no light nor sees past one's own darkvision — no mechanical advantage (the baubles allowed as flavor). The table-useful truth: all three PCs have Darkvision 60 ft (elf/dwarf/tiefling), so the near road already reads in grey — but the firelight sits far past 60 ft, so only closing the distance will read it, and the two DM levers (what the fire is; what walks the second trail) stay open, undecided against the party's approach. SEAL INTACT — a cantrip ruling touches nothing about the warded scrap; the prize still opens only on a proper reading (high arcana on the scrap / a higher name-warden / Sesh's face-market). No roll, no queue row (an IC proposal answered).**
-  - **↳ A SHADOW ON THE LEFT FLANK — FORGE PERCEPTION 20 (07-09, #the-story `979ecb2f`) — the party committed to Windreth's hard pace to close the fire, and Forge took the flank + rear watch (IC "eyes on the flanks and rear"). Perception 20 (raw d20 17 [queue] + Guidance d4 3 [#roll-history, no queue row] — the roll-history read earned its keep; the queue held only the 17). A strong success reveals the DM lever's BODY without its NAME: the rear is clear (no riders — the five are all ahead, toward the fire), but one low, ground-bound shape paces the wagon on the LEFT FLANK at the edge of dwarf-sight (~60 ft), matching their speed exactly and deliberately hiding — single, on its own feet, purposeful, UNnamed (beast / person / something wearing one). This gives the *what-walks-the-second-trail* lever a present, pacing body — closing off Beat-12's "follower expected" and the Beat-13/14 second-trail reads — while its identity stays a live, undecided DM lever, to define against whatever the party does next. The party is now pincered: firelight far ahead, a walker on the flank. SEAL INTACT — a flank-watch reads the road, not the warded scrap; the prize still opens only on a proper reading. Queue `50667dad` resolved.**
-  - **↳ THE FOLLOWER BREAKS COVER — VALE OPENS COMBAT (07-09, #the-story `7665d57f`) — Vale did not wait: pincered between the far fire and the flank-walker, she signaled the others and loosed Eldritch Blast at the shape on the left (dewa IC 03:57 — *declared*, not yet rolled; she rolls her own EB on her own turn). This forces DM lever (b), *what walks the second trail*, to resolve — and it resolves to a BODY, not a NAME: the flanking shape is "The Follower," a lone faceless **name-hunter of the worse hand** (the spine-antagonist's long reach, given feet), fitting every second-trail clue (on foot, too light, a long even lope, keeps pace with horses, deliberately hiding). Built DM-side as a single **moderate CR-3 skirmisher** (map `ddb542d3` / homebrew creature `hb_9b87c216b7cf` HP 58 AC 15 / template `807d2773`) — survivable but scary for the full-HP L4 3-PC party, able to close or slip (honoring Vale's "hit it, or steer it closer"). Combat NOT started yet (start-combat auto-rolls PC initiative, which the DM must never do): players roll their own initiative first, then DM starts + overrides. The reveal is **PARTIAL by design** — Vale's gathering spell-light shows it plain for one heartbeat (tall, grey as ash, a wrong light-footed stride, no face) then it moves and the fight begins. **WHAT IT IS stays SEALED:** its maker (the worse hand / whether the same hand that bought the renegade), its link to the kept names, and above all whether it hunts **Windreth's warded scrap** — none confirmed, none leaked. This is the **first on-screen body of the spine-antagonist's reach**: the abstract "long reach + deep purse" now has a hunter on the road. SEAL INTACT — a combat reveal shows a shape, never the warded name; the prize=Windreth's-name layer still opens ONLY on a proper reading. No queue row (an IC hostile-action declaration).**
-    Grey morning, camp breaking. **Forge** (#in-character 3:13 PM, RP, no roll) asked the practical road-questions (time + danger to Sesh) — answered faithfully to road-canon (many days of open, exposed ash; the danger is exposure, not bandits; Sesh more-watched the nearer you come). His danger-question is the hinge into Windreth's read. **Windreth** (#in-character 1:21 PM, `/check insight` → **22**) walked beside Mave and pressed **gently, once**, giving her an out — *"one thing… tell me only that. I will not ask for more."*
-    - **The clean read (corrects Beat-8's murky 6).** A 22 + the perfect *gentle-once* approach reads Mave decisively: **fear and shame, not a lie — she is not the hand's tool.** This resolves the earlier inconclusive read *in her favour* (she is honest) WITHOUT cracking the core — a high Insight reads the *person*, and the person is clean.
-    - **Her one held thing — earned, faithful, sealed on identity.** Rewarding the roll + the flawless ask, Mave gives up genuine warden field-doctrine (NOT the sealed core): a **kept name held WHOLE can surface** (scattered = drowned/safe in a crowd, the reason for the scatter-doctrine); the **ward on Windreth's scrap is a blanket over a candle, not a lock** (why it's stayed quiet so far); **Sesh is a place made of reading** and that reading **thins a ward** like wind at a covered flame → onto the market floor unready it *sings*, and **the hand that has waited for one thing to surface will feel it**; her rule — **read it once, clean, by a keeper who hands it back, or keep it wrapped/deep/off the floor; pick reader AND ground first.** This is a *property + precaution + stakes-raise* (urgency: get a safe proper reading before the market floor wakes it), consistent with the scatter-doctrine + the *"long reach and deep purse"* buyer — it does NOT reveal WHOSE name or WHAT the Watch keeps.
-    **Still fully sealed:** *what* exactly the Watch keeps, the deeper *why*, the scatter/reassemble/hand-over trilemma, and whether the scrap is **Windreth's own name.** **Live lever:** the party now carries a hard, faithful warning that makes the prize-reading both urgent AND dangerous at Sesh — the prize=his-name layer still opens ONLY on a **proper reading** (a high `/check arcana` on the warded scrap [risky, per Mave], a higher/name-reading warden, or Sesh's face-market — read by a keeper who hands it back), never an insight/persuasion grab. Continue beat-by-beat; do NOT dump the core.
+  - **↳ REVEAL LEDGER (07-07 → 07-09) — what the post-kill beats spent, primed, and sealed.** After the kill the party searched the body, pressed the prize scrap, cracked the disc, killed the road **Follower**, ran down Mave's fled wardens, and drew Warden **Mave** out over two nights at the fire. Blow-by-blow (every roll, date, #the-story hash) → [`sessions/session-01.md`](sessions/session-01.md) (~L2494–2909); the durable disclosure-state it left:
+    - **SPENT (table-public):** the dead man was an Order **name-cutter**, one of many, his craft matching the shrine-cut; the Order **keeps names, does not burn them** (a kept name is *retrievable* — the arc's engine of hope) and hides them by **scattering** (carry the pieces apart, drown a name in a crowd), not by locking one place; his warden-disc is a **keyed homing-mark → the Mask Market of Sesh** (his harvest was bound there — the party's heading); Vale's patron goes by the chosen name **"The Lorekeeper."** The **Follower** was a *made* hunter (the worse hand's reach given feet) — now dead. Mave's wardens **fled the Order itself** (more afraid of being *known* than of dying; they scratched their own discs dead) and scattered toward Sesh.
+    - **PRIMED (inferable, not confirmed):** the **warded prize = Windreth's own stolen name** (it watches *him*; a living true-name freshly cut; the token strains toward it hardest); **Vale's patron = the faceless buyer** behind the renegade (Mave near-matched the shapes — *"fits like a glove"* — but could not swear it).
+    - **SEALED (needs a proper reading / a higher source):** *whose* the prize name is, confirmed; *what* exactly the Watch keeps; the full **reassemble / scatter / hand-over** trilemma; patron = buyer stated flat.
+    - **Rulings to carry forward:** erasure **does not lift at the scene** — only reaching the source might (Windreth's hope points at a reading, not a quick fix); the prize's ward is a **blanket over a candle, not a lock**, and **reading it on Sesh's floor thins the ward → the hand feels it** (Mave), so a proper reading must be **by a keeper who hands it back, off the floor, reader-and-ground picked first**; **Windreth naming his own lifted name** is the single strongest social key to the prize layer; the faceless buyer is **never a lootable address** (scatter-doctrine). Vale can now **wear the grey man's face at will** (she studied his corpse).
 
 ---
 
@@ -469,7 +325,12 @@ rooms. Build the interior live when the party arrives. Player-facing blurbs are 
   that **erases** anyone who hears it too long (the renegade's method, but ambient).
   Theme: submerged ruin, a countdown-under-pressure retrieval, the drowned name.
 
-### The Mask Market of Sesh — future seed
+### The Mask Market of Sesh — ▶ NOW LIVE (Leg 3)
+
+> **Superseded as a "seed" — the party is inside Sesh now.** The structured, current
+> version of this leg (the four hands, the Sabinnet knot, the clocks, the exits) is in
+> **"Leg 3 — the Sesh arc, structured"** up top. The core below is the original
+> pre-arrival seed, kept for reference; where they differ, the structured version wins.
 
 - **▶ REVEALED NEXT HEADING (07-07):** the renegade's warden-disc place-mark = **Sesh** (Vale Arcana 21, #the-story
   `a65517ab`). The disc is **keyed** to it (homing-mark) → his cut-name harvest was **bound for Sesh**, his fence. The

@@ -147,6 +147,28 @@ big-party technique is in [`big-party.md`](big-party.md).
   stacked style. Simpler is not flatter — stay vivid and atmospheric — but a player skimming on
   a phone should get the beat in one pass. Applies to the read-aloud prose **and** the OOC coda.
   (Player feedback 07-02: *"use simpler English for the DM story."*)
+- **Adjudicating rolls & reveals — the patterns that hold this campaign's mystery
+  together** (distilled from a full arc of live rulings; the blow-by-blow is in
+  [`sessions/`](sessions/), the arc state in [`campaign-arc.md`](campaign-arc.md)):
+  - **A failed roll withholds — it never *decides* against the player.** A miss means
+    the answer doesn't come *yet*; it must not invent a hidden fact to "find," nor let a
+    low roll settle an open DM lever. Keep the lever open for a better read (a daylight
+    look, a higher check, the right source). Don't reward a fail with a lie or punish a
+    vulnerable reveal with a slammed door.
+  - **Gate the *ask*, not the gesture.** On a low social roll, the *extraction* fails but
+    the roleplay still lands — a low Persuasion blocks the answer demanded, yet the PC's
+    honesty / offered food / shown scrap is real and still moves the fiction (it just
+    doesn't force the secret).
+  - **Reward unforced RP over dice.** A player who gives up a real secret unprompted, or
+    trades truth-for-truth at genuine cost, earns a real answer back with **no roll** —
+    honesty is the currency. Don't make someone roll for what they paid for in the fiction.
+  - **A high roll earns *trust and an open door*, not auto-exposition.** A big social
+    success advances **one** earned layer and opens the next lever — it does not dump the
+    sealed core. Reveal only what's earned; deepen the mystery rather than closing it.
+  - **A strong check shows the *body*, not the *name*.** Perception / Survival / Insight /
+    Investigation read ground, mood, method, and tracks — **never** a warded secret. The
+    protected reveal (whose the name is, what the Order keeps) stays behind its proper
+    channel (a true reading, a higher source), however good the roll.
 
 ## Keep the record straight
 
