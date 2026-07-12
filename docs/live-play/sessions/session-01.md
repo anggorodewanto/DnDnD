@@ -2933,3 +2933,229 @@ Windreth wins the 14–14 tie with Vale on higher DEX (18 vs 10). The Follower's
 **Narration.** One scene to #the-story (post `c3b406d3`, 201, **single Discord message**, coda 940 chars ✓). The OOC coda shows the honest initiative math (each PC's die + fixed mod = total, the by-hand mod-adds called out so the table sees no fudge), the DEX tie-break, the full turn order, and Forge's turn: he's at D5, the Follower at O5 (~55 ft, same row), too far to close *and* strike in one turn, so the menu is Rage (bonus) + Dash → move up beside it, or a 25-ft move and hold, then `/done`. The read-aloud box is the opening of the fight — the dead fire, grey shapes in darkvision, the tall faceless thing coming on fast and wrong, everyone moving at once, Forge first. Render verified structurally (content precedes embed; embed carries the reveal + "He goes first"; **no AC/HP/CR/id leak**).
 
 **Turn state:** **IN COMBAT — round 1, Forge's turn.** Order locked: **Forge (19) → Windreth (14) → Vale (14) → The Follower (5)**. Await Forge's play (`/bonus action:rage`, `/action action:dash` → `/move coordinate:N5`, or `/move coordinate:I5`, then `/done`). Then Windreth (order 2 — `/attack` / `/move` / ready a shot); then **Vale resolves her declared Eldritch Blast** when *she* runs `/cast spell:eldritch_blast target:F1`; then the Follower (order 4). Play the Follower's AI honest — it wants the party, or the name they carry, so it likely closes, but Nimble Hunter can slip it away if bloodied. Do **not** reveal its AC/HP/stats; only public save success/fail. **Never roll/act/decide for the PCs.**
+
+### Round 1 resolves — three PC turns, and two engine issues found & fixed (07-09)
+
+**Forge (turn 1).** Raged, then threw a **Javelin** at the Follower (55 ft, disadvantage for long range) — **hit for 9 piercing** (1d6+4, incl. +2 Rage). Moved up to **C5** (20 ft used, closing on the flanking shape). Player's own rolls; DM only adjudicated the fixed Rage/STR modifiers.
+
+**Windreth (turn 2) — and the missing Steady Aim feature.** Windreth's player tried `/bonus action:steady-aim` and the app rejected it: the command gates on `HasFeatureByName(features, "Steady Aim")`, and Windreth's `characters.features` JSON is a **frozen build-time snapshot** — he was built (07-02) *before* Steady Aim was seeded onto the Rogue class (07-05, commit `b914e07`), so his row silently lacked the feature. The clean re-derive path (builder DM-edit → Save) is hard-blocked mid-combat (`ErrCharacterInEncounter`). Fix (user-approved): a **guarded, non-destructive jsonb append** of the seeded Steady Aim object onto Windreth's `characters.features`, scoped to his id and guarded `AND NOT (features @> …)`, object copied verbatim from `seed_classes.go`. The gate re-reads the live row per command, so no restart was needed, and this converges with any later builder re-derive (which re-adds the same feature from seed) — no drift. Pattern captured in memory `project_stale_features_no_backfill`. Windreth then used it live: **Steady Aim** (bonus action, advantage this turn, speed 0) → **Shortbow at advantage, hit 25 (19+6) for 12 piercing including Sneak Attack.**
+
+**Vale (turn 3) — Hex, Eldritch Blast, and the rider bug.** Vale cast **Hex** (bonus action, pact slot, concentrating) marking the Follower, then **Eldritch Blast** — hit for 10 force (1d10 + 4 Agonizing Blast). **But the Hex 1d6 necrotic rider never landed:** the engine only applied Hex / Hunter's Mark riders on the **weapon**-attack path (`attack.go` via `targetHexedBy` + FES), never on the **spell**-attack path in `spellcasting.go`. So her Eldritch Blast dealt its base damage with no Hex bite — an engine bug, not a rules call.
+
+**The Hex/Hunter's-Mark spell-attack fix (`06a3db8`).** Fixed red/green: new test file `internal/combat/hex_spell_attack_test.go` (4 cases — hexed target adds 1d6 necrotic reaching the target's HP; not-hexed adds nothing; hexed-by-*another*-caster adds nothing; Hunter's-Mark symmetric 1d6 force), then the minimal fix in `spellcasting.go` — after the Agonizing-Blast append, fold a `targetHexedBy` 1d6 necrotic and a `targetHuntersMarkedBy` 1d6 force into the spell-attack damage, mirroring the weapon path and calling each out in the damage breakdown. `go build ./...` + `go vet` clean; committed, pushed, and **redeployed** (`docker compose up -d --build app`).
+
+**Live reconcile of the dropped Hex die.** Rather than silently re-run the math, the DM prompted Vale to roll the 1d6 the pre-fix engine had swallowed — she rolled **1d6 = 3** (#roll-history 06:51) — and the DM applied **3 necrotic** to the Follower via an HP override (audit-logged `dm_override`, "Hex necrotic reconcile … dropped by the pre-fix engine bug"). Adding a player's *own* readied die is reconciliation, not a DM re-roll.
+
+### The Follower's turn — it closes to melee, strikes Forge (07-09)
+
+Played through the app's enemy-turn flow (honest server rolls). The Follower used **Nimble Hunter** (bonus-action Dash) to move **55 ft** from O5 into **D5** — dropping into the middle of the clustered party, now adjacent to all three PCs (Forge C5 / Windreth C4 / Vale C6). **Multiattack on Forge:** *Rending Lope* hit — 10 slashing **halved to 5 by Rage** — and *Name-Leech* hit for **6 psychic** (Rage does **not** resist psychic; the dangerous half of its kit). Forge **41 → 30/41**, still raging. Round advanced to **2**.
+
+### Round 2 — Forge's mistarget and the undo grant (07-09)
+
+Forge's player opened round 2 with `/attack` but **targeted himself** (`FO`) instead of the Follower (`F1`) — a Handaxe swing at Forge that **missed** (no HP change) but consumed his action (attacks_remaining → 0). He filed **`/undo`** ("undo my last attack. Forge attack himself"). This is an obvious input mistarget on an attack that dealt nothing — a legitimate DM undo-grant, not a re-roll of a bad outcome. Granted via the purpose-built **`restore-action`** endpoint (ISSUE-049: `POST …/combatants/{cb}/restore-action`), which clears `action_used`, resets `action_spell_cast`, and reseeds `attacks_remaining` to 1 for the *active* combatant — verified in the DB (Forge: action free, 1 attack, movement 25 untouched). The `/undo` queue row was resolved (204). Narrated to #the-story (post `47a1829b`, 201): OOC correction naming the mistarget + Forge's melee menu (greataxe / handaxe / Reckless on request) + the on-deck menu for Windreth and Vale (with the note that Vale's Hex now rides her Eldritch Blast post-fix); read-aloud box framed the swing as finding "only cold air" (a miss, never a self-hit in fiction). Render OOC-first / box-last.
+
+**Turn state:** **IN COMBAT — round 2, Forge's turn.** Order: **Forge (1) → Windreth (2) → Vale (3) → The Follower (4).** The Follower is at **D5**, in melee with all three PCs, still **hexed** (Vale concentrating). Forge's action + attack are restored; await his real attack (`/attack target:F1 weapon:greataxe`, or handaxe; Reckless on request) → then Windreth (Sneak Attack up close, or Steady Aim + shortbow) → then Vale (Eldritch Blast, Hex now rides it; disadvantage in melee unless she steps back) → then the Follower (order 4, AI honest). Pull live HP/positions from the DM Console. Do **not** reveal the Follower's AC/HP/stats; only public save success/fail. **Never roll/act/decide for the PCs.**
+
+---
+
+## Arc: the night road → Sesh (07-09 → 07-11) — reconstructed on resume 07-11
+
+> Reconstructed from the DB (encounters/combatants/turns/action_log/dm_queue_items) + `narration_posts`
+> on the 07-11 resume, when `game-state.md` was found frozen at "Follower fight, Round 2." The live game
+> had advanced two days past the save-file; this section back-fills the gap and the banner/scene/next-action
+> in `game-state.md` were compacted to match. Beat timestamps are `narration_posts.posted_at` (UTC).
+
+### The Follower — combat closed in victory (07-09)
+
+Encounter `30baba5f-…` ("The night road — the follower"), Follower = homebrew `hb_9b87c216b7cf`
+(AC 15 / HP 58, CR 3 skirmisher). Round 1 order **Forge 19 → Windreth 14 → Vale 14 → The Follower 5**.
+
+- **R2–R3 finish** (from `turns` + `action_log`): after the R1 opener (Forge javelin, Windreth Steady-Aim
+  Sneak-Attack, Vale Hex→Eldritch Blast, the Follower's Nimble-Hunter dash + double strike on Forge for 11),
+  the party ground it down — Forge handaxes (6 + 8-incl-rage), Windreth shortsword/dagger, Vale dagger (4),
+  with the **Hex necrotic rider reconciled live twice** via `dm_override` (Vale rolled 1d6=3 then 1d6=4 for
+  the rider the pre-fix engine had dropped — see ISSUE / `06a3db8`). Forge's R2 mistargeted-handaxe-on-self
+  was undone (restore-action, ISSUE-049).
+- **R3, Forge's turn — the Follower dropped to 0/58, is_alive=false; encounter `completed`** (07-09 10:14Z).
+- **Narrated** #the-story 10:13Z (read-aloud: "The Follower does not fall the way a man falls… the hex pulls
+  tight one last time") + 10:17Z OOC ("the Follower is down. Combat is over. Vale's Hex ends"). ISSUE-038
+  auto-carried final HP to sheets; transient conditions did **not** leak this time (sheets clean on resume).
+- **10:50Z lore beat:** the party learned the thing was **made** — built like a smith builds a blade, bound
+  to one task: find Windreth and follow. Same cold craft as the name-work. (Windreth-name thread deepened.)
+
+### Mave's five wardens on the ash-road (07-09)
+
+- **11:36Z** — reached the orange fire ahead: **five of Mave's people**, afraid not hostile (staves up, ready
+  to run or fight). The wrapped dead Follower on the wagon is either proof or nightmare.
+- **11:45–11:53Z** — Vale said **"Mave"** → cracked their fear (showing a *face* in a face-stealing world
+  spooked them back, then Mave's name won them). Lead warden: younger than her voice, torn Watch badge.
+  Five left, **scattered on purpose** so one follower could never catch them all — and the party dropped that
+  follower dead on their road. They trust the party now: shaky, grateful, scared.
+- **12:23Z** — Forge + Vale **patched up Harl** (old man, days-old gash gone hot — the slow-killing kind).
+- **13:08–13:47Z** — food + story warmed them. They gave the truth as far as they hold it: a **faceless buyer**
+  drove them out (can't name it), the **scatter-doctrine** (low-rank keepers carry pieces *without* learning
+  what they are, and no one holds all of it), and the steer that matters — **Sesh's name-readers**, "if a name
+  can be read this side of [the world], it's read in Sesh." Sesh is days of open ash west; **being seen, not
+  bandits, is the danger.**
+
+### Travel to Sesh (07-10)
+
+- **00:56Z** — **long rest** at the wardens' camp: everyone full (Forge 41/41, rage recharged; Vale pact slots
+  back; Windreth topped). Dawn on the ash-road, way west open.
+- **02:02–02:29Z** — corpse call: **carry the Follower to Sesh as proof** (wrapped + cold, show only the right
+  ear). Wardens departed into the grey; party keeps west, road to Sesh ~4–5 days. Grounded loot check: the grey
+  man's **bundle of cut name-scraps** (his stock, already bought).
+- **03:29Z** — the plan settles: **not a real sale, a show.** The corpse + the grey man's dead scraps go on the
+  table as bait; **Windreth's warded prize scrap stays wrapped and cold, out of the game.** Sesh in sight.
+- **03:53Z** — **entered Sesh** at last light: no gate, no guards — stalls and fences, "buys and sells faces."
+  Show live, bait out; **markers in the crowd**, one already left to carry word.
+- **04:31–06:57Z** — Forge circled the wagon (handaxes visible, minding goods); **Vale's disc points to the far
+  stone sheds** (the quiet fence end). A **grey-coat** buyer surfaced, interested in the **wrapped body** not the
+  loud goods; the party **put him off to "tomorrow"** (he left a **grey clay chit** as his sign) and followed the
+  disc to a **fence-shed**.
+- **08:55–13:14Z** — the fence-shed infiltration begins. Windreth Stealth 19 → at the iron door unseen (shed
+  occupied: light + fresh wax-and-thread tamper-seal; a hooded watcher at the lane's mouth). Vale Minor-Illusion
+  hid the door-crouch; Windreth read the door (barred from inside; seal = a fence's tamper-log; there's a
+  **speak-slot** for callers + the grey-coat's chit is a valid token). Vale's illusion pulled the lane's attention
+  (fake party-voices walking away) → **Windreth Stealth 19 + Forge Stealth 20 slipped in; Forge Athletics 19
+  took the watcher** with no cry. Interrogated the captive with Vale's **severed-head Minor-Illusion** play → a
+  lookout's share: the barred door is the **keeper's**; a **caller is expected tonight** with a token like the chit.
+
+### Sesh — inside the keeper's shed; Bertran taken (07-11)
+
+- **01:26–03:00Z** — Forge knocked the watcher out (one clean hit), then bound + gagged it in the shadow. Party
+  now at the **speak-slot with a live audience**: the grey clay chit is genuine and got the hatch open, but the
+  **keeper knows whose token it should be — and it isn't theirs.** Wary, door still barred.
+- **03:12–03:47Z** — **Mage Hand gambit** approved (anchor just inside the door). **Vale Deception 26 (nat 20)** —
+  the keeper bought the **half-mask** (the grey-coat's own face, via **Mask of Many Faces**), the token, and the
+  story whole; the bar was already lifted. The party is **welcomed in as "the grey-coat's people."**
+- **04:00–04:37Z** — Vale steps in still talking (Mage Hand winks out). **Forge Perception 3** couldn't confirm
+  the keeper was alone — something stirred past the **back curtain**. **Forge Athletics 22** → **grappled the
+  keeper, "Bertran"**, silent and helpless; Vale's **Minor Illusion (sound)** keeps Bertran's voice chatting at
+  the front, up to 1 minute.
+- **➤ LIVE DECISION POINT (unresolved, ~04:37Z):** someone behind the back curtain **rolled sharp and called
+  out, half-suspicious.** "The clock is now." Options put to the party: **answer the voice** (Vale
+  `/check deception` to keep the back calm) or **rush the back** before they rise. **Out of combat**, no dice
+  pending, dm-queue empty. Await the party's move.
+- **08:52Z** — DM tooling note only (the new `/bonus` effect-dice command); not a story beat.
+
+**Party on resume (07-11, from sheets/combatants):** Vale 31/31, Windreth 31/31, Forge 41/41 (his true max is
+41, not the roster's stale "32"), no conditions. Sheets clean. Vale still holds the **kept prize scrap**
+(`identified:false`) + the grey man's scraps bundle + warden-disc + the Faceless-God token/face-shard/name-scraps
++ Potion of Healing + Cold Iron Key.
+
+### Sesh — the back-curtain takedown (07-12)
+
+- **~01:21Z** (08:21 UTC+7) — with Bertran grappled + silenced at the front and Vale's voice-illusion still
+  running, **Windreth moved on the back-curtain figure: a stealth takedown, `/check stealth` = 19** (queue item
+  `70ca1724-…`). Vale's player (dewa) declared a contingency at 8:24: **cast Hold Person on the back figure if
+  Windreth's takedown fails.**
+- **DM ruling (resolved via DM-Queue → Send Narration → #in-character):** Stealth 19 clears the figure's
+  listening cleanly. Windreth crosses the dark, cluttered back unheard to the curtain-gap. **Authored the back
+  figure (DM-secret → now on-page):** a wiry, ink-fingered **ledger-keeper** hunched over a low table — open
+  ledger, a small **locked iron box**, a hooded reading-lamp — sleeves shoved up, **no blade**, head cocked the
+  *wrong* way (toward the fake "Bertran" voice at the front). Unaware, unarmed, facing away. The Stealth resolved
+  **positioning only** (my call): Windreth is at their back, in reach, the drop his. **The takedown *method* was
+  handed back to Windreth** (per dm-rules — don't decide the PC's action): quiet capture like Bertran, or a lethal
+  edge. Vale's Hold Person held in reserve, likely unspent.
+- **➤ LIVE (unresolved):** await Windreth's takedown method. Out of combat, queue empty. Behind the curtain the
+  **locked iron box + ledger + a dim back-glow** are the next reveal — what the fence actually guards (author on open).
+
+- **~01:41Z** — **Windreth committed the takedown as an Athletics grab: `/check athletics` = 5** (queue
+  `148d8813-…`) — a botch. **DM ruling (→ #in-character):** Stealth 19 got him there clean, but the physical take
+  went clumsy. He gets a fistful of collar; the keeper — surprised, not subdued — jerks under his reach, cracks
+  the table-leg, rocks the reading-lamp, and drags a breath IN for a shout **that hasn't landed yet** (no
+  retroactive alarm — the cry is a breath away, catchable). This is exactly the fail-branch **Vale pre-declared
+  (8:24) — cast Hold Person on the back figure if the takedown fails.** Verified Vale knows `hold-person` (2nd-lvl
+  pact slots up since the long rest).
+- **➤ LIVE (unresolved):** await **Vale `/cast hold person`** on the keeper. On cast, **DM rolls the keeper's WIS
+  save vs Vale's spell DC 14** (weak clerk, ~+0 → likely fails). Fail → held/silent/captured, then bind + open the
+  **locked iron box + ledger + back-glow** reveal. Save → cry lands → escalate to a scramble/encounter (Windreth
+  can still follow to clamp the mouth; Forge piles in). Out of combat, queue empty.
+
+- **~08:56 (UTC+7)** — **Vale fired Hold Person** (RP declaration + "to DM: resolve out of combat"). Verified
+  she knows `hold-person`; **DM rolled the keeper's WIS save: d20 9 +1 = 10 vs Vale's DC 14 → FAIL.** The spell
+  lands: the keeper freezes mid-cry, **paralyzed + silent**, held while Vale concentrates (~1 min; Minor Illusion
+  is no-concentration so "Bertran's" front voice keeps running — no conflict). **Reconciled Vale's pact slot on
+  the dashboard: 2/2 → 1/2** (she cast via RP, not `/cast`, so the app hadn't auto-decremented; reason logged).
+  Payoff **narrated to #the-story** (read-aloud + OOC coda). Both wardens now neutralized (Bertran front, keeper
+  back).
+- **➤ LIVE (unresolved):** await the party — bind + gag the keeper (then Vale drops concentration), secure
+  Bertran, then the **reveal**: the **locked iron box + open ledger + the dim back-glow** behind the last curtain
+  (author on open). Out of combat, queue empty.
+
+- **~09:24 (UTC+7)** — party (via Vale) **secured the room + opened interrogation** (RP): dropped the
+  Minor-Illusion voice, **barred the door**, **tied + gagged both Bertran and the clerk** (so Vale could release
+  Hold Person concentration and Forge/Windreth their holds — done). Then a strong intimidation setup: Vale
+  conjured a **Minor Illusion of a garland of severed tongues** under Windreth's cloak, flashed it, and menaced
+  — *"talk quietly; my friend collects tongues, and if yours isn't useful attached to you…"*
+- **DM (→ #the-story, read-aloud + OOC):** narrated the secured room + the gambit landing (clerk weeping, Bertran
+  tallow-faced but calculating). **Prompted Vale's `/check intimidation`** (base DC ~13; Help action → advantage).
+  Authored the **DM-secret graduated payload** into `game-state.md` Next-action item 1 (iron box = cut name-scrap
+  stock; ledger = scatter-routing + who-reads-faces; back-glow = a name-reader's reading-nook; high-roll prize =
+  Sesh's actual name-reader). **Chekhov noted:** a caller was "expected tonight" — a knock at the barred door is a
+  held complication.
+- **➤ LIVE (unresolved):** await **Vale `/check intimidation`** (+ any Help declaration for advantage). Out of
+  combat, queue empty. THE SEAL stays shut (no proper reading rolled).
+
+- **~09:48–09:51 (UTC+7)** — **Forge `help` action → advantage on Vale**, then **Vale `/check intimidation` = 24**
+  (queue `ea3a6019-…`; advantage dice 2 / **20**, +4 → nat 20 on the die). **Top band (≥20).** No slot/HP touched —
+  a check only (Hold Person pact already reconciled to 1/2 last beat).
+- **DM ruling — the little back-clerk folds completely (→ #the-story, read-aloud + OOC + queue resolved):**
+  - **Iron box** — he keys it open himself: a fold of **cut name-scraps** (bought, unplaced) + a purse of coin + a
+    **tally-token stamped with an unknown mark**. Fence working stock; **NOT** Windreth's name (THE SEAL stays on Vale).
+  - **Ledger** — his hand: the **full scatter-routing** (who carries which piece, where) + a margin column of
+    **faces read in Sesh this season** (who was opened, and who did the opening).
+  - **His nook** (the back-glow) — hooded lamp + lens + grey-salt ring: he reads only **loose** names; a **sealed**
+    name would blacken/misread under his glass — he won't touch a warded scrap.
+  - **★ The prize (top band):** the sealed-name reader — **Sabinnet, the *Reader-under-glass*** — deep market, the
+    narrow counting-house with the **salt-white door behind the fish-stones**. Cold kicker: **she answers to the
+    faceless buyer** (his hand in Sesh). That's the gatekeeper for THE SEAL, but she's the enemy's own reader.
+  - **⏳ Chekhov now ARMED (bonus warning):** the caller expected tonight is the **buyer's runner**, due **any hour**
+    to collect the night's read — a wrong/dark door when he knocks and he brings the lane down. Knock held, not yet fired.
+- **➤ LIVE (unresolved):** **await the party's move** — (a) press clerk/Bertran for more, (b) grab box + ledger and
+  slip out before the runner, or (c) stay and be ready for the knock. Out of combat, queue empty. **THE SEAL stays
+  shut** (a squeeze, not a reading). Runner-clock is live; fire the knock when the party commits.
+
+- **~10:13 (UTC+7)** — **Vale pressed the clerk (RP, no dice):** *"do you know where we can meet the buyer? Or
+  would the runner know?"* **DM ruling — he already folded on the 24, so this is truth as far as he holds it
+  (→ #the-story, read-aloud + OOC):**
+  - **The buyer is unreachable** — faceless, never seen, works only through hands; a shed-clerk is too low in the
+    scatter to hold an address. No pin to extract (protects the arc; the buyer isn't a lootable location).
+  - **The runner is a courier too** (no buyer-door either) — **but** the clerk gave up his **procedure/countersign**:
+    the runner raps the speak-slot **two slow, one quick**, waits for the word back **"the salt's dry,"** then takes
+    the night's read from the box and goes. High-value fold-payoff: arms both the con and the ambush paths.
+  - **Clock sharpened: runner IMMINENT (minutes, not hours).** Chekhov still held (no knock yet — asking ≠ committing).
+- **➤ LIVE (unresolved):** await the party's pick — **con** the runner (Vale's Mask of Many Faces + the countersign),
+  **take** him at the door, or **ghost** with box + ledger before he raps. Out of combat, queue empty. THE SEAL stays
+  wrapped. Fire the knock the moment they commit (or stall too long).
+
+- **~10:58 (UTC+7)** — bluff holding; **Forge searches the shed for valuables/kit** (Jonathan asked what roll).
+  **DM ruling:** the iron box + ledger are already theirs (clerk handed them over) — no roll; searching for *stashed*
+  goods = **`/check investigation`** (DC-banded; loot payload pre-authored in game-state Next-action item 1).
+- **DM — CHEKHOV FIRED (→ #the-story, read-aloud + OOC):** Forge looting = spending the telegraphed clock, so the
+  **runner's knock landed** mid-search: at the speak-slot, **two slow, one quick**, a bored voice waiting on the
+  countersign **"the salt's dry."** Not a gotcha — the "minutes, not hours" clock was flagged twice. Nobody's caught;
+  the runner just raps + waits, so the party still controls the outcome. **Forge still gets his Investigation roll**
+  (his hands are already in the crate) — I resolve loot when it lands.
+- **➤ LIVE (unresolved):** real-time pick at the door — **con** (give the sign, Vale wears the grey-coat's face,
+  `/check deception`), **take** (word him close, jump at the bar), or **ghost** (box + ledger, out the back) — plus
+  **Forge `/check investigation`** pending. Out of combat, queue empty. THE SEAL stays wrapped.
+
+- **~14:41–14:56 (UTC+7), 07-12** — **the party committed to the CON.** Plan (Jonathan + dewa): **Forge takes the
+  `help` action → advantage**, cloaked in **Vale's illusion as "Bertran" the keeper** standing behind to sell a
+  normal shed; **Vale answers the slot in the grey-coat's face**, gives the countersign, and **lets the transaction
+  go through** so **Windreth can stealthily tail the runner up-chain to the buyer.** Roll: **Vale `/check deception`
+  = 15** (queue `fb923f37-…`; advantage dice 6 / **9**, +6).
+- **DM ruling — the con holds (→ #the-story read-aloud + #in-character OOC, queue resolved):** strong positioning
+  (correct countersign + a known buyer's face + keeper-behind + a bored low-rank carrier) → **15 (adv) clears the
+  exchange.** The runner answers **"…salt's dry,"** takes a **packet of loose scraps** (the bought-not-placed stock
+  from the open box — nothing sealed) as the night's read, **raises no alarm, never enters**, and **turns back into
+  the lane sure he's alone.** Capped below the earlier nat-20: he's a **careful carrier** who gives up **nothing** to
+  talk (no name, no door — *the buyer sits at the end of his route, not on his tongue*) and won't be led anywhere he'd
+  notice. The up-chain is reachable only by **following** — Windreth's roll, not a decree. **THE SEAL stays wrapped**
+  (only loose stock changed hands; Vale's kept prize scrap never in play).
+- **➤ LIVE (unresolved):** await **Windreth `/check stealth`** (peel out + tail the runner into the lane — flagged
+  in-fiction: a pro carrier watches his back, so a blown roll marks *him*, not just loses the tail) **and Forge
+  `/check investigation`** (the shed search, still pending — DM-secret loot bands pre-authored in game-state
+  Next-action item 1). **Vale holds the doorway** in the grey-coat's face. Out of combat, queue empty.
