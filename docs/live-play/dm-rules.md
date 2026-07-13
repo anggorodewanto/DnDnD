@@ -200,6 +200,22 @@ big-party technique is in [`big-party.md`](big-party.md).
   - **On resume, treat the DB + DM Console + #combat-log as the source of truth**
     (see [`README.md`](README.md)): if the live board is ahead of the docs, **stop
     and reconcile** — narrate the un-narrated beats — *before* taking any new action.
+- **Write loot, found items, and awarded coin onto the character's sheet — never
+  leave them only in narration.** The moment the party loots a body, searches a
+  cache, or earns a reward, put it on the finding PC's sheet so it isn't forgotten:
+  **Party → that PC's "Manage inventory" → "+ Add items"** (search the catalog for
+  standard gear — rope, lantern, rations, etc.; each catalog item keeps its own row),
+  the **"Add Custom"** tab for one-off story items, and the **Gold** field for coin.
+  A line in #the-story is ephemeral; the sheet (`characters.inventory` / `.gold`) is
+  the durable store the players actually carry forward, so anything that changes what
+  a PC *owns* belongs there too — not just in the session log. Inventory/gold edits
+  are **not** combat-blocked (unlike HP/slots), so you can hand out loot at any time.
+  - **Gold is an absolute set, not additive** — read the current value first, then
+    write `old + award` (the field replaces, it doesn't add).
+  - **Custom-item gotcha:** every freeform "Add Custom" item persists with an empty
+    `item_id`, and the add path stacks rows by `item_id` — so **two custom items in
+    one character collapse into a single row**. Add at most one custom item per
+    character, or map the rest to catalog slugs (each has a unique `item_id`).
 
 ## Bugs found while playing
 
