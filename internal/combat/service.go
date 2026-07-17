@@ -1261,9 +1261,7 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 	// acts (previously it first rendered only on the first /done). Best-effort:
 	// a nil notifier or notifier-side error must never roll back the persisted
 	// encounter.
-	if s.combatMapNotifier != nil {
-		s.combatMapNotifier.PostCombatMap(ctx, enc.ID)
-	}
+	s.postCombatMap(ctx, enc.ID)
 
 	return StartCombatResult{
 		Encounter:         enc,

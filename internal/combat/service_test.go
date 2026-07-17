@@ -3296,10 +3296,13 @@ func TestService_StartCombat_FiresFirstTurnPing(t *testing.T) {
 			Conditions: json.RawMessage(`[]`),
 		}, nil
 	}
+	// AdvanceTurn seats the first candidate in list order (the real query
+	// pre-sorts by initiative_order); the PC is listed first so a PC leads the
+	// round — the first-turn #your-turn ping is now PC-only (NPC turns suppressed).
 	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 		return []refdata.Combatant{
-			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
 			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
 		}, nil
 	}
 	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
@@ -3421,10 +3424,13 @@ func TestService_StartCombat_PostsCombatMap(t *testing.T) {
 			Conditions: json.RawMessage(`[]`),
 		}, nil
 	}
+	// AdvanceTurn seats the first candidate in list order (the real query
+	// pre-sorts by initiative_order); the PC is listed first so a PC leads the
+	// round — the first-turn #your-turn ping is now PC-only (NPC turns suppressed).
 	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 		return []refdata.Combatant{
-			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
 			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
 		}, nil
 	}
 	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {

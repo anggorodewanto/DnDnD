@@ -553,11 +553,24 @@ var ErrEnemyTurnNotExecuted = errors.New("enemy turn must be executed before it 
 // AdvanceTurn completes the current turn (if any), determines the next combatant,
 // creates a new turn (skipping surprised combatants in round 1), and advances the
 // round when all combatants have gone.
-func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnInfo, error) {
+func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (info TurnInfo, err error) {
 	enc, err := s.store.GetEncounter(ctx, encounterID)
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("getting encounter: %w", err)
 	}
+
+	// After an NPC's turn ends, repost the board to #combat-map so players see
+	// the result of the enemy's move — even when the DM advances via the
+	// dashboard (which otherwise posts no map). PC turns already post their map
+	// from the /done handler, so they are excluded to avoid a double post. Fires
+	// only on a successful advance; the first turn of combat has no outgoing
+	// combatant, so StartCombat's opening board is not duplicated.
+	var outgoingWasNPC bool
+	defer func() {
+		if err == nil && outgoingWasNPC {
+			s.postCombatMap(ctx, encounterID)
+		}
+	}()
 
 	// Complete current turn if there is one
 	if enc.CurrentTurnID.Valid {
@@ -582,6 +595,7 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		if currentCombatant.IsNpc && !currentTurn.ActionUsed {
 			return TurnInfo{}, ErrEnemyTurnNotExecuted
 		}
+		outgoingWasNPC = currentCombatant.IsNpc
 
 		if _, err := s.ProcessTurnEndWithLog(ctx, encounterID, currentTurn.CombatantID, enc.RoundNumber, enc.CurrentTurnID.UUID); err != nil {
 			return TurnInfo{}, fmt.Errorf("processing turn end conditions: %w", err)
@@ -1078,12 +1092,31 @@ func (s *Service) notifyTurnStart(ctx context.Context, encounterID uuid.UUID, co
 	if s.turnStartNotifier == nil {
 		return
 	}
+	// An NPC turn gets no detailed #your-turn banner — that prompt is for
+	// players. The DM is cued separately via the enemy_turn_ready dm-queue post
+	// (postEnemyTurnReady) and the initiative tracker still updates. Suppressing
+	// here covers every turn-start path (createActiveTurn + reseat).
+	if combatant.IsNpc {
+		return
+	}
 	impact := s.GetImpactSummary(ctx, encounterID, combatant.ID)
 	s.turnStartNotifier.NotifyTurnStart(ctx, encounterID, TurnInfo{
 		Turn:        turn,
 		CombatantID: combatant.ID,
 		RoundNumber: roundNumber,
 	}, impact)
+}
+
+// postCombatMap best-effort posts the current board to #combat-map via the wired
+// notifier. Nil-safe: without a notifier it no-ops. Shared by StartCombat's
+// opening board and AdvanceTurn's after-an-NPC-turn repost. A notifier-side
+// error must never undo the successfully-persisted turn state, so no error is
+// returned.
+func (s *Service) postCombatMap(ctx context.Context, encounterID uuid.UUID) {
+	if s.combatMapNotifier == nil {
+		return
+	}
+	s.combatMapNotifier.PostCombatMap(ctx, encounterID)
 }
 
 // postEnemyTurnReady dispatches a KindEnemyTurnReady notification through
