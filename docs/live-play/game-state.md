@@ -10,7 +10,22 @@
 > here.** Per-PC durable kit is in [`party/`](party/); play-by-play in
 > [`sessions/`](sessions/). See [`dm-rules.md`](dm-rules.md) "Keep the record straight."
 
-_Last updated: 2026-07-12 — **SESH, the keeper's shed (out of combat).** The party ran the **con** on the buyer's runner at the speak-slot: **Vale Deception 15** (advantage, Forge Helping as illusion-"Bertran") **held** — the runner took a packet of loose scraps as the "night's read," raised no alarm, never entered, and is **walking back into the lane, sure he's alone.** ➤ Live beat: **Windreth's tail** (`/check stealth`, to follow the runner up-chain toward the buyer) + **Forge's `/check investigation`** of the shed — both awaiting player rolls; Vale holds the doorway. The runner is a careful carrier with **no buyer-address on him** (the buyer sits at the end of his route, not on his tongue), so following is the only thread up. The full night-road → Follower-kill → Mave's-wardens → Sesh → the-con arc lives in [`sessions/session-01.md`](sessions/session-01.md). Live board → DM Console; durable IDs/secrets below._
+_Last updated: 2026-07-17 — **SESH, the deep market — IN COMBAT at Sabinnet's door. Encounter `8431a89b`, end of Round 1;
+Vale's turn open, Round 2 leads with Windreth.** The morning con collapsed into a **Rage door-breach** (Forge, 14:11); the
+table went LOUD (all three `/initiative` in: **Windreth 23 → Forge 18 → watcher 7 → Vale 6 → watcher 1**). DM built the
+fight via in-page API (map `db0a4d44` + template `8564bc2d` = **2× Thug as "Sabinnet's Watcher"**, HP/AC secret; enemy
+init auto-rolled), opened it (#the-story `1527585506932559906`), **no surprise round.** **Round 1 played:** Windreth
+(Cunning-Action Hide → Sneak, Stealth 21) & Forge chopped the **door-blocker** to 2 HP; coat-watcher (init 7) maced
+**Forge for 7** (Forge 34/41 — **NOT raging**: his bonus action went to the off-hand handaxe, so the hit landed full);
+**Vale's Eldritch Blast dropped the blocker (DEAD, 0 HP).** **➤ NEXT: Vale may reposition (K6) then click End Turn →
+Round 2 leads Windreth (23). The coat-watcher (J2, untouched 32 HP) is the last enemy standing; the barred door is still
+shut.** Don't act for PCs; enemy HP/AC behind the screen.
+Prior beat: rested at the wagon (bot-applied long rest), walked up
+as customers, got the slot open on a woman's voice offering the reading trade — before Forge went loud. The runner-tail
+converged both threads on this door (Windreth Stealth 17: a courier's road ends at a hand, not a face — **the same
+salt-white door the clerk named as Sabinnet's**, the *Reader-under-glass*, who answers to the faceless buyer). The full
+night-road → Follower-kill → Mave's-wardens → Sesh → the-con → the-tail arc lives in
+[`sessions/session-01.md`](sessions/session-01.md). Live board → DM Console; durable IDs/secrets below._
 Out of combat there is no live board to pull — the durable post-combat state is in "Current scene"; non-derivable intent is under "Next action."_
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -104,7 +119,19 @@ CLOSED encounters, newest first:
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: SESH — inside the keeper Bertran's fence-shed, mid-infiltration (out of combat).** The party is deep in
+**★ Now: SESH — Sabinnet's door, IN COMBAT. Encounter `8431a89b`, end of Round 1 (Vale's turn open); Round 2 leads Windreth.** The morning con
+(walked up as customers; no Mask) collapsed when **Forge pivoted to a Rage door-breach (14:11)**; DM froze at the brink,
+the **table went LOUD** (all three `/initiative` in). DM built the fight via in-page dashboard API and opened it
+(#the-story `1527585506932559906`), **no surprise round** (open walk-up vs posted watchers). **The board (live state →
+DM Console, do NOT hand-track here):** enemy = **2× SRD Thug** dressed as **"Sabinnet's Watcher"** — `watch1` (blocker,
+H2) **now DEAD** + `watch2` (coat, J2, untouched **32 HP / AC 11 — SECRET from players**); current PC positions
+**Windreth G2, Forge I3 (34/41, took a 7 mace), Vale K6.** **Turn order: Windreth 23 → Forge 18 → watch2 (7) → Vale 6.**
+**Round 1 played out:** Windreth (Cunning-Action Hide, Stealth 21 → Sneak) + Forge chopped the blocker to 2; watch2 (coat)
+maced Forge for 7 (Forge **NOT raging** — his bonus went to the off-hand handaxe, so full damage landed); **Vale's Eldritch
+Blast finished the blocker.** **➤ NEXT — don't act for PCs:** Vale may reposition (K6) then click End Turn → **Round 2
+leads Windreth (23).** Only the coat-watcher remains up and the door is still barred. ⚠ Loud is loud — a breach at
+Sabinnet's door is the buyer's business; the sealed scrap still stays hidden (reading THE SEAL here thins the ward, the
+buyer feels it, Mave). Sabinnet + any interior muscle can escalate as the fight drags. The party is deep in
 **Sesh**, the gateless face-market city days west of the Palewatch, chasing the scattered name toward Sesh's
 **name-readers** (the one place a kept name can be read). They ran a "show, not a sale" con — the wrapped
 **Follower corpse** as bait — and followed **Vale's disc** to a fence-shed, took its lookout, then conned the
@@ -124,10 +151,14 @@ one), but the clerk gave the **runner's countersign** — knock **two slow, one 
 illusion as "Bertran" behind her → advantage), **Vale answered the slot in the grey-coat's face** and gave the
 countersign — **Deception 15 held.** The runner took a **packet of loose scraps** (the bought-not-placed stock from
 the open box) as the night's read, **raised no alarm, never entered**, and **turned back into the lane sure he's
-alone.** He gave up nothing to talk — a courier has no buyer-door; the buyer sits at the end of his *route*. **➤ The
-live beat (07-12): the up-chain is now a chase — Windreth's `/check stealth` to tail the runner, plus Forge's
-`/check investigation` of the shed; Vale holds the doorway.** **THE SEAL stays shut** (only loose stock changed
-hands; the kept prize scrap never in play). (Full
+alone.** He gave up nothing to talk — a courier has no buyer-door; the buyer sits at the end of his *route*. **➤ Both shed
+rolls resolved (07-13): Forge Investigation 10** netted the working kit (→ his sheet, gold 15) and **Windreth
+Stealth 17** (advantage, Vale's illusion) **tailed the runner clean** — no buyer (scatter-doctrine), but the
+runner's road **ends at Sabinnet's own salt-white door behind the fish-stones**, so the reader-lead and the
+runner-road are **the same place** (warded, watched, hers — the enemy's gatekeeper). **The party then long-rested at
+the wagon (07-17) and moved on the door by morning — they now sit at a covered daylight vantage on it, choosing how
+to take a threshold that belongs to the enemy.** **THE SEAL stays shut** (only loose stock changed hands; the kept
+prize scrap never read). (Full
 arc: night road → Follower kill →
 Mave's five wardens → travel to Sesh → the con → this shed — in [`sessions/session-01.md`](sessions/session-01.md).)
 
@@ -142,14 +173,19 @@ Mave's five wardens → travel to Sesh → the con → this shed — in [`sessio
   (07-09). Arc pressure now runs through: the **Order of the Pale-Watch** (wardens still out there; the party
   killed a man in their cloister over a kept scrap), **Vale's patron** (a rival collector still steering her —
   DM-secret), and the **physical name-scraps**. Secret spine → [`campaign-arc.md`](campaign-arc.md).
-- **⚠ THE SEAL (do NOT resolve on a low/wrong roll):** Vale carries the warded **kept prize scrap**
-  (`identified:false`) — likely **Windreth's own stolen name**, strongly implied but **never confirmed**. It
+- **⚠ THE SEAL (do NOT resolve on a low/wrong roll):** **Windreth** carries the warded **kept prize scrap** — on
+  his sheet as **_The Kept Name-Scrap (warded)_** (`identified:false`) — likely **his own stolen name**, strongly
+  implied but **never confirmed** (verified on the sheets 07-14: it is on Windreth, NOT Vale). It
   opens ONLY on a **proper reading**: a high `/check arcana` (risky), a higher warden, or **Sesh's name-market**
   — NOT insight / survival / perception / a failed roll. **Windreth's stolen true name** is recoverable only via
   this scattered-name arc (the man who could simply hand it back is dead).
-- **Vale's kit (on her sheet):** the Faceless God's cold-iron token, the ashen face-shard, name-scraps (×2 + the
-  grey man's cut-scrap bundle), the defaced **warden-disc**, the **kept prize scrap**, a **Potion of Healing**
-  (2d4+2, unused), the Cold Iron Key. **DM-secrets held** (see [`campaign-arc.md`](campaign-arc.md)): the Order's
+- **Vale's kit (on her sheet):** the Faceless God's Token, the ashen face-shard, the **Name-Scrap of the Faceless
+  God**, the **Grey Man's Name-Scraps (bundle)**, the defaced **Renegade's Warden-Disc**, a **Potion of Healing**
+  (2d4+2, unused), the Cold Iron Key (×2). **⚠ Vale does NOT hold the kept prize scrap** — that warded scrap is on
+  **Windreth's** sheet (see THE SEAL above).
+- **Windreth's arc-kit (on his sheet):** **_The Kept Name-Scrap (warded)_** (`identified:false`, THE SEAL — likely
+  his own stolen name) + a **Token of Remembrance**. He keeps the warded scrap buried/cold (his 07-13 tail RP); it
+  opens only on a proper reading — never at the scene, never on a failed roll. **DM-secrets held** (see [`campaign-arc.md`](campaign-arc.md)): the Order's
   right-to-refuse doctrine, Vale's patron = rival collector using her, the reassemble/scatter/hand-over trilemma.
 
 ## Next action (DM intent — the one thing the Console can't infer)
@@ -158,7 +194,7 @@ Mave's five wardens → travel to Sesh → the con → this shed — in [`sessio
 > apply this intent. **Never roll/act/decide for the PCs** — players roll their own dice; verify any `/command`
 > syntax against `internal/discord/commands.go` before advertising it in a coda.
 
-1. **★ SESH, the keeper's shed — the con held; await Windreth's tail + Forge's search (out of combat).**
+1. **★ SESH, the deep market — rested; at a daylight vantage on Sabinnet's door, choosing the approach (out of combat).**
    Vale's **Intimidation 24** (nat 20 + Forge's Help) broke the back-clerk fully — **all intel delivered** (see
    Current scene): the **iron box** (cut name-scraps + coin + a stamped tally-token — NOT Windreth's name), the
    **ledger** (full scatter-routing + a who-read-whom column for Sesh this season), and the **prize** — **Sabinnet**,
@@ -170,19 +206,48 @@ Mave's five wardens → travel to Sesh → the con → this shed — in [`sessio
      no alarm, **never entered**, and is **walking back into the lane sure he's alone.** He gave up nothing — a courier
      has no buyer-address; **the buyer sits at the end of his route, not on his tongue.** Vale handed over only loose
      stock, so **THE SEAL stayed wrapped.** The con bought a clean exit and cover; the thread up-chain is now the tail.
-   - **➤ Await two player rolls (out of combat, queue empty) — never roll/decide either for them:**
-     - **Windreth `/check stealth`** — peel out + **tail the runner** up-chain. He's a pro carrier watching his own
-       back: a strong roll follows him to his drop / the next hand toward the buyer; **a blown roll marks Windreth**
-       (the carrier clocks the tail → leads him wrong, bolts, or turns it into a fight). This is the live thread to the
-       buyer now the con's done. If it turns into a fight, stand up an encounter (`POST /api/combat/start` with the char
-       ids above + PC initiative per [[project_combat_start_pc_init_seat_repair]]).
-     - **DM-SECRET — Forge's `/check investigation` (shed search, still pending), resolve on the roll:** box + ledger
-       already theirs; this is hidden kit. **≥15** = false-bottom crate / floor-cache — a purse of real coin, a spare
-       grey-clay buyer-chit, **plus a *sealed* courier-packet Bertran had prepped but not yet sent** (now **evidence /
-       leverage**, NOT something to hand the runner — the handoff already happened). **10–14** = coin + working supplies
-       (rope, hooded lantern, spare wax/thread for seals, travel food). **<10** = only bulky face-trade contraband he
-       can't carry, and the rummaging is **loud** — but the runner's already walking, so it risks drawing the *lane* /
-       a second set of ears, not the con.
+   - **✅ BOTH SHED ROLLS RESOLVED (07-13) — queue empty, no pending roll:**
+     - **Windreth `/check stealth` = 17** (advantage, Vale's illusion) — **tailed the runner clean, unmarked** past a
+       carrier who checks his back twice. **No buyer** (scatter-doctrine: a courier's road ends at a hand, not a face),
+       **but the tail converged the two threads** — the runner feeds the night's packet through a **slot in Sabinnet's
+       own salt-white door behind the fish-stones**, so the reader-lead and the runner-road are **the same place**.
+       Windreth marked the door, its **two watchers**, and the approach, then slipped off. **THE SEAL stayed shut** (he
+       kept the living scrap buried, did not read it).
+     - **Forge `/check investigation` = 10** (middle band) — no false-bottom cache, but netted the trade's **working
+       kit**: rope, hooded lantern, travel food, a small purse of coin, a **fence's seal-kit**. **→ written to Forge's
+       sheet** (`characters` id `d2d98745…`): `gold 15`; rows `rope-50ft ×1`, `lantern-hooded ×1`, `rations-1day ×3`,
+       custom **Fence's Seal-Kit ×1**. (Loot-to-sheet is now a standing rule — [`dm-rules.md`](dm-rules.md).)
+   - **✅ REST + APPROACH (07-17):** the party chose to **long-rest at the wagon and move on Sabinnet in the morning**
+     (dewa; all three ran `/rest`, **bot-applied** — Vale's pact slots restored, death saves reset, HP full; **no DM
+     mutation owed**). Narrated the quiet night (no ambush decreed on a rest they chose) → grey morning → the party
+     down to a **covered daylight vantage on Sabinnet's salt-white door** (#the-story `1527548072874479727`).
+   - **✅ APPROACH CHOSEN (07-17):** the party went **open — walked up as customers** (dewa: "approach openly,
+     knocking as a regular customer… ask for reading service and probe for info about the buyer"; Forge "Buy"; **no
+     Mask, own faces**). Narrated to the slot (#the-story `1527564400716677191`): watchers flank, a woman's voice
+     opens the reading trade and asks who sent them.
+   - **✅ COMBAT LIVE (07-17) — encounter `8431a89b`, end of Round 1 (Vale's turn open) → Round 2 leads Windreth.** The
+     con collapsed on Forge's 14:11 Rage-breach; DM froze at the brink (`1527574640061583391`), the table went LOUD (all
+     three `/initiative` in: Windreth 23, Forge 18, Vale 6), DM built the fight via in-page dashboard API and opened it
+     (#the-story `1527585506932559906`), **no surprise round**. **Durable IDs:** map `db0a4d44` · template `8564bc2d` ·
+     encounter `8431a89b`. **Enemy = 2× SRD Thug** (`creature_ref_id:"thug"`) as **"Sabinnet's Watcher"**: `watch1`
+     blocker @H2 **now DEAD**, `watch2` coat @J2 **untouched (HP 32 / AC 11 — SECRET)**. Current PC positions Windreth
+     G2, Forge I3 (34/41), Vale K6. **Turn order: Windreth 23 → Forge 18 → watch2 (7) → Vale 6.** **Round 1 played:**
+     Windreth Cunning-Action Hide (Stealth 21) → Shortsword Sneak 15 + Nick-dagger 4 on blocker; Forge two handaxes (11)
+     on blocker (→ 2 HP); watch2 (coat) maced **Forge for 7** (Forge **NOT raging** — his bonus went to the off-hand
+     handaxe, so no resistance; #combat-log + #the-story `1527589987988672653`); **Vale's Eldritch Blast (8 force)
+     finished the blocker.** **➤ NEXT — live state from the DM Console (don't hand-track HP/positions here):**
+     - **Vale's turn is open** — she cast EB (her action) and may still move; on her word, click **End Turn** in the
+       Combat Manager → **Round 2, Windreth up (23).** Resolve each PC action off their own `/`-command; **never
+       roll/act for them.** Re-seat via `POST /api/combat/{enc}/set-active-turn {combatant_id}` if the tracker desyncs.
+     - **Enemy turns = Combat Manager → yellow "Run Enemy Turn" → Review (server rolls) → Confirm & Post → End Turn.**
+       The engine picks target + rolls; keep the rolled numbers (no fudging). Only the **coat-watcher (init 7)** remains.
+     - **⚠ Forge not raging:** his declared Rage never went up (bonus spent on the off-hand swing). Flagged to Jonathan;
+       he can `/bonus`-Rage on a future turn. Do NOT retro-apply it.
+     - **Escalation:** Sabinnet + any interior muscle can join as the fight drags; she may flee / alarm the buyer.
+       Build extra combatants into the same encounter if they enter.
+     - **⚠ Standing hazard — the sealed scrap stays hidden:** do NOT let Windreth's warded scrap be read on Sesh's
+       floor — it **thins the ward → the buyer feels it** (Mave). Loud means the buyer already has a reason to look
+       this way; keeping the SEAL out of sight matters more, not less, now.
    - **THE SEAL still opens ONLY on a proper name-reading actually rolled** — the Sabinnet lead is a *route* to that,
      not the reading itself.
    Durable lore → [`world.md`](world.md); secret spine → [`campaign-arc.md`](campaign-arc.md).

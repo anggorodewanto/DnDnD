@@ -61,3 +61,12 @@
 - **Joined the fiction** as a traveler who followed the cold down through Ashfall (per
   [`../world.md`](../world.md) fold-in) — **no backstory imposed, motive left to the
   player.** Play-by-play beats now live in [`../sessions/session-01.md`](../sessions/session-01.md).
+
+## Story-durable kit (arc-critical — on his `/character` sheet)
+
+- **⚠ THE SEAL — _The Kept Name-Scrap (warded)_** (`identified:false`, on **Windreth's** sheet, not Vale's —
+  verified 07-14). The Order's kept prize taken at the Palewatch vault; **likely Windreth's own stolen name**,
+  strongly implied, never confirmed. He keeps it **buried and cold** (07-13 tail RP). It opens **only on a proper
+  reading** — a route runs through Sesh's **Sabinnet** (the hostile Reader-under-glass), NOT at the scene and never
+  on a failed roll. See [`../game-state.md`](../game-state.md) "THE SEAL."
+- **Token of Remembrance** — minor keepsake on his sheet.

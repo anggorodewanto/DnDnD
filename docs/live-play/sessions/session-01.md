@@ -3159,3 +3159,177 @@ Encounter `30baba5f-…` ("The night road — the follower"), Follower = homebre
   in-fiction: a pro carrier watches his back, so a blown roll marks *him*, not just loses the tail) **and Forge
   `/check investigation`** (the shed search, still pending — DM-secret loot bands pre-authored in game-state
   Next-action item 1). **Vale holds the doorway** in the grey-coat's face. Out of combat, queue empty.
+
+- **~15:32 (UTC+7), 07-12** — **Forge `/check investigation` = 10** (queue resolved). **DM ruling — middle band
+  (10–14):** no false-bottom cache (the deep secret stays buried), but Forge nets the trade's **working kit**: a
+  coil of **rope**, a **hooded lantern**, **travel food**, a **small purse of honest coin**, and a **fence's
+  seal-kit** (grey wax, waxed thread, a blank stamp). Practical, not revelatory. **→ written to Forge's SHEET**
+  (`characters` id `d2d98745…`) so it isn't lost to narration: `gold 15`; inventory rows `rope-50ft ×1`,
+  `lantern-hooded ×1`, `rations-1day ×3`, custom **Fence's Seal-Kit ×1** (added via Party → Manage inventory; loot-to-
+  sheet is now a standing DM rule — see [`dm-rules.md`](../dm-rules.md) "Keep the record straight"). Story beat:
+  #the-story `ae65fe7e`-era post.
+- **~17:53 (UTC+7), 07-13** — **Windreth commits the tail** (RP): *"The reader gave us Sabinnet. The runner gives us
+  the road. I follow him. Quietly. No fight unless he makes one,"* and **keeps the living scrap buried and cold** (THE
+  SEAL stays shut — he does not read it). **Vale's illusion melds him into the dark → advantage.** Roll: **Windreth
+  `/check stealth` = 17** (advantage; queue `f3c340af-…`, resolved).
+- **DM ruling — the tail holds; the two threads converge (→ #the-story read-aloud + #in-character OOC, queue
+  resolved):** 17 (adv) beats the careful carrier — twice he checks his back (boot that isn't loose; a full turn
+  under a dead lamp) and both times the illusion-dark holds, Windreth simply **not there**; he stays **unmarked**.
+  **No buyer** — scatter-doctrine holds: *a courier's road ends at a hand, not a face.* What the tail buys is the
+  **road itself**: the runner works down through the deep market — blank-mask stalls, the **fish-stones** — and feeds
+  the night's packet through a **slot in a low salt-white door**, to a **gloved hand**, one unheard word, then walks
+  off empty; **he never enters.** That door is **Sabinnet's** — the *Reader-under-glass* the clerk named — so the
+  **runner's road and the reader lead to the SAME place.** Windreth marks the door, its **two watchers** (not buying
+  fish), the way the street pretends it isn't there, and slips off clean. Story beat: #the-story
+  `1526181712374136856`.
+- **➤ LIVE (unresolved):** the con is fully spent; **the party regroups at the wagon** (Forge already exfil'd the
+  haul; captives left bound at the shed) to decide **how to take Sabinnet's warded, watched door** — a threshold that
+  **belongs to the enemy** (she answers to the faceless buyer). No pending roll; out of combat, queue empty. **THE
+  SEAL still opens only on a proper name-reading actually rolled** — Sabinnet is the *route* to that reading, not the
+  reading itself, and she's a hostile gatekeeper. Next objective = the deep-market approach to the salt-white door.
+
+- **~10:11 (UTC+7), 07-14** — **Jonathan (Forge) OOC:** *"(To DM: who is Sabinnet)"* — an intel request, no roll.
+  **DM answer (→ #the-story read-aloud + OOC coda, `1526427256212422678`):** consolidated only what the party has
+  **earned** (clerk's fold + ledger + Windreth's tail) — **Sabinnet = the *Reader-under-glass***, the one reader in
+  Sesh who opens a **sealed** name (not just loose ones); narrow counting-house behind the **fish-stones**, salt-white
+  door + slot + two watchers; **the runners feed her**; and the cold part — **she answers to the faceless buyer**
+  (his reader/hand in Sesh). **Explicitly re-flagged to the players (now table-known):** she is the door *and* the
+  trap — she **can** read **Windreth's** warded scrap (_The Kept Name-Scrap_, on his sheet — likely his own name),
+  but she's the enemy's, **and** Mave's warning
+  stands (reading a sealed name on Sesh's floor **thins the ward → the buyer feels it**), so even a willing reading
+  there rings the bell. **Left as an open lever (DM-secret, unrevealed):** whether Sabinnet serves the buyer freely
+  or under a leash. No roll; the party's next move (case the door / work the ledger / find a lever) is theirs.
+
+- **~12:16 (UTC+7), 07-17** — **the party takes a LONG REST, then moves on Sabinnet in the morning** (group
+  decision, no check). **dewa (Vale):** *"We take a long rest tonight and will visit Sabinnet in the morning."* All
+  three ran **`/rest`** and the **bot applied the long rest** (three "Long Rest Complete" APP messages,
+  ~12:16–12:20): **Vale's pact magic slots restored**, all **death-save tallies reset**, HP full (party was already
+  undamaged out of combat). **No DM mutation needed** — the bot owns rest mechanics; nothing to reconcile on the
+  dashboard.
+- **DM ruling — the rest stands; morning re-scout, agency handed back (→ #the-story read-aloud + OOC coda,
+  `1527548072874479727`):** narrated the wagon pulled off the market floor for a quiet night (watch set, nothing
+  comes — no ambush decreed on a rest the players chose), then **grey morning** and the party coming back down into
+  the deep market **by daylight** to a **covered vantage on Sabinnet's salt-white door** (behind the fish-stones,
+  slot shut, **two watchers** of the same kind — not last night's pair, changing of the guard, runners feeding the
+  slot and leaving empty, the street pretending the door isn't there; the **ward** a faint cold-off-glass wrongness
+  from cover). **Stopped at the threshold — did NOT decree an approach.** Re-flagged the hard constraint: the door is
+  the enemy's and **reading a sealed name on Sesh's floor thins the ward → the buyer feels it** (Mave), so a walk-up
+  reading backfires. Laid out the levers the party already holds (Windreth's door-map + watchers + approach; the
+  ledger's who-read-whom column for a face/leverage; **Vale's Mask of Many Faces**; the clerk + wardens still bound
+  at the shed) and the open angles (**case harder** `/check investigation|perception|stealth`, **con the door**
+  `/check deception` behind a borrowed face, **hunt a lever** on Sabinnet, or something stranger).
+- **➤ LIVE (unresolved):** out of combat, queue empty, **no pending roll.** The party is at a **daylight vantage on
+  Sabinnet's warded, watched door**, choosing **how** to take a threshold that belongs to the enemy. Await the
+  players' declared approach + who's doing what. **THE SEAL still opens only on a proper name-reading actually
+  rolled** — and reading it *at Sabinnet's* rings the buyer's bell, so the approach problem and the seal problem are
+  now tangled: the players have to solve *how to read the scrap without the enemy feeling it* (open, unrevealed).
+
+- **~13:32 (UTC+7), 07-17** — **the party declares the approach: walk up OPENLY as customers.** **dewa (Vale):**
+  *"We approach the door openly, knocking as a regular customer would. We will ask for reading service and probe for
+  information about the buyer."* **Jonathan (Forge):** *"Forge, 'Buy'…."* (Forge plays the blunt paying customer.)
+  **No Mask this time** — their own faces (faces not yet burned to Sabinnet; the shed clerk is bound and hasn't
+  reported, the runner never made Windreth).
+- **DM ruling — engage the door in fiction, gate the probe, don't resolve (→ #the-story read-aloud + OOC coda,
+  `1527564400716677191`):** narrated the open walk-up → the two watchers peeling off the wall to flank →
+  **the slot opens to a woman's voice** (Sabinnet or her proxy — left ambiguous), quiet/used-to-obedience, who
+  weighs them and offers the trade in-fiction: *"I read names. Loose ones, at a fair price. Sealed ones cost more —
+  and cost you other things besides"* (a diegetic flag of the ward hazard) and asks *"What did you bring me. And who
+  told you where my door is."* **Stopped before resolution.** Adjudication laid out in the coda:
+  - **Buying a plain reading of a LOOSE scrap = no roll** (her cover trade; coin is coin).
+  - **⚠ Hazard 1 — the sealed scrap stays hidden:** do NOT hand Windreth's warded scrap across the slot as the
+    "reading" unless they mean to — reading THE SEAL on Sesh's floor **thins the ward → the buyer feels it** (Mave).
+    Present a loose scrap for cover, or nothing.
+  - **⚠ Hazard 2 (the GATED beat) — probing the buyer:** she's his hand and fears him; steering her to talk about him
+    without spooking/marking them is a **Charisma check** — **Vale `/check persuasion`** (coax) or **`/check
+    deception`** (invent a cover reason, e.g. lean on the grey-coat's name). Forge's paying-customer act Helps
+    (advantage) or `bonus:<dice>`. **Flagged failure cost:** a hard fail doesn't just shut her mouth — it tells her
+    hand that someone came asking after the buyer. (`persuasion` verified canonical — skill_validation.go:137.)
+- **➤ LIVE (unresolved):** out of combat, queue empty, **no pending roll yet** — awaiting the party's confirmed
+  staging (who's the face, what cover scrap if any, who hangs back on the watchers/exit) and **the Charisma roll when
+  they press on the buyer.** THE SEAL stays shut (loose-scrap cover only; sealed scrap kept out of sight).
+
+- **~14:11 (UTC+7), 07-17** — **HARD PIVOT — Forge declares a loud breach.** **Jonathan (Forge):** *"Forge wields
+  both of his handaxes, then using skill Rage. He run through, slamming the seller's door in a swift motion."* This
+  **contradicts dewa's con** (declared 13:32, same minute-ish window) — going loud detonates the quiet-reading plan,
+  starts a **fight at the enemy's warded stronghold**, and splits the party (two players set up quiet).
+- **DM ruling — CHECKPOINT at the brink, do NOT flip the scene unilaterally (→ #the-story read-aloud + OOC,
+  `1527574640061583391`):** narrated Forge's rage kindling + both axes + the two watchers reading the turn and going
+  for their coats, and **froze on the last breath before the swing** — did **not** resolve the hit, did **not** roll
+  initiative, **built no combat state.** Rationale: this is **hard-to-reverse + party-splitting** (overriding two
+  players' just-declared con to honor one player's pivot), so the table confirms first. OOC laid out: (1) **Forge —
+  confirm the breach** and it rolls live; (2) the door is warded but still a **heavy barred door → Strength
+  (Athletics) check, Rage = advantage on STR checks** (Forge built for it; the *name-magic* ward isn't a wall — the
+  reading is a separate problem); (3) **Vale & Windreth get their heartbeat** — back the play / hang off / do their
+  own thing (their call, not the DM's, not Forge's). On a "going loud" confirm → **build the Sesh map + Sabinnet's
+  watchers, `POST /api/combat/start` with the char ids + PC `/initiative roll:<total>`** (APP-5 flow).
+- **➤ LIVE (unresolved) — TABLE DECISION PENDING:** out of combat still, **no combat encounter built, no roll
+  pending yet.** Awaiting the table to reconcile the con-vs-breach split: **Forge to confirm the swing**, and **Vale
+  + Windreth to declare** whether they go loud. If confirmed → stand up the fight; if pulled → resume the con at the
+  slot. **No PC action resolved for them; no mutation made.**
+
+- **~14:17–14:19 (UTC+7), 07-17** — **TABLE CALLED IT: LOUD.** **dewa (Vale):** *"We are going to battle"* (14:17),
+  then ran **`/initiative` → rolled 6** (`1d20 → [6]`, APP-5 self-initiative logged for Vale, 14:19). **Forge
+  (Jonathan)** had already committed the breach (14:11). **Windreth: silent — no declaration, no `/initiative` yet.**
+  Two of three players explicit + the party verb ("we"); the con is dead, it's a fight.
+- **DM ruling — resolve the checkpoint to combat, but do NOT roll for the PCs (→ #the-story read-aloud + OOC,
+  `1527579182085967944`):** narrated the con collapsing on Forge's word — the breach charge, rage kindling, the two
+  watchers reading it a half-breath late (one going for a coat, one planting between the party and the wood), the
+  room behind the salt-white door stirring — and froze on *"This is a fight now. Find your footing."* **Rulings laid
+  out in the OOC:** (1) **no surprise round** — the party walked up in the open and these are posted watchers, both
+  sides aware → straight initiative; (2) **Forge + Windreth still owe `/initiative roll:<total>`** (Vale's 6 already
+  in) — **the DM does not roll initiative for them**; once all three dice are in the board stands up; (3) **Forge's
+  door-smash resolves on his turn = STR (Athletics), Rage = advantage** (the name-magic ward is not a physical wall —
+  the *reading* is a separate problem); (4) **⚠ loud is loud** — a breach at Sabinnet's door is the buyer's business,
+  and the sealed scrap still stays hidden.
+- **➤ LIVE — GATHERING INITIATIVE (still out of combat, no board yet):** queue empty, **no combat encounter built.**
+  Blocking on **Forge + Windreth `/initiative`** (Vale = 6). On all-three-in → build the Sesh map + Sabinnet's **two
+  watchers** as combatants + `POST /api/combat/start` (char ids + `character_initiatives`, APP-5, zero overrides),
+  then it's Forge's breach on his turn. **No PC action resolved for them; no mutation made this turn.**
+
+- **~07:38–07:41 UTC, 07-17 — all three initiatives in** (`pending_initiatives`, APP-5, players rolled their own):
+  **Windreth 23**, **Forge 18**, **Vale 6** (Vale's landed earlier at 07:19). Their `/initiative` confirmations are
+  ephemeral, so they don't render in the DM's Discord view — the authoritative store is `pending_initiatives`, which
+  showed all three on re-check. (First check caught only Vale's; ~20 min lag before Forge/Windreth rolled.)
+- **DM stood up the fight (in-page dashboard API, no raw curl):** verified command syntax first (`/attack /move /cast
+  /bonus` incl. `cunning-action` — commands.go), then via authenticated in-page `fetch` on the dashboard tab:
+  (1) `POST /api/maps` → map `db0a4d44` (16×12, "Sabinnet's Door — the salt-white slot"); (2) `POST /api/encounters`
+  → template `8564bc2d` placing **2× SRD Thug** (`creature_ref_id:"thug"`, CR ½, **HP 32 / AC 11** — hidden from
+  players) as **"Sabinnet's Watcher"** — `watch1` blocker @H2, `watch2` coat @J2; (3) `POST /api/combat/start` with
+  the three char ids + `character_initiatives` (Windreth 23 / Forge 18 / Vale 6, used verbatim — zero overrides) +
+  `character_positions` (Forge H4 charge-lane, Windreth F5 flank, Vale K6 back). **Enemy initiative auto-rolled
+  server-side:** watch2 = 7, watch1 = 1. **Encounter `8431a89b`, Round 1.** Turn order: **Windreth 23 → Forge 18 →
+  watch2 (7) → Vale 6 → watch1 (1).** (Note: live HP Windreth **31** / Forge 41 / Vale 31 — engine authoritative;
+  roster's 24 for Windreth is stale doc.)
+- **DM opened combat to #the-story (`1527585506932559906`):** read-aloud — the breach igniting, the two watchers
+  turning from scenery (one planting in the doorway with a club, one sliding wide with a hand into his coat), the slot
+  gone silent — and handed **round 1 to Windreth** (fastest at 23). OOC published the turn order + no-surprise ruling,
+  Windreth's options (`/attack watch1|watch2`, `/move`, `/cast`, Cunning Action `/bonus action:"cunning-action …"`,
+  Sneak-Attack trigger note), and re-flagged **Forge's door-smash = STR (Athletics), Rage = advantage** on his turn.
+- **➤ LIVE — IN COMBAT, Round 1, Windreth's turn.** Awaiting **Windreth's** action (his roll/command). **No PC action
+  taken by the DM; enemy stats behind the screen.** Next: resolve Windreth → Forge's breach (STR/Athletics, Rage adv)
+  → watch2 → Vale → watch1. Sabinnet + interior muscle can escalate as the door gives.
+
+### Round 1 resolved — first blood at the door (07-17)
+
+- **Round 1 played out; PCs ran their own `/`-commands. DM ran only the enemy turn and never rolled for a PC:**
+  - **Windreth (23):** `/move` to **G2**, Cunning-Action **Hide** (Stealth **21**, hidden from all), then Attack —
+    **Shortsword** vs blocker (adv, hidden) hit 16 → **15 piercing incl. Sneak Attack**; **Nick-dagger** vs blocker
+    (adv, vex) hit 17 → **4 piercing**. Blocker 32 → **13**. (Dagger = **Nick** mastery: the off-hand swing rides the
+    Attack action, leaving the bonus action free for Cunning-Action Hide — legal 2024, not a double bonus action.)
+  - **Forge (18):** `/move` to **I3**, **Handaxe** hit 11 → **7**, bonus **Handaxe** (vex) hit 11 → **4**. Blocker
+    13 → **2**. ⚠ Forge narrated Rage ("using skill Rage") but never spent the bonus action on it — engine shows
+    `is_raging=false`, no rage damage/resistance; his bonus went to the off-hand axe. **Not retro-applied.**
+  - **watch2 / coat (7) — DM-run enemy turn** (Combat Manager → *Run Enemy Turn* → *Review* → *Confirm & Post* → *End
+    Turn*): engine targeted **Forge**, **Mace** to-hit **14** vs Forge AC 14 = **HIT**, **7 bludgeoning** (Forge 41 →
+    **34**; full, no rage resistance). Posted to #combat-log. Target was Forge, not Windreth, so **no Defensive Duelist
+    pre-declare** was needed. Server rolled the dice; DM kept the numbers verbatim (no fudging).
+  - **Vale (6):** `/cast` **Eldritch Blast** on the blocker — attack d20(9)+mod **15** hit → **8 force** (1d10 + 4
+    Agonizing Blast). Blocker **2 → 0, DEAD.** First enemy down.
+  - **watch1 / blocker (1):** dead — skipped.
+- **DM narrated the round-close to #the-story (`1527589987988672653`):** read-aloud — the coat's iron cudgel cracking
+  Forge (bloodied, still up), then Vale's force-line dropping the door-blocker across the fish-stones ("one down"), the
+  coat unmoved and the door still barred. OOC: prompted **Vale** (turn still open — she may reposition from K6, then End
+  Turn) and flagged to **Jonathan** that Forge isn't raging (full 7 landed; he can `/bonus`-Rage on a later turn).
+- **➤ LIVE — end of Round 1, Vale's turn open.** Only the **coat-watcher (J2, untouched 32 HP)** remains; door still
+  shut. Awaiting Vale's move/hold → End Turn → **Round 2, Windreth (23).** No PC action taken by the DM; enemy stats
+  behind the screen.
