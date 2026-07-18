@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   uploadAsset, getEnemyTurnPlan, executeEnemyTurn,
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
+  applySpellMarker,
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
   getPendingSaves, resolveMonsterSave, resolveMonsterSaveByUrl, cancelMonsterSave, restoreCombatantAction,
@@ -333,6 +334,28 @@ describe('updateCombatantConditions', () => {
     expect(url).toBe('/api/combat/enc-1/combatants/comb-1/conditions');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body)).toEqual({ conditions: ['Blinded'] });
+  });
+});
+
+describe('applySpellMarker', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs a source-tagged spell marker', async () => {
+    const mockResult = { id: 'comb-1', conditions: [{ condition: 'hexed' }] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await applySpellMarker('enc-1', 'comb-1', 'hex', 'caster-9');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/comb-1/spell-marker');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ spell: 'hex', source_combatant_id: 'caster-9' });
   });
 });
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -33,6 +34,8 @@ type mockBonusCombatService struct {
 	bardicCalls     []combat.BardicInspirationCommand
 	secondWindCalls []combat.SecondWindCommand
 	steadyAimCalls  []combat.SteadyAimCommand
+	moveHexCalls    []moveMarkerCall
+	moveMarkCalls   []moveMarkerCall
 
 	rageResult       combat.RageResult
 	endRageResult    combat.RageResult
@@ -48,6 +51,8 @@ type mockBonusCombatService struct {
 	bardicResult     combat.BardicInspirationResult
 	secondWindResult combat.SecondWindResult
 	steadyAimResult  combat.SteadyAimResult
+	moveMarkerResult combat.MoveSpellMarkerResult
+	moveMarkerErr    error
 
 	// D-47 / D-48b / D-54-cunning / D-56 / D-57 recordings + canned results.
 	wsActivateCalls  []combat.WildShapeCommand
@@ -67,6 +72,12 @@ type mockBonusCombatService struct {
 type releaseDragCall struct {
 	Mover   refdata.Combatant
 	Targets []refdata.Combatant
+}
+
+type moveMarkerCall struct {
+	Caster      refdata.Combatant
+	Turn        refdata.Turn
+	NewTargetID uuid.UUID
 }
 
 func (m *mockBonusCombatService) ActivateRage(_ context.Context, cmd combat.RageCommand) (combat.RageResult, error) {
@@ -142,6 +153,16 @@ func (m *mockBonusCombatService) SecondWind(_ context.Context, cmd combat.Second
 func (m *mockBonusCombatService) SteadyAim(_ context.Context, cmd combat.SteadyAimCommand) (combat.SteadyAimResult, error) {
 	m.steadyAimCalls = append(m.steadyAimCalls, cmd)
 	return m.steadyAimResult, nil
+}
+
+func (m *mockBonusCombatService) MoveHex(_ context.Context, caster refdata.Combatant, turn refdata.Turn, newTargetID uuid.UUID) (combat.MoveSpellMarkerResult, error) {
+	m.moveHexCalls = append(m.moveHexCalls, moveMarkerCall{Caster: caster, Turn: turn, NewTargetID: newTargetID})
+	return m.moveMarkerResult, m.moveMarkerErr
+}
+
+func (m *mockBonusCombatService) MoveHuntersMark(_ context.Context, caster refdata.Combatant, turn refdata.Turn, newTargetID uuid.UUID) (combat.MoveSpellMarkerResult, error) {
+	m.moveMarkCalls = append(m.moveMarkCalls, moveMarkerCall{Caster: caster, Turn: turn, NewTargetID: newTargetID})
+	return m.moveMarkerResult, m.moveMarkerErr
 }
 
 func (m *mockBonusCombatService) ActivateWildShape(_ context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error) {
@@ -824,6 +845,62 @@ func TestBonusHandler_BardicInspiration(t *testing.T) {
 	}
 	if svc.bardicCalls[0].Target.ShortID != "OS" {
 		t.Errorf("expected target OS, got %s", svc.bardicCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_MoveHex_RoutesToService(t *testing.T) {
+	h, sess, svc, provider := setupBonusHandler()
+	svc.moveMarkerResult = combat.MoveSpellMarkerResult{CombatLog: "🔁 Aria moves Hex onto Orc."}
+	h.Handle(makeBonusInteraction("hex", "OS"))
+	if len(svc.moveHexCalls) != 1 {
+		t.Fatalf("expected 1 MoveHex call, got %d", len(svc.moveHexCalls))
+	}
+	if svc.moveHexCalls[0].Caster.ID != provider.actor.ID {
+		t.Errorf("expected caster %s, got %s", provider.actor.ID, svc.moveHexCalls[0].Caster.ID)
+	}
+	if svc.moveHexCalls[0].NewTargetID != provider.target.ID {
+		t.Errorf("expected new target %s, got %s", provider.target.ID, svc.moveHexCalls[0].NewTargetID)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "moves Hex") {
+		t.Errorf("expected move-hex log, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected move-hex result to be public, got flags %d", sess.lastResponse.Data.Flags)
+	}
+}
+
+func TestBonusHandler_MoveHuntersMark_RoutesToService(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	svc.moveMarkerResult = combat.MoveSpellMarkerResult{CombatLog: "🔁 Aria moves Hunter's Mark onto Orc."}
+	h.Handle(makeBonusInteraction("hunters-mark", "OS"))
+	if len(svc.moveMarkCalls) != 1 {
+		t.Fatalf("expected 1 MoveHuntersMark call, got %d", len(svc.moveMarkCalls))
+	}
+	if len(svc.moveHexCalls) != 0 {
+		t.Errorf("hunters-mark must not route to MoveHex")
+	}
+}
+
+func TestBonusHandler_MoveHex_ServiceError_Ephemeral(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	svc.moveMarkerErr = fmt.Errorf("Goblin still has 7 HP — you can only move Hex once its target drops to 0 HP")
+	h.Handle(makeBonusInteraction("hex", "OS"))
+	if !strings.Contains(sess.lastResponse.Data.Content, "Moving Hex failed") {
+		t.Errorf("expected failure message, got %q", sess.lastResponse.Data.Content)
+	}
+	if sess.lastResponse.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected error to be ephemeral")
+	}
+}
+
+func TestBonusHandler_MoveHex_MissingTarget(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("hex", ""))
+	if len(svc.moveHexCalls) != 0 {
+		t.Errorf("expected no MoveHex call when target missing")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
+		t.Errorf("expected missing-target usage, got %q", sess.lastResponse.Data.Content)
 	}
 }
 

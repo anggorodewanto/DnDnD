@@ -3,6 +3,7 @@
     getCombatWorkspace,
     updateCombatantHP,
     updateCombatantConditions,
+    applySpellMarker,
     updateCombatantPosition,
     removeCombatant,
     undoLastAction,
@@ -79,6 +80,10 @@
   let damageInput = $state(0);
   let healInput = $state(0);
   let conditionToAdd = $state('');
+  // Spell-marker mini-form (Hex / Hunter's Mark): which marker + the caster it
+  // is sourced from, so the stamped condition fires the on-hit rider.
+  let markerSpell = $state('');
+  let markerSource = $state('');
 
   // Canvas ref
   let canvasEl = $state(null);
@@ -1102,6 +1107,22 @@
       error = e.message;
     }
   }
+
+  // Stamp a source-tagged Hex / Hunter's Mark on the selected combatant. The
+  // caster is chosen from the encounter's combatants so the marker carries the
+  // source spell + caster id the on-hit rider matches on (the plain conditions
+  // dropdown cannot express those tags, so a bare "hexed" it adds never fires).
+  async function handleAddSpellMarker() {
+    if (!selectedCombatant || !markerSpell || !markerSource) return;
+    try {
+      await applySpellMarker(activeEncounter.id, selectedCombatant.id, markerSpell, markerSource);
+      await loadWorkspace();
+      markerSpell = '';
+      markerSource = '';
+    } catch (e) {
+      error = e.message;
+    }
+  }
 </script>
 
 <div class="combat-manager">
@@ -1534,6 +1555,24 @@
                   {/each}
                 </select>
                 <button onclick={handleAddCondition} data-testid="add-condition-btn">Add Condition</button>
+              </div>
+
+              <!-- Spell markers (Hex / Hunter's Mark) carry a source spell +
+                   caster so the on-hit rider fires; the plain dropdown above
+                   cannot express that, so they get their own add-form. -->
+              <div class="action-row spell-marker-row">
+                <select bind:value={markerSpell} data-testid="marker-spell-select">
+                  <option value="">-- Spell marker --</option>
+                  <option value="hex">Hex</option>
+                  <option value="hunters-mark">Hunter's Mark</option>
+                </select>
+                <select bind:value={markerSource} data-testid="marker-source-select">
+                  <option value="">-- Cast by --</option>
+                  {#each (activeEncounter?.combatants || []).filter(c => c.id !== selectedCombatant.id) as caster (caster.id)}
+                    <option value={caster.id}>{caster.display_name}</option>
+                  {/each}
+                </select>
+                <button onclick={handleAddSpellMarker} data-testid="add-spell-marker-btn">Add Marker</button>
               </div>
             </div>
 

@@ -48,8 +48,8 @@ func TestActionCatalog_EntriesWellFormed(t *testing.T) {
 		if e.Universal && len(e.Classes) > 0 {
 			t.Errorf("entry %q is Universal but lists classes %v", e.Key, e.Classes)
 		}
-		if !e.Universal && len(e.Classes) == 0 && len(e.Feats) == 0 {
-			t.Errorf("entry %q is not Universal and lists no gating class or feat", e.Key)
+		if !e.Universal && len(e.Classes) == 0 && len(e.Feats) == 0 && len(e.Spells) == 0 {
+			t.Errorf("entry %q is not Universal and lists no gating class, feat, or spell", e.Key)
 		}
 		for _, c := range e.Classes {
 			if c != strings.ToLower(c) {

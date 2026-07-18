@@ -61,6 +61,7 @@ func (h *WorkspaceHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/workspace", h.GetWorkspace)
 		r.Patch("/{encounterID}/combatants/{combatantID}/hp", h.UpdateCombatantHP)
 		r.Patch("/{encounterID}/combatants/{combatantID}/conditions", h.UpdateCombatantConditions)
+		r.Post("/{encounterID}/combatants/{combatantID}/spell-marker", h.ApplySpellMarker)
 		r.Patch("/{encounterID}/combatants/{combatantID}/position", h.UpdateCombatantPosition)
 		r.Delete("/{encounterID}/combatants/{combatantID}", h.DeleteCombatant)
 	})
@@ -136,6 +137,16 @@ type updateHPRequest struct {
 
 type updateConditionsRequest struct {
 	Conditions []string `json:"conditions"`
+}
+
+// applySpellMarkerRequest stamps a source-tagged concentration marker (Hex,
+// Hunter's Mark) so the DM can place a working marker from the dashboard — one
+// that carries the source spell + caster id the on-hit rider matches on. The
+// plain conditions editor cannot express these tags, so a bare "hexed" it adds
+// never fires the rider (this endpoint is the fix).
+type applySpellMarkerRequest struct {
+	Spell             string `json:"spell"`               // "hex" | "hunters-mark"
+	SourceCombatantID string `json:"source_combatant_id"` // the caster combatant
 }
 
 type updatePositionRequest struct {
@@ -433,6 +444,71 @@ func reconcileConditionNames(existing json.RawMessage, names []string) (json.Raw
 		out = append(out, CombatCondition{Condition: name})
 	}
 	return json.Marshal(out)
+}
+
+// spellMarkerDef maps a dashboard spell key to the marker condition + spell ID
+// the on-hit rider matches on (targetMarkedBySpell). The keys mirror the
+// constants in hex.go / hunters_mark.go.
+func spellMarkerDef(spell string) (condName, spellID string, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(spell)) {
+	case "hex":
+		return hexConditionName, hexSpellID, true
+	case "hunters-mark", "hunters_mark", "huntersmark":
+		return huntersMarkConditionName, huntersMarkSpellID, true
+	}
+	return "", "", false
+}
+
+// ApplySpellMarker handles POST /api/combat/{encounterID}/combatants/{combatantID}/spell-marker.
+// It stamps a source-tagged Hex / Hunter's Mark marker on the target so a
+// DM-placed marker actually fires the on-hit rider (the plain conditions editor
+// drops the source tags). Re-stamping the same caster's marker replaces it.
+func (h *WorkspaceHandler) ApplySpellMarker(w http.ResponseWriter, r *http.Request) {
+	_, combatantID, err := parseWorkspaceRouteParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var req applySpellMarkerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	condName, spellID, ok := spellMarkerDef(req.Spell)
+	if !ok {
+		http.Error(w, "unknown spell marker (want hex or hunters-mark)", http.StatusBadRequest)
+		return
+	}
+	sourceID, err := uuid.Parse(strings.TrimSpace(req.SourceCombatantID))
+	if err != nil {
+		http.Error(w, "invalid source_combatant_id", http.StatusBadRequest)
+		return
+	}
+
+	existing, err := h.svc.GetCombatant(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "failed to fetch combatant", http.StatusInternalServerError)
+		return
+	}
+	conds, err := parseConditions(existing.Conditions)
+	if err != nil {
+		conds = nil
+	}
+	updated, err := json.Marshal(upsertSpellMarkerConds(conds, condName, spellID, sourceID.String()))
+	if err != nil {
+		http.Error(w, "failed to serialize conditions", http.StatusInternalServerError)
+		return
+	}
+
+	c, err := h.svc.UpdateCombatantConditions(r.Context(), combatantID, updated, existing.ExhaustionLevel)
+	if err != nil {
+		http.Error(w, "failed to update conditions", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toWorkspaceCombatantResponse(c))
 }
 
 // UpdateCombatantPosition handles PATCH /api/combat/{encounterID}/combatants/{combatantID}/position.

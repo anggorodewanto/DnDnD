@@ -49,6 +49,11 @@ type BonusCombatService interface {
 	// COV-8: Steady Aim (rogue bonus-action self-advantage on this turn's attack).
 	SteadyAim(ctx context.Context, cmd combat.SteadyAimCommand) (combat.SteadyAimResult, error)
 
+	// Move a concentration-scoped spell marker (Hex, Hunter's Mark) to a new
+	// target as a bonus action after the current target drops to 0 HP.
+	MoveHex(ctx context.Context, caster refdata.Combatant, turn refdata.Turn, newTargetID uuid.UUID) (combat.MoveSpellMarkerResult, error)
+	MoveHuntersMark(ctx context.Context, caster refdata.Combatant, turn refdata.Turn, newTargetID uuid.UUID) (combat.MoveSpellMarkerResult, error)
+
 	// D-47 / Phase 47: Wild Shape activate / revert.
 	ActivateWildShape(ctx context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error)
 	RevertWildShapeService(ctx context.Context, cmd combat.RevertWildShapeCommand) (combat.RevertWildShapeResult, error)
@@ -213,6 +218,10 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchCunningAction(ctx, interaction, bctx, args)
 		case "steady-aim", "steadyaim":
 			h.dispatchSteadyAim(ctx, interaction, bctx)
+		case "hex", "move-hex", "movehex":
+			h.dispatchMoveSpellMarker(ctx, interaction, bctx, args, "hex")
+		case "hunters-mark", "huntersmark", "hunters_mark", "mark", "move-hunters-mark":
+			h.dispatchMoveSpellMarker(ctx, interaction, bctx, args, "hunters-mark")
 		case "drag":
 			h.dispatchDrag(ctx, interaction, bctx, args)
 		case "release-drag", "releasedrag":
@@ -542,6 +551,30 @@ func (h *BonusHandler) dispatchBardicInspiration(ctx context.Context, interactio
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Bardic Inspiration failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchMoveSpellMarker wires /bonus hex and /bonus hunters-mark. The caster
+// moves their concentration marker (the Hex curse / Hunter's Mark) to a new
+// target as a bonus action, once the current target has dropped to 0 HP.
+func (h *BonusHandler) dispatchMoveSpellMarker(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args, spell string) {
+	move := h.combatService.MoveHex
+	label, usage := "Hex", "hex <target>"
+	if spell == "hunters-mark" {
+		move = h.combatService.MoveHuntersMark
+		label, usage = "Hunter's Mark", "hunters-mark <target>"
+	}
+
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, usage)
+	if !ok {
+		return
+	}
+
+	result, err := move(ctx, bctx.actor, bctx.turn, target.ID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Moving %s failed: %v", label, err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)

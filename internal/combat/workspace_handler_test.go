@@ -504,6 +504,121 @@ func TestWorkspaceHandler_UpdateCombatantConditions_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
+// --- Spell-marker endpoint: DM stamps a source-tagged Hex/Hunter's Mark ---
+
+func TestWorkspaceHandler_ApplySpellMarker_StampsSourceTaggedHex(t *testing.T) {
+	encounterID, combatantID, casterID := uuid.New(), uuid.New(), uuid.New()
+
+	var written json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			assert.Equal(t, combatantID, id)
+			return refdata.Combatant{ID: combatantID, Conditions: json.RawMessage(`[{"condition":"prone"}]`)}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			written = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"spell":"hex","source_combatant_id":"` + casterID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/spell-marker", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	// the fired rider requires a marker matching (hexed, hex, casterID)
+	assert.True(t, targetMarkedBySpell(written, casterID, hexConditionName, hexSpellID),
+		"persisted conditions must carry the source-tagged hex marker, got %s", string(written))
+	// pre-existing conditions survive
+	assert.Contains(t, string(written), "prone")
+}
+
+func TestWorkspaceHandler_ApplySpellMarker_HuntersMark(t *testing.T) {
+	encounterID, combatantID, casterID := uuid.New(), uuid.New(), uuid.New()
+	var written json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: json.RawMessage(`[]`)}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			written = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"spell":"hunters-mark","source_combatant_id":"` + casterID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/spell-marker", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, targetMarkedBySpell(written, casterID, huntersMarkConditionName, huntersMarkSpellID))
+}
+
+// Re-stamping the same caster's marker replaces rather than duplicating it.
+func TestWorkspaceHandler_ApplySpellMarker_Idempotent(t *testing.T) {
+	encounterID, combatantID, casterID := uuid.New(), uuid.New(), uuid.New()
+	existing := `[{"condition":"hexed","source_spell":"hex","source_combatant_id":"` + casterID.String() + `"}]`
+	var written json.RawMessage
+	svc := &mockWorkspaceSvc{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, Conditions: json.RawMessage(existing)}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
+			written = conditions
+			return refdata.Combatant{ID: combatantID, Conditions: conditions}, nil
+		},
+	}
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"spell":"hex","source_combatant_id":"` + casterID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/spell-marker", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	conds, err := parseConditions(written)
+	require.NoError(t, err)
+	assert.Len(t, conds, 1, "duplicate marker should be replaced, not stacked")
+}
+
+func TestWorkspaceHandler_ApplySpellMarker_UnknownSpell(t *testing.T) {
+	encounterID, combatantID := uuid.New(), uuid.New()
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, &mockWorkspaceSvc{})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"spell":"fireball","source_combatant_id":"` + uuid.New().String() + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/spell-marker", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestWorkspaceHandler_ApplySpellMarker_InvalidSource(t *testing.T) {
+	encounterID, combatantID := uuid.New(), uuid.New()
+	h := NewWorkspaceHandler(&mockWorkspaceStore{}, &mockWorkspaceSvc{})
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"spell":"hex","source_combatant_id":"not-a-uuid"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/spell-marker", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 // --- TDD Cycle 16: PATCH combatant HP with invalid combatant ID ---
 
 func TestWorkspaceHandler_UpdateCombatantHP_InvalidCombatantID(t *testing.T) {

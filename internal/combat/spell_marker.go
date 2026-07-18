@@ -38,6 +38,41 @@ func targetMarkedBySpell(targetConditions json.RawMessage, attackerID uuid.UUID,
 	return false
 }
 
+// newSpellMarkerCond builds a source-tagged marker condition — the single shape
+// the on-hit rider matches on (targetMarkedBySpell). Shared by every writer of a
+// marker: the /bonus move path, the DM dashboard endpoint (upsertSpellMarkerConds),
+// and the on-cast apply (applySpellMarkerCondition).
+func newSpellMarkerCond(condName, spellID, sourceCombatantID string) CombatCondition {
+	return CombatCondition{
+		Condition:         condName,
+		SourceCombatantID: sourceCombatantID,
+		SourceSpell:       spellID,
+	}
+}
+
+// stripSpellMarkerConds returns conds with every (condName, spellID) marker
+// placed by sourceCombatantID removed, leaving all other conditions intact.
+// Shared by the /bonus move path (move_spell_marker.go) and the DM dashboard
+// spell-marker endpoint (workspace_handler.go).
+func stripSpellMarkerConds(conds []CombatCondition, condName, spellID, sourceCombatantID string) []CombatCondition {
+	filtered := make([]CombatCondition, 0, len(conds))
+	for _, c := range conds {
+		if c.Condition == condName && c.SourceSpell == spellID && c.SourceCombatantID == sourceCombatantID {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	return filtered
+}
+
+// upsertSpellMarkerConds returns conds with any existing (condName, spellID)
+// marker from sourceCombatantID replaced by a single fresh one, so re-stamping
+// the same caster's marker is idempotent rather than stacking duplicates.
+func upsertSpellMarkerConds(conds []CombatCondition, condName, spellID, sourceCombatantID string) []CombatCondition {
+	return append(stripSpellMarkerConds(conds, condName, spellID, sourceCombatantID),
+		newSpellMarkerCond(condName, spellID, sourceCombatantID))
+}
+
 // applySpellMarkerCondition marks the target with a source-tagged condition so
 // the caster's subsequent attacks add the spell's rider while they concentrate
 // (consumed by targetMarkedBySpell + the spell's rider FeatureDefinition). No-op
@@ -47,11 +82,7 @@ func (s *Service) applySpellMarkerCondition(ctx context.Context, condName string
 	if targetID == uuid.Nil {
 		return nil
 	}
-	cond := CombatCondition{
-		Condition:         condName,
-		SourceCombatantID: caster.ID.String(),
-		SourceSpell:       spell.ID,
-	}
+	cond := newSpellMarkerCond(condName, spell.ID, caster.ID.String())
 	if _, _, err := s.ApplyCondition(ctx, targetID, cond); err != nil {
 		return fmt.Errorf("applying %s condition: %w", condName, err)
 	}

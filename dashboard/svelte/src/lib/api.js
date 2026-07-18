@@ -1046,6 +1046,25 @@ export async function updateCombatantConditions(encounterId, combatantId, condit
   return res.json();
 }
 
+/**
+ * Stamp a source-tagged concentration marker (Hex / Hunter's Mark) on a
+ * combatant. Unlike the plain conditions PATCH, this carries the source spell +
+ * caster id the on-hit rider matches on, so a DM-placed marker actually fires.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - The marked (target) combatant UUID.
+ * @param {string} spell - "hex" or "hunters-mark".
+ * @param {string} sourceCombatantId - The caster combatant UUID.
+ * @returns {Promise<object>} The updated combatant.
+ */
+export async function applySpellMarker(encounterId, combatantId, spell, sourceCombatantId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/spell-marker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spell, source_combatant_id: sourceCombatantId }),
+  });
+  return res.json();
+}
+
 // --- Reactions Panel API ---
 
 /**

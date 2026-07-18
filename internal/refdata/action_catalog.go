@@ -77,6 +77,14 @@ type ActionCatalogEntry struct {
 	// sheet (it gates by class only). Threading the character's feats into the
 	// sheet is a deliberate follow-up.
 	Feats []string `json:"feats,omitempty"`
+	// Spells lists the lower-case spell IDs (matching seed_spells_*.go, e.g.
+	// "hex", "hunters-mark") that grant this action. Used for situational
+	// spell-driven bonus actions like moving a Hex/Hunter's Mark to a new target.
+	// Like Feats, a spell-gated entry carries no Classes and is not Universal, and
+	// exists so the /bonus drift guard stays honest; AvailableActions does not
+	// surface spell-granted actions on the sheet (it has no access to the
+	// character's known spells).
+	Spells []string `json:"spells,omitempty"`
 }
 
 // actionCatalog is the canonical, ordered list. Declaration order is the
@@ -172,6 +180,12 @@ var actionCatalog = []ActionCatalogEntry{
 		Summary: "After you Attack with a one-handed weapon, fire a hand crossbow you're holding as a bonus action (spends a bolt)."},
 	{Key: "shield", Name: "Shield Master", Economy: EconomyBonusAction, Command: "/bonus shield <target> [push|prone]", Feats: []string{"shield-master"},
 		Summary: "After you take the Attack action, shove a creature within 5 ft with your shield as a bonus action (knock prone or push 5 ft)."},
+
+	// --- Spell-driven bonus actions (gated by a concentration spell, not a class) ---
+	{Key: "hex", Name: "Move Hex", Economy: EconomyBonusAction, Command: "/bonus hex <target>", Spells: []string{"hex"},
+		Summary: "While concentrating on Hex, move the curse to a new creature as a bonus action after its current target drops to 0 HP."},
+	{Key: "hunters-mark", Name: "Move Hunter's Mark", Economy: EconomyBonusAction, Command: "/bonus hunters-mark <target>", Spells: []string{"hunters-mark"},
+		Summary: "While concentrating on Hunter's Mark, move the mark to a new creature as a bonus action after its current target drops to 0 HP."},
 }
 
 // ActionCount is the number of rows in the canonical action catalog. Derived so
