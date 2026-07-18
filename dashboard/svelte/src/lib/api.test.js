@@ -5,6 +5,7 @@ import {
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
   getPendingSaves, resolveMonsterSave, resolveMonsterSaveByUrl, cancelMonsterSave, restoreCombatantAction,
+  restoreCombatantBonusAction,
   listActionLog,
   undoLastAction,
   overrideCombatantHP as overrideCombatantHPDM,
@@ -682,6 +683,35 @@ describe('restoreCombatantAction', () => {
       text: () => Promise.resolve('combatant is not the active turn'),
     });
     await expect(restoreCombatantAction('enc-1', 'c-1')).rejects.toThrow('combatant is not the active turn');
+  });
+});
+
+describe('restoreCombatantBonusAction', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs to the restore-bonus-action endpoint and returns the result', async () => {
+    const mockResult = { combatant_id: 'c-1', combatant_name: 'Vale', restored: true };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mockResult) });
+
+    const result = await restoreCombatantBonusAction('enc-1', 'c-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/c-1/restore-bonus-action');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
+  it('throws the server text on a 409 (not the active turn)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve('combatant is not the active turn'),
+    });
+    await expect(restoreCombatantBonusAction('enc-1', 'c-1')).rejects.toThrow('combatant is not the active turn');
   });
 });
 

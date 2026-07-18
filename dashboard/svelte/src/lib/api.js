@@ -1011,6 +1011,26 @@ export async function restoreCombatantAction(encounterId, combatantId) {
 }
 
 /**
+ * Restore (give back) the bonus action the active combatant spent this turn —
+ * the sibling of {@link restoreCombatantAction} for the bonus-action economy.
+ * Clears bonus_action_used and reseeds the turn's bonus action; leaves the main
+ * action and movement alone.
+ * apiFetch throws Error(serverText) on non-2xx (409 not-active-turn /
+ * already-available, 400 bad ids).
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - The active combatant UUID.
+ * @returns {Promise<{combatant_id:string, combatant_name:string, restored:boolean}>}
+ */
+export async function restoreCombatantBonusAction(encounterId, combatantId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/restore-bonus-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+/**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

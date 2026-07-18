@@ -78,6 +78,8 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/pending-saves/{saveID}/cancel", h.CancelAoEPendingSave)
 		// ISSUE-049: DM hands the active combatant back their spent action (undo grant).
 		r.Post("/{encounterID}/combatants/{combatantID}/restore-action", h.RestoreTurnAction)
+		// ISSUE-049 (bonus-action variant): DM hands back the spent bonus action (undo grant).
+		r.Post("/{encounterID}/combatants/{combatantID}/restore-bonus-action", h.RestoreTurnBonusAction)
 	})
 }
 

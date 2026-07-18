@@ -18,6 +18,7 @@
     endCombat,
     combatMapUrl,
     restoreCombatantAction,
+    restoreCombatantBonusAction,
   } from './lib/api.js';
   import {
     applyDamage,
@@ -257,6 +258,18 @@
       await loadWorkspace();
     } catch (e) {
       dmOverrideMessage = 'Restore action failed: ' + e.message;
+    }
+  }
+
+  async function handleRestoreBonusAction() {
+    if (!activeEncounter || !activeTurnCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      const res = await restoreCombatantBonusAction(activeEncounter.id, activeTurnCombatant.id);
+      dmOverrideMessage = `Bonus action restored for ${res.combatant_name || activeTurnCombatant.display_name}.`;
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Restore bonus action failed: ' + e.message;
     }
   }
 
@@ -1344,6 +1357,14 @@
               data-testid="restore-action-btn"
             >
               Restore Action{activeTurnCombatant ? ` — ${activeTurnCombatant.display_name}` : ''}
+            </button>
+            <button
+              onclick={handleRestoreBonusAction}
+              disabled={!activeTurnCombatant}
+              title="Give the active combatant back the bonus action they spent this turn (e.g. to grant an undo of a misplayed bonus-action cast)"
+              data-testid="restore-bonus-action-btn"
+            >
+              Restore Bonus Action{activeTurnCombatant ? ` — ${activeTurnCombatant.display_name}` : ''}
             </button>
           </div>
           <button
