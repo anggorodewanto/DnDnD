@@ -3511,8 +3511,8 @@ re-ran `/attack target:Sabinnet's Housecarl weapon:handaxe`. The engine gave him
 side — hurt but still standing. Turn ended (action + bonus spent).
 
 **Sabinnet's turn (DM-run).** Combat Manager → Run Enemy Turn proposed **Mind Lance vs Forge** (+6, 3d6 psychic,
-ranged). Reviewed → **10 to hit → MISS**. Sabinnet never left his glass at F1; the psychic lance broke against
-Forge's rage and scattered (Rage doesn't resist psychic — he simply rolled low). Confirmed & posted to #combat-log;
+ranged). Reviewed → **10 to hit → MISS**. Sabinnet never left her glass at F1; the psychic lance broke against
+Forge's rage and scattered (Rage doesn't resist psychic — she simply rolled low). Confirmed & posted to #combat-log;
 narrated the whiff to #the-story (6:03 AM) and handed the moment to Vale. End Turn → Vale active.
 
 **➤ Now:** Round 2, **Vale's turn (PC)** — engine auto-pinged #your-turn; awaiting her action. Only two enemies
@@ -3566,7 +3566,7 @@ guard. The mace cracked stone, not bone. Posted to #combat-log; End Turn advance
 past the dead housecarl (auto-skipped) into **Round 3**.
 
 **Round 2 tally:** one housecarl dead, the second down to 16/32 and badly hurt,
-Sabinnet still untouched at his rod (58/58). No PC has taken a hit since Forge's
+Sabinnet still untouched at her rod (58/58). No PC has taken a hit since Forge's
 early beating — Forge is patched to 20/41, Windreth and Vale full.
 
 R2-close beat posted to #the-story (7:07 AM). **Round 3 opens on Windreth (Winfroz)**
@@ -3594,7 +3594,7 @@ fell on the housecarl who was *already dead*; the engine let him roll against a
 downed target, so the blows meant nothing but a spray of pages and blood.
 
 **The board now:** both housecarls dead, and **only Sabinnet remains — 58/58,
-untouched**, watching from his desk with his pale rod across his knees. No PC is
+untouched**, watching from her desk with her pale rod across her knees. No PC is
 seriously hurt (Forge 20/41 and raging, Windreth and Vale full).
 
 Forge's turn is still open — his attacks are spent but he has ~25 ft of movement.
@@ -3627,3 +3627,42 @@ action-economy gap, left as-is since the guard was doomed regardless.)
 
 **State after:** both housecarls dead; only **Sabinnet** stands (F1, untouched). Forge's turn still open, bonus +
 move in hand, awaiting his choice. Then Sabinnet acts. She breaks and raises the alarm the moment she's bloodied.
+
+---
+
+### Round 3 — the Reader is held
+
+Forge closed the last of the distance (I5→**G2**) and set his shoulder against the
+glass, axe up, but held the throw — he ended his turn toe-to-toe with Sabinnet
+rather than spend the off-hand cast (12:20 PM).
+
+Sabinnet answered from the table without rising: another **Mind Lance**, and this
+one bit — **24 to hit, 11 psychic**, straight through the Rage (rage blunts blades,
+not thought). **Forge dropped to 9/41.** The dwarf is bloodied and standing in
+reach of a thing that hits minds.
+
+Then **Vale** spoke one flat, final word. **Hold Person.** Sabinnet's own reader-craft
+turned on her: pact slot spent, her concentration locked on holding her. The save
+came up **10 against DC 14 — a failure**, and the Reader-under-glass froze mid-cant,
+rod half-raised, eyes open and furious and useless. **Paralyzed** — and while she's
+held, every blade that finds her finds it easy, and any melee hit from within five
+feet lands as a critical. She rolls a fresh Wisdom save at the end of each of her own
+turns to break it.
+
+Windreth is up next, into a wide-open target with Forge already pinning it.
+
+**Rules note (monster save via the sanctioned path).** The enemy's Wisdom save was
+resolved from the DM dashboard through the ISSUE-043 monster-save endpoint
+(`POST /api/combat/{enc}/pending-saves/{saveID}/resolve`) — the engine rolled d20+5
+server-side, applied the paralyzed condition on the fail, and posted the result to
+#combat-log without ever surfacing Sabinnet's HP. No hand-rolled dice, no raw SQL.
+
+**Pronoun (resolved 2026-07-18).** Canon: **Sabinnet is she/her** — the DM's ruling; the
+docs were normalized this session (every stray *he/him* for her flipped). The 12:48 PM
+#the-story paralysis beat went out with *he/him* just before the ruling and was **not**
+re-posted — a single stale beat isn't worth a player-facing pronoun correction; she/her
+from here on.
+
+**State after:** both housecarls dead; **Sabinnet HELD** (F1, save-ends WIS DC 14).
+Live HP — Windreth 31/31 (G5), Forge **9/41** (G2, raging), Vale 31/31 (J6). Vale's
+turn still open (action + pact slots spent; movement + bonus in hand). Then Windreth.
