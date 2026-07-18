@@ -3567,7 +3567,8 @@ past the dead housecarl (auto-skipped) into **Round 3**.
 
 **Round 2 tally:** one housecarl dead, the second down to 16/32 and badly hurt,
 Sabinnet still untouched at her rod (58/58). No PC has taken a hit since Forge's
-early beating — Forge is patched to 20/41, Windreth and Vale full.
+early beating — Forge is patched to 20/41 (**Vale's Potion of Healing, spent on him**;
+consumed, off both sheets), Windreth and Vale full.
 
 R2-close beat posted to #the-story (7:07 AM). **Round 3 opens on Windreth (Winfroz)**
 at the top of the order — his move. The engine pinged #your-turn. Awaiting his action.
@@ -3691,3 +3692,18 @@ Vale's turn, and Sabinnet was free again but bloodied. Before the round, dewa ha
 - **Combat ENDED** (Combat Manager → End Combat). All three enemies down (Sabinnet + both housecarls). Concentration dropped; final HP carried back to sheets: **Windreth 31/31, Vale 31/31, Forge 9/41** (Forge walks out of this one badly hurt). Capture beat posted to #the-story (3:16 PM).
 
 **Aftermath (out of combat).** The reading room is theirs. Sabinnet lies senseless behind her desk; her pale rod skittered out of reach; the alarm-cord she was reaching for was never pulled, so nothing outside has been alerted yet. Ahead of the party: secure/bind her, search the desk + ledgers + glass cases, and wake her for questioning — and Windreth is still carrying **THE SEAL**, which may well belong to this very desk. Awaiting their roleplay and rolls; not acting for them.
+
+### Aftermath — the first search (out of combat, 2026-07-18)
+
+The party started tossing the room. Two `/check` rolls came in and were resolved through the sanctioned DM-Queue narration path (`POST /dashboard/queue/{id}/narrate` → posts the outcome to #in-character + marks the item resolved); one shared read-aloud beat went to #the-story.
+
+- **Forge (PC) — Sleight of Hand 17** (`d20(13)+2+1d4(2)`): careful hands on the unconscious reader + the desk. Came up with Sabinnet's **key-ring**, a **jeweler's reading-lens on a chain**, and a **flat oilcloth packet**; one key opened the **locked desk drawer** silently → **waxed name-scraps**, a stub of **black sealing-wax**, and a **faceless signet**. Physical objects in hand — but none of it *readable* without her craft (dm-rules: a strong check shows the body, not the name).
+- **Vale (PC) — Investigation 8** (`d20(6)+2`): a fast, weak sweep. The **ledgers + glass-cased scraps** are in the same **faceless scatter-cipher** as the fence's book — no crack without time or a key, so the buyer and the faceless god stay hidden. Pocketed **2 unlabeled vials** (unidentified). The low roll deliberately steers the deep intel behind **Sabinnet herself** (the interrogation is the intended channel, not a search roll).
+
+**Ruling — non-lethal EB → still "shows the body, not the name."** The searches surface *instruments* (the lens, the wax, the signet, the sorted scraps) and *atmosphere* (the salt-and-ash smell tying back to the scraps the party already carries), but the sealed core — who the buyer is, what the faceless god is, how a kept name gets read — stays shut. Two hazards kept front-of-mind and NOT triggered: (1) **THE SEAL** (Windreth's warded scrap) must not be read on Sesh's floor — reading it thins the ward and the buyer feels it; (2) the means to read is *right here* (lens + wax + the woman), which is exactly the temptation to route around.
+
+**Queue housekeeping.** Cleared 4 stale combat-era items left over from the closed encounter (`95f98525`): 2× `enemy_turn_ready` (Sabinnet, from the paralyzed rounds) + 2× Forge `undo_request` (mid-combat, now moot). Resolved via `POST /dashboard/queue/{id}/resolve`. Queue is empty; no active encounter.
+
+**Inventory written (07-18).** Per the standing "loot → the finding PC's sheet" rule, the found items went onto sheets via `POST /api/inventory/add` (7× `200 ok`) from the authed dashboard tab — no raw SQL. **Forge** (his Sleight-of-Hand find): Sabinnet's Key-Ring, Jeweler's Reading-Lens (chain), Oilcloth Packet (unopened), Waxed Name-Scraps (sealed), Stub of Black Sealing-Wax, Faceless Signet. **Vale** (her Investigation find): Unlabeled Vial ×2. The arc-sensitive pieces — the packet, the sealed name-scraps, the faceless signet, and Vale's vials — were recorded `identified:false` with atmospheric `magic_properties` (mirrors Windreth's warded scrap), so the party *possesses* them but nothing is *read*: THE SEAL, the buyer, and the faceless-cipher intel stay gated behind Sabinnet, not a search roll. The mundane kit (key-ring, lens, wax) is plain identified gear. Verified in the DB after write.
+
+**➤ NOW:** out of combat, room secured-but-not-yet-bound. Items **found, not yet claimed to sheets** (holding the inventory writes until players declare what they pocket — the arc-scraps + signet shouldn't be freely "owned"/identified yet). Live HP unchanged: **Forge 9/41** (heal candidate), Vale 31/31, Windreth 31/31. Awaiting the party's next declared move (bind / wake + interrogate / search harder / short rest); not acting for them.

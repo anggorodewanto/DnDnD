@@ -11,17 +11,21 @@
 > [`sessions/session-01.md`](sessions/session-01.md). See [`dm-rules.md`](dm-rules.md)
 > "Keep the record straight."
 
-_Last updated: 2026-07-18 — **SESH, the deep market — OUT OF COMBAT, aftermath in Sabinnet's
-reading room.** The climactic reader fight is **WON**: the party breached the salt-white inner
-door, cut down both housecarls, and dropped **Sabinnet, the Reader-under-glass**. Vale had
-**pre-declared non-lethal intent** (to interrogate), so **Sabinnet is CAPTURED ALIVE**
-(unconscious + stable — new house rule, see [`dm-rules.md`](dm-rules.md)); encounter `95f98525`
-is `completed` (End-Combat carried HP back: Windreth 31/31, Vale 31/31, **Forge 9/41**).
-**➤ NOW:** the party has the room — bind / search / wake + interrogate her; her **alarm-cord was
-never pulled**, so the interior is **not yet alerted**. **THE SEAL stays shut** — Windreth still
-carries the warded prize scrap; it opens only on a proper reading, never at the scene. Full
-blow-by-blow → [`sessions/session-01.md`](sessions/session-01.md); live board (when a fight
-stands up) → DM Console; durable IDs/secrets below._
+_Last updated: 2026-07-18 — **SESH, the deep market — OUT OF COMBAT, searching Sabinnet's
+reading room.** The reader fight is **WON** and **Sabinnet is CAPTURED ALIVE** (unconscious +
+stable — pre-declared non-lethal; new house rule, see [`dm-rules.md`](dm-rules.md)); encounter
+`95f98525` is `completed` (Windreth 31/31, Vale 31/31, **Forge 9/41**). **First search resolved:**
+Forge (Sleight of Hand 17) frisked her + opened the locked desk drawer → key-ring, reading-lens,
+oilcloth packet, waxed name-scraps, black sealing-wax, faceless signet; Vale (Investigation 8, weak)
+got only 2 unlabeled vials + confirmation the ledgers/scraps are in the fence's faceless cipher —
+the real intel sits **behind Sabinnet herself**. Loot **written to sheets 07-18** (Forge: key-ring,
+reading-lens, oilcloth packet, waxed name-scraps, black wax, faceless signet; Vale: 2 vials — arc
+items recorded `identified:false`/sealed so possession ≠ reading).
+**➤ NOW:** room theirs, **not yet bound/woken**; alarm-cord **never pulled** → interior **not
+alerted**. Await the party's next move (bind / wake + interrogate / search harder / short rest) —
+don't act for them. **THE SEAL stays shut** — Windreth's warded scrap opens only on a proper
+reading, never at the scene. Full blow-by-blow → [`sessions/session-01.md`](sessions/session-01.md);
+live board (when a fight stands up) → DM Console; durable IDs/secrets below._
 
 ## Live mechanical state → DM Console (do not hand-copy here)
 
@@ -166,7 +170,8 @@ stock did; the kept prize scrap is unread).
   failed roll. The Sabinnet lead is a *route* to that reading, not the reading itself.
 - **Vale's kit (on her sheet):** the Faceless God's Token, the ashen face-shard, the **Name-Scrap
   of the Faceless God**, the **Grey Man's Name-Scraps (bundle)**, the defaced **Renegade's
-  Warden-Disc**, a **Potion of Healing** (2d4+2, unused), the Cold Iron Key (×2). **⚠ Vale does
+  Warden-Disc**, the Cold Iron Key (×2). (Her **Potion of Healing** was **spent on Forge** during
+  the reader fight — patched him to 20/41 mid-combat; consumed, off both sheets.) **⚠ Vale does
   NOT hold the kept prize scrap** — that warded scrap is on Windreth's sheet (see THE SEAL).
 - **Windreth's arc-kit (on his sheet):** **_The Kept Name-Scrap (warded)_** (THE SEAL) + a **Token
   of Remembrance**. He keeps the warded scrap buried/cold; it opens only on a proper reading.
@@ -183,8 +188,14 @@ stock did; the kept prize scrap is unread).
 1. **★ SESH, Sabinnet's reading room — AFTERMATH, out of combat.** The fight is won and
    **Sabinnet is captured alive**; the party has the room and the initiative. Await their RP /
    rolls — don't act for them. Likely beats to adjudicate:
-   - **Secure her / the room** — bind + gag Sabinnet before she wakes, take the fallen rod; toss
-     the desk, ledgers, glass cases, papers (`/check skill:investigation`, `/check skill:perception`).
+   - **Secure her / the room** — bind + gag Sabinnet before she wakes, take the fallen rod. **First
+     search already resolved 07-18** (Forge SoH 17 → key-ring, reading-lens, oilcloth packet, drawer:
+     waxed name-scraps + black wax + faceless signet; Vale Inv 8 → 2 unlabeled vials, ledgers stay
+     ciphered). Loot **written to sheets 07-18** — Forge holds the desk kit (key-ring, reading-lens,
+     oilcloth packet, waxed name-scraps, black wax, faceless signet), Vale the 2 vials; the arc pieces
+     (packet, scraps, signet, vials) are recorded `identified:false`/sealed so **possession ≠ reading**
+     — the SEAL and the deep intel stay gated behind Sabinnet, not a search roll. Deeper digging =
+     another `/check skill:investigation` (with time).
    - **Wake + interrogate** — she's the sealed-name Reader-under-glass and the whole reason they
      came; question her (`/check skill:intimidation` / `skill:persuasion`) about the buyer, the
      sealed names, and how a kept name gets read. Follow the adjudication patterns in
