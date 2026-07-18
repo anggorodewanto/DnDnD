@@ -114,7 +114,7 @@ func (s *Service) PolearmMasterBonusAttack(ctx context.Context, cmd PolearmMaste
 		return result, err
 	}
 
-	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true); err != nil {
 		return result, err
 	}
 

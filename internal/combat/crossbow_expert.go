@@ -147,7 +147,7 @@ func (s *Service) CrossbowExpertBonusAttack(ctx context.Context, cmd CrossbowExp
 	if err != nil {
 		return result, err
 	}
-	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true); err != nil {
 		return result, err
 	}
 

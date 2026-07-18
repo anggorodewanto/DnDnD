@@ -561,6 +561,13 @@ type AttackResult struct {
 	TargetDroppedToZero          bool
 	PromptGWMBonusAttackEligible bool
 
+	// DownLogLine is the formatted drop-to-0 line (💀/💔) when this attack
+	// dropped the target above-0 → 0. FormatAttackLog renders it at the tail of
+	// the narrative so #combat-log shows "defeated" AFTER the hit, not before.
+	// Stamped by applyHitDamage (which defers the service's own immediate post);
+	// empty when the target survived. See DownLogLine on ApplyDamageResult.
+	DownLogLine string
+
 	// SR-010: list of EffectType strings whose conditions included
 	// OncePerTurn:true and which actually fired (passed condition filtering)
 	// in the on_damage_roll pass. Service.Attack reads this to mark the
@@ -1269,6 +1276,7 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)%s%s", result.DamageTotal, result.DamageType, result.DamageDice, sneakAttackTag(result), savageAttackerTag(result))
 		writeDamageBreakdown(&b, result)
+		writeDroppedToZero(&b, result)
 		return b.String()
 	}
 
@@ -1343,7 +1351,21 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, "\n    \u2192 \U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.", result.AttackerName)
 	}
 
+	writeDroppedToZero(&b, result)
+
 	return b.String()
+}
+
+// writeDroppedToZero appends the target's drop-to-0 line (\ud83d\udc80/\ud83d\udc94) at the tail of
+// the attack narrative when the hit dropped the target. Carried on the result
+// (DownLogLine) so it rides the same #combat-log message as the hit \u2014 the
+// service defers its own immediate post for FormatAttackLog paths, guaranteeing
+// the "defeated" line lands AFTER the damage line, not before it.
+func writeDroppedToZero(b *strings.Builder, result AttackResult) {
+	if result.DownLogLine == "" {
+		return
+	}
+	fmt.Fprintf(b, "\n    \u2192 %s", result.DownLogLine)
 }
 
 // resolveAndPersistAttack resolves an attack from the given input, persists the
@@ -1389,19 +1411,28 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 // that land multiple strikes on one target in a single command (Flurry of
 // Blows) can thread the reduced HP into the next strike; on a no-op the target
 // is returned unchanged.
-func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result AttackResult) (refdata.Combatant, ApplyDamageResult, error) {
+// deferDownLog controls the drop-to-0 #combat-log post: attack paths whose
+// result is rendered through FormatAttackLog pass true so the "defeated" line
+// rides the same message as the hit (stamped onto result.DownLogLine here);
+// paths with their own aggregated log (Flurry of Blows) pass false to keep the
+// service's immediate post.
+func (s *Service) applyHitDamage(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, result *AttackResult, deferDownLog bool) (refdata.Combatant, ApplyDamageResult, error) {
 	if !result.Hit || result.DamageTotal <= 0 {
 		return target, ApplyDamageResult{}, nil
 	}
 	out, err := s.ApplyDamage(ctx, ApplyDamageInput{
-		EncounterID: encounterID,
-		Target:      target,
-		RawDamage:   result.DamageTotal,
-		DamageType:  result.DamageType,
-		IsCritical:  result.CriticalHit,
+		EncounterID:  encounterID,
+		Target:       target,
+		RawDamage:    result.DamageTotal,
+		DamageType:   result.DamageType,
+		IsCritical:   result.CriticalHit,
+		DeferDownLog: deferDownLog,
 	})
 	if err != nil {
 		return target, ApplyDamageResult{}, fmt.Errorf("applying attack damage: %w", err)
+	}
+	if deferDownLog {
+		result.DownLogLine = out.DownLogLine
 	}
 	return out.Updated, out, nil
 }
@@ -1571,7 +1602,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return result, err
 	}
 
-	_, dmgOut, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result)
+	_, dmgOut, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true)
 	if err != nil {
 		return result, err
 	}
@@ -1751,7 +1782,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	if err != nil {
 		return result, err
 	}
-	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true); err != nil {
 		return result, err
 	}
 	// SR-010 — mirror Service.Attack: improvised hits that produce a
@@ -1957,7 +1988,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if err != nil {
 		return result, err
 	}
-	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true); err != nil {
 		return result, err
 	}
 	// Persist any once-per-turn rider that fired on the off-hand swing (Sneak
@@ -2138,7 +2169,7 @@ func (s *Service) GWMBonusAttack(ctx context.Context, cmd GWMBonusAttackCommand,
 	if err != nil {
 		return result, err
 	}
-	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, result); err != nil {
+	if _, _, err := s.applyHitDamage(ctx, cmd.Attacker.EncounterID, cmd.Target, &result, true); err != nil {
 		return result, err
 	}
 

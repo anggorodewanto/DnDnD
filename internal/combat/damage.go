@@ -125,6 +125,14 @@ type ApplyDamageInput struct {
 	// combatant adds two death-save failures instead of one. Damage rolls
 	// that are not attack-based (AoE saves, ongoing damage) pass false.
 	IsCritical bool
+	// DeferDownLog suppresses the immediate #combat-log post of the drop-to-0
+	// line so the caller can render it after its own result line (avoiding the
+	// "💀 defeated" landing above the attack that caused it). The formatted
+	// line is still returned on ApplyDamageResult.DownLogLine, and the DM-console
+	// action_log row is still recorded. Set by the attack chokepoint
+	// (applyHitDamage); every other damage source leaves it false and keeps the
+	// immediate post.
+	DeferDownLog bool
 }
 
 // ApplyDamageResult holds outputs of Service.ApplyDamage.
@@ -153,6 +161,12 @@ type ApplyDamageResult struct {
 	// drop-to-0 or damage-at-0-HP routing. Nil when no death-save event
 	// fired (e.g. target survived above 0 HP, NPC corpse path).
 	DeathSaveOutcome *DeathSaveOutcome
+	// DownLogLine is the formatted drop-to-0 #combat-log line (💀/💔). Populated
+	// whenever this event dropped the target above-0 → 0. When the caller set
+	// DeferDownLog, the immediate post is skipped and the caller renders this
+	// line at the tail of its own result message instead. Empty on every no-op /
+	// survival path.
+	DownLogLine string
 }
 
 // ApplyDamage is the single seam for every production damage write. It
@@ -284,8 +298,9 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	// undo (Override), wild-shape reverts (the druid is not dying), damage-at-0
 	// ticks (prevHP already 0), and survivals (newHP > 0).
 	droppedToZero := !input.Override && !isWildShaped && target.HpCurrent > 0 && newHP <= 0
+	var downLogLine string
 	if droppedToZero {
-		s.notifyDroppedToZero(ctx, input.EncounterID, target, dsRouting.instantDeath)
+		downLogLine = s.notifyDroppedToZero(ctx, input.EncounterID, target, dsRouting.instantDeath, input.DeferDownLog)
 	}
 
 	return ApplyDamageResult{
@@ -300,6 +315,7 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		InstantDeath:     dsRouting.instantDeath,
 		DroppedToZero:    droppedToZero,
 		DeathSaveOutcome: dsRouting.outcome,
+		DownLogLine:      downLogLine,
 	}, nil
 }
 
@@ -309,16 +325,23 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 // visible in lockstep with the hit that caused it. Pure observability: the
 // action_log parent is the encounter's active turn (skipped when out of
 // combat), and every error is swallowed — a logging miss must never roll back
-// the damage write that already landed.
-func (s *Service) notifyDroppedToZero(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, instantDeath bool) {
+// the damage write that already landed. Returns the formatted line so a caller
+// that deferred the #combat-log post can render it after its own result line.
+//
+// deferCombatLog skips the immediate #combat-log post (the DM-console row is
+// always recorded); the caller is responsible for surfacing the returned line.
+func (s *Service) notifyDroppedToZero(ctx context.Context, encounterID uuid.UUID, target refdata.Combatant, instantDeath, deferCombatLog bool) string {
 	msg := formatDroppedToZeroLog(target.DisplayName, target.IsNpc, instantDeath)
-	s.postCombatLog(ctx, encounterID, msg)
+	if !deferCombatLog {
+		s.postCombatLog(ctx, encounterID, msg)
+	}
 
 	enc, err := s.store.GetEncounter(ctx, encounterID)
 	if err != nil || !enc.CurrentTurnID.Valid {
-		return
+		return msg
 	}
 	s.recordCombatAction(ctx, enc.CurrentTurnID.UUID, encounterID, target.ID, uuid.NullUUID{}, actionTypeDowned, msg)
+	return msg
 }
 
 // phase43DeathSaveResult is the internal return of routePhase43DeathSave.
