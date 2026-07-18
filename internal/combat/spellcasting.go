@@ -201,6 +201,12 @@ type CastResult struct {
 	// dropped spell's effects were cleaned up server-side. The full result is
 	// surfaced here so the handler can post the consolidated 💨 log line.
 	ConcentrationCleanup BreakConcentrationFullyResult
+	// DownLogLine is the formatted drop-to-0 line (💀/💔) when the spell's
+	// damage dropped the target above-0 → 0. FormatCastLog renders it at the
+	// tail so #combat-log shows "defeated" AFTER the cast, not before (mirrors
+	// AttackResult.DownLogLine). The service defers its own immediate post for
+	// the spell-damage path; empty when the target survived.
+	DownLogLine string
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -356,6 +362,13 @@ func FormatCastLog(result CastResult) string {
 	// DM required
 	if result.ResolutionMode == "dm_required" {
 		b.WriteString("\U0001f4e8 Routed to DM for resolution\n")
+	}
+
+	// Drop-to-0 line rides the same #combat-log message as the cast that caused
+	// it (mirrors FormatAttackLog): the service defers its own immediate post so
+	// "defeated" lands AFTER the cast, not before. Empty when the target lived.
+	if result.DownLogLine != "" {
+		fmt.Fprintf(&b, "%s\n", result.DownLogLine)
 	}
 
 	return strings.TrimRight(b.String(), "\n")
@@ -760,15 +773,21 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			})
 		}
 		result.DamageTotal = raw
-		_, err = s.ApplyDamage(ctx, ApplyDamageInput{
-			EncounterID: target.EncounterID,
-			Target:      target,
-			RawDamage:   raw,
-			DamageType:  result.DamageType,
+		// Defer the drop-to-0 #combat-log post so it rides the same message as
+		// the cast (rendered at the tail of FormatCastLog), not above it — the
+		// cast handler posts FormatCastLog after Cast returns. Mirrors the
+		// weapon-attack chokepoint (applyHitDamage).
+		dmgOut, derr := s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID:  target.EncounterID,
+			Target:       target,
+			RawDamage:    raw,
+			DamageType:   result.DamageType,
+			DeferDownLog: true,
 		})
-		if err != nil {
-			return CastResult{}, fmt.Errorf("applying spell damage: %w", err)
+		if derr != nil {
+			return CastResult{}, fmt.Errorf("applying spell damage: %w", derr)
 		}
+		result.DownLogLine = dmgOut.DownLogLine
 	}
 
 	// 12α-i. Repelling Blast: an Eldritch Blast hit from a warlock with the

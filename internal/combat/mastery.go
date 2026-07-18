@@ -111,17 +111,13 @@ func (s *Service) applyCleaveAttack(ctx context.Context, attacker, primaryTarget
 		return nil
 	}
 
-	// Apply the secondary damage through the same pipeline the primary hit uses.
-	if secondResult.Hit && secondResult.DamageTotal > 0 {
-		if _, err := s.ApplyDamage(ctx, ApplyDamageInput{
-			EncounterID: second.EncounterID,
-			Target:      second,
-			RawDamage:   secondResult.DamageTotal,
-			DamageType:  secondResult.DamageType,
-			IsCritical:  secondResult.CriticalHit,
-		}); err != nil {
-			return fmt.Errorf("applying cleave damage: %w", err)
-		}
+	// Apply the secondary damage through the shared hit-damage chokepoint. Passing
+	// deferDownLog=true suppresses the immediate drop-to-0 post and stamps the
+	// formatted line onto secondResult.DownLogLine, so a Cleave kill's "defeated"
+	// rides the same #combat-log message as the /attack (rendered after the Cleave
+	// hit line in FormatAttackLog), not above it. applyHitDamage no-ops on a miss.
+	if _, _, err := s.applyHitDamage(ctx, second.EncounterID, second, &secondResult, true); err != nil {
+		return fmt.Errorf("applying cleave damage: %w", err)
 	}
 
 	result.CleaveAttack = &secondResult
@@ -344,14 +340,20 @@ func (s *Service) applyGrazeDamage(ctx context.Context, target refdata.Combatant
 	if result.DamageTotal <= 0 {
 		return nil
 	}
-	if _, err := s.ApplyDamage(ctx, ApplyDamageInput{
-		EncounterID: target.EncounterID,
-		Target:      target,
-		RawDamage:   result.DamageTotal,
-		DamageType:  result.DamageType,
-	}); err != nil {
+	// Defer the drop-to-0 post so a graze kill's "defeated" line rides the same
+	// #combat-log message as the attack (rendered at the tail of FormatAttackLog
+	// via result.DownLogLine), not above it. Mirrors applyHitDamage.
+	out, err := s.ApplyDamage(ctx, ApplyDamageInput{
+		EncounterID:  target.EncounterID,
+		Target:       target,
+		RawDamage:    result.DamageTotal,
+		DamageType:   result.DamageType,
+		DeferDownLog: true,
+	})
+	if err != nil {
 		return fmt.Errorf("applying graze damage: %w", err)
 	}
+	result.DownLogLine = out.DownLogLine
 	return nil
 }
 

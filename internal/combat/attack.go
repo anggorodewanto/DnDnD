@@ -1317,10 +1317,13 @@ func FormatAttackLog(result AttackResult) string {
 	}
 
 	// 2024 Weapon Mastery \u2014 Cleave: surface the auto-resolved secondary hit so
-	// players see the extra attack against the adjacent creature.
+	// players see the extra attack against the adjacent creature. A Cleave kill's
+	// drop-to-0 line rides right after the Cleave hit (secondResult.DownLogLine),
+	// so "defeated" lands after the strike that felled the second creature.
 	if result.CleaveAttack != nil && result.CleaveAttack.Hit {
 		fmt.Fprintf(&b, "\n    \u2192 \u2694\ufe0f Cleave hits %s for %d %s",
 			result.CleaveAttack.TargetName, result.CleaveAttack.DamageTotal, result.CleaveAttack.DamageType)
+		writeDroppedToZero(&b, *result.CleaveAttack)
 	} else if result.CleaveAttack != nil {
 		fmt.Fprintf(&b, "\n    \u2192 \u2694\ufe0f Cleave misses %s", result.CleaveAttack.TargetName)
 	}
