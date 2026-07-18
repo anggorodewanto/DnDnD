@@ -3666,3 +3666,16 @@ from here on.
 **State after:** both housecarls dead; **Sabinnet HELD** (F1, save-ends WIS DC 14).
 Live HP — Windreth 31/31 (G5), Forge **9/41** (G2, raging), Vale 31/31 (J6). Vale's
 turn still open (action + pact slots spent; movement + bonus in hand). Then Windreth.
+
+### Round 4 — the hold shatters
+
+The players pressed the auto-crit window hard while Sabinnet was paralyzed (melee within 5ft of a paralyzed target auto-crits):
+
+- **Windreth (PC)** into the held boss: `/attack` Shortsword **CRIT 19** + Dagger **CRIT 6** → Sabinnet 58 → 33. (Windreth ends at E2.)
+- **Forge (PC):** `/attack` Handaxe **CRIT 15** + Handaxe **CRIT 10** (incl. +2 Rage) → Sabinnet 33 → **8 HP, bloodied**. (Forge at G2, raging.)
+- **Sabinnet (DM-run enemy turn):** she was still paralyzed, so I ran her turn with an **empty plan** — sanctioned in-page `POST /api/combat/{enc}/enemy-turn` with `steps:[]`. She takes no actions; the engine (`ExecuteEnemyTurn` → `rollNPCEndOfTurnResave`) auto-rolls her end-of-turn WIS re-save: **22 vs DC 14 → SUCCESS.** Paralysis ends; Vale's Hold Person loses its last target so **Vale's concentration drops** and the spell ends. Then `POST …/advance-turn` handed the turn to Vale.
+- Break-free beat posted to #the-story (3:06 PM): the rod stops trembling, her eyes refocus, she's on her feet again — bloodied, one hand drifting toward the alarm-cord, already looking for the door. OOC coda handed off to Vale (EB is a cantrip, no slot; kill window is now).
+
+**Rules note (NPC end-of-turn save via the sanctioned path).** A paralyzed NPC's 2024 "save ends" re-roll is DM-driven: you don't roll it by hand or via SQL — you *run the NPC's turn*, and `ExecuteEnemyTurn` rolls it honestly server-side. For a creature that can't act, that means an enemy-turn POST with empty `steps`. Saves don't crit in 2024, so it's a plain total-vs-DC (22 ≥ 14).
+
+**➤ NOW:** Round 4, **Vale's turn** (dewa). Sabinnet free + bloodied (8 HP, secret), no longer auto-crit. She bolts/alarms the instant she gets to act. Awaiting Vale — not acting for her.
