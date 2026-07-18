@@ -169,6 +169,20 @@ big-party technique is in [`big-party.md`](big-party.md).
     Investigation read ground, mood, method, and tracks — **never** a warded secret. The
     protected reveal (whose the name is, what the Order keeps) stays behind its proper
     channel (a true reading, a higher source), however good the roll.
+- **Pre-declared non-lethal intent is honored — even with a ranged or spell attack
+  (house rule, 2026-07-18).** RAW (2014 *and* 2024) lets you knock a creature to 0
+  unconscious instead of killing it **only on a melee hit**. **This table waives that
+  range restriction:** if a player **declares non-lethal intent before the blow** (to
+  capture, interrogate, or spare), a hit that drops the target to 0 leaves it
+  **unconscious and stable, not dead** — regardless of the attack's range or type
+  (ranged weapon, Eldritch Blast, any damaging spell). The one condition: the
+  declaration must come **before the roll** — no retroactive "actually I wanted them
+  alive" after the kill lands (this mirrors the reactions-pre-declared rule: intent
+  locks in before the dice). (Origin: Vale pre-declared *"we are going to defeat
+  Sabinnet non-lethally, to interrogate afterwards,"* then dropped her to 0 with
+  Eldritch Blast — a ranged cantrip RAW cannot subdue. Ruling honored the stated
+  intent, so Sabinnet is captured alive and the sealed-name-reader lead survives
+  rather than dying with her.)
 
 ## Keep the record straight
 

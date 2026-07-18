@@ -3679,3 +3679,15 @@ The players pressed the auto-crit window hard while Sabinnet was paralyzed (mele
 **Rules note (NPC end-of-turn save via the sanctioned path).** A paralyzed NPC's 2024 "save ends" re-roll is DM-driven: you don't roll it by hand or via SQL — you *run the NPC's turn*, and `ExecuteEnemyTurn` rolls it honestly server-side. For a creature that can't act, that means an enemy-turn POST with empty `steps`. Saves don't crit in 2024, so it's a plain total-vs-DC (22 ≥ 14).
 
 **➤ NOW:** Round 4, **Vale's turn** (dewa). Sabinnet free + bloodied (8 HP, secret), no longer auto-crit. She bolts/alarms the instant she gets to act. Awaiting Vale — not acting for her.
+
+### Round 4 — the Reader falls (captured, not killed)
+
+Vale's turn, and Sabinnet was free again but bloodied. Before the round, dewa had posted the party's intent in #in-character: *"We are going to defeat Sabinnet non-lethally, to be able to interrogate afterwards."*
+
+- **Vale (PC):** `/cast` **Eldritch Blast + Agonizing Blast** on Sabinnet → dropped her to **0 HP**.
+
+**Ruling — non-lethal with a ranged blast (new house rule).** RAW (2014 and 2024) you can only choose to knock a creature unconscious instead of killing it on a *melee* hit; Eldritch Blast is a ranged spell attack, so by the book she'd be dead. The player, though, pre-declared non-lethal intent before the shot, specifically to keep her alive for interrogation. DM ruling (confirmed with the table): **honor the pre-declared intent.** Sabinnet is **unconscious and stable, captured alive** — the sealed-name-reader lead survives instead of dying with her. Written up as a standing house rule in [`dm-rules.md`](../dm-rules.md): *pre-declared non-lethal intent is honored even for ranged/spell attacks, provided the call is made before the roll.*
+
+- **Combat ENDED** (Combat Manager → End Combat). All three enemies down (Sabinnet + both housecarls). Concentration dropped; final HP carried back to sheets: **Windreth 31/31, Vale 31/31, Forge 9/41** (Forge walks out of this one badly hurt). Capture beat posted to #the-story (3:16 PM).
+
+**Aftermath (out of combat).** The reading room is theirs. Sabinnet lies senseless behind her desk; her pale rod skittered out of reach; the alarm-cord she was reaching for was never pulled, so nothing outside has been alerted yet. Ahead of the party: secure/bind her, search the desk + ledgers + glass cases, and wake her for questioning — and Windreth is still carrying **THE SEAL**, which may well belong to this very desk. Awaiting their roleplay and rolls; not acting for them.
