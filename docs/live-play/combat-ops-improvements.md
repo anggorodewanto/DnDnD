@@ -90,7 +90,7 @@ one guarded DB write. Most of that is avoidable.
   write, and the displaced combatant still takes its turn later this round.
 - **Note:** APP-1 + APP-2 together retire the entire discard/override/repair dance.
 
-### APP-3 (P2) — Initiative-override endpoint safety
+### APP-3 (P2) — Initiative-override endpoint safety — ✅ DONE 2026-07-09 (`9630da4`)
 - **Problem:** the override request struct uses non-pointer ints, so omitting
   `initiative_order` silently writes `0` (jumping that combatant to the front). It writes
   both fields unconditionally and enforces no uniqueness/contiguity, so duplicate orders are
@@ -103,7 +103,7 @@ one guarded DB write. Most of that is avoidable.
 - **Acceptance:** a roll-only override leaves order intact; a duplicate order is rejected or
   cleanly resolved.
 
-### APP-4 (P2) — Coordinate-model consistency + better 400s
+### APP-4 (P2) — Coordinate-model consistency + better 400s — ✅ DONE 2026-07-10 (`ea7f6f8`)
 - **Problem:** `character_positions` uses `Position{ Col string /* letter */, Row int /*
   1-based */ }`, while encounter-template creature placement uses integer `position_col` /
   `position_row`. Sending a numeric `col` to `start` returns a bare `400 "invalid JSON
@@ -117,7 +117,13 @@ one guarded DB write. Most of that is avoidable.
 - **Acceptance:** consistent coords across the two endpoints; a type mismatch names the
   offending field.
 
-### APP-5 (P2) — A player self-initiative command that feeds the tracker
+### APP-5 (P2) — A player self-initiative command that feeds the tracker — ✅ DONE 2026-07-12 (`1963a79`)
+- **Shipped:** `/initiative roll:<total>` stages a player's own initiative into a per-
+  `(campaign, character)` table before combat exists; `StartCombat` reads-and-clears the
+  staged rows (one `DELETE … RETURNING`) and folds them into the APP-1 `character_initiatives`
+  map, so those PCs skip the auto-roll — zero override, no DB touch. Re-run to edit,
+  `/initiative clear:true` to remove, bare `/initiative` echoes the staged value. Reported
+  total bounded 1..50 at the Discord edge (typo guard).
 - **Problem:** `/roll d20+N reason:initiative` is cosmetic — it posts to #roll-history but
   does not feed the combat tracker. Players have no way to submit their own initiative into
   an encounter, which is the root reason the DM must roll-then-override.
@@ -128,7 +134,7 @@ one guarded DB write. Most of that is avoidable.
   the tracker. Pairs with APP-1.
 - **Acceptance:** player `/initiative` seats their own value; the DM performs no override.
 
-### APP-6 (P3, PARTLY DONE) — Test the forms the help advertises
+### APP-6 (P3) — Test the forms the help advertises — ✅ DONE 2026-07-09 (`9630da4`)
 - **Problem:** `/roll`'s help, command-option description, and `rollExamples` advertised
   `d20`, which `ParseExpression` rejected; there was no test over the advertised forms.
 - **Evidence:** the `/roll d20+2` bug (fixed this session in `e967364`).
@@ -137,7 +143,7 @@ one guarded DB write. Most of that is avoidable.
   guards the whole class, not just today's case.
 - **Acceptance:** a regression test fails if any advertised example stops parsing.
 
-### APP-7 (P3) — Opaque decode errors on write endpoints
+### APP-7 (P3) — Opaque decode errors on write endpoints — ✅ DONE 2026-07-09 (`9630da4`)
 - **Problem:** `start` returns bare `"invalid JSON body"`; homebrew-creature create uses
   `DisallowUnknownFields` plus `sql.Null*` / `pqtype.NullRawMessage` wrapper shapes that
   `400` on any drift. Both are painful to debug blind.
@@ -146,7 +152,7 @@ one guarded DB write. Most of that is avoidable.
 - **Proposed fix:** surface field-level decode errors on these endpoints.
 - **Acceptance:** a wrong field/type is named in the response.
 
-### APP-8 (P3) — A read-side combat-state endpoint
+### APP-8 (P3) — A read-side combat-state endpoint — ✅ DONE 2026-07-10 (`ea7f6f8`)
 - **Problem:** there is no clean GET for "current active turn + combatant order + hp"; the DM
   queried Postgres directly to verify the seat.
 - **Evidence:** this session verified the repair via `psql` against `encounters` / `turns` /
@@ -163,8 +169,10 @@ one guarded DB write. Most of that is avoidable.
 > **Status (2026-07-09): Part B encoded.** DMH-1/-4/-6 → [`dm-rules.md`](dm-rules.md);
 > DMH-2/-3/-6/-7 → [`runbook.md`](runbook.md); DMH-5 noted as a deferred one-off in
 > [`README.md`](README.md) (banner surgery held back — a concurrent DM agent was live on
-> `game-state.md`). **Part A: APP-1 + APP-2 DONE 2026-07-09** (together they retire the
-> discard/override/DB-repair dance); APP-3…8 still open for the product track.
+> `game-state.md`). **Part A: ALL DONE** — APP-1 + APP-2 (`d0524c8`, 2026-07-09) retire the
+> discard/override/DB-repair dance; APP-3/6/7 (`9630da4`), APP-4/8 (`ea7f6f8`), and APP-5
+> (`1963a79`) landed the safety, coord, decode, read-state, and self-initiative work. Only
+> **DMH-5** (banner refactor) remains, deferred as concurrent-edit territory.
 
 ### DMH-1 (P1) — Verify slash-command syntax **before** prompting players — ✅ DONE (encoded in [`dm-rules.md`](dm-rules.md), "At the table" → *Verify every slash command's syntax BEFORE you put it in a coda*)
 - **What went wrong:** the Beat-18 initiative prompt told players `/roll d20+2` — the exact

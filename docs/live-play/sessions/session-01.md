@@ -3333,3 +3333,297 @@ Encounter `30baba5f-…` ("The night road — the follower"), Follower = homebre
 - **➤ LIVE — end of Round 1, Vale's turn open.** Only the **coat-watcher (J2, untouched 32 HP)** remains; door still
   shut. Awaiting Vale's move/hold → End Turn → **Round 2, Windreth (23).** No PC action taken by the DM; enemy stats
   behind the screen.
+
+### Round 2 — the coat alone (07-17)
+
+- **Vale closed Round 1** (`done`, 15:32) → engine rolled to Round 2, Windreth up. Round 2 PC actions (their own
+  `/`-commands):
+  - **Windreth (23):** `/bonus` **Steady Aim** (advantage this turn, speed 0) → **Shortbow** vs coat (15 ft, adv) hit
+    **18** → **14 piercing incl. Sneak Attack**. Coat 32 → **18** (bloodied). (Steady Aim, not Cunning-Action Hide, this
+    round — the Rogue's optional-feature self-advantage; he stayed put at G2 and shot.)
+  - **Forge (18):** `/attack` **Handaxe** vs coat **MISS** (9), bonus **Handaxe** **MISS** (6). No damage.
+  - **watch2 / coat (7) — DM-run enemy turn:** engine targeted **Forge** again (adjacent; **no Pack Tactics now** — the
+    blocker's dead, so a straight roll), **Mace** to-hit **5** (nat 1 + 4) vs AC 14 = **MISS**. Server rolled; DM kept the
+    numbers. **DM fiction layered on:** the lone, bloodied coat **shouted two words through the barred door** — a call for
+    interior help (escalation seed; no mechanical effect yet). Posted to #combat-log.
+- **DM narrated Round 2 to #the-story (`1527598322980880436`):** Windreth's arrow punching the coat, Forge's two whiffs,
+  the coat's wild miss off the salt-white stone, and his shout inward. OOC handed the turn to **Vale** (init 6, K6) and
+  flagged the door-shout clock.
+- **➤ LIVE — Round 2, Vale's turn open.** Coat-watcher **18/32, bloodied, last enemy standing**, backed to the still-shut
+  door. Awaiting Vale's `/`-command → End Turn → **Round 3, Windreth (23).** ⚠ Escalation armed: the coat's shout may
+  bring Sabinnet / interior muscle next round (build them into this encounter if the door opens). No PC action taken by
+  the DM; enemy stats behind the screen.
+
+### Combat won — the threshold taken (07-17)
+
+The players ran through the rest of the fight on their own `/`-commands before the DM re-synced; the enemy was already
+dead by the time the DM reopened the table:
+
+- **Vale closed Round 2** (`cast`, 15:49): **Eldritch Blast** vs coat hit **12** → **14 force** (incl. +4 Agonizing
+  Blast). Coat **18 → 4**. `done` → engine rolled to Round 3, Windreth up.
+- **Round 3 — Windreth (23):** `/bonus` **Steady Aim** again → **Shortbow** vs coat (adv) hit **19** → **21 piercing incl.
+  Sneak Attack**. Against a 4-HP target that's a clean kill — **coat DEAD.** Both of Sabinnet's watchers now down; the
+  turn tracker rolled on to Forge, but **no living enemy remained.**
+- **DM ended the combat (16:57):** Combat Manager → **End Combat → Confirm End**. Verified: encounter `8431a89b` status
+  `completed`; **End-Combat auto-carried final HP to the `characters` sheets** — **Forge 34/41**, **Vale 31/31**,
+  **Windreth 31/31**, no lingering conditions. Board was Windreth G2, Forge I3, Vale K6; both watchers X'd (H2 blocker,
+  J2 coat).
+- **The armed escalation did NOT fire as a mid-combat spawn** — the DM's condition was "*if the barred door opens*," and
+  it never did; the coat died before any help arrived. So the shout became the **aftermath clock** instead of a new
+  wave: the interior heard the fight end and is now roused behind the still-shut salt-white inner door.
+- **DM narrated the aftermath to #the-story (`1527600138061615175`):** the coat folding around Windreth's arrow beside
+  the first body, the doorway won, and — past the warded inner door — a floorboard shifting, a lamp-shadow moving,
+  someone gone very quiet and listening. OOC closed combat, reported HP, and put the choice to the table (breach /
+  listen / parley / pull back), no roll pre-rolled.
+- **➤ LIVE — out of combat, at Sabinnet's threshold.** Both watchers dead, encounter closed. **Barred salt-white inner
+  door still shut; interior roused and waiting** (Sabinnet + likely muscle behind it). Awaiting the party's chosen
+  approach. ⚠ If the fight reopens it's a **FRESH** encounter (old one is `completed`). Standing hazards unchanged: THE
+  SEAL stays buried; reading it on Sesh's floor thins the ward and the buyer feels it.
+
+### The salt-white door — breaching (07-17)
+
+The party chose to go loud through Sabinnet's inner door:
+
+- **Forge (16:00):** stowed both handaxes to **shoulder the door**. DM set the last-quiet beat + prompted the roll
+  (#the-story `1527601414174674945`), holding a **secret DC 15** for the stout, iron-banded, wax-sealed barred door.
+- **Windreth (16:05):** slid **wide to flank the opening** and **readied a shortbow shot** at the first hostile who
+  reaches for names, casts, or bolts — a clean overwatch on the seam. (Ready holds until the door gives.)
+- **First shove — Forge `/check athletics` = 10 vs DC 15 → FAILED.** Door held; the bar leapt in its bracket, dust fell,
+  but it caught. Resolved via **DM Queue → Send Narration** (posted to #in-character, queue cleared). The cost of the
+  miss was **noise** — the street and the interior both heard it, so any chance of a quiet entry is gone; whoever's
+  behind the door is now fully braced.
+- **Forge (16:15):** asked Windreth or Vale for a **Help** to retry with advantage. DM's ruling posted with the
+  resolution: to swing the door Forge wants **advantage**, via **either `/bonus rage`** (Rage grants advantage on STR
+  checks) **or an ally's Help** — the two don't stack, so one source is enough. Tradeoff flagged: Windreth Helping drops
+  his readied shot; Vale Helping forgoes readying her own spell.
+- **➤ LIVE — awaiting Forge's retry roll.** Door still shut, interior braced. The instant it gives → **initiative → a
+  FRESH encounter** (Sabinnet + any interior muscle). No PC dice rolled by the DM; DCs/enemy stats behind the screen.
+
+### The door gives — into Sabinnet's reading room (07-17)
+
+- **Vale (16:20):** gave the **Help action** (Forge asked Windreth *or* Vale; Vale took it, so **Windreth kept his readied
+  overwatch shot**). Forge now had advantage.
+- **Second shove — Forge `/check athletics` = 20 (advantage, Vale's Help) vs DC 15 → SUCCESS.** The bar sheared out of its
+  bracket and the salt-white door slammed inward off a hinge. Resolved via **DM Queue → Send Narration** (#in-character).
+- **⚔️ COMBAT TRIGGERED.** DM posted the reveal + initiative call to #the-story (`1527611410945671259`): the reading room
+  laid open — **Sabinnet** at her glass, ink to the elbows, unrisen and unhurried ("a clerk looking at a debt"), plus
+  **two housecarls** who answered the coat's shout, spreading to shield her. Nobody surprised (the battering gave it away).
+- **DM built the FRESH encounter via in-page API** (map → homebrew creature → template; the old encounter `8431a89b` is
+  closed):
+  - **Map `353c58b3-3844-4f4f-8a19-b38a73c0da47`** — "Sabinnet's Reading Room," 12×10 blank grid.
+  - **Sabinnet creature `hb_84d6333d764f`** — homebrew **CR3 caster** (kept SECRET): AC 13, HP 58, **INT/WIS save
+    proficiencies** (via the pqtype `saving_throws` wrapper — the web form can't set these), *Mind Lance* (+6 ranged,
+    3d6 psychic, 60 ft) + *Warding Rod* (+4 melee, 1d8+2 force), psychic resistance, charm immunity. Seated far-north
+    (template **F/row1**). Design intent: a Reader/controller boss who **flees or alarms the buyer if bloodied** — not a
+    fight to the death by default.
+  - **2× SRD Thug** (`creature_ref_id:"thug"`) reflavored **"Sabinnet's Housecarl"**, mid-room at **D/row4** + **H/row4**.
+  - **Template `db9943fa-ea1e-41ca-976c-d9387bda110b`** ("The Reader Under Glass").
+  - *Difficulty:* Sabinnet CR3 (~700 XP) + 2 Thug (200) ×2 multiplier ≈ **1,800 adjusted XP** — Hard-leaning-Deadly for
+    3 near-full-resource L4 PCs. Sabinnet-flees-when-bloodied caps the lethality.
+- **➤ LIVE — awaiting the party's `/initiative` totals.** Once all three are in, DM starts combat via
+  `POST /api/combat/start` (PC dice supplied verbatim, APP-5 zero-override path; PCs breach at the south wall; Windreth's
+  readied overwatch = a clean opening shot). No PC dice rolled by the DM; enemy HP/AC behind the screen.
+
+### Combat opens — the reader's room (07-17)
+
+Door's down. All three initiative totals landed in **#roll-history** as plain `/roll`s (not `/initiative`, but clearly the
+answer to the call): **Forge** `d20+2` = **19**, **Vale** `d20` = **19**, **Windreth** `d20+4` = **19**. Three-way tie at 19.
+
+Started the fight via in-page `POST /api/combat/start` — **dice verbatim** (APP-5, zero override), PCs staged at the breach
+(**Windreth C9** wide-west flank, **Forge F9** in the breach, **Vale F10** behind; combat-start rows 1-based). Engine broke
+the 19-tie on DEX: **Windreth(1) → Forge(2) → Sabinnet(3) → Vale(4) → HC2(5) → HC1(6)**. No surprise — the room was braced.
+Encounter **`95f98525-3e70-47f0-ad74-583c612a0c73`** ("Sabinnet's reading room"), round 1, on map `353c58b3` / template `db9943fa`.
+
+Board: enemies NORTH — **Sabinnet F1** at her glass, housecarls **HC1 D4** + **HC2 H4** across the mid-floor lane; party SOUTH
+in the breach. ~25 ft from Windreth to the nearest housecarl, ~40 ft to Sabinnet (behind her guards). Enemy HP/AC kept SECRET
+(Sabinnet AC13/HP58, INT+WIS saves, Mind Lance +6 3d6 psychic + Warding Rod +4 1d8+2 force, psychic-resist + charm-immune,
+**flees/alarms when bloodied ≤29**; 2× Thug housecarls HP32).
+
+Posted the combat-open read-aloud (**#the-story**, ~5:24 PM): the door slams in off its last hinge, a long cold salt-white
+room, Sabinnet unmoving behind thick green glass with a pale rod across her knees, two housecarls pushing off the walls to
+close the lane, Windreth already down and wide with the string at his cheek. OOC coda: the 19-tie order + "Windreth you're up
+first — take your overwatch shot; `/bonus` steady-aim for advantage if you want the Sneak."
+
+Windreth's readied overwatch folds into his first turn as the clean opening shot. **Awaiting his `/attack`** — not rolling for
+him. Then Forge, then Sabinnet (DM-run enemy turn), then Vale, then the housecarls.
+
+### Round 1 — the reader's room (07-17)
+
+Combat `95f98525` opened (beat posted #the-story 5:24 PM). Player /attacks resolved through the bot; DM caught the
+fiction up in one Round-1 recap beat (#the-story 6:25 PM), then ran Sabinnet via the Combat Manager Turn Builder.
+
+**Turn order** (all rolled 19 → engine DEX tiebreak): Windreth → Forge → Sabinnet → Vale → HC2 → HC1.
+
+- **Windreth (C9).** `/bonus` steady-aim (advantage this turn, speed 0) → Shortbow into the left housecarl **HC1 (D4)**:
+  to-hit 18, **14 piercing incl Sneak Attack**. HC1 32 → 18. Turn done.
+- **Forge (F9→G5).** `/action rage` (bonus — **Rage active**), charged up the lane to **G5**, Handaxe into the same
+  housecarl **HC1**: **10 incl +2 Rage**, vex applied. HC1 18 → **8/32 — reeling, one hit from dropping.** Turn done.
+- **Sabinnet (F1, DM-run).** Combat Manager → Run Enemy Turn → Turn Builder proposed **Mind Lance vs Forge** (+6, 3d6
+  psychic, "reach 0ft"). Review rolled **24 to hit → HIT, 16 psychic**. Rage does **not** resist psychic → **Forge 34 → 18/41.**
+  She never rose from the desk; stayed at F1. Confirm & Post → #combat-log, End Turn.
+- **➤ Vale (F10) — up now.** Awaiting her action (Warlock; EB reaches the reeling HC1 at D4, the fresh HC2 at H4, or
+  Sabinnet far back at F1). Not rolling for her.
+
+Live HP after Sabinnet's turn: WI 31/31 · FO 18/41 · VA 31/31 · SAB 58/58 (secret) · HC1 8/32 (secret) · HC2 32/32 (secret).
+Sabinnet flees/alarms when bloodied (≤29). No PC reaction windows triggered (Mind Lance is ranged psychic; Defensive Duelist
+is melee-only, no Uncanny Dodge at Rogue 4).
+
+**Vale's turn (Round 1).** Vale cast **Hold Person on Sabinnet** (2nd-level; pact slot). Engine queued a pending WIS save
+for Sabinnet rather than auto-rolling it — DM resolved it via Combat Manager → **Pending monster saves → Resolve save**:
+**Sabinnet WIS 25 vs DC 14 → Success.** Hold Person fizzled; **Vale lost concentration, slot spent, 0 targets held.** The
+Reader shrugs off the binding without moving. Fizzle beat posted (#the-story 7:16 PM). Vale's **action** is spent but she
+hadn't moved (still F10) — offered her remaining 30 ft (move or "done"). Awaiting her call; not acting for her. Next after
+Vale: the two housecarls (DM-run).
+
+### Round 1 close — the housecarls answer (07-17)
+
+With Vale's Hold Person broken and her turn timed out (no move, still F10), the two housecarls got their swings — both DM-run through the Combat Manager (Run Enemy Turn → Turn Builder → Review → Confirm & Post, engine rolling).
+
+- **HC2** (the fresh guard, H4) stepped to Forge and swung: **Mace, 22 to hit — Hit, 2 bludgeoning** (raw 4, Forge's Rage resistance halved it to 2). Forge 18 → 16/41.
+- **HC1** (the reeling one at D4, 8/32 from Windreth's arrow + Forge's axe) hauled itself up and charged in: **Mace, 17 to hit — Hit, 3 bludgeoning** (raw 6, Rage-halved to 3). Forge 16 → **13/41**. Since the engine resolved the hit without moving the token, I DM-position-overrode HC1 from **D4 → F5** (`POST …/override/combatant/{id}/position`) so the board matched the melee reach — the wounded guard lunging in from the west.
+
+Net: **Forge is now flanked at G5** — fresh guard HC2 on the east (H4), wounded HC1 on the west (F5). Rage soaked both blows (bludgeoning resistance), so despite two hits he's only down to 13/41 and still swinging. Sabinnet never stirred from the north table (F1), untouched, save already made.
+
+No PC reaction windows triggered (both attacks were melee vs Forge; Forge has no post-hit reaction declared; Windreth's Defensive Duelist is his own melee-only reaction, not applicable to Forge).
+
+**End Turn ×2 → Round 2.** Order repeats: Windreth → Forge → Sabinnet → Vale → housecarls.
+
+**Round 2 opens (Windreth's turn).** Posted the housecarl-assault + Round-2 open beat to #the-story (7:39 PM, read-aloud + OOC coda): the room turning on Forge, both maces soaked by the rage, Forge penned between two guards, Sabinnet still watching from behind the glass. Handed the turn to **Windreth** (at C9, Steady-Aim advantage expired at turn start) with his menu — flanking noted (an ally stands next to both guards, so any Shortbow shot at either lands Sneak Attack). Awaiting his call. Live HP entering Round 2: WI 31/31 · FO 13/41 (raging) · VA 31/31 · SAB 58/58 (secret) · HC1 8/32 (secret, F5, reeling) · HC2 32/32 (secret, H4).
+
+### Round 2 — Windreth's kill, and Forge's handaxe do-over (07-17)
+
+**Windreth (Round 2).** No hesitation: `/bonus` Steady Aim again → `/attack` Shortbow at the wounded housecarl (HC1, F5), advantage. **18 to hit, 17 piercing with Sneak Attack** — the arrow dropped the 8-HP guard where he stood. **HC1 dead (0/32).** One housecarl left. Kill beat posted #the-story (7:55 PM).
+
+**Forge (Round 2) — the handaxe tangle.** Forge threw his handaxe last round (thrown attack), which in the engine cleared his `equipped_main_hand`. He opened his turn with a freeform: *"take my thrown handaxe from the deceased F5 enemy"* + *"To DM: approve my action if make sense."* I approved it as a **free object interaction** (he was adjacent to the corpse) and resolved both his pending freeforms in the DM Queue.
+
+Then he moved **G5→I5** (up beside the last guard, HC2 at H4) and ran `/attack` — but with no `weapon:` arg the engine fell through his (now-empty) main hand to **Unarmed Strike**: 22 to hit, hit for **5** (HC2 32→27). That wasn't what he wanted — he meant to chop with the reclaimed axe.
+
+**Ruling + do-over (per the table).** Picking the axe back up stays a free interaction, and he gets to swing *it*, not his fist. Mechanics: the thrown handaxe had only NULLed his main hand (the axe is still in his off-hand/inventory), and there's no "return thrown weapon" logic in the engine — so a bare `/attack` will keep defaulting to Unarmed; the clean fix is for him to pass `weapon:handaxe`. To reverse the mis-swing I couldn't use `undo-last-action` (it 422s on an attack row — those carry no before-state), so I used two in-page DM fetches: **HP-override to put HC2 back to 32/32**, and **`restore-action` on Forge** to hand back his spent action (attacks_remaining reseeded to 1; his 15 ft of used movement was left as-is, since he did legitimately move). Posted the redo prompt to #the-story (8:06 PM): *swing for real with `/attack target:Sabinnet's Housecarl weapon:handaxe`.* Awaiting his roll.
+
+*(Loadout gotcha logged for future: throwing a weapon NULLs `equipped_main_hand` but keeps it in inventory; repeat throws / melee-after-throw need `weapon:<id>` or `/equip <id>` — there's no DM-side equipment endpoint to fix the hand from the console.)*
+
+### Round 2 continues — Forge's axe bites, Sabinnet's mind-lance whiffs (07-18)
+
+**Forge's handaxe redo (resolved).** Per the DM ruling (pickup as free interaction, swing with the axe), Jonathan
+re-ran `/attack target:Sabinnet's Housecarl weapon:handaxe`. The engine gave him two swings: the **action** attack
+**missed** (7 to hit), then a **bonus-action** follow **hit** (23) for **5 slashing** (incl. +2 Rage). HC2 dropped
+**32→27**. Narrated to #the-story (5:58 AM) as the first chop going wide and the follow-up biting into the guard's
+side — hurt but still standing. Turn ended (action + bonus spent).
+
+**Sabinnet's turn (DM-run).** Combat Manager → Run Enemy Turn proposed **Mind Lance vs Forge** (+6, 3d6 psychic,
+ranged). Reviewed → **10 to hit → MISS**. Sabinnet never left his glass at F1; the psychic lance broke against
+Forge's rage and scattered (Rage doesn't resist psychic — he simply rolled low). Confirmed & posted to #combat-log;
+narrated the whiff to #the-story (6:03 AM) and handed the moment to Vale. End Turn → Vale active.
+
+**➤ Now:** Round 2, **Vale's turn (PC)** — engine auto-pinged #your-turn; awaiting her action. Only two enemies
+left: HC2 (27/32, wounded, H4) beside Forge, and Sabinnet (58/58, unhurt, F1) at the north table. After Vale, HC2
+takes the round's last enemy turn. Sabinnet flees/alarms if bloodied (≤29 HP). Enemy HP/AC kept secret.
+
+### Round 2 — Vale's mercy: potion for Forge, and a Hex taken back (07-18)
+
+With one housecarl dead and Forge bleeding at 13 HP, Vale (dewa) asked the DM
+whether she could heal Forge with her Potion of Healing as a free interaction.
+
+**DM ruling (2024 rules, this campaign's edition):** drawing the vial is the free
+object interaction, but *pouring it into another creature* is a **Bonus Action**
+and requires being **within 5 ft**. Vale was at F10, Forge at I5 (~25 ft) — she
+had to close first.
+
+**What she did:**
+- `/move` F10 → **J6**, sliding in beside Forge (diagonal-adjacent, 10 ft of move
+  left). ✅
+- Declared **bonus action: administer the Potion of Healing to Forge**, and rolled
+  `/roll 2d4+2` → **[3,2]+2 = 7**. DM applied it via HP-override: **Forge 13 → 20/41.**
+- Then `/cast` **Hex** on Sabinnet as a *bonus action* — immediately realized her
+  bonus was already spent on the potion and asked the DM to **undo the Hex.**
+
+**DM undo (all via the sanctioned in-page dashboard fetch, never raw SQL):**
+- `POST …/combatants/{Vale}/concentration/drop` → broke her concentration on Hex
+  and stripped the `hexed` condition off Sabinnet (1 effect removed).
+- `POST …/override/character/{Vale}/slots` → **refunded the pact slot (0 → 1).**
+
+Net: her **bonus action** is the potion (correct), the mistaken Hex is fully rolled
+back, and her **Action remains free.** Forge, half-dead a moment ago, coughs down
+the draught and stands taller — axe still hungry.
+
+Heal beat + undo confirmation posted to #the-story (6:50 AM). Vale's **Action** is
+still hers to spend (light crossbow, a spell, or something else) — awaiting dewa.
+After Vale ends her turn: **HC2** (the last enemy turn of Round 2).
+
+### Round 2 closes — Vale's blast, the guard's whiff, and Round 3 opens (07-18)
+
+**Vale's Action (after the potion):** with her bonus already spent healing Forge,
+Vale turned her free Action on the wounded housecarl and let fly `/cast` **Eldritch
+Blast** — the DM confirmed her **Agonizing Blast** invocation, so +4 force rode the
+bolt. Attack 15 to hit, **11 force**, dropping the housecarl from 27 to **16/32**.
+Her consumed **Potion of Healing** was removed from her sheet at the DM's request
+(`POST /api/inventory/remove`).
+
+**HC2 (the last enemy of the round, DM-run via Combat Manager):** only Forge stood
+within its 5 ft reach (Vale had pulled back a square), so the Turn Builder proposed
+**Mace vs Forge**. Review rolled **13 to hit — a miss** against the raging dwarf's
+guard. The mace cracked stone, not bone. Posted to #combat-log; End Turn advanced
+past the dead housecarl (auto-skipped) into **Round 3**.
+
+**Round 2 tally:** one housecarl dead, the second down to 16/32 and badly hurt,
+Sabinnet still untouched at his rod (58/58). No PC has taken a hit since Forge's
+early beating — Forge is patched to 20/41, Windreth and Vale full.
+
+R2-close beat posted to #the-story (7:07 AM). **Round 3 opens on Windreth (Winfroz)**
+at the top of the order — his move. The engine pinged #your-turn. Awaiting his action.
+
+### Round 3 — Windreth unseen, and the last guard falls (07-18)
+
+**Windreth (Winfroz)** opened Round 3 by turning invisible in plain sight. He
+`/move`d up to **G5**, flanking the surviving housecarl, then spent his bonus on
+**Cunning Action: Hide** — Stealth **23**, gone from every hostile's eye. From the
+dark he struck: `/attack` **Shortsword** (advantage, attacker hidden) → 23 to hit,
+7 piercing plus **Sneak Attack**; then `/attack` **Dagger** (advantage from vex) →
+a **natural 20, critical hit**, 5 piercing. The last of Sabinnet's muscle **dropped
+to 0 and was defeated.**
+
+> Rules note: Windreth's dagger was a second bonus-action expenditure (Cunning
+> Action Hide already took his bonus), so the off-hand attack was technically a
+> double-spend. The engine permitted it, the housecarl was already all but dead,
+> and reversing a natural-20 kill on a mook would be joyless — so it stands, logged
+> as an engine action-economy gap rather than reversed.
+
+**Forge (JonathanEka)** came in a heartbeat behind — `/attack` **Handaxe** (21 to
+hit, 5 slashing + 2 Rage) and a bonus `/attack` handaxe (9 — miss). Both swings
+fell on the housecarl who was *already dead*; the engine let him roll against a
+downed target, so the blows meant nothing but a spray of pages and blood.
+
+**The board now:** both housecarls dead, and **only Sabinnet remains — 58/58,
+untouched**, watching from his desk with his pale rod across his knees. No PC is
+seriously hurt (Forge 20/41 and raging, Windreth and Vale full).
+
+Forge's turn is still open — his attacks are spent but he has ~25 ft of movement.
+The DM posted the guard-fall beat to #the-story and asked Jonathan whether Forge
+closes on Sabinnet (into rod reach) or holds and ends. Awaiting his call; then
+Sabinnet's turn (DM-run).
+
+---
+
+### Round 3 — a miscredited kill, set straight (and a bonus handed back)
+
+**OOC / record correction (2026-07-18).** When Round 3 was first written up, the log looked like Windreth's
+nat-20 dagger crit had dropped the second housecarl and Forge's two handaxes had thudded into a corpse. The HP
+math says otherwise. HC2 had 32 HP; by the time Windreth's blades landed it was already down to 16 (Vale's
+Eldritch Blast in Round 2). Windreth's shortsword took it to 9, and the crit — five more — left it at **4, still
+standing.** It was **Forge's action handaxe** (5 + 2 Rage) that split the guard's helm and put it down. His kill,
+not Windreth's.
+
+That reordering matters for the *next* swing. With the guard already falling, Forge's off-hand throw — his bonus
+action — sailed into a dead man and missed anyway. Forge asked, fairly, to take that wasted bonus back. Approved:
+the killing throw stands, the off-hand throw is un-spent. He can lob that second axe at Sabinnet (about 20 ft off,
+just inside range) or pocket it — his call, his ~25 ft of movement still his.
+
+**Rules / engine note.** There is no one-click "refund a bonus action" control on the DM dashboard — only a
+"Restore Action" button, which would have wrongly clawed back Forge's *kill*. So the refund was applied directly
+this once (with the table's OK), and a proper **`restore-bonus-action`** endpoint + dashboard button was built and
+tested the same session so the next such undo goes through the sanctioned path. (Separately: Windreth's earlier
+double-spent bonus in this same round — Cunning-Action Hide *and* the off-hand dagger — remains an unrelated engine
+action-economy gap, left as-is since the guard was doomed regardless.)
+
+**State after:** both housecarls dead; only **Sabinnet** stands (F1, untouched). Forge's turn still open, bonus +
+move in hand, awaiting his choice. Then Sabinnet acts. She breaks and raises the alarm the moment she's bloodied.
