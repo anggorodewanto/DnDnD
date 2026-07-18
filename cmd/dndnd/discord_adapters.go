@@ -360,6 +360,15 @@ func (a *rollHistoryLoggerAdapter) LogRoll(entry dice.RollLogEntry) error {
 // #roll-history. The format prioritises the player + purpose so DMs can
 // scan quickly without parsing dice expressions.
 func formatRollLogEntry(e dice.RollLogEntry) string {
+	// Self-contained entries (/check, /save) carry a Breakdown that already
+	// names each die with its value and ends in the grand total, e.g.
+	// "d20(13) + 2 + 1d4(2) = 17". Render "Roller — Purpose: breakdown" and
+	// omit the redundant backtick expression + leading "=" that would
+	// otherwise double the total.
+	if e.SelfContained {
+		return formatSelfContainedRollLogEntry(e)
+	}
+
 	parts := []string{}
 	if e.Roller != "" {
 		parts = append(parts, e.Roller)
@@ -381,6 +390,24 @@ func formatRollLogEntry(e dice.RollLogEntry) string {
 		return "(empty roll)"
 	}
 	return strings.Join(parts, " ")
+}
+
+// formatSelfContainedRollLogEntry renders "Roller — Purpose: breakdown" for
+// entries whose Breakdown is self-contained (dice-with-values ending in the
+// grand total). See RollLogEntry.SelfContained.
+func formatSelfContainedRollLogEntry(e dice.RollLogEntry) string {
+	breakdown := e.Breakdown
+	if breakdown == "" {
+		breakdown = fmt.Sprintf("%d", e.Total)
+	}
+	purpose := e.Purpose
+	if purpose == "" {
+		purpose = "roll"
+	}
+	if e.Roller == "" {
+		return fmt.Sprintf("%s: %s", purpose, breakdown)
+	}
+	return fmt.Sprintf("%s — %s: %s", e.Roller, purpose, breakdown)
 }
 
 // mapRegeneratorQueries is the narrow subset of refdata.Queries that the

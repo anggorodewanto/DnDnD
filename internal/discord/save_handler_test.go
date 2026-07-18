@@ -430,8 +430,11 @@ func TestSaveHandler_BasicSave(t *testing.T) {
 	if len(logger.logged) != 1 {
 		t.Errorf("expected 1 roll logged, got %d", len(logger.logged))
 	}
-	if !strings.Contains(logger.logged[0].Purpose, "save") {
-		t.Errorf("expected save in purpose, got: %s", logger.logged[0].Purpose)
+	if !strings.Contains(logger.logged[0].Purpose, "Save") {
+		t.Errorf("expected Save in purpose, got: %s", logger.logged[0].Purpose)
+	}
+	if !logger.logged[0].SelfContained {
+		t.Errorf("expected SelfContained roll-log entry for a /save")
 	}
 }
 

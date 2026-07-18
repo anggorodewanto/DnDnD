@@ -261,20 +261,23 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	if h.rollLogger != nil && !result.AutoFail {
 		diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}}
 		expression := fmt.Sprintf("d20+%d", result.Modifier+result.FeatureBonus)
-		breakdown := result.D20Result.Breakdown
 		if result.BonusExpression != "" {
 			diceRolls = append(diceRolls, result.BonusRolls...)
 			expression += "+" + result.BonusExpression
-			breakdown += result.BonusFragment()
 		}
+		// Self-contained breakdown so any effect die folds into a single total
+		// (e.g. "d20(11) + 3 + 1d4(2) = 16") instead of dangling after the
+		// d20's own "= total".
+		breakdown := dice.FormatValuedBreakdown(result.D20Result, result.BonusExpression, result.BonusTotal, result.Total)
 		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-			DiceRolls:  diceRolls,
-			Total:      result.Total,
-			Expression: expression,
-			Roller:     char.Name,
-			Purpose:    fmt.Sprintf("%s save", strings.ToUpper(result.Ability)),
-			Breakdown:  breakdown,
-			Timestamp:  result.D20Result.Timestamp,
+			DiceRolls:     diceRolls,
+			Total:         result.Total,
+			Expression:    expression,
+			Roller:        char.Name,
+			Purpose:       fmt.Sprintf("%s Save", strings.ToUpper(result.Ability)),
+			Breakdown:     breakdown,
+			SelfContained: true,
+			Timestamp:     result.D20Result.Timestamp,
 		})
 	}
 

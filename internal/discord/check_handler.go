@@ -438,20 +438,20 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 	if h.rollLogger != nil {
 		diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: contested.InitiatorD20.Rolls, Total: contested.InitiatorD20.Chosen}}
 		expression := fmt.Sprintf("d20+%d", initiatorMod)
-		breakdown := contested.InitiatorD20.Breakdown
 		if contested.InitiatorBonusExpression != "" {
 			diceRolls = append(diceRolls, contested.InitiatorBonusRolls...)
 			expression += "+" + contested.InitiatorBonusExpression
-			breakdown += contested.BonusFragment()
 		}
+		breakdown := dice.FormatValuedBreakdown(contested.InitiatorD20, contested.InitiatorBonusExpression, contested.InitiatorBonusTotal, contested.InitiatorTotal)
 		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-			DiceRolls:  diceRolls,
-			Total:      contested.InitiatorTotal,
-			Expression: expression,
-			Roller:     char.Name,
-			Purpose:    fmt.Sprintf("contested %s vs %s", input.Skill, oppName),
-			Breakdown:  breakdown,
-			Timestamp:  contested.InitiatorD20.Timestamp,
+			DiceRolls:     diceRolls,
+			Total:         contested.InitiatorTotal,
+			Expression:    expression,
+			Roller:        char.Name,
+			Purpose:       fmt.Sprintf("Contested %s vs %s", prettySkillLabel(input.Skill), oppName),
+			Breakdown:     breakdown,
+			SelfContained: true,
+			Timestamp:     contested.InitiatorD20.Timestamp,
 		})
 	}
 	return true
@@ -635,23 +635,43 @@ func (h *CheckHandler) logRollIfWanted(char refdata.Character, result check.Sing
 	}
 	diceRolls := []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}}
 	expression := fmt.Sprintf("d20+%d", result.Modifier)
-	breakdown := result.D20Result.Breakdown
 	// Fold any effect dice (Guidance, Bardic Inspiration, ...) into the log so
 	// #roll-history reflects the full roll, not just the d20.
 	if result.BonusExpression != "" {
 		diceRolls = append(diceRolls, result.BonusRolls...)
 		expression += "+" + result.BonusExpression
-		breakdown += result.BonusFragment()
 	}
+	// Self-contained breakdown: "d20(13) + 2 + 1d4(2) = 17" — one total that
+	// includes any effect die, instead of the d20's own "= total" with the
+	// bonus dangling after it.
+	breakdown := dice.FormatValuedBreakdown(result.D20Result, result.BonusExpression, result.BonusTotal, result.Total)
 	_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-		DiceRolls:  diceRolls,
-		Total:      result.Total,
-		Expression: expression,
-		Roller:     char.Name,
-		Purpose:    fmt.Sprintf("%s check", result.Skill),
-		Breakdown:  breakdown,
-		Timestamp:  result.D20Result.Timestamp,
+		DiceRolls:     diceRolls,
+		Total:         result.Total,
+		Expression:    expression,
+		Roller:        char.Name,
+		Purpose:       prettySkillLabel(result.Skill),
+		Breakdown:     breakdown,
+		SelfContained: true,
+		Timestamp:     result.D20Result.Timestamp,
 	})
+}
+
+// prettySkillLabel renders a skill key as a #roll-history display label:
+// "sleight-of-hand" → "Sleight of Hand", "animal_handling" → "Animal Handling".
+// Words are split on hyphen/underscore/space and Title-cased, with the small
+// connector words ("of"/"and"/"the") kept lowercase unless they lead.
+func prettySkillLabel(skill string) string {
+	words := strings.FieldsFunc(skill, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	})
+	for i, w := range words {
+		if i > 0 && (w == "of" || w == "and" || w == "the") {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // invalidBonusDiceMessage is the player-facing rejection shown when a /check,

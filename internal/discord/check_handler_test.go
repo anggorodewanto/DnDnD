@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -205,6 +206,26 @@ func TestCheckHandler_BonusDiceAppliedAndLogged(t *testing.T) {
 	}
 	if !strings.Contains(entry.Expression, "1d4") {
 		t.Errorf("expected roll-log expression to include the bonus die, got %q", entry.Expression)
+	}
+	// #roll-history breakdown must be self-contained: one total that folds the
+	// effect die in, not the d20's own "= total" with the bonus dangling after.
+	if !entry.SelfContained {
+		t.Errorf("expected SelfContained roll-log entry for a /check")
+	}
+	if entry.Purpose != "Perception" {
+		t.Errorf("expected purpose %q, got %q", "Perception", entry.Purpose)
+	}
+	if !strings.HasPrefix(entry.Breakdown, "d20(12)") {
+		t.Errorf("expected breakdown to start with d20(12), got %q", entry.Breakdown)
+	}
+	if !strings.Contains(entry.Breakdown, "+ 1d4(12)") {
+		t.Errorf("expected breakdown to name the effect die 1d4(12), got %q", entry.Breakdown)
+	}
+	if want := fmt.Sprintf("= %d", entry.Total); !strings.HasSuffix(entry.Breakdown, want) {
+		t.Errorf("expected breakdown to end with the grand total %q, got %q", want, entry.Breakdown)
+	}
+	if n := strings.Count(entry.Breakdown, "="); n != 1 {
+		t.Errorf("expected exactly one '=' in breakdown, got %d in %q", n, entry.Breakdown)
 	}
 }
 

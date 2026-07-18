@@ -14,6 +14,12 @@ type RollLogEntry struct {
 	Purpose    string        `json:"purpose"`
 	Breakdown  string        `json:"breakdown"`
 	Timestamp  time.Time     `json:"timestamp"`
+	// SelfContained marks a Breakdown that already names each die with its
+	// rolled value and ends in the grand total (see FormatValuedBreakdown),
+	// e.g. "d20(13) + 2 + 1d4(2) = 17". The #roll-history renderer then drops
+	// the redundant backtick Expression and the leading "=" so the line reads
+	// "Roller — Purpose: breakdown" rather than doubling up the total.
+	SelfContained bool `json:"self_contained,omitempty"`
 }
 
 // ToJSONRolls serializes the dice_rolls field as JSONB for action_log storage.
