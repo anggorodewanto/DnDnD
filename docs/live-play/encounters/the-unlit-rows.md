@@ -1,10 +1,22 @@
-# Encounter — The Unlit Rows: ambush in Sesh's dark undermarket (STAGED, not run)
+# Encounter — The Unlit Rows: ambush in Sesh's dark undermarket (⚔ COMBAT LIVE 07-19)
 
-> **🟡 PREPARED 2026-07-19, not yet deployed.** Map + statblocks are built in the
-> dashboard/DB, staged for whenever a fight triggers off the current Sesh fork (party
-> just read THE SEAL under the name-market canopy; a fence gone missing + the soft clock
-> = the buyer's hand can close on them in the blind rows). Purpose-built to show off the
-> map engine's **walls + fog-of-war**. Not started — no combat/encounter row exists yet.
+> **⚔ COMBAT LIVE 2026-07-19.** Template `7e91023b-06e3-4f5d-b955-4eea6fa5d7f3` →
+> **live encounter `6fffbb99-1584-4c3e-a642-a641dce1b2aa`**. All three PCs rolled
+> `/initiative` (Windreth 18 / Vale 15 / Forge 12, auto-filled verbatim); enemies
+> engine-rolled (ENF-NW 17). Order: **Windreth → ENF-NW → Vale → Forge → [lower]**. PCs
+> bottom-center (Forge G11 / Vale H11 / Windreth I11); ambushers in the 4 booths (ENF-NW B2,
+> NE O2, W B8, STK O8). **Round 1, Windreth's turn.**
+>
+> **🐛 Fog-of-war bug found + FIXED live:** the player map leaked all 4 ambushers. Root
+> cause was NOT the map data — `buildVisionSources` seeded player fog from **enemy** vision
+> too (each source force-shows its own tile even in `magical_darkness`). Fix = **player fog
+> is PC-vision only** (`cmd/dndnd/discord_adapters.go`, redeployed) + cleared the stale
+> `explored_cells` (bug had cached booth tiles as Explored; one-line DB repair). Walls also
+> recolored **bold slate + moved beneath the fog pass** (`renderer.go`) so undiscovered walls
+> stay hidden and DMs can read corridors. The magical_darkness booths are now belt-and-braces,
+> NOT the token-hider — see the corrected [[reference_map_fog_vision_model]] and the fog recipe
+> below (⚠ the old "darkness hides the token" claim was wrong). Purpose-built to
+> show off the map engine's **walls + fog-of-war** — which it did, by surfacing this bug.
 > Lore/spine: [`../campaign-arc.md`](../campaign-arc.md) (Leg 3, the four hands; blank
 > people = the renegade's method). Rules: [`../dm-rules.md`](../dm-rules.md).
 

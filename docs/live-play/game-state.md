@@ -11,8 +11,9 @@
 > [`sessions/session-01.md`](sessions/session-01.md). See [`dm-rules.md`](dm-rules.md)
 > "Keep the record straight."
 
-_Last updated: 2026-07-18 — **SESH, the deep market — OUT OF COMBAT, searching Sabinnet's
-reading room.** The reader fight is **WON** and **Sabinnet is CAPTURED ALIVE** (unconscious +
+_Last updated: 2026-07-19 — **SESH, the unlit rows — ⚔ COMBAT LIVE ("The Unlit Rows" walls+fog
+encounter `6fffbb99`), round 1, WINDRETH'S TURN (init 18); fog-of-war bug found + FIXED mid-fight.
+Sabinnet released, THE SEAL already read.** The reader fight is **WON** and **Sabinnet is CAPTURED ALIVE** (unconscious +
 stable — pre-declared non-lethal; new house rule, see [`dm-rules.md`](dm-rules.md)); encounter
 `95f98525` is `completed` (Windreth 31/31, Vale 31/31, **Forge 9/41**). **First search resolved:**
 Forge (Sleight of Hand 17) frisked her + opened the locked desk drawer → key-ring, reading-lens,
@@ -30,12 +31,39 @@ restoring:** Windreth now *knows* his name, doesn't have it *back* (ward = blank
 restoration runs through the god's scattered name — endgame lever). **New tension:** Sabinnet (the
 buyer's own reader) has now **read Windreth's name aloud and knows whose it is** — the captive holds
 the campaign's most dangerous fact. Still sealed: the buyer's true identity, what the faceless god is,
-the reassemble/scatter/hand-over trilemma stated flat, and *restoration*. **Fork handed back:**
-Windreth's response (his to play) / what to do with Sabinnet now she knows (`/check skill:insight`
-offered) / next heading. **THE SEAL is OPEN (read safely); the scrap on Windreth's sheet is now
-KNOWN but still warded/unrestored** (`identified:false` left as-is — not mutated; flag change deferred).
+the reassemble/scatter/hand-over trilemma stated flat, and *restoration*. **★ Forge Insight 22
+resolved (07-19):** the read confirms Sabinnet is **honestly out of lore** on the buyer's true name
++ the faceless god (real emptiness, not a bluff — *stop squeezing her on those*), and surfaces two
+live threads instead: (1) **she wants to defect + vanish and will bargain hard for it** — clean name /
+coin / distance — because she believes reading this name marks her for death; (2) **the ward on
+Windreth's name is a master's cut — the same craft that hollows people into blank faces** — she flinched
+recognizing the *hand*, not the name, but genuinely does **not** know whose hand (breadcrumb toward the
+renegade-erasure spine; kept SEALED — no name given). **Player resolution (07-19 eve):** Forge
+**released Sabinnet** (unbound her, "speak nothing of us") — mercy played honest: she vanishes grateful,
+keeps quiet (telling the buyer ends *her*), leaves one free warning (the signet is an *overdue* delivery-key;
+the drop is watched). Loose thread parked, not punished. **⚔ AMBUSH TRIGGERED — "The Unlit Rows" is LIVE
+(07-19, at the user's call).** Party released her and set out for the **buyer's blind drop** in Sesh's
+**unlit rows** (the dark undermarket), meaning next to keep a market **appointment with Forge's half-masked
+contact** (a *separate* live thread — NOT the dead Renegade "grey man"; I misread that in a since-corrected
+OOC note). At the chalked drop the **blank-faced** muscle stepped out of the warded booths. **No surprise**
+(party had declared *keeping watch* — reward the RP); the walls+fog is the ambushers' edge. **Encounter
+template built** `7e91023b-06e3-4f5d-b955-4eea6fa5d7f3` (map `f2b2f184`, 3× Blank-Faced Enforcer + 1× Hollow
+Stalker, one per magical-darkness booth). **⚔ COMBAT STARTED (07-19)** → live encounter
+`6fffbb99-1584-4c3e-a642-a641dce1b2aa`; all three PCs rolled `/initiative` (Windreth 18 / Vale 15 / Forge 12,
+auto-filled verbatim, zero roll-for-PC), enemies engine-rolled (ENF-NW 17). **Order: Windreth → ENF-NW → Vale
+→ Forge → [lower enemies].** PCs spawned bottom-center (Forge G11 / Vale H11 / Windreth I11); ambushers in
+the 4 corner booths (ENF-NW B2, ENF-NE O2, ENF-W B8, STK O8). **Round 1, Windreth's turn — awaiting his
+declared move** (prompted advance/Hide/Ready; no roll-for-PC). **🐛 FOG BUG found + FIXED live:** the player
+map was leaking ALL ambushers — root cause `buildVisionSources` seeded fog from enemy vision too (each enemy's
+own tile always renders); fix = exclude NPCs from player fog (code, redeployed). Also cleared the encounter's
+stale `explored_cells` (bug had persisted booth tiles as Explored; user-approved one-line DB repair) and
+recolored/reordered walls (bold slate, beneath fog) for legibility. **Code changes uncommitted on `main`**
+(discord_adapters.go, wall.go, renderer.go + tests) — commit only when the user asks. See
+[[reference_map_fog_vision_model]] for the corrected engine model. **Parked
+threads:** Forge's half-mask market appointment (deferred by the fight); Sabinnet at large (knows the name).
+**THE SEAL is OPEN; restoration + the erasure-hand's identity remain the sealed gates.**
 Full blow-by-blow → [`sessions/session-01.md`](sessions/session-01.md);
-live board (when a fight stands up) → DM Console; durable IDs/secrets below._
+live board (once combat starts) → DM Console; durable IDs/secrets below._
 
 ## Live mechanical state → DM Console (do not hand-copy here)
 
