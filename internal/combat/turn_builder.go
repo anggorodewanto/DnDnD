@@ -9,12 +9,19 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// enemyBaseSightTiles is the NPC planner's base (non-magical) sight radius in
+// tiles — 60ft / 12 tiles, matching the PC fog path's defaultBaseSightTiles in
+// cmd/dndnd. It is the floor a sighted creature can see in a lit area even with
+// no darkvision; darkvision/blindsight/truesight extend it via the parsed senses.
+const enemyBaseSightTiles = 12
 
 // Step type constants for TurnStep.
 const (
@@ -110,6 +117,12 @@ type BuildTurnPlanInput struct {
 	Grid       *pathfinding.Grid
 	Reactions  []refdata.ReactionDeclaration
 	SpeedFt    int32
+	// MagicalDarknessTiles is the union of every magical-darkness tile on the
+	// map (static lighting layer + live-cast Darkness zones). The planner's
+	// see-filter uses it (with Grid.Walls) so an NPC only targets PCs it can
+	// actually see: darkvision is demoted inside these tiles, mirroring the
+	// player-facing fog model in renderer.ComputeVisibilityWithZones.
+	MagicalDarknessTiles []renderer.GridPos
 }
 
 // BuildTurnPlan generates a suggested turn plan for an NPC combatant.
@@ -128,19 +141,47 @@ func BuildTurnPlan(input BuildTurnPlanInput) (*TurnPlan, error) {
 	abilities := parseCreatureAbilitiesFromCreature(input.Creature)
 	hasMultiattack := hasMultiattackAbility(abilities)
 
-	// Find nearest hostile (PC) target
-	nearestTarget, distFt := findNearestHostile(input.Combatant, input.Combatants)
+	// Best reach across this creature's attacks (used by both the movement trim
+	// and the reach-filter below).
+	bestReach := 5
+	for _, a := range attacks {
+		if a.ReachFt > bestReach {
+			bestReach = a.ReachFt
+		}
+	}
 
-	// Step 1: Movement — path toward nearest hostile
+	// See-filter: an NPC may only target PCs it can actually see. Compute the
+	// NPC's own vision (base sight + parsed senses) against the map walls and
+	// magical-darkness tiles, then keep only candidates standing on a Visible
+	// tile. This stops the planner from swinging at a PC hidden behind a wall
+	// or lost in magical darkness. findNearestHostile still applies its own
+	// dead/self/faction filters on top.
+	var fow *renderer.FogOfWar
+	candidates := input.Combatants
+	if input.Grid != nil {
+		fow = computeNPCVisibility(input)
+		candidates = visibleCombatants(input.Combatants, fow)
+	}
+
+	// Find nearest hostile (PC) target among the ones we can see.
+	nearestTarget, distFt := findNearestHostile(input.Combatant, candidates)
+
+	// Step 1: Movement — path toward nearest hostile.
+	var movementStep *TurnStep
 	if nearestTarget != nil && input.Grid != nil {
-		movementStep := buildMovementStep(input.Combatant, *nearestTarget, input.Creature, input.Grid, input.SpeedFt, attacks)
+		movementStep = buildMovementStep(input.Combatant, *nearestTarget, input.Creature, input.Grid, input.SpeedFt, attacks)
 		if movementStep != nil {
 			plan.Steps = append(plan.Steps, *movementStep)
 		}
 	}
 
-	// Step 2: Attacks
-	if nearestTarget != nil && len(attacks) > 0 {
+	// Step 2: Attacks — reach-filter. Only emit attacks if, from the NPC's END
+	// position (after any planned movement), the target is actually reachable
+	// this turn: within melee reach, or within a ranged attack's range while
+	// still visible. Otherwise the turn is a hold (no movement/attack was worth
+	// emitting) — ExecuteEnemyTurn treats an attack-less plan as a valid pass.
+	if nearestTarget != nil && len(attacks) > 0 &&
+		npcCanReachTarget(input.Combatant, *nearestTarget, movementStep, bestReach, attacks, fow) {
 		if hasMultiattack {
 			multiattackSteps := buildMultiattackSteps(attacks, *nearestTarget, abilities)
 			plan.Steps = append(plan.Steps, multiattackSteps...)
@@ -206,6 +247,111 @@ func findNearestHostile(mover refdata.Combatant, combatants []refdata.Combatant)
 	return nearest, bestDist
 }
 
+// npcSenses is the subset of a creature's `senses` JSONB the planner cares
+// about, in feet: {"darkvision":60,"blindsight":10,"truesight":120,...}.
+type npcSenses struct {
+	Darkvision int `json:"darkvision"`
+	Blindsight int `json:"blindsight"`
+	Truesight  int `json:"truesight"`
+}
+
+// parseNPCSenses decodes a creature's senses JSONB. A null/empty/malformed
+// payload yields the zero value (base sight only).
+func parseNPCSenses(raw pqtype.NullRawMessage) npcSenses {
+	var s npcSenses
+	if !raw.Valid || len(raw.RawMessage) == 0 {
+		return s
+	}
+	_ = json.Unmarshal(raw.RawMessage, &s)
+	return s
+}
+
+// sensesTilesFromFeet converts a senses range in feet to tile units (5ft per
+// tile). Local to the combat package because cmd/dndnd's tilesFromFeet is not
+// importable. Non-positive input clamps to 0.
+func sensesTilesFromFeet(ft int) int {
+	if ft <= 0 {
+		return 0
+	}
+	return ft / 5
+}
+
+// computeNPCVisibility builds the fog-of-war the NPC sees, seeded from a single
+// VisionSource at the NPC's tile (base sight + darkvision/blindsight/truesight)
+// evaluated against the map walls and magical-darkness tiles. Grid must be
+// non-nil (callers guard this).
+func computeNPCVisibility(input BuildTurnPlanInput) *renderer.FogOfWar {
+	npcCol, npcRow := parsePosition(input.Combatant)
+	senses := parseNPCSenses(input.Creature.Senses)
+	src := renderer.VisionSource{
+		Col:             npcCol,
+		Row:             npcRow,
+		RangeTiles:      enemyBaseSightTiles,
+		DarkvisionTiles: sensesTilesFromFeet(senses.Darkvision),
+		BlindsightTiles: sensesTilesFromFeet(senses.Blindsight),
+		TruesightTiles:  sensesTilesFromFeet(senses.Truesight),
+	}
+	return renderer.ComputeVisibilityWithZones(
+		[]renderer.VisionSource{src}, nil,
+		input.Grid.Walls, input.MagicalDarknessTiles,
+		input.Grid.Width, input.Grid.Height,
+	)
+}
+
+// visibleCombatants keeps only the combatants an NPC can actually perceive as
+// attack targets: on a Visible tile in fow AND not hidden. A combatant with
+// IsVisible=false took the Hide action and won its Stealth-vs-Perception contest
+// (that's what set the flag), so it can stand on a lit, line-of-sight tile yet
+// still be unseen — the fog check (tile) and the hidden check (creature) are
+// independent, and a target must pass both. Uses the same 0-based (col,row)
+// parsePosition convention buildMapGrid uses for occupants, so the tile a
+// combatant occupies in the grid is the tile checked against the fog.
+func visibleCombatants(combatants []refdata.Combatant, fow *renderer.FogOfWar) []refdata.Combatant {
+	visible := make([]refdata.Combatant, 0, len(combatants))
+	for i := range combatants {
+		if !combatants[i].IsVisible {
+			continue // hidden (Hide action) — unseen, not a valid target
+		}
+		col, row := parsePosition(combatants[i])
+		if fow.StateAt(col, row) == renderer.Visible {
+			visible = append(visible, combatants[i])
+		}
+	}
+	return visible
+}
+
+// npcCanReachTarget reports whether the NPC can strike target this turn from the
+// position it ends on (movementStep's Destination if it moved, else its start
+// tile): within melee reach, or within a ranged attack's range while the target
+// is still visible. fow may be nil (no grid) — then the ranged visibility gate
+// is skipped (best-effort).
+func npcCanReachTarget(mover, target refdata.Combatant, movementStep *TurnStep, bestReach int, attacks []CreatureAttackEntry, fow *renderer.FogOfWar) bool {
+	endCol, endRow := parsePosition(mover)
+	if movementStep != nil && movementStep.Movement != nil {
+		endCol = movementStep.Movement.Destination.Col
+		endRow = movementStep.Movement.Destination.Row
+	}
+	targetCol, targetRow := parsePosition(target)
+	distFt := chebyshevDist(endCol, endRow, targetCol, targetRow) * 5
+	if distFt <= bestReach {
+		return true
+	}
+	// Ranged: within a ranged attack's max range AND still visible.
+	bestRange := 0
+	for _, a := range attacks {
+		if a.RangeFt > bestRange {
+			bestRange = a.RangeFt
+		}
+	}
+	if bestRange == 0 || distFt > bestRange {
+		return false
+	}
+	if fow == nil {
+		return true
+	}
+	return fow.StateAt(targetCol, targetRow) == renderer.Visible
+}
+
 // parsePosition converts a combatant's position to 0-based col, row ints.
 func parsePosition(c refdata.Combatant) (int, int) {
 	coord := c.PositionCol + strconv.Itoa(int(c.PositionRow))
@@ -214,6 +360,32 @@ func parsePosition(c refdata.Combatant) (int, int) {
 		return 0, 0
 	}
 	return col, row
+}
+
+// gridWithoutOccupantAt returns a shallow copy of grid whose Occupants exclude
+// any occupant standing on (col,row). Walls/terrain/dimensions are shared. Used
+// so A* can path toward a target tile that the target itself occupies; the
+// approach path is trimmed to stop within reach, so the mover never enters it.
+// Returns grid unchanged when nothing occupies (col,row).
+func gridWithoutOccupantAt(grid *pathfinding.Grid, col, row int) *pathfinding.Grid {
+	if grid == nil {
+		return nil
+	}
+	filtered := make([]pathfinding.Occupant, 0, len(grid.Occupants))
+	removed := false
+	for _, o := range grid.Occupants {
+		if o.Col == col && o.Row == row {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, o)
+	}
+	if !removed {
+		return grid
+	}
+	clone := *grid
+	clone.Occupants = filtered
+	return &clone
 }
 
 // buildMovementStep creates a movement step if the NPC needs to move to reach its target.
@@ -235,13 +407,18 @@ func buildMovementStep(mover refdata.Combatant, target refdata.Combatant, creatu
 		return nil
 	}
 
-	// Use A* to find path
+	// Use A* to find path. The target combatant occupies the destination tile,
+	// and FindPath refuses to path onto an occupied tile — so we path against a
+	// grid copy with the target's own occupant removed. trimPathTobudget below
+	// stops the mover once it is within reach (i.e. adjacent), so it never
+	// actually enters the target's tile; this only lets A* find the approach.
+	pathGrid := gridWithoutOccupantAt(grid, targetCol, targetRow)
 	sizeCategory := pathfinding.ParseSizeCategory(creature.Size)
 	result, err := pathfinding.FindPath(pathfinding.PathRequest{
 		Start:           pathfinding.Point{Col: startCol, Row: startRow},
 		End:             pathfinding.Point{Col: targetCol, Row: targetRow},
 		SizeCategory:    sizeCategory,
-		Grid:            grid,
+		Grid:            pathGrid,
 		MoverAltitudeFt: int(mover.AltitudeFt),
 	})
 	if err != nil || !result.Found {

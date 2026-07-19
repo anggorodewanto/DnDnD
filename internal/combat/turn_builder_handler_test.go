@@ -77,6 +77,7 @@ func TestGetEnemyTurnPlan_Success(t *testing.T) {
 					IsAlive:     true,
 					HpCurrent:   45,
 					Ac:          16,
+					IsVisible:   true, // DB default: seen unless the Hide action set it false
 				},
 			}, nil
 		},
@@ -877,7 +878,7 @@ func TestGenerateEnemyTurnPlan_F12_UsesEncounterMap(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
 				{ID: npcID, DisplayName: "Goblin", PositionCol: "A", PositionRow: 1, IsNpc: true, IsAlive: true, HpCurrent: 10},
-				{ID: pcID, DisplayName: "Aragorn", PositionCol: "E", PositionRow: 1, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16},
+				{ID: pcID, DisplayName: "Aragorn", PositionCol: "E", PositionRow: 1, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16, IsVisible: true}, // not hidden — the map's wall, not a Hide action, must suppress the attack
 			}, nil
 		},
 		listActiveReactionDeclarationsByEncounterFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.ReactionDeclaration, error) {
@@ -906,16 +907,26 @@ func TestGenerateEnemyTurnPlan_F12_UsesEncounterMap(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, plan)
 
-	// The plan should have a movement step. With a 10x8 map and a wall,
-	// the path should respect the map dimensions (not default 20x20).
-	// Verify the plan was generated (movement + attack).
-	assert.GreaterOrEqual(t, len(plan.Steps), 1)
+	// The encounter map has a full-height wall at the col2|col3 boundary that
+	// fully divides the Goblin (A1) from the PC (E1). With the see-filter the
+	// walled-off PC is unseeable, so the planner correctly refuses to plan an
+	// attack against it and the turn is a hold (no attack step).
+	//
+	// This is exactly what proves the encounter map was loaded and honored: on
+	// the 20x20 open FALLBACK grid (no wall) the Goblin WOULD see and attack the
+	// PC 4 tiles away — so an attack-less plan can only mean the map's wall was
+	// used for line-of-sight, not the default grid.
+	attackSteps := filterStepsByType(plan.Steps, StepTypeAttack)
+	assert.Empty(t, attackSteps, "walled-off, unseeable PC must not be attacked (proves the map's wall was loaded)")
 
-	// Verify the movement step exists and its path stays within 10x8 bounds.
-	if len(plan.Steps) > 0 && plan.Steps[0].Type == StepTypeMovement && plan.Steps[0].Movement != nil {
-		for _, pt := range plan.Steps[0].Movement.Path {
-			assert.Less(t, pt.Col, 10, "path col must be within map width 10")
-			assert.Less(t, pt.Row, 8, "path row must be within map height 8")
+	// Any movement that IS planned must stay within the 10x8 map bounds (guards
+	// against the default 20x20 grid leaking in).
+	for _, step := range plan.Steps {
+		if step.Type == StepTypeMovement && step.Movement != nil {
+			for _, pt := range step.Movement.Path {
+				assert.Less(t, pt.Col, 10, "path col must be within map width 10")
+				assert.Less(t, pt.Row, 8, "path row must be within map height 8")
+			}
 		}
 	}
 }
@@ -952,7 +963,7 @@ func TestGenerateEnemyTurnPlan_F12_FallsBackToDefaultGrid(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
 				{ID: npcID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 3, IsNpc: true, IsAlive: true, HpCurrent: 10},
-				{ID: pcID, DisplayName: "Aragorn", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16},
+				{ID: pcID, DisplayName: "Aragorn", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16, IsVisible: true},
 			}, nil
 		},
 		listActiveReactionDeclarationsByEncounterFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.ReactionDeclaration, error) {
@@ -1035,6 +1046,7 @@ func TestGenerateEnemyTurnPlan_F22_AttackStepsHaveRollResult(t *testing.T) {
 					IsAlive:     true,
 					HpCurrent:   45,
 					Ac:          16,
+					IsVisible:   true, // DB default: seen unless the Hide action set it false
 				},
 			}, nil
 		},
@@ -1103,7 +1115,7 @@ func TestGenerateEnemyTurnPlan_SurfacesReactionsForPCTarget(t *testing.T) {
 	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 		return []refdata.Combatant{
 			{ID: npcID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 3, IsNpc: true, IsAlive: true, HpCurrent: 10},
-			{ID: pcID, DisplayName: "Windreth", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+			{ID: pcID, DisplayName: "Windreth", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16, IsVisible: true, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
 		}, nil
 	}
 	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {

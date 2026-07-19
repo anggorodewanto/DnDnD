@@ -207,7 +207,10 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 	speedFt := ParseWalkSpeed(creature.Speed)
 
 	// F-12: Load the encounter's actual map for pathfinding; fall back to 20x20 open grid.
+	// The map's static lighting layer also carries magical-darkness tiles, which
+	// feed the planner's see-filter so an NPC can't target a PC it can't see.
 	grid := buildDefaultGrid(20, 20, combatants, combatant.ID)
+	var magicalDarknessTiles []renderer.GridPos
 	enc, err := s.store.GetEncounter(ctx, encounterID)
 	if err == nil && enc.MapID.Valid {
 		m, merr := s.store.GetMapByIDUnchecked(ctx, enc.MapID.UUID)
@@ -215,17 +218,34 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 			md, perr := renderer.ParseTiledJSON(m.TiledJson, nil, nil)
 			if perr == nil && md.Width > 0 && md.Height > 0 {
 				grid = buildMapGrid(md, combatants, combatant.ID)
+				magicalDarknessTiles = md.MagicalDarknessTiles
+			}
+		}
+	}
+
+	// Union live-cast Darkness (encounter_zones) with the map's static
+	// magical-darkness lighting layer so a spell cast mid-combat also blinds the
+	// planner, matching the player-facing fog path. Best-effort: a listing error
+	// leaves the map-layer darkness in place.
+	if zones, zerr := s.store.ListEncounterZonesByEncounterID(ctx, encounterID); zerr == nil {
+		for _, z := range zones {
+			if z.ZoneType != "magical_darkness" {
+				continue
+			}
+			for _, t := range ZoneAffectedTilesFromShape(z.Shape, z.OriginCol, z.OriginRow, z.Dimensions) {
+				magicalDarknessTiles = append(magicalDarknessTiles, renderer.GridPos{Col: t.Col, Row: t.Row})
 			}
 		}
 	}
 
 	plan, err := BuildTurnPlan(BuildTurnPlanInput{
-		Combatant:  combatant,
-		Creature:   creature,
-		Combatants: combatants,
-		Grid:       grid,
-		Reactions:  reactions,
-		SpeedFt:    speedFt,
+		Combatant:            combatant,
+		Creature:             creature,
+		Combatants:           combatants,
+		Grid:                 grid,
+		Reactions:            reactions,
+		SpeedFt:              speedFt,
+		MagicalDarknessTiles: magicalDarknessTiles,
 	})
 	if err != nil {
 		return nil, err

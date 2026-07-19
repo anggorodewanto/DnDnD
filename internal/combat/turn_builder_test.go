@@ -68,6 +68,7 @@ func TestBuildTurnPlan_SimpleCreature_SingleAttack(t *testing.T) {
 		IsAlive:     true,
 		HpCurrent:   45,
 		Ac:          16,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -146,6 +147,7 @@ func TestBuildTurnPlan_MultiattackCreature(t *testing.T) {
 		IsAlive:     true,
 		HpCurrent:   38,
 		Ac:          15,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -222,6 +224,7 @@ func TestBuildTurnPlan_RechargeAbility(t *testing.T) {
 		IsAlive:     true,
 		HpCurrent:   60,
 		Ac:          18,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -282,6 +285,7 @@ func TestBuildTurnPlan_NoMovementWhenAdjacent(t *testing.T) {
 		IsNpc:       false,
 		IsAlive:     true,
 		HpCurrent:   20,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -314,6 +318,214 @@ func TestBuildTurnPlan_NoMovementWhenAdjacent(t *testing.T) {
 	assert.Len(t, attackSteps, 1)
 }
 
+// --- See-filter + reach-filter: an NPC only attacks PCs it can SEE and REACH ---
+
+// darknessEnforcerCreature is a darkvision-60 melee brute used by the
+// see/reach-filter tests (matches the live-play "Blank-Faced Enforcer").
+func darknessEnforcerCreature() refdata.Creature {
+	return refdata.Creature{
+		ID:            "enforcer",
+		Name:          "Blank-Faced Enforcer",
+		Size:          "Medium",
+		Speed:         json.RawMessage(`{"walk":30}`),
+		Attacks:       json.RawMessage(`[{"name":"Slam","to_hit":5,"damage":"1d8+3","damage_type":"bludgeoning","reach_ft":5}]`),
+		AbilityScores: json.RawMessage(`{"str":16,"dex":12,"con":14,"int":8,"wis":10,"cha":8}`),
+		Senses:        toNullRawMessage(json.RawMessage(`{"darkvision":60,"passive_perception":10}`)),
+	}
+}
+
+// Regression for the live-play bug: an NPC standing in a magical-darkness booth
+// was told to melee a PC ~50ft away on the far side of a wall maze, with no
+// movement step (A* could never close). With the see-filter the walled-off PC
+// is unseeable, so the plan must contain NO attack (it's a hold).
+//
+// RED before the see-filter: findNearestHostile picks the PC by raw chebyshev
+// and buildAttackStep is emitted unconditionally (movement is nil because A*
+// can't path through the wall) → an attack step exists → this test fails.
+func TestBuildTurnPlan_SkipsUnseeableTargetBehindWallInDarkness(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	// NPC at B4 (col1,row3) inside a magical-darkness booth; PC at F4
+	// (col5,row3) on the far side of a full-height wall at the col2|col3 edge.
+	npc := refdata.Combatant{
+		ID: npcID, DisplayName: "Blank-Faced Enforcer",
+		PositionCol: "B", PositionRow: 4,
+		IsNpc: true, IsAlive: true, HpCurrent: 30,
+		CreatureRefID: sql.NullString{String: "enforcer", Valid: true},
+	}
+	pc := refdata.Combatant{
+		ID: pcID, DisplayName: "Vale",
+		PositionCol: "F", PositionRow: 4,
+		IsNpc: false, IsAlive: true, HpCurrent: 40, Ac: 16,
+		IsVisible: true, // not hidden — the wall geometry, not a Hide action, must suppress the attack
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   7,
+		Height:  7,
+		Terrain: testTerrainGrid(7, 7),
+		Walls: []renderer.WallSegment{
+			{X1: 3, Y1: 0, X2: 3, Y2: 7}, // full-height wall, col2|col3 boundary
+		},
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:            npc,
+		Creature:             darknessEnforcerCreature(),
+		Combatants:           []refdata.Combatant{npc, pc},
+		Grid:                 grid,
+		SpeedFt:              30,
+		MagicalDarknessTiles: []renderer.GridPos{{Col: 1, Row: 3}}, // the NPC's booth tile
+	})
+	require.NoError(t, err)
+
+	attackSteps := filterStepsByType(plan.Steps, StepTypeAttack)
+	assert.Empty(t, attackSteps, "must not attack a PC hidden behind a wall")
+	movementSteps := filterStepsByType(plan.Steps, StepTypeMovement)
+	assert.Empty(t, movementSteps, "no reachable target ⇒ no movement either (hold)")
+}
+
+// A PC standing INSIDE magical darkness is unseeable to a darkvision-only NPC
+// (darkvision is demoted by magical darkness), so no attack is planned even on
+// an open grid with no walls. Directly exercises the darkness-demotion path.
+func TestBuildTurnPlan_SkipsTargetInMagicalDarkness(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID: npcID, DisplayName: "Blank-Faced Enforcer",
+		PositionCol: "B", PositionRow: 4, // (col1,row3), lit
+		IsNpc: true, IsAlive: true, HpCurrent: 30,
+		CreatureRefID: sql.NullString{String: "enforcer", Valid: true},
+	}
+	pc := refdata.Combatant{
+		ID: pcID, DisplayName: "Vale",
+		PositionCol: "D", PositionRow: 4, // (col3,row3), 2 tiles east, in darkness
+		IsNpc: false, IsAlive: true, HpCurrent: 40, Ac: 16,
+		IsVisible: true, // not hidden — the magical darkness, not a Hide action, must suppress the attack
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   7,
+		Height:  7,
+		Terrain: testTerrainGrid(7, 7),
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:            npc,
+		Creature:             darknessEnforcerCreature(),
+		Combatants:           []refdata.Combatant{npc, pc},
+		Grid:                 grid,
+		SpeedFt:              30,
+		MagicalDarknessTiles: []renderer.GridPos{{Col: 3, Row: 3}}, // the PC's tile
+	})
+	require.NoError(t, err)
+
+	attackSteps := filterStepsByType(plan.Steps, StepTypeAttack)
+	assert.Empty(t, attackSteps, "darkvision-only NPC cannot see a PC standing in magical darkness")
+}
+
+// Sibling positive test: the filter is not over-eager. The same darkness-booth
+// NPC, adjacent to a PC standing on a lit tile with clear LOS, still attacks.
+func TestBuildTurnPlan_AttacksVisibleReachableTargetFromDarkness(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID: npcID, DisplayName: "Blank-Faced Enforcer",
+		PositionCol: "B", PositionRow: 4, // (col1,row3), in darkness booth
+		IsNpc: true, IsAlive: true, HpCurrent: 30,
+		CreatureRefID: sql.NullString{String: "enforcer", Valid: true},
+	}
+	pc := refdata.Combatant{
+		ID: pcID, DisplayName: "Vale",
+		PositionCol: "C", PositionRow: 4, // (col2,row3), adjacent, lit
+		IsNpc: false, IsAlive: true, HpCurrent: 40, Ac: 16,
+		IsVisible: true, // DB default: seen unless the Hide action set it false
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   7,
+		Height:  7,
+		Terrain: testTerrainGrid(7, 7),
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:            npc,
+		Creature:             darknessEnforcerCreature(),
+		Combatants:           []refdata.Combatant{npc, pc},
+		Grid:                 grid,
+		SpeedFt:              30,
+		MagicalDarknessTiles: []renderer.GridPos{{Col: 1, Row: 3}}, // NPC booth only; PC is lit
+	})
+	require.NoError(t, err)
+
+	attackSteps := filterStepsByType(plan.Steps, StepTypeAttack)
+	require.Len(t, attackSteps, 1, "an adjacent, visible, lit PC must still be attacked")
+	assert.Equal(t, pcID, attackSteps[0].Attack.TargetID)
+}
+
+// TestBuildTurnPlan_SkipsHiddenTarget pins the Hide-action half of the
+// see-filter, kept distinct from the geometry cases above. It mirrors
+// TestBuildTurnPlan_AttacksVisibleReachableTargetFromDarkness exactly — an NPC
+// adjacent to a lit, in-line-of-sight PC on an open grid — and toggles only the
+// PC's IsVisible flag. With IsVisible=false (the PC took the Hide action and won
+// its Stealth contest) the NPC is blind to it and must HOLD: no attack step. The
+// identical setup with IsVisible=true DOES attack, proving it is the hidden flag
+// — not the geometry — that suppresses the swing. The production see-filter
+// already exists, so this is a green pin (no red step needed).
+func TestBuildTurnPlan_SkipsHiddenTarget(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID: npcID, DisplayName: "Blank-Faced Enforcer",
+		PositionCol: "B", PositionRow: 4, // (col1,row3), in darkness booth
+		IsNpc: true, IsAlive: true, HpCurrent: 30,
+		CreatureRefID: sql.NullString{String: "enforcer", Valid: true},
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   7,
+		Height:  7,
+		Terrain: testTerrainGrid(7, 7),
+	}
+
+	// planAgainstPC builds the plan for the identical geometry (adjacent, lit PC)
+	// varying only whether the PC is hidden.
+	planAgainstPC := func(visible bool) *TurnPlan {
+		pc := refdata.Combatant{
+			ID: pcID, DisplayName: "Vale",
+			PositionCol: "C", PositionRow: 4, // (col2,row3), adjacent, lit
+			IsNpc: false, IsAlive: true, HpCurrent: 40, Ac: 16,
+			IsVisible: visible,
+		}
+		plan, err := BuildTurnPlan(BuildTurnPlanInput{
+			Combatant:            npc,
+			Creature:             darknessEnforcerCreature(),
+			Combatants:           []refdata.Combatant{npc, pc},
+			Grid:                 grid,
+			SpeedFt:              30,
+			MagicalDarknessTiles: []renderer.GridPos{{Col: 1, Row: 3}}, // NPC booth only; PC is lit
+		})
+		require.NoError(t, err)
+		return plan
+	}
+
+	// Hidden PC (IsVisible=false): unseen ⇒ no attack, even though adjacent & lit.
+	hiddenPlan := planAgainstPC(false)
+	assert.Empty(t, filterStepsByType(hiddenPlan.Steps, StepTypeAttack),
+		"a hidden (IsVisible=false) PC must not be attacked even when adjacent and lit")
+
+	// Same geometry, PC no longer hidden: the NPC attacks — proving the hidden
+	// flag, not the geometry, suppressed the swing above.
+	seenAttacks := filterStepsByType(planAgainstPC(true).Steps, StepTypeAttack)
+	require.Len(t, seenAttacks, 1,
+		"the identical adjacent, lit PC is attacked once IsVisible flips to true")
+	assert.Equal(t, pcID, seenAttacks[0].Attack.TargetID)
+}
+
 // --- TDD Cycle 5: Reactions surfaced ---
 
 func TestBuildTurnPlan_ReactionsIncluded(t *testing.T) {
@@ -338,6 +550,7 @@ func TestBuildTurnPlan_ReactionsIncluded(t *testing.T) {
 		IsNpc:       false,
 		IsAlive:     true,
 		HpCurrent:   40,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -854,6 +1067,7 @@ func TestBuildTurnPlan_UsesStructuredBonusActions(t *testing.T) {
 		IsNpc:       false,
 		IsAlive:     true,
 		HpCurrent:   40,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -912,6 +1126,7 @@ func TestBuildTurnPlan_BonusAction_GoblinNimbleEscape(t *testing.T) {
 		IsNpc:       false,
 		IsAlive:     true,
 		HpCurrent:   40,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
@@ -967,6 +1182,7 @@ func TestBuildTurnPlan_NoBonusAction_WhenNonePresent(t *testing.T) {
 		IsNpc:       false,
 		IsAlive:     true,
 		HpCurrent:   20,
+		IsVisible:   true, // DB default: seen unless the Hide action set it false
 	}
 
 	creature := refdata.Creature{
