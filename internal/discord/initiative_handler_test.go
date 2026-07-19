@@ -106,6 +106,9 @@ func TestInitiativeHandler_RecordsRoll(t *testing.T) {
 	if !strings.Contains(rc.Content, "17") || !strings.Contains(rc.Content, "Aria") {
 		t.Errorf("expected confirmation with roll + name, got: %s", rc.Content)
 	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected the recorded-initiative confirmation to be public (non-ephemeral), got flags %d", rc.Flags)
+	}
 }
 
 func TestInitiativeHandler_ClearRemovesStagedValue(t *testing.T) {
@@ -125,6 +128,9 @@ func TestInitiativeHandler_ClearRemovesStagedValue(t *testing.T) {
 	if !strings.Contains(strings.ToLower(rc.Content), "cleared") {
 		t.Errorf("expected a cleared confirmation, got: %s", rc.Content)
 	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected the cleared confirmation to be public (non-ephemeral), got flags %d", rc.Flags)
+	}
 }
 
 func TestInitiativeHandler_ShowsCurrentWhenStaged(t *testing.T) {
@@ -143,6 +149,9 @@ func TestInitiativeHandler_ShowsCurrentWhenStaged(t *testing.T) {
 	if !strings.Contains(rc.Content, "14") {
 		t.Errorf("expected the staged value 14 echoed, got: %s", rc.Content)
 	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Errorf("expected the staged-value echo to be public (non-ephemeral), got flags %d", rc.Flags)
+	}
 }
 
 func TestInitiativeHandler_PromptsWhenNoneStaged(t *testing.T) {
@@ -157,6 +166,9 @@ func TestInitiativeHandler_PromptsWhenNoneStaged(t *testing.T) {
 
 	if !strings.Contains(strings.ToLower(rc.Content), "haven't staged") {
 		t.Errorf("expected a prompt to stage, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected the empty-state prompt to stay ephemeral, got flags %d", rc.Flags)
 	}
 }
 
@@ -174,6 +186,9 @@ func TestInitiativeHandler_RejectsBothRollAndClear(t *testing.T) {
 	if !strings.Contains(rc.Content, "not both") {
 		t.Errorf("expected a both-flags rejection, got: %s", rc.Content)
 	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected a validation error to stay ephemeral, got flags %d", rc.Flags)
+	}
 }
 
 func TestInitiativeHandler_RejectsOutOfRange(t *testing.T) {
@@ -189,6 +204,9 @@ func TestInitiativeHandler_RejectsOutOfRange(t *testing.T) {
 	}
 	if !strings.Contains(rc.Content, "between") {
 		t.Errorf("expected a range error, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected a range error to stay ephemeral, got flags %d", rc.Flags)
 	}
 }
 
@@ -215,5 +233,8 @@ func TestInitiativeHandler_NoCharacter(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(rc.Content), "character") {
 		t.Errorf("expected a missing-character error, got: %s", rc.Content)
+	}
+	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Errorf("expected a lookup error to stay ephemeral, got flags %d", rc.Flags)
 	}
 }

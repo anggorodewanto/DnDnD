@@ -89,7 +89,7 @@ func (h *InitiativeHandler) Handle(interaction *discordgo.Interaction) {
 			respondEphemeral(h.session, interaction, "❌ Couldn't clear your staged initiative. Try again.")
 			return
 		}
-		respondEphemeral(h.session, interaction, fmt.Sprintf("🎲 Cleared your staged initiative, %s.", char.Name))
+		respondPublic(h.session, interaction, fmt.Sprintf("🎲 Cleared your staged initiative, %s.", char.Name))
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *InitiativeHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "❌ Couldn't record your initiative. Try again.")
 		return
 	}
-	respondEphemeral(h.session, interaction, fmt.Sprintf(
+	respondPublic(h.session, interaction, fmt.Sprintf(
 		"🎲 Initiative **%d** recorded for %s. The DM will use it when combat starts — re-run `/initiative` to change it, or `/initiative clear:true` to remove it.",
 		roll, char.Name))
 }
@@ -119,7 +119,7 @@ func (h *InitiativeHandler) respondWithCurrent(ctx context.Context, interaction 
 		respondEphemeral(h.session, interaction, "🎲 You haven't staged an initiative yet. Run `/initiative roll:<total>` (your d20 roll + your initiative modifier).")
 		return
 	}
-	respondEphemeral(h.session, interaction, fmt.Sprintf(
+	respondPublic(h.session, interaction, fmt.Sprintf(
 		"🎲 Your staged initiative is **%d**, %s. Run `/initiative roll:<total>` to change it, or `/initiative clear:true` to remove it.",
 		cur, char.Name))
 }
