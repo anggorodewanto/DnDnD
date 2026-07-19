@@ -457,10 +457,14 @@ func TestBuildVisionSources_PCDarkvisionFromRace(t *testing.T) {
 	assert.Greater(t, sources[0].RangeTiles, 0, "base sight must be positive so PC sees in lit areas")
 }
 
-// TestBuildVisionSources_NPCSensesFromCreature exercises the NPC branch:
-// combatant.creature_ref_id → GetCreature → Senses JSONB
-// {darkvision, blindsight, truesight} → renderer.VisionSource.
-func TestBuildVisionSources_NPCSensesFromCreature(t *testing.T) {
+// TestBuildVisionSources_ExcludesNPCs pins the hidden-ambush fix: player-view
+// fog is computed from PC vision ONLY. A living NPC combatant — even with a
+// valid position and a resolvable creature ref that carries darkvision — must
+// contribute ZERO vision sources. Otherwise every enemy seeds a source that
+// marks its own origin tile Visible (the renderer forces a source's origin
+// visible even inside magical_darkness), leaking hidden ambushers onto the
+// player-facing #combat-map.
+func TestBuildVisionSources_ExcludesNPCs(t *testing.T) {
 	q := &fakeMapRegenQueries{
 		creatures: map[string]refdata.Creature{
 			"shadow-demon": {
@@ -480,11 +484,8 @@ func TestBuildVisionSources_NPCSensesFromCreature(t *testing.T) {
 		},
 	}
 
-	sources := buildVisionSources(context.Background(), q, combatants)
-
-	require.Len(t, sources, 1)
-	assert.Equal(t, 24, sources[0].DarkvisionTiles, "120ft darkvision = 24 tiles")
-	assert.Equal(t, 2, sources[0].BlindsightTiles, "10ft blindsight = 2 tiles")
+	assert.Empty(t, buildVisionSources(context.Background(), q, combatants),
+		"a living NPC must contribute no vision source — player-view fog is PC-vision only")
 }
 
 // TestBuildVisionSources_SkipsDeadAndUnparseablePositions guards the helper

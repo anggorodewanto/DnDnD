@@ -83,14 +83,17 @@ func RenderMap(md *MapData) ([]byte, error) {
 	// 1.5. Zone overlays (between terrain and grid so grid lines show over overlays)
 	DrawZoneOverlays(dc, md)
 
-	// 1.8. Fog of war overlay (between zones and grid)
+	// 1.7. Walls — drawn BENEATH the fog overlay so Unexplored fog fully hides
+	// undiscovered walls (no maze-layout leak) and Explored fog dims them. The
+	// DM view is unaffected: DrawFogOfWar early-returns when FogOfWar.DMSeesAll
+	// is true, leaving the walls painted at full brightness.
+	DrawWalls(dc, md)
+
+	// 1.8. Fog of war overlay (between walls and grid)
 	DrawFogOfWar(dc, md)
 
-	// 2. Grid lines
+	// 2. Grid lines (over the fog; thin grid lines over walls are acceptable)
 	DrawGrid(dc, md)
-
-	// 3. Walls
-	DrawWalls(dc, md)
 
 	// 4. Tokens
 	DrawTokens(dc, md)

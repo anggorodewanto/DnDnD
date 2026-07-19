@@ -848,15 +848,6 @@ func tilesFromFeet(ft int) int {
 // per-tile light level.
 const defaultBaseSightTiles = 12
 
-// senses captures the subset of Creature.Senses JSONB that the renderer's
-// VisionSource cares about. Field names match the spec's documented shape
-// ({darkvision, blindsight, truesight, ...}). Missing keys default to 0.
-type senses struct {
-	Darkvision int `json:"darkvision"`
-	Blindsight int `json:"blindsight"`
-	Truesight  int `json:"truesight"`
-}
-
 // buildVisionSourcesQueries is the narrow read-only contract buildVisionSources
 // needs from a mapRegeneratorQueries. Splitting it out makes the helper
 // straight to unit-test from the test fake without invoking the full
@@ -864,13 +855,13 @@ type senses struct {
 type buildVisionSourcesQueries interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetRace(ctx context.Context, id string) (refdata.Race, error)
-	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 }
 
-// buildVisionSources projects each living combatant into a renderer.VisionSource:
-//   - PCs: combatant.character_id → Character.Race → Race.DarkvisionFt
-//   - NPCs: combatant.creature_ref_id → Creature.Senses (darkvision / blindsight /
-//     truesight)
+// buildVisionSources projects each living PC combatant into a
+// renderer.VisionSource: combatant.character_id → Character.Race →
+// Race.DarkvisionFt (plus Devil's Sight). NPCs/enemies are deliberately
+// excluded — player-view fog is computed from PC vision ONLY, so an enemy can
+// never seed what the party sees (see the IsNpc skip below).
 //
 // Combatants with unparseable coordinates or empty linkage are skipped so the
 // shadowcaster doesn't fire from (-1,-1). Lookup errors are non-fatal — the
@@ -882,6 +873,15 @@ func buildVisionSources(ctx context.Context, q buildVisionSourcesQueries, in []r
 		if !c.IsAlive {
 			continue
 		}
+		// Player-view fog is PC-vision only; enemy vision must never seed it.
+		// Each source marks its own origin tile Visible (the renderer forces
+		// this even inside magical_darkness), so letting NPCs contribute would
+		// reveal every enemy — including hidden ambushers — on the player-facing
+		// map. (A summoned friendly NPC extending party vision is a known
+		// limitation: no allegiance flag exists yet, so all NPCs are excluded.)
+		if c.IsNpc {
+			continue
+		}
 		col, row, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", c.PositionCol, c.PositionRow))
 		if err != nil {
 			continue
@@ -890,23 +890,6 @@ func buildVisionSources(ctx context.Context, q buildVisionSourcesQueries, in []r
 			Col:        col,
 			Row:        row,
 			RangeTiles: defaultBaseSightTiles,
-		}
-		if c.IsNpc {
-			if !c.CreatureRefID.Valid || q == nil {
-				out = append(out, src)
-				continue
-			}
-			creature, err := q.GetCreature(ctx, c.CreatureRefID.String)
-			if err == nil && creature.Senses.Valid {
-				var s senses
-				if json.Unmarshal(creature.Senses.RawMessage, &s) == nil {
-					src.DarkvisionTiles = tilesFromFeet(s.Darkvision)
-					src.BlindsightTiles = tilesFromFeet(s.Blindsight)
-					src.TruesightTiles = tilesFromFeet(s.Truesight)
-				}
-			}
-			out = append(out, src)
-			continue
 		}
 		// PC branch.
 		if !c.CharacterID.Valid || q == nil {
