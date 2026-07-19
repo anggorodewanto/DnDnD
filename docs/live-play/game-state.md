@@ -21,10 +21,20 @@ got only 2 unlabeled vials + confirmation the ledgers/scraps are in the fence's 
 the real intel sits **behind Sabinnet herself**. Loot **written to sheets 07-18** (Forge: key-ring,
 reading-lens, oilcloth packet, waxed name-scraps, black wax, faceless signet; Vale: 2 vials — arc
 items recorded `identified:false`/sealed so possession ≠ reading).
-**➤ NOW:** room theirs, **not yet bound/woken**; alarm-cord **never pulled** → interior **not
-alerted**. Await the party's next move (bind / wake + interrogate / search harder / short rest) —
-don't act for them. **THE SEAL stays shut** — Windreth's warded scrap opens only on a proper
-reading, never at the scene. Full blow-by-blow → [`sessions/session-01.md`](sessions/session-01.md);
+**➤ NOW:** ★★ **THE SEAL IS READ — arc payoff landed (07-19).** Party walked Sabinnet + the warded
+scrap quietly to **Sesh's name-market** under the countersign and had **Sabinnet read it under the
+warding-canopy** (the safe gate — thread drank the sound, **buyer did NOT feel it, no bell**). The
+reading **confirms the warded prize is a living, freshly-cut name — and it is WINDRETH'S OWN stolen
+name** (the buyer's most-wanted prize). Literal name kept offstage (still a driver). **Reading ≠
+restoring:** Windreth now *knows* his name, doesn't have it *back* (ward = blanket over a candle;
+restoration runs through the god's scattered name — endgame lever). **New tension:** Sabinnet (the
+buyer's own reader) has now **read Windreth's name aloud and knows whose it is** — the captive holds
+the campaign's most dangerous fact. Still sealed: the buyer's true identity, what the faceless god is,
+the reassemble/scatter/hand-over trilemma stated flat, and *restoration*. **Fork handed back:**
+Windreth's response (his to play) / what to do with Sabinnet now she knows (`/check skill:insight`
+offered) / next heading. **THE SEAL is OPEN (read safely); the scrap on Windreth's sheet is now
+KNOWN but still warded/unrestored** (`identified:false` left as-is — not mutated; flag change deferred).
+Full blow-by-blow → [`sessions/session-01.md`](sessions/session-01.md);
 live board (when a fight stands up) → DM Console; durable IDs/secrets below._
 
 ## Live mechanical state → DM Console (do not hand-copy here)
@@ -120,14 +130,19 @@ Current scene). Recent CLOSED encounters, newest first:
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: SESH — Sabinnet's reading room, OUT OF COMBAT (aftermath).** The party breached the
-barred salt-white inner door (Forge Athletics 20 w/ Vale's Help vs secret DC 15) and won the
-reader fight over four rounds (both housecarls down; Sabinnet paralyzed by Vale's Hold Person,
-crit-battered while held, then finished at range). **Sabinnet is CAPTURED ALIVE** — senseless
-behind her desk, her pale **rod fallen out of reach**, the **alarm-cord never pulled** (nothing
-outside alerted *yet*). The room is full of paper, ledgers, and glass cases. The party can
-**secure/bind her**, **search the room**, or **wake and interrogate** her — she's the sealed-name
-reader they came for, and Windreth carries **THE SEAL** that may belong to this very desk.
+**★ Now: SESH — the name-market canopy, moments after THE SEAL was read.** The party breached the
+reader's door, won the fight non-lethally, searched + interrogated + **captured Sabinnet alive**,
+extracted her cleanly, long-rested, then walked her + Windreth's warded scrap to **Sesh's name-market**
+and had her **read the scrap under the warding-canopy** (07-19). The canopy held — the thread carried
+nowhere, **the faceless buyer felt nothing, no bell**. ★★ **The reveal landed: the warded prize is a
+living, freshly-cut true name, and it is WINDRETH'S OWN** — the name scraped out of him, the buyer's
+most-wanted prize, now spoken aloud for the first time (literal name kept offstage). **Reading ≠
+restoration** (he knows it, doesn't have it back; the ward's undoing runs through the god's scattered
+name — the endgame lever). The loaded cost: **Sabinnet, the buyer's own reader, now knows whose name it
+is.** The scene is the beat *right after* — Windreth hearing his own name, the captive who now holds
+it, and the party's next move. **Still sealed: the buyer's true identity, what the faceless god is, the
+trilemma stated flat, and how the name is restored.** Handed back: Windreth's response / Sabinnet's fate
+now she knows / next heading. Build the next beat live.
 **⚠ Loud is loud:** a breach at Sabinnet's door is the buyer's business; if the fight reopens,
 build newcomers into a **FRESH encounter** (in-page `POST /api/homebrew/creatures` +
 `POST /api/combat/start`; the old encounter is closed).
@@ -162,19 +177,25 @@ stock did; the kept prize scrap is unread).
   (07-09). Arc pressure now runs through the **Order of the Pale-Watch** (wardens still out
   there), **Vale's patron** (a rival collector still steering her — DM-secret), and the physical
   **name-scraps**. Secret spine → [`campaign-arc.md`](campaign-arc.md).
-- **⚠ THE SEAL (do NOT resolve on a low/wrong roll):** **Windreth** carries the warded **kept
-  prize scrap** — on his sheet as **_The Kept Name-Scrap (warded)_** (`identified:false`) — likely
-  **his own stolen name**, strongly implied but **never confirmed** (verified on the sheets 07-14:
-  it is on **Windreth, NOT Vale**). It opens ONLY on a **proper reading**: a high `/check arcana`
-  (risky), a higher warden, or **Sesh's name-market** — NOT insight / survival / perception / a
-  failed roll. The Sabinnet lead is a *route* to that reading, not the reading itself.
+- **★★ THE SEAL — READ 07-19 (was: do NOT resolve on a low/wrong roll):** **Windreth** carries the
+  warded **kept prize scrap** — on his sheet as **_The Kept Name-Scrap (warded)_** (`identified:false`,
+  flag left as-is). **It has now been read** — Sabinnet read it under Sesh's name-market **warding-canopy**
+  (the safe gate: thread drank the sound, buyer felt nothing). **CONFIRMED: it is a living, freshly-cut
+  true name, and it is WINDRETH'S OWN stolen name** (was "likely / never confirmed" — the reading
+  confirmed it; literal name still offstage, kept as a driver). **Reading ≠ restoration** — he *knows*
+  it now, doesn't have it *back*; the ward is a blanket over a candle, and undoing it runs through the
+  god's own scattered name (endgame lever, still sealed). **Loaded fallout:** Sabinnet (the buyer's
+  reader) now knows whose name it is. Do NOT re-gate this as "unread"; the open question is now
+  *restoration* + *what the party does with the knowledge*, not *how to read it*.
 - **Vale's kit (on her sheet):** the Faceless God's Token, the ashen face-shard, the **Name-Scrap
   of the Faceless God**, the **Grey Man's Name-Scraps (bundle)**, the defaced **Renegade's
   Warden-Disc**, the Cold Iron Key (×2). (Her **Potion of Healing** was **spent on Forge** during
   the reader fight — patched him to 20/41 mid-combat; consumed, off both sheets.) **⚠ Vale does
   NOT hold the kept prize scrap** — that warded scrap is on Windreth's sheet (see THE SEAL).
-- **Windreth's arc-kit (on his sheet):** **_The Kept Name-Scrap (warded)_** (THE SEAL) + a **Token
-  of Remembrance**. He keeps the warded scrap buried/cold; it opens only on a proper reading.
+- **Windreth's arc-kit (on his sheet):** **_The Kept Name-Scrap (warded)_** (THE SEAL — **now READ
+  07-19: confirmed = Windreth's own stolen name**, still warded/unrestored on the sheet) + a **Token
+  of Remembrance**. The scrap is no longer a *hidden* prize — he knows what it is; the live thread is
+  restoring it (endgame) and that Sabinnet now knows it too.
   **DM-secrets held** (see [`campaign-arc.md`](campaign-arc.md)): the Order's right-to-refuse
   doctrine, Vale's patron = rival collector using her, the reassemble/scatter/hand-over trilemma.
 
@@ -185,28 +206,31 @@ stock did; the kept prize scrap is unread).
 > own dice; verify any `/command` syntax against `internal/discord/commands.go` before
 > advertising it in a coda.
 
-1. **★ SESH, Sabinnet's reading room — AFTERMATH, out of combat.** The fight is won and
-   **Sabinnet is captured alive**; the party has the room and the initiative. Await their RP /
-   rolls — don't act for them. Likely beats to adjudicate:
-   - **Secure her / the room** — bind + gag Sabinnet before she wakes, take the fallen rod. **First
-     search already resolved 07-18** (Forge SoH 17 → key-ring, reading-lens, oilcloth packet, drawer:
-     waxed name-scraps + black wax + faceless signet; Vale Inv 8 → 2 unlabeled vials, ledgers stay
-     ciphered). Loot **written to sheets 07-18** — Forge holds the desk kit (key-ring, reading-lens,
-     oilcloth packet, waxed name-scraps, black wax, faceless signet), Vale the 2 vials; the arc pieces
-     (packet, scraps, signet, vials) are recorded `identified:false`/sealed so **possession ≠ reading**
-     — the SEAL and the deep intel stay gated behind Sabinnet, not a search roll. Deeper digging =
-     another `/check skill:investigation` (with time).
-   - **Wake + interrogate** — she's the sealed-name Reader-under-glass and the whole reason they
-     came; question her (`/check skill:intimidation` / `skill:persuasion`) about the buyer, the
-     sealed names, and how a kept name gets read. Follow the adjudication patterns in
-     [`dm-rules.md`](dm-rules.md) (reward unforced RP; a strong check shows the *body*, not the
-     *name*; don't dump the sealed core).
-   - **Housekeeping:** Forge is at **9/41** (short-rest / heal candidate); his old thrown handaxe
-     is still in the dead housecarl (trivial post-combat pickup). Loot → the finding PC's sheet
-     (standing rule, [`dm-rules.md`](dm-rules.md)).
-   - **⚠ Standing hazard — keep THE SEAL hidden:** do NOT let Windreth's warded scrap be read on
-     Sesh's floor — reading it thins the ward and **the buyer feels it** (Mave). Loud already gives
-     the buyer a reason to look this way, so keeping the SEAL out of sight matters *more* now.
+1. **★★ SESH — THE SEAL just read under the canopy; the reveal has landed (07-19).** Reader fight won,
+   Sabinnet captured + interrogated, party extracted cleanly, long-rested, walked her + the warded scrap
+   to **Sesh's name-market**, and had her **read it under the warding-canopy** — the safe gate held
+   (thread drank the sound, **buyer felt nothing, no bell**). ★★ **Confirmed: the warded prize is a
+   living, freshly-cut true name = WINDRETH'S OWN** (the buyer's most-wanted prize; literal name offstage,
+   still a driver). **Reading ≠ restoration.** Await their RP / rolls — don't act for them. Live beats:
+   - **Windreth's response — HIS to play.** He just heard his own stolen name for the first time. Do NOT
+     script it (say-it-back / take the scrap / go quiet / reach for restoration — all his). Give it room;
+     this is the campaign's emotional fulcrum.
+   - **Sabinnet now KNOWS the name.** The buyer's own reader has read Windreth's true name aloud and knows
+     whose it is — the most dangerous fact in the arc now sits in a captive's head. The live decision is
+     what the party does about that (`/check skill:insight` offered to read whether she'll keep/sell/fear
+     it). ⚠ **Prohibited-action guard:** if they move to *kill a bound prisoner* or similar, that's their
+     call to declare — adjudicate the fiction, don't push it; and never resolve a PC's moral choice for them.
+   - **Restoration is the new sealed gate (endgame lever).** Knowing the name ≠ having it back; undoing the
+     ward runs through the god's *own* scattered name (the assembly tracker → convergence). Do NOT hand
+     restoration cheaply; it's the trilemma's teeth. Still sealed too: buyer's true identity, what the
+     faceless god is, patron=buyer stated flat, the trilemma stated flat (per [`campaign-arc.md`](campaign-arc.md)).
+   - **⚠ Soft clock** — a missing fence-reader gets noticed. No pursuit *yet*; the longer they linger in
+     Sesh, the more the district stirs (Pale-Watch wardens / the buyer's runners). Foreshadow, don't spring.
+   - **Next heading** — the market itself, the buyer's blind-drop (signet + countersign), the fled wardens
+     (Mave's five in Sesh's crowd), or a road of their own. Build it live when they point.
+   - **Housekeeping:** all PCs full post-rest (**Forge 41/41**). Forge's old thrown handaxe was left in
+     the dead housecarl back in the reading room (abandoned on extraction — trivial, ignore unless a player
+     flags it). Loot → the finding PC's sheet (standing rule, [`dm-rules.md`](dm-rules.md)).
    - **⚠ Loadout quirk:** thrown weapons leave `equipped_main_hand` NULL (inventory kept) — for a
      repeat throw / melee-after-throw the player must pass `weapon:handaxe` or `/equip handaxe`;
      there is **no DM equipment endpoint** to fix the hand from the console.
