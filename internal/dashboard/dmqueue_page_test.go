@@ -357,6 +357,7 @@ func TestKindLabelFor_AllKinds(t *testing.T) {
 		{dmqueue.KindEnemyTurnReady, "Enemy Turn Ready"},
 		{dmqueue.KindNarrativeTeleport, "Narrative Teleport"},
 		{dmqueue.KindPlayerWhisper, "Player Whisper"},
+		{dmqueue.KindInitiativeStaged, "Initiative (staged)"},
 		{dmqueue.EventKind("mystery"), "Notification"},
 	}
 	for _, tc := range cases {

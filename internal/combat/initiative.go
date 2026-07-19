@@ -393,6 +393,22 @@ func mergePendingInitiatives(supplied map[uuid.UUID]InitiativeInput, charIDs []u
 	return merged
 }
 
+// cancelStagedInitiativeItems cancels the #dm-queue entry recorded on each
+// consumed staged-initiative row (APP-5). Nil-safe on dmNotifier and
+// best-effort: a NULL/empty id is skipped and a Cancel error is swallowed so a
+// flaky notifier never blocks a combat start. Mirrors resolveEnemyTurnReady.
+func (s *Service) cancelStagedInitiativeItems(ctx context.Context, staged []refdata.ClearAndReturnPendingInitiativesRow) {
+	if s.dmNotifier == nil {
+		return
+	}
+	for _, row := range staged {
+		if !row.DmQueueItemID.Valid || row.DmQueueItemID.String == "" {
+			continue
+		}
+		_ = s.dmNotifier.Cancel(ctx, row.DmQueueItemID.String, "combat started")
+	}
+}
+
 // RollInitiative rolls initiative for all combatants in an encounter, sorts them,
 // assigns initiative_order, sets round to 1 and status to "active".
 func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, roller *dice.Roller) ([]refdata.Combatant, error) {

@@ -1224,6 +1224,10 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		log.Printf("APP-5: reading staged initiatives for campaign %s failed: %v", enc.CampaignID, err)
 		staged = nil
 	}
+	// Combat is starting, so the pre-combat "Initiative (staged)" #dm-queue items
+	// are stale: cancel each consumed item's queue entry. Nil-safe + best-effort,
+	// mirroring the OA-forfeit sweep (resolveEnemyTurnReady).
+	s.cancelStagedInitiativeItems(ctx, staged)
 	initiatives := mergePendingInitiatives(input.CharacterInitiatives, input.CharacterIDs, staged)
 	sortedCombatants, err := s.rollInitiative(ctx, enc.ID, roller, initiatives)
 	if err != nil {

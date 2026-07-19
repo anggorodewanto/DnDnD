@@ -45,6 +45,12 @@ const (
 	// acting on a stale map and can re-post / investigate, then resolve the
 	// item. (T09 / Finding 6f)
 	KindMapRenderFailure EventKind = "map_render_failure"
+	// KindInitiativeStaged surfaces a player's pre-combat /initiative roll in
+	// #dm-queue and the DM Console so the DM can see who has staged before
+	// StartCombat. It is informational/housekeeping (not combat-blocking): a
+	// re-roll cancels the prior item, /initiative clear:true cancels it, and
+	// StartCombat cancels every consumed item. (APP-5)
+	KindInitiativeStaged EventKind = "initiative_staged"
 )
 
 // WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
@@ -104,6 +110,7 @@ var kindLabels = map[EventKind]kindLabel{
 	KindOpportunityAttack:   {emoji: "⚔️", label: "Opportunity Attack", useColon: true},
 	KindChannelDivinity:     {emoji: "✝️", label: "Channel Divinity", useColon: true},
 	KindMapRenderFailure:    {emoji: "🗺️", label: "Map Render Failed", useColon: true},
+	KindInitiativeStaged:    {emoji: "🎲", label: "Initiative", useColon: false},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}

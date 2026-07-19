@@ -41,6 +41,8 @@ export function iconForKind(kind) {
       return 'UN';
     case 'retire_request':
       return 'RT';
+    case 'initiative_staged':
+      return 'IN';
     default:
       return '??';
   }

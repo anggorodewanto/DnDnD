@@ -3,15 +3,18 @@ package combat
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -94,4 +97,43 @@ func TestHandler_StartCombat_ConsumesAndClearsStagedInitiative(t *testing.T) {
 	}
 	assert.True(t, found, "the player-staged initiative total (25) is used verbatim")
 	assert.NotEqual(t, uuid.Nil, clearedCampaign, "staged rows are cleared after combat starts")
+}
+
+// StartCombat cancels each consumed staged item's #dm-queue entry so the
+// pre-combat "Initiative (staged)" notifications don't linger in the DM Console
+// once combat is under way.
+func TestHandler_StartCombat_CancelsStagedInitiativeQueueItems(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := startCombatMockStore(templateID, encounterID, charID)
+	store.clearAndReturnPendingInitiativesFn = func(_ context.Context, _ uuid.UUID) ([]refdata.ClearAndReturnPendingInitiativesRow, error) {
+		return []refdata.ClearAndReturnPendingInitiativesRow{
+			{CharacterID: charID, Roll: 18, DmQueueItemID: sql.NullString{String: "queued-init-1", Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`), DisplayName: "Aragorn"}, nil
+	}
+
+	svc := NewService(store)
+	notifier := &fakeDMNotifier{}
+	svc.SetDMNotifier(notifier)
+	roller := dice.NewRoller(func(int) int { return 15 })
+	h := NewHandler(svc, roller)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := map[string]any{
+		"template_id":   templateID.String(),
+		"character_ids": []string{charID.String()},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, notifier.cancels, "queued-init-1", "StartCombat cancels the staged item's #dm-queue entry")
 }

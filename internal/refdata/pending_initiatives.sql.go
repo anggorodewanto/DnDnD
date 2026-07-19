@@ -7,6 +7,7 @@ package refdata
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -14,12 +15,13 @@ import (
 const clearAndReturnPendingInitiatives = `-- name: ClearAndReturnPendingInitiatives :many
 DELETE FROM pending_initiatives
 WHERE campaign_id = $1
-RETURNING character_id, roll
+RETURNING character_id, roll, dm_queue_item_id
 `
 
 type ClearAndReturnPendingInitiativesRow struct {
-	CharacterID uuid.UUID `json:"character_id"`
-	Roll        int32     `json:"roll"`
+	CharacterID   uuid.UUID      `json:"character_id"`
+	Roll          int32          `json:"roll"`
+	DmQueueItemID sql.NullString `json:"dm_queue_item_id"`
 }
 
 // APP-5: StartCombat consumes every staged roll for the campaign and clears the
@@ -34,7 +36,7 @@ func (q *Queries) ClearAndReturnPendingInitiatives(ctx context.Context, campaign
 	items := []ClearAndReturnPendingInitiativesRow{}
 	for rows.Next() {
 		var i ClearAndReturnPendingInitiativesRow
-		if err := rows.Scan(&i.CharacterID, &i.Roll); err != nil {
+		if err := rows.Scan(&i.CharacterID, &i.Roll, &i.DmQueueItemID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -64,7 +66,7 @@ func (q *Queries) DeletePendingInitiative(ctx context.Context, arg DeletePending
 }
 
 const getPendingInitiative = `-- name: GetPendingInitiative :one
-SELECT id, campaign_id, character_id, roll, created_at, updated_at FROM pending_initiatives
+SELECT id, campaign_id, character_id, roll, created_at, updated_at, dm_queue_item_id FROM pending_initiatives
 WHERE campaign_id = $1 AND character_id = $2
 `
 
@@ -83,28 +85,38 @@ func (q *Queries) GetPendingInitiative(ctx context.Context, arg GetPendingInitia
 		&i.Roll,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
 
 const upsertPendingInitiative = `-- name: UpsertPendingInitiative :one
-INSERT INTO pending_initiatives (campaign_id, character_id, roll)
-VALUES ($1, $2, $3)
+INSERT INTO pending_initiatives (campaign_id, character_id, roll, dm_queue_item_id)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (campaign_id, character_id)
-DO UPDATE SET roll = EXCLUDED.roll, updated_at = now()
-RETURNING id, campaign_id, character_id, roll, created_at, updated_at
+DO UPDATE SET roll = EXCLUDED.roll, dm_queue_item_id = EXCLUDED.dm_queue_item_id, updated_at = now()
+RETURNING id, campaign_id, character_id, roll, created_at, updated_at, dm_queue_item_id
 `
 
 type UpsertPendingInitiativeParams struct {
-	CampaignID  uuid.UUID `json:"campaign_id"`
-	CharacterID uuid.UUID `json:"character_id"`
-	Roll        int32     `json:"roll"`
+	CampaignID    uuid.UUID      `json:"campaign_id"`
+	CharacterID   uuid.UUID      `json:"character_id"`
+	Roll          int32          `json:"roll"`
+	DmQueueItemID sql.NullString `json:"dm_queue_item_id"`
 }
 
 // APP-5: stage (or edit) one player's own initiative before combat starts.
 // Re-submitting the same (campaign, character) overwrites the prior roll.
+// dm_queue_item_id carries the id of the #dm-queue / DM-Console item this stage
+// posted, so a re-roll / clear / StartCombat can cancel it (nullable: NULL when
+// no notifier is wired).
 func (q *Queries) UpsertPendingInitiative(ctx context.Context, arg UpsertPendingInitiativeParams) (PendingInitiative, error) {
-	row := q.db.QueryRowContext(ctx, upsertPendingInitiative, arg.CampaignID, arg.CharacterID, arg.Roll)
+	row := q.db.QueryRowContext(ctx, upsertPendingInitiative,
+		arg.CampaignID,
+		arg.CharacterID,
+		arg.Roll,
+		arg.DmQueueItemID,
+	)
 	var i PendingInitiative
 	err := row.Scan(
 		&i.ID,
@@ -113,6 +125,7 @@ func (q *Queries) UpsertPendingInitiative(ctx context.Context, arg UpsertPending
 		&i.Roll,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }

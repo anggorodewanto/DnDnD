@@ -390,7 +390,7 @@ func queueKindPriority(kind string) int {
 		return priorityPlayerAction
 	case "skill_check_narration":
 		return priorityNarration
-	case "rest_request", "undo_request", "retire_request":
+	case "rest_request", "undo_request", "retire_request", "initiative_staged":
 		return priorityHousekeeping
 	default:
 		return priorityDefault
@@ -425,6 +425,8 @@ func queueKindLabel(kind string) string {
 		return "Channel Divinity"
 	case "map_render_failure":
 		return "Map Render Failed"
+	case "initiative_staged":
+		return "Initiative (staged)"
 	default:
 		return "Notification"
 	}

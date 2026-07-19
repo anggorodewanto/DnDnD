@@ -9,35 +9,38 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
 // --- Mock InitiativeStagingStore ---
 
 type mockInitiativeStore struct {
-	upsertFn func(ctx context.Context, campaignID, characterID uuid.UUID, roll int32) error
-	getFn    func(ctx context.Context, campaignID, characterID uuid.UUID) (int32, bool, error)
+	upsertFn func(ctx context.Context, campaignID, characterID uuid.UUID, roll int32, dmQueueItemID string) error
+	getFn    func(ctx context.Context, campaignID, characterID uuid.UUID) (int32, string, bool, error)
 	deleteFn func(ctx context.Context, campaignID, characterID uuid.UUID) error
 
-	upsertedRoll int32
-	upsertCalls  int
-	deleteCalls  int
+	upsertedRoll   int32
+	upsertedItemID string
+	upsertCalls    int
+	deleteCalls    int
 }
 
-func (m *mockInitiativeStore) UpsertPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID, roll int32) error {
+func (m *mockInitiativeStore) UpsertPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID, roll int32, dmQueueItemID string) error {
 	m.upsertCalls++
 	m.upsertedRoll = roll
+	m.upsertedItemID = dmQueueItemID
 	if m.upsertFn != nil {
-		return m.upsertFn(ctx, campaignID, characterID, roll)
+		return m.upsertFn(ctx, campaignID, characterID, roll, dmQueueItemID)
 	}
 	return nil
 }
 
-func (m *mockInitiativeStore) GetPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) (int32, bool, error) {
+func (m *mockInitiativeStore) GetPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) (int32, string, bool, error) {
 	if m.getFn != nil {
 		return m.getFn(ctx, campaignID, characterID)
 	}
-	return 0, false, nil
+	return 0, "", false, nil
 }
 
 func (m *mockInitiativeStore) DeletePendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) error {
@@ -138,7 +141,7 @@ func TestInitiativeHandler_ShowsCurrentWhenStaged(t *testing.T) {
 	rc := captureResponse(sess)
 
 	store := &mockInitiativeStore{
-		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, bool, error) { return 14, true, nil },
+		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, string, bool, error) { return 14, "", true, nil },
 	}
 	h := setupInitiativeHandler(sess, store)
 	h.Handle(makeInitiativeInteraction(map[string]any{}))
@@ -159,7 +162,7 @@ func TestInitiativeHandler_PromptsWhenNoneStaged(t *testing.T) {
 	rc := captureResponse(sess)
 
 	store := &mockInitiativeStore{
-		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, bool, error) { return 0, false, nil },
+		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, string, bool, error) { return 0, "", false, nil },
 	}
 	h := setupInitiativeHandler(sess, store)
 	h.Handle(makeInitiativeInteraction(map[string]any{}))
@@ -207,6 +210,95 @@ func TestInitiativeHandler_RejectsOutOfRange(t *testing.T) {
 	}
 	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
 		t.Errorf("expected a range error to stay ephemeral, got flags %d", rc.Flags)
+	}
+}
+
+// --- APP-5 pre-combat DM-queue surfacing ---
+
+// A fresh stage posts one initiative_staged item to #dm-queue and stores the
+// returned item id on the staging row.
+func TestInitiativeHandler_StagePostsQueueItem(t *testing.T) {
+	sess := newTestMock()
+	captureResponse(sess)
+
+	store := &mockInitiativeStore{}
+	h := setupInitiativeHandler(sess, store)
+	n := &cancelRecordingNotifier{nextItemID: "queued-1"}
+	h.SetNotifier(n)
+
+	h.Handle(makeInitiativeInteraction(map[string]any{"roll": 12}))
+
+	if len(n.posted) != 1 {
+		t.Fatalf("expected exactly 1 dm-queue post, got %d", len(n.posted))
+	}
+	if n.posted[0].Kind != dmqueue.KindInitiativeStaged {
+		t.Errorf("expected kind %q, got %q", dmqueue.KindInitiativeStaged, n.posted[0].Kind)
+	}
+	if !strings.Contains(n.posted[0].Summary, "12") {
+		t.Errorf("expected the posted summary to carry the roll, got %q", n.posted[0].Summary)
+	}
+	if n.posted[0].CampaignID == "" {
+		t.Errorf("expected CampaignID on the event so PgStore.Insert can persist it")
+	}
+	if len(n.cancelCalls) != 0 {
+		t.Errorf("a fresh stage must not cancel anything, got %d cancels", len(n.cancelCalls))
+	}
+	if store.upsertedItemID != "queued-1" {
+		t.Errorf("expected the posted item id stored on the row, got %q", store.upsertedItemID)
+	}
+}
+
+// Re-rolling cancels the prior staged item, then posts a fresh one.
+func TestInitiativeHandler_ReRollCancelsPriorThenPosts(t *testing.T) {
+	sess := newTestMock()
+	captureResponse(sess)
+
+	store := &mockInitiativeStore{
+		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, string, bool, error) {
+			return 8, "old-item", true, nil
+		},
+	}
+	h := setupInitiativeHandler(sess, store)
+	n := &cancelRecordingNotifier{nextItemID: "queued-2"}
+	h.SetNotifier(n)
+
+	h.Handle(makeInitiativeInteraction(map[string]any{"roll": 19}))
+
+	if len(n.cancelCalls) != 1 || n.cancelCalls[0].itemID != "old-item" {
+		t.Fatalf("expected the prior item 'old-item' cancelled, got %+v", n.cancelCalls)
+	}
+	if len(n.posted) != 1 {
+		t.Fatalf("expected a fresh post after the cancel, got %d posts", len(n.posted))
+	}
+	if store.upsertedItemID != "queued-2" {
+		t.Errorf("expected the NEW item id stored on the row, got %q", store.upsertedItemID)
+	}
+}
+
+// Clearing cancels the prior staged item and does not post.
+func TestInitiativeHandler_ClearCancelsQueueItem(t *testing.T) {
+	sess := newTestMock()
+	captureResponse(sess)
+
+	store := &mockInitiativeStore{
+		getFn: func(_ context.Context, _, _ uuid.UUID) (int32, string, bool, error) {
+			return 8, "old-item", true, nil
+		},
+	}
+	h := setupInitiativeHandler(sess, store)
+	n := &cancelRecordingNotifier{}
+	h.SetNotifier(n)
+
+	h.Handle(makeInitiativeInteraction(map[string]any{"clear": true}))
+
+	if len(n.cancelCalls) != 1 || n.cancelCalls[0].itemID != "old-item" {
+		t.Fatalf("expected the staged item 'old-item' cancelled on clear, got %+v", n.cancelCalls)
+	}
+	if len(n.posted) != 0 {
+		t.Errorf("clear must not post a new item, got %d posts", len(n.posted))
+	}
+	if store.deleteCalls != 1 {
+		t.Errorf("expected the staging row deleted, got %d deletes", store.deleteCalls)
 	}
 }
 

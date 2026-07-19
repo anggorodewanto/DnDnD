@@ -268,12 +268,21 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			combatantLookup,
 			deps.rollHistoryLogger,
 		),
-		initiative: discord.NewInitiativeHandler(
-			deps.session,
-			checkCampProv,
-			characterLookup,
-			newPendingInitiativeAdapter(deps.queries),
-		),
+		initiative: func() *discord.InitiativeHandler {
+			h := discord.NewInitiativeHandler(
+				deps.session,
+				checkCampProv,
+				characterLookup,
+				newPendingInitiativeAdapter(deps.queries),
+			)
+			// APP-5: surface a staged /initiative in #dm-queue + DM Console.
+			// CampaignID is threaded into the Event so PgStore.Insert persists
+			// the row (SR-002); a nil notifier leaves staging silent.
+			if deps.notifier != nil {
+				h.SetNotifier(deps.notifier)
+			}
+			return h
+		}(),
 		roll: discord.NewRollHandler(
 			deps.session,
 			deps.roller,
@@ -1703,27 +1712,28 @@ func newPendingInitiativeAdapter(q *refdata.Queries) *pendingInitiativeAdapter {
 	return &pendingInitiativeAdapter{queries: q}
 }
 
-func (a *pendingInitiativeAdapter) UpsertPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID, roll int32) error {
+func (a *pendingInitiativeAdapter) UpsertPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID, roll int32, dmQueueItemID string) error {
 	_, err := a.queries.UpsertPendingInitiative(ctx, refdata.UpsertPendingInitiativeParams{
-		CampaignID:  campaignID,
-		CharacterID: characterID,
-		Roll:        roll,
+		CampaignID:    campaignID,
+		CharacterID:   characterID,
+		Roll:          roll,
+		DmQueueItemID: sql.NullString{String: dmQueueItemID, Valid: dmQueueItemID != ""},
 	})
 	return err
 }
 
-func (a *pendingInitiativeAdapter) GetPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) (int32, bool, error) {
+func (a *pendingInitiativeAdapter) GetPendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) (int32, string, bool, error) {
 	row, err := a.queries.GetPendingInitiative(ctx, refdata.GetPendingInitiativeParams{
 		CampaignID:  campaignID,
 		CharacterID: characterID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
+		return 0, "", false, nil
 	}
 	if err != nil {
-		return 0, false, err
+		return 0, "", false, err
 	}
-	return row.Roll, true, nil
+	return row.Roll, row.DmQueueItemID.String, true, nil
 }
 
 func (a *pendingInitiativeAdapter) DeletePendingInitiative(ctx context.Context, campaignID, characterID uuid.UUID) error {

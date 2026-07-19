@@ -322,6 +322,8 @@ func kindLabelFor(k dmqueue.EventKind) string {
 		return "Player Whisper"
 	case dmqueue.KindMapRenderFailure:
 		return "Map Render Failed"
+	case dmqueue.KindInitiativeStaged:
+		return "Initiative (staged)"
 	default:
 		return "Notification"
 	}

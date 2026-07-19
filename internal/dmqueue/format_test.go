@@ -88,6 +88,16 @@ func TestFormatEvent(t *testing.T) {
 			},
 			want: `🤫 **Whisper** — Aria: "I want to pickpocket the merchant" — [Resolve →](/dashboard/queue/w1)`,
 		},
+		{
+			name: "initiative staged",
+			event: Event{
+				Kind:        KindInitiativeStaged,
+				PlayerName:  "Aria",
+				Summary:     "rolled initiative 17 (pre-combat)",
+				ResolvePath: "/dashboard/queue/i1",
+			},
+			want: `🎲 **Initiative** — Aria rolled initiative 17 (pre-combat) — [Resolve →](/dashboard/queue/i1)`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

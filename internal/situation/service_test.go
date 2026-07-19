@@ -413,6 +413,7 @@ func TestQueueKindLabelAndPriority_AllKinds(t *testing.T) {
 		{"rest_request", "Rest Request", priorityHousekeeping},
 		{"undo_request", "Undo Request", priorityHousekeeping},
 		{"retire_request", "Retire Request", priorityHousekeeping},
+		{"initiative_staged", "Initiative (staged)", priorityHousekeeping},
 		{"something_new", "Notification", priorityDefault},
 	}
 	for _, c := range cases {

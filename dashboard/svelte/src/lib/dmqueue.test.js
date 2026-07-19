@@ -32,6 +32,7 @@ describe('iconForKind', () => {
       'player_whisper',
       'undo_request',
       'retire_request',
+      'initiative_staged',
     ];
     for (const kind of known) {
       expect(iconForKind(kind), `kind=${kind}`).not.toBe('??');

@@ -469,12 +469,13 @@ type PendingDdbImport struct {
 }
 
 type PendingInitiative struct {
-	ID          uuid.UUID `json:"id"`
-	CampaignID  uuid.UUID `json:"campaign_id"`
-	CharacterID uuid.UUID `json:"character_id"`
-	Roll        int32     `json:"roll"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            uuid.UUID      `json:"id"`
+	CampaignID    uuid.UUID      `json:"campaign_id"`
+	CharacterID   uuid.UUID      `json:"character_id"`
+	Roll          int32          `json:"roll"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DmQueueItemID sql.NullString `json:"dm_queue_item_id"`
 }
 
 type PendingSafe struct {
