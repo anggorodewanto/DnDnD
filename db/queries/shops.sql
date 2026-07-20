@@ -33,6 +33,21 @@ UPDATE shop_items SET name = $2, description = $3, price_gp = $4, quantity = $5,
 WHERE id = $1
 RETURNING *;
 
+-- ReserveShopItemStock atomically claims one unit of stock: the quantity > 0
+-- guard and the decrement happen in a single statement, so concurrent buyers
+-- can never oversell. No rows returned means the item was already sold out.
+-- name: ReserveShopItemStock :one
+UPDATE shop_items SET quantity = quantity - 1, updated_at = now()
+WHERE id = $1 AND quantity > 0
+RETURNING *;
+
+-- RestoreShopItemStock returns a reserved unit to the shelf when the rest of
+-- the purchase fails (e.g. the buyer cannot afford it).
+-- name: RestoreShopItemStock :one
+UPDATE shop_items SET quantity = quantity + 1, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteShopItem :exec
 DELETE FROM shop_items WHERE id = $1;
 

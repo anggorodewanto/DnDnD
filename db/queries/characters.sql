@@ -119,6 +119,16 @@ UPDATE characters SET inventory = $2, gold = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- DeductCharacterGoldAndSetInventory charges a character relative to the gold
+-- they actually hold, refusing to go negative in the same statement. No rows
+-- returned means they could not afford the price. Prefer this over
+-- UpdateCharacterInventoryAndGold whenever the new gold total would be
+-- computed from a separate, potentially stale read.
+-- name: DeductCharacterGoldAndSetInventory :one
+UPDATE characters SET inventory = sqlc.arg(inventory), gold = gold - sqlc.arg(price_gp), updated_at = now()
+WHERE id = sqlc.arg(id) AND gold >= sqlc.arg(price_gp)
+RETURNING *;
+
 -- name: UpdateCharacterAttunementSlots :one
 UPDATE characters SET attunement_slots = $2, updated_at = now()
 WHERE id = $1

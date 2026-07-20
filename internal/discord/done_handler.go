@@ -15,6 +15,18 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+const (
+	// doneTurnAlreadyEndedMsg is the reply to an "End Turn" click whose captured
+	// turn is no longer the encounter's current turn — a double-click, or a
+	// confirmation left sitting in the channel across a turn boundary.
+	doneTurnAlreadyEndedMsg = "That turn has already ended — this confirmation is no longer valid."
+
+	// doneStaleConfirmationMsg is the reply to a pre-turn-capture ("done_confirm:<encounter>")
+	// button that survived a redeploy. Advancing it unguarded is what cost a
+	// player a full turn, so it is refused rather than honoured.
+	doneStaleConfirmationMsg = "This confirmation button is out of date. Please re-run `/done`."
+)
+
 // DoneTurnAdvancer advances the turn in combat.
 type DoneTurnAdvancer interface {
 	AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (combat.TurnInfo, error)
@@ -283,7 +295,9 @@ func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {
 	unused := combat.CheckUnusedResources(turn)
 	if len(unused) > 0 {
 		warning := combat.FormatUnusedResourcesWarning(unused)
-		h.sendConfirmation(interaction, warning, encounterID)
+		// Capture the encounter's own current-turn pointer (not turn.ID) — it is
+		// the value HandleDoneConfirm compares against.
+		h.sendConfirmation(interaction, warning, encounterID, encounter.CurrentTurnID.UUID)
 		return
 	}
 
@@ -291,12 +305,27 @@ func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {
 	h.endTurn(ctx, interaction, encounterID)
 }
 
-// HandleDoneConfirm processes the "End Turn" button click.
-func (h *DoneHandler) HandleDoneConfirm(interaction *discordgo.Interaction, encounterID uuid.UUID) {
+// HandleDoneConfirm processes the "End Turn" button click. turnID is the turn
+// the button was minted for (captured in its custom ID); it is checked against
+// the encounter's current-turn pointer so a double-click cannot end two turns —
+// the second click would otherwise advance whoever became active in between,
+// silently costing that player a whole turn.
+func (h *DoneHandler) HandleDoneConfirm(interaction *discordgo.Interaction, encounterID, turnID uuid.UUID) {
 	ctx := context.Background()
 
-	if _, err := h.combatService.GetEncounter(ctx, encounterID); err != nil {
+	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
+	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to get encounter data.")
+		return
+	}
+
+	if !encounter.CurrentTurnID.Valid {
+		respondEphemeral(h.session, interaction, doneTurnAlreadyEndedMsg)
+		return
+	}
+
+	if encounter.CurrentTurnID.UUID != turnID {
+		respondEphemeral(h.session, interaction, doneTurnAlreadyEndedMsg)
 		return
 	}
 
@@ -353,8 +382,11 @@ func (h *DoneHandler) isAuthorized(ctx context.Context, userID, guildID string, 
 	return false
 }
 
-// sendConfirmation sends the ephemeral confirmation prompt with buttons.
-func (h *DoneHandler) sendConfirmation(interaction *discordgo.Interaction, warning string, encounterID uuid.UUID) {
+// sendConfirmation sends the ephemeral confirmation prompt with buttons. The
+// "End Turn" button captures the turn it was minted for so HandleDoneConfirm
+// can reject a stale click (double-click, or a button left over from an
+// earlier turn) instead of ending someone else's turn.
+func (h *DoneHandler) sendConfirmation(interaction *discordgo.Interaction, warning string, encounterID, turnID uuid.UUID) {
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -366,7 +398,7 @@ func (h *DoneHandler) sendConfirmation(interaction *discordgo.Interaction, warni
 						discordgo.Button{
 							Label:    "End Turn",
 							Style:    discordgo.SuccessButton,
-							CustomID: fmt.Sprintf("done_confirm:%s", encounterID.String()),
+							CustomID: fmt.Sprintf("done_confirm:%s:%s", encounterID.String(), turnID.String()),
 							Emoji: &discordgo.ComponentEmoji{
 								Name: "\u2705",
 							},

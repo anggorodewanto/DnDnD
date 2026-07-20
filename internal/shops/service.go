@@ -2,6 +2,7 @@ package shops
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,11 +35,16 @@ type Store interface {
 	GetShopItem(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	ListShopItems(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
 	UpdateShopItem(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
+	ReserveShopItemStock(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
+	RestoreShopItemStock(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	DeleteShopItem(ctx context.Context, id uuid.UUID) error
 	DeleteShopItemsByShop(ctx context.Context, shopID uuid.UUID) error
 	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
-	UpdateCharacterInventoryAndGold(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error)
+	// Deliberately no UpdateCharacterInventoryAndGold: writing an absolute
+	// gold total computed from an earlier read is what let concurrent buys
+	// clobber each other. Shops charge relatively, guarded by the DB.
+	DeductCharacterGoldAndSetInventory(ctx context.Context, arg refdata.DeductCharacterGoldAndSetInventoryParams) (refdata.Character, error)
 }
 
 // BuyResult summarizes a successful purchase.
@@ -144,33 +150,35 @@ func (s *Service) GetCampaign(ctx context.Context, campaignID uuid.UUID) (refdat
 	return s.store.GetCampaignByID(ctx, campaignID)
 }
 
-// Buy purchases one unit of a shop item for a character: it deducts the price
-// from the character's gold, adds the item to their inventory, and decrements
-// the shop's stock. The gold deduction and inventory grant are persisted
-// atomically; the stock decrement follows. Mirrors loot.ClaimItem's inventory
-// grant pattern.
+// Buy purchases one unit of a shop item for a character: it reserves a unit of
+// stock, adds the item to their inventory, and deducts the price from their
+// gold. Both writes are conditional single statements (quantity > 0, gold >=
+// price) rather than absolute values computed from an earlier read, so racing
+// buyers — or two clicks on the still-live shop_buy button — cannot oversell
+// the shelf or spend the same gold twice. Mirrors loot.ClaimItem's
+// claim-then-grant pattern.
 func (s *Service) Buy(ctx context.Context, shopItemID uuid.UUID, characterID uuid.UUID) (BuyResult, error) {
-	item, err := s.store.GetShopItem(ctx, shopItemID)
-	if err != nil {
-		return BuyResult{}, ErrShopItemNotFound
+	// Reserve first: the guard and the decrement are one statement, so a
+	// second buyer racing for the last unit is rejected here rather than
+	// passing a stale quantity check. A failed reservation IS a real error —
+	// nothing has been charged yet, so there is no committed purchase to
+	// protect from a retry.
+	item, err := s.store.ReserveShopItemStock(ctx, shopItemID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BuyResult{}, s.reservationFailure(ctx, shopItemID)
 	}
-	if item.Quantity <= 0 {
-		return BuyResult{}, ErrOutOfStock
+	if err != nil {
+		return BuyResult{}, fmt.Errorf("reserving stock: %w", err)
 	}
 
 	char, err := s.store.GetCharacter(ctx, characterID)
 	if err != nil {
-		return BuyResult{}, fmt.Errorf("getting character: %w", err)
+		return s.abortBuy(ctx, item.ID, fmt.Errorf("getting character: %w", err))
 	}
-	if char.Gold < item.PriceGp {
-		return BuyResult{}, ErrInsufficientGold
-	}
-
-	newGold := char.Gold - item.PriceGp
 
 	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
 	if err != nil {
-		return BuyResult{}, fmt.Errorf("parsing inventory: %w", err)
+		return s.abortBuy(ctx, item.ID, fmt.Errorf("parsing inventory: %w", err))
 	}
 
 	itemIDStr := item.ItemID
@@ -187,37 +195,49 @@ func (s *Service) Buy(ctx context.Context, shopItemID uuid.UUID, characterID uui
 
 	invJSON, err := character.MarshalInventory(items)
 	if err != nil {
-		return BuyResult{}, fmt.Errorf("marshaling inventory: %w", err)
+		return s.abortBuy(ctx, item.ID, fmt.Errorf("marshaling inventory: %w", err))
 	}
 
-	if _, err := s.store.UpdateCharacterInventoryAndGold(ctx, refdata.UpdateCharacterInventoryAndGoldParams{
+	// Charge relative to the gold the character actually holds: the read above
+	// only supplied the inventory to extend, never the new gold total.
+	charged, err := s.store.DeductCharacterGoldAndSetInventory(ctx, refdata.DeductCharacterGoldAndSetInventoryParams{
 		ID:        characterID,
 		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
-		Gold:      newGold,
-	}); err != nil {
-		return BuyResult{}, fmt.Errorf("updating character: %w", err)
-	}
-
-	// Stock decrement is best-effort: the buyer has already been charged and
-	// granted the item atomically above, so the purchase is committed. A
-	// stock-update failure must NOT surface as an error here — returning one
-	// would prompt a retry that double-charges the buyer. Worst case the shop
-	// oversells by one unit until the next successful update.
-	newStock := item.Quantity - 1
-	_, _ = s.store.UpdateShopItem(ctx, refdata.UpdateShopItemParams{
-		ID:          item.ID,
-		Name:        item.Name,
-		Description: item.Description,
-		PriceGp:     item.PriceGp,
-		Quantity:    newStock,
+		PriceGp:   item.PriceGp,
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return s.abortBuy(ctx, item.ID, ErrInsufficientGold)
+	}
+	if err != nil {
+		return s.abortBuy(ctx, item.ID, fmt.Errorf("updating character: %w", err))
+	}
 
 	return BuyResult{
 		ItemName:       item.Name,
 		PricePaid:      item.PriceGp,
-		GoldRemaining:  newGold,
-		StockRemaining: newStock,
+		GoldRemaining:  charged.Gold,
+		StockRemaining: item.Quantity,
 	}, nil
+}
+
+// reservationFailure disambiguates the two reasons a reservation matches no
+// row, so the handler's messaging stays as specific as it was before.
+func (s *Service) reservationFailure(ctx context.Context, shopItemID uuid.UUID) error {
+	if _, err := s.store.GetShopItem(ctx, shopItemID); err != nil {
+		return ErrShopItemNotFound
+	}
+	return ErrOutOfStock
+}
+
+// abortBuy puts a reserved unit back on the shelf and passes the failure
+// through unchanged. The restore is best-effort: the buyer was never charged,
+// so nothing is committed and a restore failure must NOT replace err —
+// callers switch on the ErrOutOfStock / ErrInsufficientGold sentinels to phrase
+// their reply. Worst case the shop undersells by one unit until a DM edits the
+// stock, which is the safe direction to fail.
+func (s *Service) abortBuy(ctx context.Context, shopItemID uuid.UUID, err error) (BuyResult, error) {
+	_, _ = s.store.RestoreShopItemStock(ctx, shopItemID)
+	return BuyResult{}, err
 }
 
 // FormatShopAnnouncement formats a shop as a Discord message.

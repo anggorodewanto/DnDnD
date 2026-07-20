@@ -603,13 +603,25 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	// Done button callbacks
 	if r.doneHandler != nil {
 		if after, ok := strings.CutPrefix(customID, "done_confirm:"); ok {
-			encounterIDStr := after
+			// Form is "done_confirm:<encounterID>:<turnID>". The legacy
+			// 2-segment form carries no turn identity, so it cannot be
+			// double-click-guarded — refuse it instead of falling back.
+			encounterIDStr, turnIDStr, hasTurn := strings.Cut(after, ":")
+			if !hasTurn {
+				respondEphemeral(r.bot.session, interaction, doneStaleConfirmationMsg)
+				return
+			}
 			encounterID, err := uuid.Parse(encounterIDStr)
 			if err != nil {
 				respondEphemeral(r.bot.session, interaction, "Invalid encounter ID.")
 				return
 			}
-			r.doneHandler.HandleDoneConfirm(interaction, encounterID)
+			turnID, err := uuid.Parse(turnIDStr)
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, "Invalid turn ID.")
+				return
+			}
+			r.doneHandler.HandleDoneConfirm(interaction, encounterID, turnID)
 			return
 		}
 

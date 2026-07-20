@@ -148,6 +148,65 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 	return i, err
 }
 
+const deductCharacterGoldAndSetInventory = `-- name: DeductCharacterGoldAndSetInventory :one
+UPDATE characters SET inventory = $1, gold = gold - $2, updated_at = now()
+WHERE id = $3 AND gold >= $2
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id, conditions
+`
+
+type DeductCharacterGoldAndSetInventoryParams struct {
+	Inventory pqtype.NullRawMessage `json:"inventory"`
+	PriceGp   int32                 `json:"price_gp"`
+	ID        uuid.UUID             `json:"id"`
+}
+
+// DeductCharacterGoldAndSetInventory charges a character relative to the gold
+// they actually hold, refusing to go negative in the same statement. No rows
+// returned means they could not afford the price. Prefer this over
+// UpdateCharacterInventoryAndGold whenever the new gold total would be
+// computed from a separate, potentially stale read.
+func (q *Queries) DeductCharacterGoldAndSetInventory(ctx context.Context, arg DeductCharacterGoldAndSetInventoryParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, deductCharacterGoldAndSetInventory, arg.Inventory, arg.PriceGp, arg.ID)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.Name,
+		&i.Race,
+		&i.Classes,
+		&i.Level,
+		&i.AbilityScores,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.AcFormula,
+		&i.SpeedFt,
+		&i.ProficiencyBonus,
+		&i.EquippedMainHand,
+		&i.EquippedOffHand,
+		&i.EquippedArmor,
+		&i.SpellSlots,
+		&i.PactMagicSlots,
+		&i.HitDiceRemaining,
+		&i.FeatureUses,
+		&i.Features,
+		&i.Proficiencies,
+		&i.Gold,
+		&i.AttunementSlots,
+		pq.Array(&i.Languages),
+		&i.Inventory,
+		&i.CharacterData,
+		&i.DdbUrl,
+		&i.Homebrew,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CardMessageID,
+		&i.Conditions,
+	)
+	return i, err
+}
+
 const deleteCharacter = `-- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1
 `

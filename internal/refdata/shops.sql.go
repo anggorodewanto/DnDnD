@@ -218,6 +218,59 @@ func (q *Queries) ListShopsByCampaign(ctx context.Context, campaignID uuid.UUID)
 	return items, nil
 }
 
+const reserveShopItemStock = `-- name: ReserveShopItemStock :one
+UPDATE shop_items SET quantity = quantity - 1, updated_at = now()
+WHERE id = $1 AND quantity > 0
+RETURNING id, shop_id, item_id, name, description, price_gp, quantity, type, created_at, updated_at
+`
+
+// ReserveShopItemStock atomically claims one unit of stock: the quantity > 0
+// guard and the decrement happen in a single statement, so concurrent buyers
+// can never oversell. No rows returned means the item was already sold out.
+func (q *Queries) ReserveShopItemStock(ctx context.Context, id uuid.UUID) (ShopItem, error) {
+	row := q.db.QueryRowContext(ctx, reserveShopItemStock, id)
+	var i ShopItem
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ItemID,
+		&i.Name,
+		&i.Description,
+		&i.PriceGp,
+		&i.Quantity,
+		&i.Type,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const restoreShopItemStock = `-- name: RestoreShopItemStock :one
+UPDATE shop_items SET quantity = quantity + 1, updated_at = now()
+WHERE id = $1
+RETURNING id, shop_id, item_id, name, description, price_gp, quantity, type, created_at, updated_at
+`
+
+// RestoreShopItemStock returns a reserved unit to the shelf when the rest of
+// the purchase fails (e.g. the buyer cannot afford it).
+func (q *Queries) RestoreShopItemStock(ctx context.Context, id uuid.UUID) (ShopItem, error) {
+	row := q.db.QueryRowContext(ctx, restoreShopItemStock, id)
+	var i ShopItem
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ItemID,
+		&i.Name,
+		&i.Description,
+		&i.PriceGp,
+		&i.Quantity,
+		&i.Type,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateShop = `-- name: UpdateShop :one
 UPDATE shops SET name = $2, description = $3, updated_at = now()
 WHERE id = $1

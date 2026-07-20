@@ -22,12 +22,14 @@ type mockStore struct {
 	getShopItemFn           func(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	listShopItemsFn         func(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
 	updateShopItemFn        func(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
+	reserveShopItemStockFn  func(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
+	restoreShopItemStockFn  func(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	deleteShopItemFn        func(ctx context.Context, id uuid.UUID) error
 	deleteShopItemsByShopFn func(ctx context.Context, shopID uuid.UUID) error
 	getCampaignByIDFn       func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 
-	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
-	updateCharacterInventoryAndGoldFn func(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error)
+	getCharacterFn        func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	deductCharacterGoldFn func(ctx context.Context, arg refdata.DeductCharacterGoldAndSetInventoryParams) (refdata.Character, error)
 }
 
 func (m *mockStore) CreateShop(ctx context.Context, arg refdata.CreateShopParams) (refdata.Shop, error) {
@@ -57,6 +59,12 @@ func (m *mockStore) ListShopItems(ctx context.Context, shopID uuid.UUID) ([]refd
 func (m *mockStore) UpdateShopItem(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error) {
 	return m.updateShopItemFn(ctx, arg)
 }
+func (m *mockStore) ReserveShopItemStock(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error) {
+	return m.reserveShopItemStockFn(ctx, id)
+}
+func (m *mockStore) RestoreShopItemStock(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error) {
+	return m.restoreShopItemStockFn(ctx, id)
+}
 func (m *mockStore) DeleteShopItem(ctx context.Context, id uuid.UUID) error {
 	return m.deleteShopItemFn(ctx, id)
 }
@@ -69,6 +77,6 @@ func (m *mockStore) GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.
 func (m *mockStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
 	return m.getCharacterFn(ctx, id)
 }
-func (m *mockStore) UpdateCharacterInventoryAndGold(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error) {
-	return m.updateCharacterInventoryAndGoldFn(ctx, arg)
+func (m *mockStore) DeductCharacterGoldAndSetInventory(ctx context.Context, arg refdata.DeductCharacterGoldAndSetInventoryParams) (refdata.Character, error) {
+	return m.deductCharacterGoldFn(ctx, arg)
 }

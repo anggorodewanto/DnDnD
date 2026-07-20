@@ -336,7 +336,7 @@ func TestDoneHandler_AllResourcesSpent_ImmediateEnd(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 
 	interaction := &discordgo.Interaction{
 		Type:    discordgo.InteractionMessageComponent,
@@ -345,11 +345,11 @@ func TestDoneHandler_HandleDoneConfirm(t *testing.T) {
 			User: &discordgo.User{ID: "user1"},
 		},
 		Data: discordgo.MessageComponentInteractionData{
-			CustomID: "done_confirm:" + encounterID.String(),
+			CustomID: "done_confirm:" + encounterID.String() + ":" + turnID.String(),
 		},
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	if sess.lastResponse == nil {
 		t.Fatal("expected response")
@@ -442,7 +442,7 @@ func TestDoneHandler_NPCTurn_NonDMRejected(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm_GetEncounterError(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 
 	handler.combatService = &mockMoveService{
 		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
@@ -464,7 +464,7 @@ func TestDoneHandler_HandleDoneConfirm_GetEncounterError(t *testing.T) {
 		GuildID: "guild1",
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Failed to get encounter") {
@@ -504,7 +504,7 @@ func TestRouter_DoneConfirmRouting(t *testing.T) {
 	router := NewCommandRouter(bot, nil)
 
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 	// Use the mock session from the router's bot for the handler
 	handler.session = mock
 	router.SetDoneHandler(handler)
@@ -513,7 +513,7 @@ func TestRouter_DoneConfirmRouting(t *testing.T) {
 		Type:    discordgo.InteractionMessageComponent,
 		GuildID: "guild1",
 		Data: discordgo.MessageComponentInteractionData{
-			CustomID: "done_confirm:" + encounterID.String(),
+			CustomID: "done_confirm:" + encounterID.String() + ":" + turnID.String(),
 		},
 	}
 	router.Handle(interaction)
@@ -559,7 +559,7 @@ func TestRouter_DoneCancelRouting(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm_AdvanceError(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 	handler.turnAdvancer = &mockDoneTurnAdvancer{
 		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
 			return combat.TurnInfo{}, errors.New("advance error")
@@ -571,7 +571,7 @@ func TestDoneHandler_HandleDoneConfirm_AdvanceError(t *testing.T) {
 		GuildID: "guild1",
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Failed to advance turn") {
@@ -583,7 +583,7 @@ func TestDoneHandler_HandleDoneConfirm_AdvanceError(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm_CombatantError(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 
 	unknownID := uuid.New()
 	handler.turnAdvancer = &mockDoneTurnAdvancer{
@@ -608,7 +608,7 @@ func TestDoneHandler_HandleDoneConfirm_CombatantError(t *testing.T) {
 		GuildID: "guild1",
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "failed to get next combatant") {
@@ -620,7 +620,7 @@ func TestDoneHandler_HandleDoneConfirm_CombatantError(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm_NoAdvancer(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, _ := setupFullDoneHandler(sess)
 	handler.turnAdvancer = nil
 
 	interaction := &discordgo.Interaction{
@@ -628,7 +628,7 @@ func TestDoneHandler_HandleDoneConfirm_NoAdvancer(t *testing.T) {
 		GuildID: "guild1",
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Turn ended") {
@@ -640,7 +640,7 @@ func TestDoneHandler_HandleDoneConfirm_NoAdvancer(t *testing.T) {
 
 func TestDoneHandler_HandleDoneConfirm_Skipped(t *testing.T) {
 	sess := &mockMoveSession{}
-	handler, encounterID, _, _, nextCombatantID := setupFullDoneHandler(sess)
+	handler, encounterID, turnID, _, nextCombatantID := setupFullDoneHandler(sess)
 
 	handler.turnAdvancer = &mockDoneTurnAdvancer{
 		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
@@ -660,7 +660,7 @@ func TestDoneHandler_HandleDoneConfirm_Skipped(t *testing.T) {
 		},
 	}
 
-	handler.HandleDoneConfirm(interaction, encounterID)
+	handler.HandleDoneConfirm(interaction, encounterID, turnID)
 
 	if sess.lastResponse == nil {
 		t.Fatal("expected response")
