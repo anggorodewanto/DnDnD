@@ -209,6 +209,17 @@ func TestService_Attack_SetsRageAttackedThisRound(t *testing.T) {
 		IsVisible:   true,
 		Conditions:  json.RawMessage(`[]`),
 	}
+	// The attacker's persisted row really is raging. markRageAttacked reads the
+	// live row rather than trusting the AttackCommand snapshot, so that a
+	// barbarian who attacks first and rages later on the same turn is still
+	// credited — the snapshot would say IsRaging=false.
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == combatantID {
+			return attacker, nil
+		}
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
 	_, err := svc.Attack(context.Background(), AttackCommand{
 		Attacker: attacker,
 		Target:   target,

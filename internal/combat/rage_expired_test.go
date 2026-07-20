@@ -50,7 +50,7 @@ func TestMaybeEndRageOnTurnEnd_Lapsed_LogsRageExpired(t *testing.T) {
 	cl := &fakeCombatLog{}
 	svc.SetCombatLogNotifier(cl)
 
-	svc.maybeEndRageOnTurnEnd(context.Background(), combatantID)
+	svc.maybeEndRageOnTurnEnd(context.Background(), combatantID, 4)
 
 	// Rage was cleared + persisted.
 	require.NotNil(t, ragePersisted, "expected rage state to be persisted")
@@ -86,9 +86,9 @@ func TestMaybeEndRageOnTurnEnd_AttackedThisRound_NoLog(t *testing.T) {
 			IsRaging: true, RageAttackedThisRound: true,
 		}, nil
 	}
-	rageUpdated := false
+	var persisted *refdata.UpdateCombatantRageParams
 	ms.updateCombatantRageFn = func(_ context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
-		rageUpdated = true
+		persisted = &arg
 		return refdata.Combatant{ID: arg.ID}, nil
 	}
 	logged := captureActionLog(ms)
@@ -97,9 +97,13 @@ func TestMaybeEndRageOnTurnEnd_AttackedThisRound_NoLog(t *testing.T) {
 	cl := &fakeCombatLog{}
 	svc.SetCombatLogNotifier(cl)
 
-	svc.maybeEndRageOnTurnEnd(context.Background(), combatantID)
+	svc.maybeEndRageOnTurnEnd(context.Background(), combatantID, 4)
 
-	assert.False(t, rageUpdated, "rage must not be cleared when it holds")
+	// The rage rolls over rather than lapsing: it is still persisted (one round
+	// burned off the cap, per-round flags cleared) but never cleared.
+	require.NotNil(t, persisted, "a holding rage still rolls its round counter over")
+	assert.True(t, persisted.IsRaging, "rage must not be cleared when it holds")
+	assert.False(t, persisted.RageAttackedThisRound, "per-round flags reset at turn end")
 	assert.Empty(t, cl.all(), "no combat-log post when rage holds")
 	assert.Empty(t, rageExpiredRows(*logged), "no action_log row when rage holds")
 }

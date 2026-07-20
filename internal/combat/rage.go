@@ -90,11 +90,17 @@ func RageFeature(barbarianLevel int) FeatureDefinition {
 	}
 }
 
-// RageRounds is the number of rounds rage lasts (1 minute = 10 rounds).
-const RageRounds = 10
+// RageRounds is the hard duration cap on a Rage: 2024 PHB says 10 minutes,
+// which is 100 rounds. The rage almost always lapses long before this — the
+// turn-by-turn sustain check (ShouldRageEndOnTurnEnd) is the real clock — but
+// the cap is enforced at turn start via ShouldRageEndOnTurnStart.
+const RageRounds = 100
 
-// ValidateRageActivation checks all preconditions for rage activation.
-// Returns an error if any precondition fails.
+// ValidateRageActivation checks all preconditions for STARTING a rage.
+// Returns an error if any precondition fails. An already-raging barbarian is
+// routed to the bonus-action extension path before this is reached, so
+// isRaging remains a genuine error here (a second fresh rage would burn a
+// second daily use).
 func ValidateRageActivation(isRaging bool, armorType string) error {
 	if isRaging {
 		return fmt.Errorf("already raging")
@@ -120,12 +126,28 @@ func FormatRageEndVoluntary(name string) string {
 	return fmt.Sprintf("\U0001f525  %s ends their Rage", name)
 }
 
-// ApplyRageToCombatant sets rage state on a combatant.
-func ApplyRageToCombatant(c refdata.Combatant) refdata.Combatant {
+// FormatRageExtend returns the combat log string for spending a Bonus Action to
+// extend an active Rage (2024 PHB sustain option).
+func FormatRageExtend(name string) string {
+	return fmt.Sprintf("\U0001f525  %s roars and extends their Rage (Bonus Action)", name)
+}
+
+// ApplyRageToCombatant starts a rage in the given encounter round.
+func ApplyRageToCombatant(c refdata.Combatant, roundNumber int32) refdata.Combatant {
 	c.IsRaging = true
 	c.RageRoundsRemaining = sql.NullInt32{Int32: RageRounds, Valid: true}
 	c.RageAttackedThisRound = false
 	c.RageTookDamageThisRound = false
+	c.RageStartedRound = sql.NullInt32{Int32: roundNumber, Valid: true}
+	return c
+}
+
+// ExtendRageOnCombatant refreshes an active rage's "until the end of your next
+// turn" horizon to the given round — the Bonus Action sustain option. It leaves
+// the daily-use count and the RageRounds cap untouched: extending costs an
+// action economy slot, not a rage.
+func ExtendRageOnCombatant(c refdata.Combatant, roundNumber int32) refdata.Combatant {
+	c.RageStartedRound = sql.NullInt32{Int32: roundNumber, Valid: true}
 	return c
 }
 
@@ -135,13 +157,33 @@ func ClearRageFromCombatant(c refdata.Combatant) refdata.Combatant {
 	c.RageRoundsRemaining = sql.NullInt32{Valid: false}
 	c.RageAttackedThisRound = false
 	c.RageTookDamageThisRound = false
+	c.RageStartedRound = sql.NullInt32{Valid: false}
 	return c
 }
 
-// ShouldRageEndOnTurnEnd checks if rage should auto-end because the barbarian
-// neither attacked nor took damage this round.
-func ShouldRageEndOnTurnEnd(c refdata.Combatant) bool {
+// RageHasGraceWindow reports whether the rage was started (or Bonus-Action
+// extended) in the round whose turn is now ending. 2024 PHB: a Rage "lasts
+// until the end of your NEXT turn", so the turn that started or extended it can
+// never be the turn that ends it — regardless of activity. This is the fix for
+// the live regression where a barbarian raged, swung once, and lost the rage at
+// the end of that very turn.
+func RageHasGraceWindow(c refdata.Combatant, roundNumber int32) bool {
+	return c.RageStartedRound.Valid && c.RageStartedRound.Int32 == roundNumber
+}
+
+// ShouldRageEndOnTurnEnd checks if rage lapses at the end of the barbarian's
+// turn in roundNumber. Under 2024 rules the rage is sustained by ANY of:
+//   - the grace window (started or Bonus-Action extended this very turn)
+//   - an attack roll made this round, hit or miss (RageAttackedThisRound, which
+//     markRageForcedSave also sets for "you forced a save")
+//   - damage taken since the barbarian's last turn (RageTookDamageThisRound)
+//
+// Nothing at all → the rage ends.
+func ShouldRageEndOnTurnEnd(c refdata.Combatant, roundNumber int32) bool {
 	if !c.IsRaging {
+		return false
+	}
+	if RageHasGraceWindow(c, roundNumber) {
 		return false
 	}
 	return !c.RageAttackedThisRound && !c.RageTookDamageThisRound
@@ -194,8 +236,15 @@ type RageResult struct {
 	RagesLeft int
 }
 
-// ActivateRage handles the /bonus rage command.
+// ActivateRage handles the /bonus rage command. An already-raging barbarian
+// does not get an error: 2024 PHB lets you spend a Bonus Action to extend an
+// active Rage, so /bonus rage doubles as the extend command (/bonus end-rage
+// is still the way to stop raging).
 func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult, error) {
+	if cmd.Combatant.IsRaging {
+		return s.extendRage(ctx, cmd)
+	}
+
 	// Validate bonus action
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
 		return RageResult{}, err
@@ -267,7 +316,7 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	}
 
 	// Apply rage to combatant and persist
-	ragedCombatant := ApplyRageToCombatant(cmd.Combatant)
+	ragedCombatant := ApplyRageToCombatant(cmd.Combatant, cmd.Turn.RoundNumber)
 	ragedCombatant, err = s.persistRageState(ctx, ragedCombatant)
 	if err != nil {
 		return RageResult{}, fmt.Errorf("updating combatant rage: %w", err)
@@ -292,18 +341,70 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	}, nil
 }
 
+// extendRage spends a Bonus Action to push an active Rage's horizon out to the
+// end of the barbarian's next turn (2024 PHB sustain option c). It costs no
+// daily rage use and does not touch the RageRounds cap — refreshing
+// RageStartedRound to the current round re-arms the same grace window that
+// activation uses, which is exactly "lasts until the end of your next turn".
+func (s *Service) extendRage(ctx context.Context, cmd RageCommand) (RageResult, error) {
+	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
+		return RageResult{}, err
+	}
+
+	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
+	if err != nil {
+		return RageResult{}, fmt.Errorf("using bonus action: %w", err)
+	}
+	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
+		return RageResult{}, fmt.Errorf("updating turn actions: %w", err)
+	}
+
+	extended, err := s.persistRageState(ctx, ExtendRageOnCombatant(cmd.Combatant, cmd.Turn.RoundNumber))
+	if err != nil {
+		return RageResult{}, fmt.Errorf("updating combatant rage: %w", err)
+	}
+
+	return RageResult{
+		Combatant: extended,
+		Turn:      updatedTurn,
+		CombatLog: FormatRageExtend(cmd.Combatant.DisplayName),
+		Remaining: FormatRemainingResources(updatedTurn, nil),
+	}, nil
+}
+
 // markRageAttacked persists `RageAttackedThisRound = true` for a raging
-// attacker so the no-attack-no-damage auto-end check at end-of-turn (see
-// ShouldRageEndOnTurnEnd) does not fire prematurely.
+// attacker so the sustain check at end-of-turn (see ShouldRageEndOnTurnEnd)
+// does not fire prematurely. 2024 rules: an attack ROLL sustains the rage
+// whether it hits or misses, which is why this is called from the attack
+// pipeline unconditionally rather than on a hit.
 //
-// Best-effort: skip non-raging attackers and swallow persistence errors so
-// the attack pipeline is never blocked by rage state. (D-46)
+// The live rage state is re-read rather than trusted from `attacker`: callers
+// pass the combatant snapshot loaded at attack time, so a barbarian who attacks
+// FIRST and rages afterwards on the same turn carries IsRaging=false in that
+// snapshot and used to get no credit. Re-reading also avoids writing stale
+// rage_rounds_remaining / rage_started_round values back over fresher ones.
+//
+// Best-effort: skip non-raging attackers and swallow errors so the attack
+// pipeline is never blocked by rage state. (D-46)
 func (s *Service) markRageAttacked(ctx context.Context, attacker refdata.Combatant) {
-	if !attacker.IsRaging {
+	live, err := s.store.GetCombatant(ctx, attacker.ID)
+	if err != nil {
 		return
 	}
-	attacker.RageAttackedThisRound = true
-	_, _ = s.persistRageState(ctx, attacker)
+	if !live.IsRaging {
+		return
+	}
+	live.RageAttackedThisRound = true
+	_, _ = s.persistRageState(ctx, live)
+}
+
+// markRageForcedSave credits the 2024 sustain condition "you forced an enemy to
+// make a saving throw". It shares RageAttackedThisRound with markRageAttacked:
+// the column is really "did a rage-sustaining offensive action happen this
+// round", and both answers are indistinguishable to ShouldRageEndOnTurnEnd, so
+// a second column would buy nothing.
+func (s *Service) markRageForcedSave(ctx context.Context, source refdata.Combatant) {
+	s.markRageAttacked(ctx, source)
 }
 
 // markRageTookDamage persists `RageTookDamageThisRound = true` for a raging
@@ -329,29 +430,71 @@ func (s *Service) maybeEndRageOnUnconscious(ctx context.Context, c refdata.Comba
 	_, _ = s.persistRageState(ctx, cleared)
 }
 
-// maybeEndRageOnTurnEnd is the AdvanceTurn-end hook that drops rage when the
-// barbarian neither attacked nor took damage this round
-// (ShouldRageEndOnTurnEnd). Best-effort: lookup or persistence errors are
-// swallowed so AdvanceTurn flow is never blocked by rage state. med-43 /
-// Phase 46.
-func (s *Service) maybeEndRageOnTurnEnd(ctx context.Context, combatantID uuid.UUID) {
+// maybeEndRageOnTurnEnd is the AdvanceTurn-end hook implementing the 2024 Rage
+// clock for the turn that just ended in roundNumber. Either the rage lapses
+// (nothing sustained it — see ShouldRageEndOnTurnEnd) or it rolls over: one
+// round is burned off the RageRounds cap and the per-round activity flags are
+// cleared, which opens the "since your last turn" damage window for the next
+// round.
+//
+// The flags MUST be reset here and not at turn start, or damage the barbarian
+// takes during the enemies' turns would be wiped before it could sustain the
+// rage.
+//
+// Best-effort: lookup or persistence errors are swallowed so AdvanceTurn flow
+// is never blocked by rage state. med-43 / Phase 46.
+func (s *Service) maybeEndRageOnTurnEnd(ctx context.Context, combatantID uuid.UUID, roundNumber int32) {
 	c, err := s.store.GetCombatant(ctx, combatantID)
-	if err != nil {
+	if err != nil || !c.IsRaging {
 		return
 	}
-	if !ShouldRageEndOnTurnEnd(c) {
+	if ShouldRageEndOnTurnEnd(c, roundNumber) {
+		cleared := ClearRageFromCombatant(c)
+		_, _ = s.persistRageState(ctx, cleared)
+		s.notifyRageEnded(ctx, c, rageEndReasonNoActivity)
+		return
+	}
+	_, _ = s.persistRageState(ctx, DecrementRageRound(c))
+}
+
+// maybeEndRageOnRoundCap is the turn-start hook enforcing the 10-minute
+// (RageRounds) hard cap via ShouldRageEndOnTurnStart. Best-effort, and gated on
+// IsRaging so a non-raging combatant costs nothing.
+func (s *Service) maybeEndRageOnRoundCap(ctx context.Context, c refdata.Combatant) {
+	if !ShouldRageEndOnTurnStart(c) {
 		return
 	}
 	cleared := ClearRageFromCombatant(c)
 	_, _ = s.persistRageState(ctx, cleared)
-	s.notifyRageExpired(ctx, c)
+	s.notifyRageEnded(ctx, c, rageEndReasonDurationExpired)
 }
 
-// rageEndReasonNoActivity is the reason shown when a rage lapses at end of turn
-// because the barbarian neither attacked a hostile nor took damage this round.
-const rageEndReasonNoActivity = "no attack or damage this round"
+// maybeEndRageOnIncapacitated drops rage when the barbarian's turn is skipped
+// for incapacitation (2024: a Rage ends early if you are Incapacitated).
+// Best-effort, mirroring the other rage hooks.
+func (s *Service) maybeEndRageOnIncapacitated(ctx context.Context, c refdata.Combatant) {
+	if !c.IsRaging {
+		return
+	}
+	cleared := ClearRageFromCombatant(c)
+	_, _ = s.persistRageState(ctx, cleared)
+	s.notifyRageEnded(ctx, c, rageEndReasonIncapacitated)
+}
 
-// notifyRageExpired best-effort records an end-of-turn rage lapse (ISSUE-041) to
+const (
+	// rageEndReasonNoActivity is the reason shown when a rage lapses at end of
+	// turn because nothing sustained it: no attack roll, no forced save, no
+	// damage taken, and no Bonus Action extension.
+	rageEndReasonNoActivity = "no attack, forced save, or damage since last turn"
+	// rageEndReasonDurationExpired is the reason shown when the 10-minute
+	// (RageRounds) hard cap runs out.
+	rageEndReasonDurationExpired = "the Rage has burned out (10 minutes)"
+	// rageEndReasonIncapacitated is the reason shown when the barbarian is
+	// Incapacitated.
+	rageEndReasonIncapacitated = "incapacitated"
+)
+
+// notifyRageEnded best-effort records a rage lapse (ISSUE-041) to
 // both the encounter's #combat-log channel and the DM Console timeline
 // (action_log), so a silently dropped rage is visible in lockstep with the turn
 // that ended it — players were never told their rage fell off. Pure
@@ -359,8 +502,8 @@ const rageEndReasonNoActivity = "no attack or damage this round"
 // encounter's active turn (the rager's own turn, still current at the
 // AdvanceTurn end-hook), and every error is swallowed so a logging miss never
 // blocks turn flow.
-func (s *Service) notifyRageExpired(ctx context.Context, c refdata.Combatant) {
-	msg := FormatRageEnd(c.DisplayName, rageEndReasonNoActivity)
+func (s *Service) notifyRageEnded(ctx context.Context, c refdata.Combatant, reason string) {
+	msg := FormatRageEnd(c.DisplayName, reason)
 	s.postCombatLog(ctx, c.EncounterID, msg)
 
 	enc, err := s.store.GetEncounter(ctx, c.EncounterID)
@@ -396,5 +539,6 @@ func (s *Service) persistRageState(ctx context.Context, c refdata.Combatant) (re
 		RageRoundsRemaining:     c.RageRoundsRemaining,
 		RageAttackedThisRound:   c.RageAttackedThisRound,
 		RageTookDamageThisRound: c.RageTookDamageThisRound,
+		RageStartedRound:        c.RageStartedRound,
 	})
 }

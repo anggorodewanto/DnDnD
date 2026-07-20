@@ -617,11 +617,13 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (info 
 			return TurnInfo{}, fmt.Errorf("processing turn end conditions: %w", err)
 		}
 
-		// med-43 / Phase 46: rage no-attack-no-damage auto-end. Rage must
-		// drop at end of turn for a Barbarian who neither attacked nor
-		// took damage this round. Best-effort: errors here do NOT abort
-		// AdvanceTurn (rage state is non-critical to turn flow).
-		s.maybeEndRageOnTurnEnd(ctx, currentTurn.CombatantID)
+		// med-43 / Phase 46: the 2024 Rage clock. Either the rage lapses
+		// (nothing sustained it this turn) or it rolls over one round.
+		// The ending turn's round is what decides the grace window, so
+		// pass it rather than the encounter's (possibly already rolled)
+		// round. Best-effort: errors here do NOT abort AdvanceTurn
+		// (rage state is non-critical to turn flow).
+		s.maybeEndRageOnTurnEnd(ctx, currentTurn.CombatantID, currentTurn.RoundNumber)
 
 		// med-43 / Phase 49: sweep expired Bardic Inspirations across
 		// every combatant in the encounter. Best-effort: errors are
@@ -776,6 +778,11 @@ func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, rou
 	}
 
 	if IsIncapacitated(conds) {
+		// 2024: a Rage ends early when the barbarian is Incapacitated. This is
+		// also the only rage hook a skipped turn ever reaches — a skipped
+		// combatant gets neither createActiveTurn nor the turn-end sweep.
+		s.maybeEndRageOnIncapacitated(ctx, combatant)
+
 		condName := GetIncapacitatingConditionName(conds)
 		if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, combatant, "incapacitated"); err != nil {
 			return TurnInfo{}, nil, err
@@ -905,6 +912,12 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 	// turn-advance (no Turn Builder) so the stub never lingers in #dm-queue.
 	// A no-op when nothing is tracked (empty map entry).
 	s.resolveEnemyTurnReady(ctx, encounterID)
+
+	// 2024 Rage hard cap (10 minutes = RageRounds). The turn-end sweep burns
+	// one round off the counter per turn; when it hits zero the rage drops at
+	// the start of the barbarian's next turn. Done before CreateTurn so the
+	// action_log entry still parents to the outgoing turn. Best-effort.
+	s.maybeEndRageOnRoundCap(ctx, combatant)
 
 	speedFt, attacksRemaining, err := s.ResolveTurnResources(ctx, combatant)
 	if err != nil {

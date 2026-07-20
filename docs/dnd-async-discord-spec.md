@@ -463,11 +463,22 @@ Players always know how far away targets are without counting squares on the map
 
 **Two-Weapon Fighting:** when a character attacks with a light melee weapon in their main hand (`equipped_main_hand`), they can use their bonus action to attack with a different light melee weapon held in the off-hand (`equipped_off_hand`). Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both `equipped_main_hand` and `equipped_off_hand` have the "light" property.
 
-**Rage (Barbarian):** `/bonus rage` activates rage. Costs the bonus action (`bonus_action_used = true`). Sets `is_raging = true` on the combatant. Requires Barbarian class and remaining rage uses in `feature_uses["rage"]` (2/day at level 1, scaling to 6/day at level 17, unlimited at level 20). While raging, all Rage effects from the Feature Effect System are active (damage bonus on melee STR attacks, resistance to B/P/S, advantage on STR checks/saves). Rage lasts up to 1 minute (10 rounds), tracked via `rage_rounds_remaining` on the combatant. Rage ends early if:
-- The Barbarian's turn ends and they have neither attacked a hostile nor taken damage since their last turn — the system auto-tracks `rage_attacked_this_round` and `rage_took_damage_this_round` (reset at turn start, checked at turn end). If neither is true, rage ends automatically with a combat log message.
+**Rage (Barbarian):** `/bonus rage` activates rage. Costs the bonus action (`bonus_action_used = true`). Sets `is_raging = true` on the combatant. Requires Barbarian class and remaining rage uses in `feature_uses["rage"]` (2/day at level 1, scaling to 6/day at level 17, unlimited at level 20). While raging, all Rage effects from the Feature Effect System are active (damage bonus on melee STR attacks, resistance to B/P/S, advantage on STR checks/saves).
+
+Duration follows the 2024 PHB: a Rage **lasts until the end of the Barbarian's next turn**, and is extended one more round whenever, on their turn, they do any of the following:
+- make an attack roll — **hit or miss** (`rage_attacked_this_round`)
+- force an enemy to make a saving throw (also recorded in `rage_attacked_this_round`)
+- spend a **Bonus Action to extend** it — `/bonus rage` while already raging extends instead of erroring, costs the bonus action, and spends no daily rage use
+- take damage since their last turn (`rage_took_damage_this_round`)
+
+The turn on which a rage is started or extended can never be the turn that ends it: `rage_started_round` records that round and the end-of-turn sweep treats it as an unconditional grace window. The per-round activity flags are reset at **turn end** (not turn start), so damage taken during the enemies' turns still counts. A hard cap of 10 minutes = **100 rounds** is tracked in `rage_rounds_remaining`, decremented once per turn end and enforced at turn start.
+
+Rage ends early if:
+- The Barbarian's turn ends and nothing above sustained it — rage ends automatically with a combat log message.
 - The Barbarian falls unconscious (`hp_current = 0`) — rage ends immediately.
+- The Barbarian is Incapacitated (their turn is skipped for an incapacitating condition).
 - The Barbarian chooses to end it: `/bonus end-rage` (free, no action cost).
-- 10 rounds elapse — system auto-ends at turn start.
+- 100 rounds elapse — system auto-ends at turn start.
 
 Cannot rage while wearing heavy armor (system validates `equipped_armor` weight class). Cannot cast spells or concentrate on spells while raging (system blocks `/cast` and drops active concentration when rage activates).
 

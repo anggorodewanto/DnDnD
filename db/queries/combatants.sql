@@ -49,6 +49,7 @@ UPDATE combatants SET
     rage_rounds_remaining = $3,
     rage_attacked_this_round = $4,
     rage_took_damage_this_round = $5,
+    rage_started_round = $6,
     updated_at = now()
 WHERE id = $1 RETURNING *;
 

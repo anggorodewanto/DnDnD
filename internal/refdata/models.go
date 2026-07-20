@@ -173,6 +173,7 @@ type Combatant struct {
 	ConcentrationSpellID       sql.NullString        `json:"concentration_spell_id"`
 	ConcentrationSpellName     sql.NullString        `json:"concentration_spell_name"`
 	NextAttackAdvOverride      sql.NullString        `json:"next_attack_adv_override"`
+	RageStartedRound           sql.NullInt32         `json:"rage_started_round"`
 }
 
 type ConditionsRef struct {

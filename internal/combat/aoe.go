@@ -631,6 +631,13 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		}
 	}
 
+	// 2024 Rage sustain (b): forcing enemies to make saving throws keeps a rage
+	// alive even on a turn with no attack roll. Best-effort, no-op unless the
+	// caster is raging.
+	if len(pendingSaves) > 0 {
+		s.markRageForcedSave(ctx, caster)
+	}
+
 	// 13. Resolve concentration: clean up any dropped spell, persist the new
 	// concentration to the authoritative columns when applicable.
 	concentration := ResolveConcentration(cmd.CurrentConcentration, spell)

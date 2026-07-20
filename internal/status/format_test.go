@@ -348,3 +348,33 @@ func TestFormatStatus_OmitsEmptySections(t *testing.T) {
 		t.Error("should omit Wild Shape section when not shifted")
 	}
 }
+
+// 2024 Rage: the 100-round hard cap is noise while it is far away — /status
+// should lead with the sustain rule the player can actually act on, and only
+// quote the countdown once the cap is close enough to bind.
+func TestFormatStatus_RageFarFromCapShowsSustainHint(t *testing.T) {
+	got := formatRageStatus(100)
+
+	if strings.Contains(got, "100 rounds remaining") {
+		t.Errorf("should not lead with the distant hard cap, got %q", got)
+	}
+	if !strings.Contains(got, "sustain") {
+		t.Errorf("expected the sustain hint, got %q", got)
+	}
+}
+
+func TestFormatStatus_RageNearCapShowsCountdown(t *testing.T) {
+	got := formatRageStatus(rageCapWarningRounds)
+
+	if !strings.Contains(got, "10 rounds remaining") {
+		t.Errorf("expected the countdown near the cap, got %q", got)
+	}
+}
+
+func TestFormatStatus_RageWithNoCounterStillRenders(t *testing.T) {
+	got := formatRageStatus(0)
+
+	if !strings.Contains(got, "**Rage:** Active") {
+		t.Errorf("expected an Active rage line, got %q", got)
+	}
+}

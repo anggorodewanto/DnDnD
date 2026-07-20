@@ -81,13 +81,16 @@ func TestRageEffects_AdvantageSTRChecks(t *testing.T) {
 
 func TestApplyRageToCombatant(t *testing.T) {
 	c := refdata.Combatant{DisplayName: "Kael"}
-	c = ApplyRageToCombatant(c)
+	c = ApplyRageToCombatant(c, 7)
 
 	if !c.IsRaging {
 		t.Error("expected IsRaging = true")
 	}
-	if !c.RageRoundsRemaining.Valid || c.RageRoundsRemaining.Int32 != 10 {
-		t.Errorf("RageRoundsRemaining = %v, want 10", c.RageRoundsRemaining)
+	if !c.RageRoundsRemaining.Valid || c.RageRoundsRemaining.Int32 != RageRounds {
+		t.Errorf("RageRoundsRemaining = %v, want %d", c.RageRoundsRemaining, RageRounds)
+	}
+	if !c.RageStartedRound.Valid || c.RageStartedRound.Int32 != 7 {
+		t.Errorf("RageStartedRound = %v, want 7", c.RageStartedRound)
 	}
 	if c.RageAttackedThisRound {
 		t.Error("expected RageAttackedThisRound = false")
@@ -97,8 +100,33 @@ func TestApplyRageToCombatant(t *testing.T) {
 	}
 }
 
+func TestExtendRageOnCombatant(t *testing.T) {
+	c := ApplyRageToCombatant(refdata.Combatant{DisplayName: "Kael"}, 2)
+	c = ExtendRageOnCombatant(c, 6)
+
+	if !c.RageStartedRound.Valid || c.RageStartedRound.Int32 != 6 {
+		t.Errorf("RageStartedRound = %v, want 6 after extend", c.RageStartedRound)
+	}
+	if c.RageRoundsRemaining.Int32 != RageRounds {
+		t.Errorf("extend must not touch the duration cap, got %d", c.RageRoundsRemaining.Int32)
+	}
+}
+
+func TestRageHasGraceWindow(t *testing.T) {
+	c := ApplyRageToCombatant(refdata.Combatant{}, 3)
+	if !RageHasGraceWindow(c, 3) {
+		t.Error("expected grace window in the round rage started")
+	}
+	if RageHasGraceWindow(c, 4) {
+		t.Error("expected no grace window in a later round")
+	}
+	if RageHasGraceWindow(refdata.Combatant{IsRaging: true}, 3) {
+		t.Error("expected no grace window when RageStartedRound is null")
+	}
+}
+
 func TestClearRageFromCombatant(t *testing.T) {
-	c := ApplyRageToCombatant(refdata.Combatant{DisplayName: "Kael"})
+	c := ApplyRageToCombatant(refdata.Combatant{DisplayName: "Kael"}, 1)
 	c.RageAttackedThisRound = true
 	c = ClearRageFromCombatant(c)
 
@@ -108,24 +136,35 @@ func TestClearRageFromCombatant(t *testing.T) {
 	if c.RageRoundsRemaining.Valid {
 		t.Error("expected RageRoundsRemaining to be null")
 	}
+	if c.RageStartedRound.Valid {
+		t.Error("expected RageStartedRound to be null")
+	}
 	if c.RageAttackedThisRound {
 		t.Error("expected RageAttackedThisRound = false")
 	}
 }
 
 func TestShouldRageEndOnTurnEnd(t *testing.T) {
+	const endingRound = 4
+
 	tests := []struct {
-		name     string
-		raging   bool
-		attacked bool
-		tookDmg  bool
-		want     bool
+		name         string
+		raging       bool
+		attacked     bool
+		tookDmg      bool
+		startedRound sql.NullInt32
+		want         bool
 	}{
-		{"not raging", false, false, false, false},
-		{"attacked", true, true, false, false},
-		{"took damage", true, false, true, false},
-		{"both", true, true, true, false},
-		{"neither", true, false, false, true},
+		{"not raging", false, false, false, sql.NullInt32{}, false},
+		{"attacked", true, true, false, sql.NullInt32{}, false},
+		{"took damage", true, false, true, sql.NullInt32{}, false},
+		{"both", true, true, true, sql.NullInt32{}, false},
+		{"neither", true, false, false, sql.NullInt32{}, true},
+		// 2024 grace window: started/extended this very turn → never ends here.
+		{"idle but started this round", true, false, false,
+			sql.NullInt32{Int32: endingRound, Valid: true}, false},
+		{"idle and started an earlier round", true, false, false,
+			sql.NullInt32{Int32: endingRound - 1, Valid: true}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,8 +172,9 @@ func TestShouldRageEndOnTurnEnd(t *testing.T) {
 				IsRaging:                tt.raging,
 				RageAttackedThisRound:   tt.attacked,
 				RageTookDamageThisRound: tt.tookDmg,
+				RageStartedRound:        tt.startedRound,
 			}
-			if got := ShouldRageEndOnTurnEnd(c); got != tt.want {
+			if got := ShouldRageEndOnTurnEnd(c, endingRound); got != tt.want {
 				t.Errorf("ShouldRageEndOnTurnEnd() = %v, want %v", got, tt.want)
 			}
 		})
@@ -171,14 +211,14 @@ func TestShouldRageEndOnTurnStart(t *testing.T) {
 }
 
 func TestDecrementRageRound(t *testing.T) {
-	c := ApplyRageToCombatant(refdata.Combatant{})
+	c := ApplyRageToCombatant(refdata.Combatant{}, 1)
 	c.RageAttackedThisRound = true
 	c.RageTookDamageThisRound = true
 
 	c = DecrementRageRound(c)
 
-	if c.RageRoundsRemaining.Int32 != 9 {
-		t.Errorf("RageRoundsRemaining = %d, want 9", c.RageRoundsRemaining.Int32)
+	if c.RageRoundsRemaining.Int32 != RageRounds-1 {
+		t.Errorf("RageRoundsRemaining = %d, want %d", c.RageRoundsRemaining.Int32, RageRounds-1)
 	}
 	if c.RageAttackedThisRound {
 		t.Error("expected RageAttackedThisRound reset to false")
@@ -336,30 +376,106 @@ func TestService_ActivateRage_BonusActionSpent(t *testing.T) {
 	}
 }
 
-func TestService_ActivateRage_AlreadyRaging(t *testing.T) {
+// 2024 PHB: /bonus rage while already raging is the Bonus Action EXTEND, not an
+// error. It must not burn a daily rage use.
+func TestService_ActivateRage_AlreadyRaging_Extends(t *testing.T) {
 	charID := uuid.New()
 	store := defaultMockStore()
-	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
-		return refdata.Character{
-			ID:      charID,
-			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
-			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
-				Valid:      true,
-			},
+	featureUsesTouched := false
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		featureUsesTouched = true
+		return refdata.Character{ID: arg.ID}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true}, nil
+	}
+	store.updateCombatantRageFn = func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:               arg.ID,
+			DisplayName:      "Kael",
+			IsRaging:         arg.IsRaging,
+			RageStartedRound: arg.RageStartedRound,
 		}, nil
 	}
 	svc := NewService(store)
 
-	_, err := svc.ActivateRage(context.Background(), RageCommand{
+	result, err := svc.ActivateRage(context.Background(), RageCommand{
 		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			DisplayName: "Kael",
 			IsRaging:    true,
 			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 		},
-		Turn: refdata.Turn{},
+		Turn: refdata.Turn{ID: uuid.New(), RoundNumber: 6},
+	})
+	if err != nil {
+		t.Fatalf("expected extend, got error: %v", err)
+	}
+	if !result.Combatant.IsRaging {
+		t.Error("expected combatant to still be raging after extend")
+	}
+	if !result.Combatant.RageStartedRound.Valid || result.Combatant.RageStartedRound.Int32 != 6 {
+		t.Errorf("RageStartedRound = %v, want 6", result.Combatant.RageStartedRound)
+	}
+	if !result.Turn.BonusActionUsed {
+		t.Error("expected extend to consume the bonus action")
+	}
+	if featureUsesTouched {
+		t.Error("extend must not spend a daily rage use")
+	}
+	if result.CombatLog != FormatRageExtend("Kael") {
+		t.Errorf("CombatLog = %q, want the extend line", result.CombatLog)
+	}
+}
+
+// The extend path still refuses when the bonus action is already spent.
+func TestService_ActivateRage_ExtendRequiresBonusAction(t *testing.T) {
+	svc := NewService(defaultMockStore())
+
+	_, err := svc.ActivateRage(context.Background(), RageCommand{
+		Combatant: refdata.Combatant{ID: uuid.New(), IsRaging: true},
+		Turn:      refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
 	})
 	if err == nil {
-		t.Error("expected error for already raging")
+		t.Error("expected error extending with a spent bonus action")
+	}
+}
+
+// Persistence failures on the extend path surface as errors (they are the
+// player's only signal that the Bonus Action did not take).
+func TestService_ActivateRage_ExtendPersistError(t *testing.T) {
+	store := defaultMockStore()
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true}, nil
+	}
+	store.updateCombatantRageFn = func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("db error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.ActivateRage(context.Background(), RageCommand{
+		Combatant: refdata.Combatant{ID: uuid.New(), IsRaging: true},
+		Turn:      refdata.Turn{ID: uuid.New()},
+	})
+	if err == nil {
+		t.Error("expected error when the extend write fails")
+	}
+}
+
+// A failed turn write on the extend path must also surface.
+func TestService_ActivateRage_ExtendTurnPersistError(t *testing.T) {
+	store := defaultMockStore()
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.ActivateRage(context.Background(), RageCommand{
+		Combatant: refdata.Combatant{ID: uuid.New(), IsRaging: true},
+		Turn:      refdata.Turn{ID: uuid.New()},
+	})
+	if err == nil {
+		t.Error("expected error when the turn write fails")
 	}
 }
 

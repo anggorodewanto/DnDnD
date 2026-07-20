@@ -406,6 +406,20 @@ func (s *bonusOffhandCommandPathStore) CreateActionLog(_ context.Context, _ refd
 	return refdata.ActionLog{}, nil
 }
 
+// GetCombatant serves the rage sustain hook: markRageAttacked re-reads live
+// rage state instead of trusting the (possibly pre-rage) attacker snapshot, so
+// the embedded (nil) combat.Store must not be invoked. Neither combatant here
+// is raging, making the hook a no-op.
+func (s *bonusOffhandCommandPathStore) GetCombatant(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	switch id {
+	case s.attacker.ID:
+		return s.attacker, nil
+	case s.target.ID:
+		return s.target, nil
+	}
+	return refdata.Combatant{}, sql.ErrNoRows
+}
+
 func (s *bonusOffhandCommandPathStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
 	if id == s.char.ID {
 		return s.char, nil

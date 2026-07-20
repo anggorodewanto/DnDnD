@@ -364,6 +364,10 @@ func (s *Service) StunningStrike(ctx context.Context, cmd StunningStrikeCommand,
 	saveTotal := d20Result.Total
 	saveSucceeded := saveTotal >= dc
 
+	// 2024 Rage sustain (b): a Monk/Barbarian who forces this CON save keeps
+	// their rage alive. Best-effort, no-op unless the striker is raging.
+	s.markRageForcedSave(ctx, cmd.Attacker)
+
 	// Keep the log's roll breakdown honest without disturbing the non-exhausted
 	// output: the exhaustion term appears only when a penalty applies.
 	saveBreakdown := fmt.Sprintf("roll %d + %d", saveRoll, conSaveBonus)

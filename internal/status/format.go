@@ -92,11 +92,7 @@ func FormatStatus(info Info) string {
 	}
 
 	if info.IsRaging {
-		if info.RageRoundsRemaining > 0 {
-			sections = append(sections, fmt.Sprintf("**Rage:** Active (%d rounds remaining)", info.RageRoundsRemaining))
-		} else {
-			sections = append(sections, "**Rage:** Active")
-		}
+		sections = append(sections, formatRageStatus(info.RageRoundsRemaining))
 	}
 
 	if info.IsWildShaped {
@@ -144,6 +140,22 @@ func FormatStatus(info Info) string {
 	}
 
 	return header + "\n\n" + strings.Join(sections, "\n")
+}
+
+// rageCapWarningRounds is how close the 2024 Rage 10-minute hard cap has to be
+// before /status bothers to print it.
+const rageCapWarningRounds = 10
+
+// formatRageStatus renders the Rage line. Under 2024 rules a Rage's real clock
+// is the turn-by-turn sustain check — attack, force a save, spend a Bonus
+// Action, or take damage — not the 100-round (10 minute) hard cap, so quoting
+// the cap up front ("100 rounds remaining") buries the thing the player can
+// actually act on. The cap is surfaced only once it is near enough to bind.
+func formatRageStatus(roundsRemaining int) string {
+	if roundsRemaining > 0 && roundsRemaining <= rageCapWarningRounds {
+		return fmt.Sprintf("**Rage:** Active (%d rounds remaining)", roundsRemaining)
+	}
+	return "**Rage:** Active — sustain it each turn (attack, force a save, or `/bonus rage`)"
 }
 
 // quotedList formats a slice of strings as a comma-separated list of quoted values.
