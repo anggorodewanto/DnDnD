@@ -40,7 +40,7 @@ func TestDrawWalls(t *testing.T) {
 // TestRenderMap_WallHiddenByUnexploredFog guards the wall/fog draw order:
 // walls must be drawn BENEATH the fog overlay so a wall on an Unexplored tile
 // (a corridor the party has not discovered) is fully hidden by the black fog,
-// while a wall on a Visible tile is rendered in the bold slate wall color.
+// while a wall on a Visible tile is rendered in the bold brick wall color.
 // Regression against a fog leak: if DrawWalls runs AFTER DrawFogOfWar the
 // far wall would paint on top of the black overlay and reveal the maze layout.
 func TestRenderMap_WallHiddenByUnexploredFog(t *testing.T) {
@@ -56,7 +56,7 @@ func TestRenderMap_WallHiddenByUnexploredFog(t *testing.T) {
 		},
 		Walls: []WallSegment{
 			// Near wall: a short segment inside the source's own (always
-			// Visible) tile — no fog covers it, so it renders in slate.
+			// Visible) tile — no fog covers it, so it renders in brick.
 			{X1: 1.3, Y1: 1.2, X2: 1.3, Y2: 1.8},
 			// Far wall: a segment on a tile far beyond vision range, so its
 			// tile stays Unexplored (solid-black fog) and the wall must not leak.
@@ -87,17 +87,17 @@ func TestRenderMap_WallHiddenByUnexploredFog(t *testing.T) {
 	assert.Equal(t, uint8(0), fg, "far wall must be hidden under Unexplored fog (fog leak)")
 	assert.Equal(t, uint8(0), fb, "far wall must be hidden under Unexplored fog (fog leak)")
 
-	// Near wall centerline: rendered in the bold slate wall color.
+	// Near wall centerline: rendered in the bold brick wall color.
 	nearX := margin + int(1.3*float64(ts))
 	nearY := margin + int(1.5*float64(ts))
 	nr, ng, nb := rgb8(img, nearX, nearY)
 	// Not the cream floor and not black (covered).
 	assert.False(t, nr == 0xF0 && ng == 0xF0 && nb == 0xE8, "near wall must not be the floor color")
 	assert.False(t, nr == 0 && ng == 0 && nb == 0, "near wall must be drawn, not black/covered")
-	// The new slate wall color (small tolerance for stroke anti-aliasing).
-	assert.InDelta(t, 0x2C, int(nr), 8, "near wall red ~ slate")
-	assert.InDelta(t, 0x38, int(ng), 8, "near wall green ~ slate")
-	assert.InDelta(t, 0x4A, int(nb), 8, "near wall blue ~ slate")
+	// The brick wall color (small tolerance for stroke anti-aliasing).
+	assert.InDelta(t, 0x8B, int(nr), 8, "near wall red ~ brick")
+	assert.InDelta(t, 0x45, int(ng), 8, "near wall green ~ brick")
+	assert.InDelta(t, 0x23, int(nb), 8, "near wall blue ~ brick")
 }
 
 func TestDrawWalls_Empty(t *testing.T) {

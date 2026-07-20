@@ -12,11 +12,12 @@ func DrawWalls(dc *gg.Context, md *MapData) {
 		return
 	}
 	ts := float64(md.TileSize)
-	// Dark slate — boldly distinct from the cream floor, the tan/brown
-	// difficult-terrain fill, the light-grey grid, and the green tokens, so a
-	// DM can read wall segments at a glance. Thick stroke with round caps keeps
-	// corners of connected segments from leaving gaps.
-	dc.SetColor(color.RGBA{R: 0x2C, G: 0x38, B: 0x4A, A: 0xFF})
+	// Brick brown — reads as a solid masonry wall and stays boldly distinct from
+	// the cream floor, the lighter tan difficult-terrain fill, the light-grey
+	// grid, and the green tokens, so players can read wall segments at a glance.
+	// Thick stroke with round caps keeps corners of connected segments from
+	// leaving gaps.
+	dc.SetColor(color.RGBA{R: 0x8B, G: 0x45, B: 0x23, A: 0xFF})
 	dc.SetLineWidth(6)
 	dc.SetLineCap(gg.LineCapRound)
 	for _, w := range md.Walls {
