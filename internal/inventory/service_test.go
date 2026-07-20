@@ -375,3 +375,105 @@ func TestUseConsumable_Antitoxin(t *testing.T) {
 	assert.Contains(t, result.Message, "poison")
 	assert.Equal(t, "antitoxin", result.AppliedCondition)
 }
+
+// /use results are posted to the channel, so every message variant has to name
+// the actor — "Used **Potion of Healing**" tells a reading party nothing about
+// who drank it. This also pins the fix for the antitoxin line, which used to
+// interpolate item.Name into the actor slot and render "Antitoxin used
+// **Antitoxin**".
+func TestUseMessages_NameTheActor(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 1, Type: TypeConsumable},
+		{ItemID: "antitoxin", Name: "Antitoxin", Quantity: 1, Type: TypeConsumable},
+		{ItemID: "mystery-flask", Name: "Mystery Flask", Quantity: 1, Type: TypeConsumable},
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: TypeMagicItem, IsMagic: true, Charges: 5, MaxCharges: 7},
+	}
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+
+	// d4 always rolls 3, so 2d4+2 = 8 and a 4/31 HP drinker ends at 12/31.
+	svc := NewService(func(max int) int { return 3 })
+
+	consumable := func(itemID string) func(string) string {
+		return func(actor string) string {
+			res, err := svc.UseConsumable(UseInput{
+				Items: items, ItemID: itemID, ActorName: actor, HPCurrent: 4, HPMax: 31,
+			})
+			assert.NoError(t, err)
+			return res.Message
+		}
+	}
+	charges := func(actor string) string {
+		res, err := svc.UseCharges(UseChargesInput{
+			Items: items, Attunement: attunement, ItemID: "wand-of-fireballs", Amount: 2, ActorName: actor,
+		})
+		assert.NoError(t, err)
+		return res.Message
+	}
+
+	tests := []struct {
+		name      string
+		render    func(actor string) string
+		withActor string
+		noActor   string
+	}{
+		{
+			name:      "healing",
+			render:    consumable("healing-potion"),
+			withActor: "\U0001f9ea **Vale** used **Healing Potion** — healed 8 HP ([3 3] + 2 = 8) → 12/31 HP",
+			noActor:   "\U0001f9ea Used **Healing Potion** — healed 8 HP ([3 3] + 2 = 8) → 12/31 HP",
+		},
+		{
+			name:      "antitoxin",
+			render:    consumable("antitoxin"),
+			withActor: "\U0001f9ea **Vale** used **Antitoxin** — grants advantage on saving throws vs poison for 1 hour.",
+			noActor:   "\U0001f9ea Used **Antitoxin** — grants advantage on saving throws vs poison for 1 hour.",
+		},
+		{
+			name:      "dm adjudication",
+			render:    consumable("mystery-flask"),
+			withActor: "\U0001f9ea **Vale** used **Mystery Flask** — sent to DM for adjudication.",
+			noActor:   "\U0001f9ea Used **Mystery Flask** — sent to DM for adjudication.",
+		},
+		{
+			name:      "charges",
+			render:    charges,
+			withActor: "⚡ **Vale** used 2 charges from **Wand of Fireballs** (3/7 remaining)",
+			noActor:   "⚡ Used 2 charges from **Wand of Fireballs** (3/7 remaining)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.withActor, tc.render("Vale"))
+			// An unnamed actor degrades to the impersonal form rather than
+			// rendering an empty "** **" span.
+			assert.Equal(t, tc.noActor, tc.render(""))
+		})
+	}
+}
+
+// The destroy-on-zero line is a second charges message and must name the actor
+// the same way the ordinary one does.
+func TestUseCharges_DestroyMessage_NamesTheActor(t *testing.T) {
+	svc := NewService(func(max int) int { return 1 }) // d20 rolls 1 -> destroyed
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: TypeMagicItem, IsMagic: true, Charges: 1, MaxCharges: 7},
+	}
+
+	result, err := svc.UseCharges(UseChargesInput{
+		Items:         items,
+		ItemID:        "wand-of-fireballs",
+		Amount:        1,
+		ActorName:     "Vale",
+		DestroyOnZero: true,
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, result.Destroyed)
+	assert.Equal(t,
+		"⚡ **Vale** used 1 charges from **Wand of Fireballs** — \U0001f4a5 rolled a 1 on d20, the item crumbles to dust!",
+		result.Message)
+}

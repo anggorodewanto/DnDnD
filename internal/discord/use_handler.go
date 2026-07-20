@@ -199,6 +199,7 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 	result, err := h.invService.UseConsumable(inventory.UseInput{
 		Items:     items,
 		ItemID:    itemID,
+		ActorName: char.Name,
 		HPCurrent: hpCurrent,
 		HPMax:     hpMax,
 	})
@@ -240,7 +241,10 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		h.postConsumableToDMQueue(ctx, interaction.GuildID, campaign.ID.String(), char.Name, usedItemName)
 	}
 
-	respondEphemeral(h.session, interaction, result.Message)
+	// A successful use is a table event — the party sees who drank what, the
+	// same way /attack and /cast results are public. Only the failure paths
+	// above stay ephemeral.
+	respondPublic(h.session, interaction, result.Message)
 }
 
 // itemHasActiveCharges reports whether the inventory item with itemID is a
@@ -294,6 +298,7 @@ func (h *UseHandler) handleMagicItemCharge(
 		Items:      items,
 		Attunement: attunement,
 		ItemID:     itemID,
+		ActorName:  char.Name,
 		Amount:     amount,
 	})
 	if err != nil {
@@ -331,19 +336,20 @@ func (h *UseHandler) handleMagicItemCharge(
 			Charges:     amount,
 		})
 		if err == nil && castResult.Routed {
-			respondEphemeral(h.session, interaction, fmt.Sprintf("%s\n%s", result.Message, castResult.Message))
+			respondPublic(h.session, interaction, fmt.Sprintf("%s\n%s", result.Message, castResult.Message))
 			return
 		}
 	}
 
-	// Fallback: report charge usage (and spell name if applicable).
+	// Fallback: report charge usage (and spell name if applicable). Like the
+	// consumable path, a successful charge is public; the failures above are not.
 	if spellID != "" {
 		msg := fmt.Sprintf("%s\n🔮 Casts **%s** from the item.", result.Message, spellID)
-		respondEphemeral(h.session, interaction, msg)
+		respondPublic(h.session, interaction, msg)
 		return
 	}
 
-	respondEphemeral(h.session, interaction, result.Message)
+	respondPublic(h.session, interaction, result.Message)
 }
 
 // resolveSpellAbility reads the magic item's active_abilities from the ref

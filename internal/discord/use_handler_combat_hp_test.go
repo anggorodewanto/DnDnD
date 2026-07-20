@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
@@ -192,6 +193,8 @@ func TestUseHandler_PotionOffTurn_RejectedWithoutTouchingAnotherTurn(t *testing.
 	fx.handler.Handle(makeUseInteraction("guild1", "user1", "healing-potion"))
 
 	assert.Contains(t, fx.sess.lastResponse, "your turn")
+	assert.NotZero(t, fx.sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"an off-turn rejection must stay ephemeral")
 	assert.Empty(t, fx.combatProv.updates, "must not spend another combatant's action economy")
 	assert.Empty(t, fx.combatProv.hpUpdates, "must not heal on a turn that is not yours")
 	assert.Empty(t, fx.store.updatedInventory, "a rejected /use must not consume the potion")

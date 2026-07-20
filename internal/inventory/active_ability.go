@@ -11,6 +11,7 @@ type UseChargesInput struct {
 	Items         []character.InventoryItem
 	Attunement    []character.AttunementSlot
 	ItemID        string
+	ActorName     string // display name of the character using the item
 	Amount        int
 	DestroyOnZero bool // if true and charges reach 0, roll d20 — on 1, item is destroyed
 }
@@ -60,7 +61,8 @@ func (s *Service) UseCharges(input UseChargesInput) (UseChargesResult, error) {
 		ItemName:     item.Name,
 		ChargesUsed:  input.Amount,
 		ChargesLeft:  updated[idx].Charges,
-		Message:      fmt.Sprintf("⚡ Used %d charges from **%s** (%d/%d remaining)", input.Amount, item.Name, updated[idx].Charges, item.MaxCharges),
+		Message: fmt.Sprintf("%s %d charges from **%s** (%d/%d remaining)",
+			useLead("⚡", input.ActorName), input.Amount, item.Name, updated[idx].Charges, item.MaxCharges),
 	}
 
 	// Destroy-on-zero check: when last charge is spent, roll d20. On a 1, item is destroyed.
@@ -71,7 +73,8 @@ func (s *Service) UseCharges(input UseChargesInput) (UseChargesResult, error) {
 		}
 		if roll.Total == 1 {
 			result.Destroyed = true
-			result.Message = fmt.Sprintf("⚡ Used %d charges from **%s** — 💥 rolled a 1 on d20, the item crumbles to dust!", input.Amount, item.Name)
+			result.Message = fmt.Sprintf("%s %d charges from **%s** — 💥 rolled a 1 on d20, the item crumbles to dust!",
+				useLead("⚡", input.ActorName), input.Amount, item.Name)
 		}
 	}
 

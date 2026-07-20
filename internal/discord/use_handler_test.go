@@ -89,6 +89,10 @@ func TestUseHandler_HealingPotion(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "Healing Potion")
 	assert.Contains(t, sess.lastResponse, "healed")
+	// A successful use is a table event: the party sees who drank what.
+	assert.Contains(t, sess.lastResponse, "Aria")
+	assert.Zero(t, sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"a successful consumable use must be public")
 
 	// Verify inventory was updated
 	var updatedItems []character.InventoryItem
@@ -237,6 +241,9 @@ func TestUseHandler_PersistInventoryError(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "Failed to save")
+	// Save failures are private feedback, not a table event.
+	assert.NotZero(t, sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"an inventory save failure must stay ephemeral")
 }
 
 func TestUseHandler_DMQueuePost(t *testing.T) {
@@ -367,6 +374,9 @@ func TestUseHandler_MagicItem_UsesCharge(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "Wand of Fireballs")
 	assert.Contains(t, sess.lastResponse, "charge")
+	assert.Contains(t, sess.lastResponse, "Aria")
+	assert.Zero(t, sess.lastFlags&discordgo.MessageFlagsEphemeral,
+		"a successful magic-item charge must be public")
 
 	var updatedItems []character.InventoryItem
 	_ = json.Unmarshal(store.updatedInventory, &updatedItems)

@@ -130,6 +130,7 @@ func NewServiceWithRoller(r *dice.Roller) *Service {
 type UseInput struct {
 	Items     []character.InventoryItem
 	ItemID    string
+	ActorName string // display name of the character using the item
 	HPCurrent int
 	HPMax     int
 }
@@ -159,6 +160,17 @@ func IsPotion(itemID string) bool {
 	return ok
 }
 
+// useLead renders the shared lead-in for a /use result message. These land in
+// a public channel, so the actor has to come first — "Used **Potion of
+// Healing**" leaves the party guessing who drank it. An unnamed actor degrades
+// to the impersonal form rather than rendering an empty "** **" span.
+func useLead(emoji, actorName string) string {
+	if actorName == "" {
+		return emoji + " Used"
+	}
+	return fmt.Sprintf("%s **%s** used", emoji, actorName)
+}
+
 // UseConsumable consumes an item and applies its effect if auto-resolvable.
 func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 	idx := resolveItemIndex(input.Items, input.ItemID)
@@ -183,7 +195,8 @@ func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 		result.AutoResolved = true
 		result.HPAfter = input.HPCurrent
 		result.AppliedCondition = "antitoxin"
-		result.Message = fmt.Sprintf("\U0001f9ea %s used **%s** \u2014 grants advantage on saving throws vs poison for 1 hour.", item.Name, item.Name)
+		result.Message = fmt.Sprintf("%s **%s** \u2014 grants advantage on saving throws vs poison for 1 hour.",
+			useLead("\U0001f9ea", input.ActorName), item.Name)
 		return result, nil
 	}
 
@@ -192,7 +205,8 @@ func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 	if !isAutoResolve {
 		result.DMQueueRequired = true
 		result.HPAfter = input.HPCurrent
-		result.Message = fmt.Sprintf("\U0001f9ea Used **%s** \u2014 sent to DM for adjudication.", item.Name)
+		result.Message = fmt.Sprintf("%s **%s** \u2014 sent to DM for adjudication.",
+			useLead("\U0001f9ea", input.ActorName), item.Name)
 		return result, nil
 	}
 
@@ -209,8 +223,8 @@ func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 	result.HealingDone = healing
 	result.HPAfter = input.HPCurrent + healing
 	result.AutoResolved = true
-	result.Message = fmt.Sprintf("\U0001f9ea Used **%s** \u2014 healed %d HP (%s) \u2192 %d/%d HP",
-		item.Name, healing, roll.Breakdown, result.HPAfter, input.HPMax)
+	result.Message = fmt.Sprintf("%s **%s** \u2014 healed %d HP (%s) \u2192 %d/%d HP",
+		useLead("\U0001f9ea", input.ActorName), item.Name, healing, roll.Breakdown, result.HPAfter, input.HPMax)
 
 	return result, nil
 }
