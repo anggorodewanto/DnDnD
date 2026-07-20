@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -327,6 +328,10 @@ func (s *stubUseGiveProvider) UpdateCombatantHP(_ context.Context, _ refdata.Upd
 	return refdata.Combatant{}, nil
 }
 
+func (s *stubUseGiveProvider) SpendTurnResources(_ context.Context, _ refdata.SpendTurnResourcesParams) (refdata.Turn, error) {
+	return s.turn, s.updateErr
+}
+
 func TestEconomyUseGiveProvider_PostsOnSuccess(t *testing.T) {
 	want := refdata.Turn{ID: uuid.New()}
 	inner := &stubUseGiveProvider{turn: want, inCombat: true}
@@ -356,5 +361,44 @@ func TestEconomyUseGiveProvider_SkipsOnError(t *testing.T) {
 	}
 	if posted {
 		t.Error("post must not fire on error")
+	}
+}
+
+// /use spends via the targeted CAS, not UpdateTurnActions. Without an explicit
+// decorator method the embedded provider promotes SpendTurnResources straight
+// through and the #your-turn economy re-post silently stops firing for /use.
+func TestEconomyUseGiveProvider_PostsOnSpend(t *testing.T) {
+	want := refdata.Turn{ID: uuid.New()}
+	inner := &stubUseGiveProvider{turn: want, inCombat: true}
+	var got refdata.Turn
+	posted := false
+	p := &economyUseGiveProvider{UseCombatProvider: inner, post: func(_ context.Context, turn refdata.Turn) {
+		posted = true
+		got = turn
+	}}
+
+	if _, err := p.SpendTurnResources(context.Background(), refdata.SpendTurnResourcesParams{SpendBonusAction: true}); err != nil {
+		t.Fatalf("SpendTurnResources error: %v", err)
+	}
+	if !posted {
+		t.Fatal("post not fired after a successful spend")
+	}
+	if got.ID != want.ID {
+		t.Errorf("post got turn %v, want the spend's returned turn %v", got.ID, want.ID)
+	}
+}
+
+// A rejected spend (sql.ErrNoRows) leaves the turn untouched, so re-posting
+// economy would tell the player something changed when nothing did.
+func TestEconomyUseGiveProvider_SkipsPostOnSpendError(t *testing.T) {
+	inner := &stubUseGiveProvider{updateErr: sql.ErrNoRows}
+	posted := false
+	p := &economyUseGiveProvider{UseCombatProvider: inner, post: func(context.Context, refdata.Turn) { posted = true }}
+
+	if _, err := p.SpendTurnResources(context.Background(), refdata.SpendTurnResourcesParams{SpendAction: true}); err == nil {
+		t.Fatal("expected the spend error to propagate")
+	}
+	if posted {
+		t.Error("post must not fire on a rejected spend")
 	}
 }

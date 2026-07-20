@@ -463,6 +463,10 @@ type mockUseCombatProvider struct {
 	combatantErr error
 	hpUpdates    []refdata.UpdateCombatantHPParams
 	hpUpdateErr  error
+	// spends records the targeted compare-and-set spends. spendErr is what the
+	// CAS returns: sql.ErrNoRows means the resource was already spent.
+	spends   []refdata.SpendTurnResourcesParams
+	spendErr error
 }
 
 func (m *mockUseCombatProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {
@@ -499,6 +503,20 @@ func (m *mockUseCombatProvider) UpdateTurnActions(_ context.Context, arg refdata
 	return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed, ActionUsed: arg.ActionUsed, FreeInteractUsed: arg.FreeInteractUsed}, nil
 }
 
+func (m *mockUseCombatProvider) SpendTurnResources(_ context.Context, arg refdata.SpendTurnResourcesParams) (refdata.Turn, error) {
+	m.spends = append(m.spends, arg)
+	if m.spendErr != nil {
+		return refdata.Turn{}, m.spendErr
+	}
+	return refdata.Turn{
+		ID:               arg.ID,
+		ActionUsed:       arg.SpendAction,
+		BonusActionUsed:  arg.SpendBonusAction,
+		ReactionUsed:     arg.SpendReaction,
+		FreeInteractUsed: arg.SpendFreeInteract,
+	}, nil
+}
+
 func TestUseHandler_PotionInCombat_DeductsBonusAction(t *testing.T) {
 	sess := &mockInventorySession{}
 	campID := uuid.New()
@@ -532,10 +550,14 @@ func TestUseHandler_PotionInCombat_DeductsBonusAction(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "Healing Potion")
-	if assert.Len(t, combatProv.updates, 1, "expected one turn update") {
-		assert.True(t, combatProv.updates[0].BonusActionUsed, "potion should consume the bonus action")
-		assert.False(t, combatProv.updates[0].ActionUsed, "potion should not consume the action")
+	if assert.Len(t, combatProv.spends, 1, "expected one targeted spend") {
+		assert.Equal(t, turnID, combatProv.spends[0].ID)
+		assert.True(t, combatProv.spends[0].SpendBonusAction, "potion should consume the bonus action")
+		assert.False(t, combatProv.spends[0].SpendAction, "potion should not consume the action")
+		assert.False(t, combatProv.spends[0].SpendReaction)
+		assert.False(t, combatProv.spends[0].SpendFreeInteract)
 	}
+	assert.Empty(t, combatProv.updates, "the spend must not blind-write all 11 turn columns")
 }
 
 func TestUseHandler_PotionInCombat_BonusActionAlreadySpent_Rejected(t *testing.T) {
@@ -572,7 +594,7 @@ func TestUseHandler_PotionInCombat_BonusActionAlreadySpent_Rejected(t *testing.T
 
 	assert.Contains(t, sess.lastResponse, "Cannot use item")
 	assert.Empty(t, store.updatedInventory, "rejection must not mutate inventory")
-	assert.Empty(t, combatProv.updates, "rejection must not persist a turn update")
+	assert.Empty(t, combatProv.spends, "rejection must not spend a turn resource")
 }
 
 func TestUseHandler_PotionOutOfCombat_NoCost(t *testing.T) {
@@ -608,7 +630,7 @@ func TestUseHandler_PotionOutOfCombat_NoCost(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "Healing Potion")
-	assert.Empty(t, combatProv.updates, "out-of-combat /use must not deduct any resource")
+	assert.Empty(t, combatProv.spends, "out-of-combat /use must not deduct any resource")
 }
 
 func TestUseHandler_MagicItem_InCombat_DeductsAction(t *testing.T) {
@@ -648,9 +670,12 @@ func TestUseHandler_MagicItem_InCombat_DeductsAction(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "Wand of Fireballs")
-	if assert.Len(t, combatProv.updates, 1, "expected one turn update for action cost") {
-		assert.True(t, combatProv.updates[0].ActionUsed, "magic-item active ability should consume the action")
+	if assert.Len(t, combatProv.spends, 1, "expected one targeted spend for the action cost") {
+		assert.Equal(t, turnID, combatProv.spends[0].ID)
+		assert.True(t, combatProv.spends[0].SpendAction, "magic-item active ability should consume the action")
+		assert.False(t, combatProv.spends[0].SpendBonusAction)
 	}
+	assert.Empty(t, combatProv.updates, "the spend must not blind-write all 11 turn columns")
 }
 
 func TestUseHandler_MagicItem_InCombat_ActionAlreadySpent_Rejected(t *testing.T) {
@@ -691,7 +716,7 @@ func TestUseHandler_MagicItem_InCombat_ActionAlreadySpent_Rejected(t *testing.T)
 
 	assert.Contains(t, sess.lastResponse, "Cannot use item")
 	assert.Empty(t, store.updatedInventory, "rejection must not mutate inventory")
-	assert.Empty(t, combatProv.updates, "rejection must not persist a turn update")
+	assert.Empty(t, combatProv.spends, "rejection must not spend a turn resource")
 }
 
 // --- Finding 8 tests: spell-casting magic items route through resolution ---

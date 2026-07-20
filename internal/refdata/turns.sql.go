@@ -825,6 +825,80 @@ func (q *Queries) SkipTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
 	return i, err
 }
 
+const spendTurnResources = `-- name: SpendTurnResources :one
+UPDATE turns SET
+    action_used        = action_used        OR $1::boolean,
+    bonus_action_used  = bonus_action_used  OR $2::boolean,
+    reaction_used      = reaction_used      OR $3::boolean,
+    free_interact_used = free_interact_used OR $4::boolean
+WHERE id = $5
+  AND (NOT $1::boolean        OR NOT action_used)
+  AND (NOT $2::boolean  OR NOT bonus_action_used)
+  AND (NOT $3::boolean      OR NOT reaction_used)
+  AND (NOT $4::boolean OR NOT free_interact_used)
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+type SpendTurnResourcesParams struct {
+	SpendAction       bool      `json:"spend_action"`
+	SpendBonusAction  bool      `json:"spend_bonus_action"`
+	SpendReaction     bool      `json:"spend_reaction"`
+	SpendFreeInteract bool      `json:"spend_free_interact"`
+	ID                uuid.UUID `json:"id"`
+}
+
+// Targeted compare-and-set spend of a turn's boolean resources.
+//
+// UpdateTurnActions blind-writes all 11 resource columns from a struct read
+// earlier in the request, so two overlapping commands (a potion spending the
+// bonus action, a cantrip spending the action) each revert the other's column
+// to whatever it held at their own read. This statement only ever sets the
+// columns it is told to spend, so those two compose however they interleave.
+//
+// The WHERE clause makes it a CAS: each guard is a no-op unless that resource
+// is actually being spent, and the update matches no row when the resource was
+// already spent. Callers therefore get sql.ErrNoRows — a real "already spent"
+// signal — instead of silently double-spending after a stale validation read.
+func (q *Queries) SpendTurnResources(ctx context.Context, arg SpendTurnResourcesParams) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, spendTurnResources,
+		arg.SpendAction,
+		arg.SpendBonusAction,
+		arg.SpendReaction,
+		arg.SpendFreeInteract,
+		arg.ID,
+	)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
 const updateTurnActions = `-- name: UpdateTurnActions :one
 UPDATE turns SET
     movement_remaining_ft = $2,

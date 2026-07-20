@@ -2,7 +2,9 @@ package discord
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -35,9 +37,15 @@ type UseCharacterStore interface {
 // must land on the token — the sheet is not refreshed during a fight, so
 // healing it both misses the real HP pool and silently clamps to zero against
 // a full-looking sheet.
+//
+// SpendTurnResources is the compare-and-set that actually deducts the cost. It
+// is on the interface rather than an optional setter so the compiler rejects
+// any adapter that forgets it — an adapter that silently skipped the spend
+// would hand the player a free potion every turn.
 type UseCombatProvider interface {
 	GetActiveTurnForCharacter(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error)
 	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+	SpendTurnResources(ctx context.Context, arg refdata.SpendTurnResourcesParams) (refdata.Turn, error)
 	GetActiveCombatantForCharacter(ctx context.Context, charID uuid.UUID) (refdata.Combatant, bool, error)
 	UpdateCombatantHP(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 }
@@ -82,6 +90,13 @@ type UseHandler struct {
 	dmQueueFunc     func(guildID string) string
 	notifier        dmqueue.Notifier
 	cardUpdater     CardUpdater // SR-007
+	turnGate        TurnGate
+}
+
+// SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
+// A nil gate disables the check; production wiring always supplies one.
+func (h *UseHandler) SetTurnGate(g TurnGate) {
+	h.turnGate = g
 }
 
 // NewUseHandler creates a new UseHandler.
@@ -215,18 +230,27 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	if err := h.persistUse(ctx, char, combatant, hasCombatant, result, invJSON); err != nil {
-		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
-		return
+	// The spend leads the write section: UseConsumable above is pure, so a
+	// compare-and-set rejection here still leaves the potion in the bag. The
+	// old ordering committed the inventory first and discarded the spend
+	// error, which is how a player could lose an item for nothing.
+	writeUse := func(ctx context.Context) error {
+		if inCombat {
+			if err := h.spendTurnResource(ctx, turn, useResourceCost(itemID)); err != nil {
+				h.respondSpendFailure(interaction, useResourceCost(itemID), err)
+				return errAlreadyResponded
+			}
+		}
+		if err := h.persistUse(ctx, char, combatant, hasCombatant, result, invJSON); err != nil {
+			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+			return errAlreadyResponded
+		}
+		// SR-007: refresh #character-cards after a successful /use write.
+		notifyCardUpdate(ctx, h.cardUpdater, char.ID)
+		return nil
 	}
-
-	// SR-007: refresh #character-cards after a successful /use write.
-	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
-
-	// med-35: persist the turn-resource deduction. Best-effort: a save
-	// failure is logged but does not undo the committed inventory change.
-	if inCombat {
-		h.spendTurnResource(ctx, turn, useResourceCost(itemID))
+	if !h.runWriteSection(ctx, interaction, turn, inCombat, writeUse) {
+		return
 	}
 
 	// Post to #dm-queue if item requires DM adjudication.
@@ -312,22 +336,33 @@ func (h *UseHandler) handleMagicItemCharge(
 		return
 	}
 
-	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
-		ID:        char.ID,
-		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
-	}); err != nil {
-		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+	// Same ordering as the consumable path: the spend must clear before the
+	// charge is written, so a rejected spend costs the player nothing.
+	writeCharge := func(ctx context.Context) error {
+		if inCombat {
+			if err := h.spendTurnResource(ctx, turn, combat.ResourceAction); err != nil {
+				h.respondSpendFailure(interaction, combat.ResourceAction, err)
+				return errAlreadyResponded
+			}
+		}
+		if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+			ID:        char.ID,
+			Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+		}); err != nil {
+			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+			return errAlreadyResponded
+		}
+		// SR-007: refresh #character-cards after a magic-item charge write.
+		notifyCardUpdate(ctx, h.cardUpdater, char.ID)
+		return nil
+	}
+	if !h.runWriteSection(ctx, interaction, turn, inCombat, writeCharge) {
 		return
 	}
 
-	// SR-007: refresh #character-cards after a magic-item charge write.
-	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
-
-	if inCombat {
-		h.spendTurnResource(ctx, turn, combat.ResourceAction)
-	}
-
 	// Finding 8: if the item casts a spell, route through spell resolution.
+	// Deliberately outside the write section: CastFromItem runs the full combat
+	// spell pipeline, which takes the same per-turn lock.
 	if spellID != "" && h.spellCaster != nil && inCombat {
 		castResult, err := h.spellCaster.CastFromItem(ctx, MagicItemCastInput{
 			SpellID:     spellID,
@@ -487,8 +522,11 @@ func (h *UseHandler) resolveCombatGate(
 //
 // Known limit: UpdateCombatantHP is a full-column overwrite computed from a
 // snapshot read earlier in the request, so a temp-HP grant or damage landing
-// in that window is clobbered. Every heal call site in internal/combat shares
-// this shape; narrowing it belongs with that query, not here.
+// in that window is clobbered. runWriteSection holds the per-turn advisory
+// lock across this call, which closes the window against the other gated
+// handlers but not against writers that never take the gate. Every heal call
+// site in internal/combat shares this shape; narrowing it belongs with that
+// query, not here.
 func (h *UseHandler) persistUse(
 	ctx context.Context,
 	char refdata.Character,
@@ -530,15 +568,61 @@ func (h *UseHandler) persistUse(
 	return err
 }
 
-// spendTurnResource marks resource as used on turn and persists the change.
-// Best-effort: persistence failures are swallowed so an uncommitted turn
-// flag never undoes a committed inventory mutation.
-func (h *UseHandler) spendTurnResource(ctx context.Context, turn refdata.Turn, resource combat.ResourceType) {
-	updated, err := combat.UseResource(turn, resource)
+// spendTurnResource deducts resource from turn with a targeted compare-and-set.
+//
+// The earlier combat.ValidateResource check reads a snapshot taken at the top
+// of the request, so it cannot see a command that spent the same resource in
+// the meantime. The CAS closes that window: it matches no row when the resource
+// is already spent, so sql.ErrNoRows reaching the caller is a real "already
+// spent" verdict rather than a lost update.
+func (h *UseHandler) spendTurnResource(ctx context.Context, turn refdata.Turn, resource combat.ResourceType) error {
+	params, err := combat.SpendTurnResourceParams(turn.ID, resource)
 	if err != nil {
+		return err
+	}
+	_, err = h.combatProv.SpendTurnResources(ctx, params)
+	return err
+}
+
+// respondSpendFailure turns a spendTurnResource error into player-facing text.
+// The already-spent wording mirrors the pre-check's "Cannot use item: <resource>:
+// resource already spent" so a player cannot tell which of the two rejected them.
+func (h *UseHandler) respondSpendFailure(interaction *discordgo.Interaction, resource combat.ResourceType, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %s: %v", resource, combat.ErrResourceSpent))
 		return
 	}
-	_, _ = h.combatProv.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
+	respondEphemeral(h.session, interaction, "Failed to save turn resources. Please try again.")
+}
+
+// runWriteSection runs the /use writes, holding the Phase 27 advisory lock for
+// their whole duration when the use happens in combat. persistUse's
+// UpdateCombatantHP is a full-column overwrite computed from a snapshot read
+// earlier in this request, so a concurrent gated write landing in that window
+// (a /cast damage roll, say) would be clobbered; holding the lock across the
+// section serialises /use against the other gated handlers.
+//
+// Out of combat there is no turn to own or lock, so write runs directly and the
+// gate is never consulted. Reports false when the caller must stop — in that
+// case the interaction has already been answered.
+func (h *UseHandler) runWriteSection(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	turn refdata.Turn,
+	inCombat bool,
+	write func(ctx context.Context) error,
+) bool {
+	if !inCombat || h.turnGate == nil {
+		return write(ctx) == nil
+	}
+	_, gateErr := h.turnGate.AcquireAndRun(ctx, turn.EncounterID, discordUserID(interaction), write)
+	if gateErr == nil {
+		return true
+	}
+	if gateErr != errAlreadyResponded {
+		respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+	}
+	return false
 }
 
 // postConsumableToDMQueue dispatches a consumable-without-effect notification

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -184,6 +186,42 @@ func TurnToUpdateParams(turn refdata.Turn) refdata.UpdateTurnActionsParams {
 		ActionSurged:         turn.ActionSurged,
 		HasStoodThisTurn:     turn.HasStoodThisTurn,
 	}
+}
+
+// SpendParams is the parameter set for a targeted turn-resource spend. It is an
+// alias for the sqlc-generated type so callers need not import refdata.
+type SpendParams = refdata.SpendTurnResourcesParams
+
+// ErrUnspendableResource is returned by SpendTurnResourceParams for resources
+// that are not simple booleans. Movement and attacks are quantities, not flags:
+// spending them needs the current value, so they still go through the
+// read-modify-write path.
+var ErrUnspendableResource = errors.New("resource cannot be spent via a targeted update")
+
+// SpendTurnResourceParams builds the parameters for a targeted spend of a
+// single boolean turn resource.
+//
+// Prefer this over TurnToUpdateParams whenever exactly one boolean resource is
+// being consumed. TurnToUpdateParams writes all 11 resource columns from a
+// struct read earlier in the request, so two commands that overlap — say a
+// potion (bonus action) and a cantrip (action) — each revert the other's column
+// to whatever it was at their own read. A targeted spend only ever sets the
+// column it names, so the two compose no matter how they interleave.
+func SpendTurnResourceParams(turnID uuid.UUID, resource ResourceType) (SpendParams, error) {
+	params := SpendParams{ID: turnID}
+	switch resource {
+	case ResourceAction:
+		params.SpendAction = true
+	case ResourceBonusAction:
+		params.SpendBonusAction = true
+	case ResourceReaction:
+		params.SpendReaction = true
+	case ResourceFreeInteract:
+		params.SpendFreeInteract = true
+	default:
+		return SpendParams{}, fmt.Errorf("%s: %w", resource, ErrUnspendableResource)
+	}
+	return params, nil
 }
 
 // buildResourceList returns the list of available resource display strings for a turn.

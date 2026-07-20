@@ -160,3 +160,18 @@ func (p *economyUseGiveProvider) UpdateTurnActions(ctx context.Context, arg refd
 	p.post(ctx, turn)
 	return turn, nil
 }
+
+// SpendTurnResources decorates the targeted CAS spend, which is the path /use
+// takes (/give still spends its free interaction through UpdateTurnActions).
+// Without this override the embedded provider's method is promoted verbatim
+// and /use stops re-posting economy to #your-turn. An error means the spend
+// changed nothing — including sql.ErrNoRows for an already-spent resource — so
+// there is no new economy to announce.
+func (p *economyUseGiveProvider) SpendTurnResources(ctx context.Context, arg refdata.SpendTurnResourcesParams) (refdata.Turn, error) {
+	turn, err := p.UseCombatProvider.SpendTurnResources(ctx, arg)
+	if err != nil {
+		return turn, err
+	}
+	p.post(ctx, turn)
+	return turn, nil
+}

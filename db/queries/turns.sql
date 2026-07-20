@@ -34,6 +34,31 @@ UPDATE turns SET
 WHERE id = $1
 RETURNING *;
 
+-- name: SpendTurnResources :one
+-- Targeted compare-and-set spend of a turn's boolean resources.
+--
+-- UpdateTurnActions blind-writes all 11 resource columns from a struct read
+-- earlier in the request, so two overlapping commands (a potion spending the
+-- bonus action, a cantrip spending the action) each revert the other's column
+-- to whatever it held at their own read. This statement only ever sets the
+-- columns it is told to spend, so those two compose however they interleave.
+--
+-- The WHERE clause makes it a CAS: each guard is a no-op unless that resource
+-- is actually being spent, and the update matches no row when the resource was
+-- already spent. Callers therefore get sql.ErrNoRows — a real "already spent"
+-- signal — instead of silently double-spending after a stale validation read.
+UPDATE turns SET
+    action_used        = action_used        OR sqlc.arg(spend_action)::boolean,
+    bonus_action_used  = bonus_action_used  OR sqlc.arg(spend_bonus_action)::boolean,
+    reaction_used      = reaction_used      OR sqlc.arg(spend_reaction)::boolean,
+    free_interact_used = free_interact_used OR sqlc.arg(spend_free_interact)::boolean
+WHERE id = sqlc.arg(id)
+  AND (NOT sqlc.arg(spend_action)::boolean        OR NOT action_used)
+  AND (NOT sqlc.arg(spend_bonus_action)::boolean  OR NOT bonus_action_used)
+  AND (NOT sqlc.arg(spend_reaction)::boolean      OR NOT reaction_used)
+  AND (NOT sqlc.arg(spend_free_interact)::boolean OR NOT free_interact_used)
+RETURNING *;
+
 -- name: ListTurnsNeedingNudge :many
 SELECT * FROM turns
 WHERE status = 'active'

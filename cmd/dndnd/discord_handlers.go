@@ -539,6 +539,9 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		handlers.distance.SetTurnGate(gate)
 		// Finding 7: /action combat mutations need the advisory lock.
 		handlers.action.SetTurnGate(gate)
+		// /use writes combatant HP from a snapshot read earlier in the
+		// request, so it has to serialise against the handlers above.
+		handlers.use.SetTurnGate(gate)
 	}
 
 	// crit-01a: wire the combat-action family of slash commands. Each
@@ -1257,6 +1260,13 @@ func (a *useGiveTurnAdapter) GetActiveTurnForCharacter(ctx context.Context, _ st
 
 func (a *useGiveTurnAdapter) UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 	return a.queries.UpdateTurnActions(ctx, arg)
+}
+
+// SpendTurnResources runs the targeted compare-and-set spend. sql.ErrNoRows is
+// passed through untouched — it is the CAS reporting the resource was already
+// spent, which /use surfaces to the player rather than treating as a fault.
+func (a *useGiveTurnAdapter) SpendTurnResources(ctx context.Context, arg refdata.SpendTurnResourcesParams) (refdata.Turn, error) {
+	return a.queries.SpendTurnResources(ctx, arg)
 }
 
 // GetActiveCombatantForCharacter resolves the character's live combat token so
