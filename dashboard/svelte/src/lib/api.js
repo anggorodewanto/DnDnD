@@ -1203,6 +1203,26 @@ export async function overrideCombatantInitiative(encounterId, combatantId, payl
 }
 
 /**
+ * Manually override the action economy of a combatant's own active turn
+ * (action / bonus action / reaction / movement / attacks). Every resource key
+ * is optional — omit one to leave it untouched; build the body with
+ * toTurnResourcesPayload(). Returns 409 when the target combatant is not the
+ * one currently acting, since a completed turn's flags are meaningless.
+ * @param {string} encounterId
+ * @param {string} combatantId
+ * @param {{action_used?:boolean, bonus_action_used?:boolean, reaction_used?:boolean,
+ *          movement_remaining_ft?:number, attacks_remaining?:number, reason:string}} payload
+ */
+export async function overrideCombatantTurnResources(encounterId, combatantId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/combatant/${combatantId}/turn-resources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
  * Read a character's current spell + pact-magic slots (DM prefill). Allowed
  * both in and out of combat.
  *   GET /api/character-overview/{characterID}/slots

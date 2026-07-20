@@ -202,3 +202,32 @@ describe('CombatManager feature-uses override', () => {
     expect(fn[0]).toContain('featureUsesEditorError = e.message');
   });
 });
+
+describe('CombatManager turn-resources override', () => {
+  // The DM correction for a combatant's turn action economy. Fetch behaviour is
+  // covered in lib/api.test.js and the payload shaping in lib/turnResources.test.js;
+  // here we assert the .svelte wiring contract.
+  it('renders a Turn Resources fieldset with a tri-state control per resource', () => {
+    expect(src).toContain('data-testid="override-turn-action"');
+    expect(src).toContain('data-testid="override-turn-bonus-action"');
+    expect(src).toContain('data-testid="override-turn-reaction"');
+    expect(src).toContain('data-testid="override-turn-movement"');
+    expect(src).toContain('data-testid="override-turn-attacks"');
+    expect(src).toContain('data-testid="override-turn-resources-btn"');
+    // "unchanged" must be the default so an untouched control is omitted from
+    // the body rather than guessing at the turn's current state.
+    expect(src).toMatch(/<select bind:value=\{dmOverrideActionUsed\}[\s\S]*?<option value="">unchanged<\/option>/);
+  });
+
+  it('builds the body through toTurnResourcesPayload then reloads the workspace', () => {
+    expect(src).toContain("import { toTurnResourcesPayload } from './lib/turnResources.js'");
+    const fn = src.match(/async function handleOverrideTurnResources\(\)\s*\{[\s\S]*?\n  \}/);
+    expect(fn).not.toBeNull();
+    expect(fn[0]).toContain('overrideCombatantTurnResources(activeEncounter.id, selectedCombatant.id, toTurnResourcesPayload(');
+    expect(fn[0]).toContain('reason: dmOverrideReason');
+    expect(fn[0]).toContain("dmOverrideMessage = 'Turn resources override saved.'");
+    expect(fn[0]).toContain('await loadWorkspace()');
+    // The 409 "not the active turn" text is surfaced verbatim to the DM.
+    expect(fn[0]).toContain("dmOverrideMessage = 'Override failed: ' + e.message");
+  });
+});

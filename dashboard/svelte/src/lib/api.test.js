@@ -13,6 +13,7 @@ import {
   overrideCombatantPosition as overrideCombatantPositionDM,
   overrideCombatantConditions as overrideCombatantConditionsDM,
   overrideCombatantInitiative,
+  overrideCombatantTurnResources,
   overrideCharacterSlots,
   getCharacterSlots,
   getCharacterFeatureUses,
@@ -873,6 +874,21 @@ describe('overrideCombatantInitiative', () => {
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/initiative');
     expect(JSON.parse(options.body)).toEqual({ initiative_roll: 18, initiative_order: 1, reason: 'reroll' });
+  });
+});
+
+describe('overrideCombatantTurnResources', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs the turn action-economy override payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    const payload = { action_used: false, movement_remaining_ft: 30, reason: 'undo the cast' };
+    const result = await overrideCombatantTurnResources('enc-1', 'comb-1', payload);
+    expect(result).toEqual({ status: 'ok' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/turn-resources');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual(payload);
   });
 });
 

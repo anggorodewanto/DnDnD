@@ -62,6 +62,10 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/override/combatant/{combatantID}/conditions", h.OverrideCombatantConditions)
 		r.Post("/{encounterID}/override/combatant/{combatantID}/initiative", h.OverrideCombatantInitiative)
 		r.Post("/{encounterID}/override/combatant/{combatantID}/exhaustion", h.OverrideCombatantExhaustion)
+		// DM correction of the active turn's action economy (action / bonus
+		// action / reaction / movement / attacks) — the one override that had
+		// no in-app path and previously needed a raw DB write.
+		r.Post("/{encounterID}/override/combatant/{combatantID}/turn-resources", h.OverrideCombatantTurnResources)
 		r.Post("/{encounterID}/override/character/{characterID}/slots", h.OverrideCharacterSlots)
 		r.Post("/{encounterID}/override/character/{characterID}/feature-uses", h.OverrideCharacterFeatureUses)
 		// C-35: per-attack DM advantage/disadvantage override for the

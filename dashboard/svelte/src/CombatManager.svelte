@@ -11,6 +11,7 @@
     overrideCombatantPosition as dmOverridePosition,
     overrideCombatantConditions as dmOverrideConditions,
     overrideCombatantInitiative,
+    overrideCombatantTurnResources,
     overrideCharacterSlots,
     getCharacterSlots,
     getCharacterFeatureUses,
@@ -48,6 +49,7 @@
     getWalls,
     getLightingData,
   } from './lib/mapdata.js';
+  import { toTurnResourcesPayload } from './lib/turnResources.js';
   import { createEncounterTabsWs } from './lib/encounterTabsWs.js';
   import TurnQueue from './TurnQueue.svelte';
   import ActionResolver from './ActionResolver.svelte';
@@ -201,6 +203,14 @@
   let dmOverrideConditionsText = $state('[]');
   let dmOverrideInitiativeRoll = $state(0);
   let dmOverrideInitiativeOrder = $state(0);
+  // Turn action-economy override. Each control defaults to '' = "unchanged":
+  // the dashboard has no read-side view of turn resources to prefill from, so
+  // only the fields the DM actually sets are sent (see toTurnResourcesPayload).
+  let dmOverrideActionUsed = $state('');
+  let dmOverrideBonusActionUsed = $state('');
+  let dmOverrideReactionUsed = $state('');
+  let dmOverrideMovementFt = $state('');
+  let dmOverrideAttacksRemaining = $state('');
   let dmUndoReason = $state('');
 
   // In-combat spell/pact slot override. The DM opens the SlotEditor, which is
@@ -355,6 +365,28 @@
         reason: dmOverrideReason,
       });
       dmOverrideMessage = 'Initiative override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
+
+  // Correct the action economy of the selected combatant's own active turn.
+  // The backend rejects a combatant who is not currently acting with a 409
+  // whose message is surfaced verbatim, so no client-side turn check is needed.
+  async function handleOverrideTurnResources() {
+    if (!activeEncounter || !selectedCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      await overrideCombatantTurnResources(activeEncounter.id, selectedCombatant.id, toTurnResourcesPayload({
+        actionUsed: dmOverrideActionUsed,
+        bonusActionUsed: dmOverrideBonusActionUsed,
+        reactionUsed: dmOverrideReactionUsed,
+        movementRemainingFt: dmOverrideMovementFt,
+        attacksRemaining: dmOverrideAttacksRemaining,
+        reason: dmOverrideReason,
+      }));
+      dmOverrideMessage = 'Turn resources override saved.';
       await loadWorkspace();
     } catch (e) {
       dmOverrideMessage = 'Override failed: ' + e.message;
@@ -1434,6 +1466,34 @@
                   <label>Roll: <input type="number" bind:value={dmOverrideInitiativeRoll} data-testid="override-init-roll" /></label>
                   <label>Order: <input type="number" bind:value={dmOverrideInitiativeOrder} data-testid="override-init-order" /></label>
                   <button onclick={handleOverrideInitiative} data-testid="override-init-btn">Apply Initiative</button>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Turn Resources (active turn only)</legend>
+                  <label>Action:
+                    <select bind:value={dmOverrideActionUsed} data-testid="override-turn-action">
+                      <option value="">unchanged</option>
+                      <option value="false">available</option>
+                      <option value="true">spent</option>
+                    </select>
+                  </label>
+                  <label>Bonus action:
+                    <select bind:value={dmOverrideBonusActionUsed} data-testid="override-turn-bonus-action">
+                      <option value="">unchanged</option>
+                      <option value="false">available</option>
+                      <option value="true">spent</option>
+                    </select>
+                  </label>
+                  <label>Reaction:
+                    <select bind:value={dmOverrideReactionUsed} data-testid="override-turn-reaction">
+                      <option value="">unchanged</option>
+                      <option value="false">available</option>
+                      <option value="true">spent</option>
+                    </select>
+                  </label>
+                  <label>Movement left (ft): <input type="number" min="0" placeholder="unchanged" bind:value={dmOverrideMovementFt} data-testid="override-turn-movement" /></label>
+                  <label>Attacks left: <input type="number" min="0" placeholder="unchanged" bind:value={dmOverrideAttacksRemaining} data-testid="override-turn-attacks" /></label>
+                  <button onclick={handleOverrideTurnResources} data-testid="override-turn-resources-btn">Apply Turn Resources</button>
                 </fieldset>
 
                 {#if selectedCombatant.character_id}

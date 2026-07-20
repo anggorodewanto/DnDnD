@@ -531,6 +531,9 @@ func mountCombatDashboardRoutes(
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/conditions", dm.OverrideCombatantConditions)
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/exhaustion", dm.OverrideCombatantExhaustion)
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/initiative", dm.OverrideCombatantInitiative)
+	// DM correction of the active turn's action economy (action / bonus action /
+	// reaction / movement / attacks).
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/turn-resources", dm.OverrideCombatantTurnResources)
 	router.Post("/api/combat/{encounterID}/override/character/{characterID}/slots", dm.OverrideCharacterSlots)
 	router.Post("/api/combat/{encounterID}/override/character/{characterID}/feature-uses", dm.OverrideCharacterFeatureUses)
 	// C-35: per-attack DM advantage/disadvantage override.
