@@ -37,6 +37,7 @@ func NewRefDataFeatureProvider(ctx context.Context, queries *refdata.Queries, lo
 	}
 	for _, cls := range classes {
 		fp.classFeatures[cls.ID] = parseFeaturesByLevel(cls.FeaturesByLevel)
+		fp.subclassFeatures[cls.ID] = parseSubclassFeatures(cls.Subclasses)
 	}
 
 	races, err := queries.ListRaces(ctx)
@@ -76,6 +77,32 @@ func parseFeaturesByLevel(raw json.RawMessage) map[string][]character.Feature {
 		return nil
 	}
 	return byLevel
+}
+
+// parseSubclassFeatures decodes the JSONB subclasses column into the
+// map[subclass_slug][level_string][]Feature shape CollectFeatures expects. The
+// column nests each subclass's levels under a "features_by_level" key alongside
+// its display name (refdata/seed_classes.go), so the outer object is decoded
+// into a struct rather than reused directly. Slugs are lowercased because
+// CollectFeatures looks the chosen subclass up lowercased.
+func parseSubclassFeatures(raw json.RawMessage) map[string]map[string][]character.Feature {
+	if len(raw) == 0 {
+		return nil
+	}
+	var decoded map[string]struct {
+		FeaturesByLevel map[string][]character.Feature `json:"features_by_level"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil
+	}
+	bySlug := make(map[string]map[string][]character.Feature, len(decoded))
+	for slug, entry := range decoded {
+		if len(entry.FeaturesByLevel) == 0 {
+			continue
+		}
+		bySlug[strings.ToLower(slug)] = entry.FeaturesByLevel
+	}
+	return bySlug
 }
 
 // parseTraits decodes the JSONB traits column into a flat []Feature slice.

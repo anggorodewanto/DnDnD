@@ -386,7 +386,7 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		PactMagicSlots:   preserveExpendedPactSlots(existing.PactMagicSlots, c.pactMagicMsg),
 		HitDiceRemaining: c.hitDiceJSON,
 		FeatureUses:      preserveExpendedFeatureUses(existing.FeatureUses, c.featureUsesMsg),
-		Features:         preservePersistedFeats(existing.Features, c.featuresMsg),
+		Features:         preservePersistedFeats(existing.Features, c.featuresMsg, buildIsAdditive(existing.Race, existing.Classes, p.Race, c.classesJSON)),
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
 		Gold:             existing.Gold,
 		AttunementSlots:  existing.AttunementSlots,
@@ -484,31 +484,34 @@ func featFlatHPBonus(features pqtype.NullRawMessage, totalLevel int32) int32 {
 	return character.FeatFlatHPBonus(feats, totalLevel)
 }
 
-// preservePersistedFeats carries forward ASI-applied feat features across a
-// builder rebuild. A rebuild regenerates Features from CollectFeatures, which
-// emits only class/subclass/racial features (derive_stats.go) — so every feature
-// the level-up ASI flow wrote with Source:"feat" (Durable, Tough, Alert, the
-// martial masters, …) would otherwise vanish, silently disabling its combat
-// riders. Each existing Source=="feat" feature is appended to the fresh list,
-// de-duped by name, preserving its full struct including MechanicalEffect. The
-// fresh build never emits feats, so this appends once per rebuild with no
-// accumulation. Falls back to the fresh value when existing is absent, has no
-// feats, or is unparseable. COV-17 S1.
-func preservePersistedFeats(existing, fresh pqtype.NullRawMessage) pqtype.NullRawMessage {
+// preservePersistedFeats carries forward persisted features a builder rebuild
+// would otherwise drop. A rebuild regenerates Features from CollectFeatures,
+// which emits only class/subclass/racial features (derive_stats.go), so
+// anything else in the stored list vanishes — silently disabling the combat
+// riders that gate on a feature by name.
+//
+// Two kinds of feature need carrying:
+//   - Source=="feat" entries the level-up ASI flow wrote (Durable, Tough,
+//     Alert, the martial masters, …). Always preserved. COV-17 S1.
+//   - Out-of-band grants appended straight to the features JSON, which carry no
+//     Source at all. Nothing stamps Source on derived features either — the
+//     seeded class/racial JSON has no "source" key — so an unsourced feature is
+//     indistinguishable from a stale class feature left over from a previous
+//     build. additive resolves that: when the edit could only grow the derived
+//     set (see buildIsAdditive), no derived feature can legitimately have been
+//     retired, so anything persisted-but-missing is an out-of-band grant and is
+//     preserved. After a respec it is dropped, because resurrecting the old
+//     class's features onto the new build would be worse and permanent.
+//
+// De-duped by name, preserving the full struct including MechanicalEffect.
+// Falls back to the fresh value when existing is absent or unparseable, or when
+// there is nothing to carry.
+func preservePersistedFeats(existing, fresh pqtype.NullRawMessage, additive bool) pqtype.NullRawMessage {
 	if !existing.Valid {
 		return fresh
 	}
 	var oldFeatures []character.Feature
 	if err := json.Unmarshal(existing.RawMessage, &oldFeatures); err != nil {
-		return fresh
-	}
-	var feats []character.Feature
-	for _, f := range oldFeatures {
-		if f.Source == featFeatureSource {
-			feats = append(feats, f)
-		}
-	}
-	if len(feats) == 0 {
 		return fresh
 	}
 
@@ -522,18 +525,72 @@ func preservePersistedFeats(existing, fresh pqtype.NullRawMessage) pqtype.NullRa
 	for _, f := range newFeatures {
 		present[f.Name] = true
 	}
-	for _, f := range feats {
+
+	carried := false
+	for _, f := range oldFeatures {
 		if present[f.Name] {
+			continue
+		}
+		if !additive && f.Source != featFeatureSource {
 			continue
 		}
 		newFeatures = append(newFeatures, f)
 		present[f.Name] = true
+		carried = true
 	}
+	if !carried {
+		return fresh
+	}
+
 	merged, err := json.Marshal(newFeatures)
 	if err != nil {
 		return fresh
 	}
 	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// buildIsAdditive reports whether an edit can only have grown the derived
+// feature set. That holds when the race is unchanged and every stored class
+// survives at the same or a higher level, keeping its subclass or gaining one
+// it did not have. Levelling up, picking the subclass the level-up flow asked
+// for, and adding a multiclass are all additive; dropping a level, swapping a
+// subclass, removing a class, or changing race are not, because each can
+// legitimately retire a feature.
+//
+// Comparison is case-insensitive because the builder submits display names
+// while stored rows hold slugs. An unparseable class list is reported as
+// non-additive, so an unreadable row falls back to the feat-only rule.
+func buildIsAdditive(existingRace string, existingClasses json.RawMessage, freshRace string, freshClasses []byte) bool {
+	if !strings.EqualFold(strings.TrimSpace(existingRace), strings.TrimSpace(freshRace)) {
+		return false
+	}
+	var oldEntries, newEntries []character.ClassEntry
+	if err := json.Unmarshal(existingClasses, &oldEntries); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(freshClasses, &newEntries); err != nil {
+		return false
+	}
+
+	// Duplicate classes are rejected upstream by validateClassEntries, so a
+	// class name is a unique key here and order does not matter.
+	fresh := make(map[string]character.ClassEntry, len(newEntries))
+	for _, e := range newEntries {
+		fresh[strings.ToLower(e.Class)] = e
+	}
+	for _, old := range oldEntries {
+		now, ok := fresh[strings.ToLower(old.Class)]
+		if !ok {
+			return false
+		}
+		if now.Level < old.Level {
+			return false
+		}
+		if old.Subclass != "" && !strings.EqualFold(old.Subclass, now.Subclass) {
+			return false
+		}
+	}
+	return true
 }
 
 // preserveExpendedPactSlots carries forward Warlock pact-magic slots already

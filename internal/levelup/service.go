@@ -271,8 +271,13 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 		update.PactMagicSlots = pactJSON
 	}
 
-	// Append class features for the new level (deduping by name)
-	if newFeatures := classRef.FeaturesByLevel[strconv.Itoa(newClassLevel)]; len(newFeatures) > 0 {
+	// Append class + chosen-subclass features for the new level (deduping by
+	// name). Copied into a fresh slice rather than appended onto the ref-data
+	// map's slice, which would alias it across calls.
+	var newFeatures []character.Feature
+	newFeatures = append(newFeatures, classRef.FeaturesByLevel[strconv.Itoa(newClassLevel)]...)
+	newFeatures = append(newFeatures, subclassFeaturesForLevel(classRef.Subclasses, subclassFor(newClasses, classID), newClassLevel)...)
+	if len(newFeatures) > 0 {
 		var existing []character.Feature
 		if len(char.Features) > 0 {
 			_ = json.Unmarshal(char.Features, &existing)
@@ -755,6 +760,42 @@ func (s *Service) buildRefMaps(
 }
 
 // classHasSubclass checks whether the given class already has a subclass selected.
+// subclassFor returns the subclass chosen for a class, or "" when the class is
+// absent or has no subclass yet.
+func subclassFor(classes []character.ClassEntry, classID string) string {
+	for _, c := range classes {
+		if c.Class == classID {
+			return c.Subclass
+		}
+	}
+	return ""
+}
+
+// subclassFeaturesForLevel pulls one level's features for the chosen subclass
+// out of the class's raw Subclasses JSON (subclass-slug → features_by_level →
+// level-string). The store adapter loads that column as map[string]any, so the
+// chosen entry is round-tripped through JSON to reach the typed Feature shape.
+func subclassFeaturesForLevel(subclasses map[string]any, subclass string, level int) []character.Feature {
+	if subclass == "" || len(subclasses) == 0 {
+		return nil
+	}
+	entry, ok := subclasses[strings.ToLower(subclass)]
+	if !ok {
+		return nil
+	}
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		return nil
+	}
+	var decoded struct {
+		FeaturesByLevel map[string][]character.Feature `json:"features_by_level"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil
+	}
+	return decoded.FeaturesByLevel[strconv.Itoa(level)]
+}
+
 func classHasSubclass(classes []character.ClassEntry, classID string) bool {
 	for _, c := range classes {
 		if c.Class == classID {

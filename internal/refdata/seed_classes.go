@@ -45,7 +45,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"berserker": map[string]any{
 					"name": "Path of the Berserker",
 					"features_by_level": map[string]any{
-						"3": []map[string]string{{"name": "Frenzy", "description": "You can go into a frenzy when you rage, allowing you to make a single melee weapon attack as a bonus action on each of your turns after this one.", "mechanical_effect": "bonus_action_melee_attack_while_raging"}},
+						"3": []map[string]string{{"name": "Frenzy", "description": "If you use Reckless Attack while your Rage is active, you deal extra damage to the first target you hit on your turn with a Strength-based attack. To determine the extra damage, roll a number of d6s equal to your Rage Damage bonus, and add them together. The damage has the same type as the weapon or Unarmed Strike used for the attack.", "mechanical_effect": "frenzy"}},
 						"6": []map[string]string{{"name": "Mindless Rage", "description": "You can't be charmed or frightened while raging.", "mechanical_effect": "immune_charmed_frightened_while_raging"}},
 					},
 				},

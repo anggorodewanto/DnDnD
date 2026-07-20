@@ -489,6 +489,11 @@ type AttackInput struct {
 	// (AdvantageInput.ForgoAdvantage) and records the effect on the result for
 	// Service.Attack to resolve post-hit (applyBrutalStrike).
 	BrutalStrike string
+	// Frenzy signals that the Berserker's Frenzy rider (Nd6, N = Rage Damage
+	// bonus) was injected into Features by populateAttackFES. ResolveAttack reads
+	// it only to stamp the once-per-turn key on a hit (recordFrenzy) — the dice
+	// themselves ride the Feature Effect System like any other extra-damage rider.
+	Frenzy bool
 	// BonusDice, when non-empty, is a player-declared effect-die expression
 	// (e.g. "1d4" Bless, "1d8" Bardic Inspiration) added to the to-hit total.
 	// Nat 20 / nat 1 semantics key off the raw die and are unaffected; the
@@ -955,6 +960,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		recordOnHitMastery(&result, onHitMastery(input, isMelee),
 			8+profBonus+effectiveAbilityMod(input))
 		recordCunningStrike(&result, input, 8+profBonus+AbilityModifier(input.Scores.Dex))
+		recordFrenzy(&result, input)
 		return result, nil
 	}
 
@@ -1034,6 +1040,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	// target-ability-independent). The save is rolled post-hit in Service.Attack
 	// (applyCunningStrike).
 	recordCunningStrike(&result, input, 8+profBonus+AbilityModifier(input.Scores.Dex))
+	// Frenzy: the extra Nd6 already landed via buildFESDamageBreakdown above —
+	// stamp the once-per-turn key so no later attack this turn re-rides it.
+	recordFrenzy(&result, input)
 
 	return result, nil
 }
@@ -2769,6 +2778,19 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	if brutalStrikeEligible(cmd, char.Features, weapon, input.AbilityUsed) {
 		input.BrutalStrike = cmd.BrutalStrike
 		input.Features = append(input.Features, BrutalStrikeFeature(weapon.DamageType))
+	}
+
+	// Frenzy (Barbarian 3, Path of the Berserker): a raging barbarian using
+	// Reckless Attack adds Nd6 of the weapon's damage type to the first target
+	// they hit this turn with a Strength-based attack, N being their Rage Damage
+	// bonus. Passive — nothing is declared on the command; frenzyEligible decides
+	// off the attacker's state and injects the rider. classLevel reads the
+	// BARBARIAN level from the already-parsed classes, so a multiclass barbarian
+	// scales on that level rather than their total character level.
+	if frenzyEligible(cmd, feats, input.AbilityUsed, input.IsRaging, input.UsedThisTurn) {
+		input.Frenzy = true
+		input.Features = append(input.Features,
+			FrenzyFeature(RageDamageBonus(classLevel(classes, "Barbarian")), weapon.DamageType))
 	}
 
 	// SR-058: Sacred Weapon condition → inject CHA mod as modify_attack_roll.
