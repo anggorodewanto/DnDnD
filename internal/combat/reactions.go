@@ -2,7 +2,6 @@ package combat
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -147,10 +146,7 @@ func (s *Service) markPCReactionUsed(ctx context.Context, encounterID, targetID 
 	if err != nil {
 		return fmt.Errorf("declaring reaction: %w", err)
 	}
-	if _, err := s.store.UpdateReactionDeclarationStatusUsed(ctx, refdata.UpdateReactionDeclarationStatusUsedParams{
-		ID:          decl.ID,
-		UsedOnRound: sql.NullInt32{Int32: activeTurn.RoundNumber, Valid: true},
-	}); err != nil {
+	if _, err := s.stampReactionUsed(ctx, decl.ID, activeTurn.RoundNumber); err != nil {
 		return fmt.Errorf("marking reaction used: %w", err)
 	}
 	return nil

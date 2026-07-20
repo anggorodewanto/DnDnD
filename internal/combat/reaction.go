@@ -205,6 +205,18 @@ func (s *Service) hasUsedReactionThisRound(ctx context.Context, encounterID, com
 	return false, nil
 }
 
+// stampReactionUsed marks a reaction declaration used and stamps the round it
+// was spent — the round-scoped source of truth read by CanDeclareReaction /
+// hasUsedReactionThisRound. Shared by the DM-resolve (ResolveReaction),
+// enemy-turn (markPCReactionUsed), and off-turn /cast (consumeCastReaction)
+// paths; each caller wraps the returned error with its own context.
+func (s *Service) stampReactionUsed(ctx context.Context, declarationID uuid.UUID, round int32) (refdata.ReactionDeclaration, error) {
+	return s.store.UpdateReactionDeclarationStatusUsed(ctx, refdata.UpdateReactionDeclarationStatusUsedParams{
+		ID:          declarationID,
+		UsedOnRound: sql.NullInt32{Int32: round, Valid: true},
+	})
+}
+
 // CancelReaction cancels a specific reaction declaration by ID.
 func (s *Service) CancelReaction(ctx context.Context, declarationID uuid.UUID) (refdata.ReactionDeclaration, error) {
 	decl, err := s.store.CancelReactionDeclaration(ctx, declarationID)
@@ -287,10 +299,7 @@ func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID) 
 		return refdata.ReactionDeclaration{}, fmt.Errorf("marking reaction used on turn: %w", err)
 	}
 
-	resolved, err := s.store.UpdateReactionDeclarationStatusUsed(ctx, refdata.UpdateReactionDeclarationStatusUsedParams{
-		ID:          declarationID,
-		UsedOnRound: sql.NullInt32{Int32: activeTurn.RoundNumber, Valid: true},
-	})
+	resolved, err := s.stampReactionUsed(ctx, declarationID, activeTurn.RoundNumber)
 	if err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("updating reaction status to used: %w", err)
 	}

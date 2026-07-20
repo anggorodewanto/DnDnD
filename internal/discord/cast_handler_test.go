@@ -721,6 +721,61 @@ func TestCastHandler_ExplorationCast_MultiPC_PicksInvokerPC(t *testing.T) {
 	}
 }
 
+// TestCastHandler_ReactionCast_ResolvesInvokerAndBypassesGate locks the fix for
+// the live "resource already spent" bug: a reaction spell (Hellish Rebuke) cast
+// during another creature's turn must be attributed to the invoking PC — not
+// the active-turn combatant — forwarded with a synthetic zero turn (so no
+// action is charged), and it must bypass the turn gate (which gates by turn
+// ownership and would otherwise reject an off-turn cast).
+func TestCastHandler_ReactionCast_ResolvesInvokerAndBypassesGate(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+
+	// The active turn belongs to an enemy; the invoker (u1) owns a different PC.
+	enemy := provider.caster // whoever is currently acting
+	charVale := uuid.New()
+	valePC := refdata.Combatant{
+		ID: uuid.New(), ShortID: "VA", DisplayName: "Vale",
+		PositionCol: "M", PositionRow: 11,
+		CharacterID: uuid.NullUUID{UUID: charVale, Valid: true}, IsAlive: true,
+	}
+	provider.listCombatantsOverride = []refdata.Combatant{enemy, valePC, provider.target}
+	provider.spells["hellish-rebuke"] = refdata.Spell{
+		ID: "hellish-rebuke", Name: "Hellish Rebuke", Level: 1, CastingTime: "1 reaction",
+	}
+
+	// A turn gate that rejects any non-owner: the reaction cast must never reach it.
+	h.SetTurnGate(&stubTurnGate{err: &combat.ErrNotYourTurn{CurrentCharacterName: "Enemy", CurrentDiscordUserID: "u-enemy"}})
+	h.SetCampaignProvider(&mockCheckCampaignProvider{
+		fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: uuid.New()}, nil
+		},
+	})
+	h.SetCharacterLookup(&mockCheckCharacterLookup{
+		fn: func(_ context.Context, _ uuid.UUID, discordUserID string) (refdata.Character, error) {
+			if discordUserID != "u1" {
+				t.Errorf("character lookup got discordUserID %q, want u1", discordUserID)
+			}
+			return refdata.Character{ID: charVale}, nil
+		},
+	})
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "hellish-rebuke", "target": "OS"}))
+
+	if strings.Contains(sess.lastResponse.Data.Content, "Enemy") {
+		t.Fatalf("reaction cast must bypass the turn gate, got gate rejection %q", sess.lastResponse.Data.Content)
+	}
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call from reaction branch, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.CasterID != valePC.ID {
+		t.Errorf("CasterID = %v, want invoker PC Vale %v (not active combatant %v)", got.CasterID, valePC.ID, enemy.ID)
+	}
+	if got.Turn.ID != uuid.Nil {
+		t.Errorf("reaction cast must forward a synthetic zero turn, got Turn.ID = %v", got.Turn.ID)
+	}
+}
+
 func TestCastHandler_TurnGate_RejectsWrongOwner(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 	h.SetTurnGate(&stubTurnGate{err: &combat.ErrNotYourTurn{

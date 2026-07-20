@@ -24,6 +24,16 @@ func IsBonusActionSpell(spell refdata.Spell) bool {
 	return strings.Contains(strings.ToLower(spell.CastingTime), "bonus action")
 }
 
+// IsReactionSpell returns true if the spell's casting time is a reaction
+// (Hellish Rebuke, Shield, Feather Fall, Counterspell, ...). A reaction spell
+// is cast off-turn: the caster is the invoking PC — not whoever's turn it is —
+// and it costs the caster's reaction, not an action. Cast therefore skips the
+// active-turn action/bonus-action economy for these and charges the caster's
+// reaction instead (see Cast + consumeCastReaction).
+func IsReactionSpell(spell refdata.Spell) bool {
+	return strings.Contains(strings.ToLower(spell.CastingTime), "reaction")
+}
+
 // ValidateBonusActionSpellRestriction enforces the 5e bonus action spell restriction
 // in both directions per Sage Advice. The isBonusAction parameter indicates whether
 // the spell is effectively a bonus action spell (accounting for metamagic like Quickened Spell).
@@ -411,24 +421,31 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	isBonusAction := IsBonusActionSpell(spell)
+	isReaction := IsReactionSpell(spell)
 
 	// 1a. Quickened Spell metamagic changes casting time to bonus action
 	if hasMetamagic(cmd.Metamagic, "quickened") {
 		isBonusAction = true
 	}
 
-	// 2. Validate action/bonus action resource
+	// 2. Validate action/bonus action resource. A reaction spell is cast
+	// off-turn and costs the caster's reaction, not an action on the active
+	// creature's turn (cmd.Turn belongs to whoever is acting, which is not the
+	// caster) — so it skips the action/bonus-action economy here and is charged
+	// against the caster's reaction below (step 13).
 	resource := ResourceAction
 	if isBonusAction {
 		resource = ResourceBonusAction
 	}
-	if err := ValidateResource(cmd.Turn, resource); err != nil {
-		return CastResult{}, err
-	}
+	if !isReaction {
+		if err := ValidateResource(cmd.Turn, resource); err != nil {
+			return CastResult{}, err
+		}
 
-	// 3. Validate bonus action spell restriction (both directions)
-	if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell, isBonusAction); err != nil {
-		return CastResult{}, err
+		// 3. Validate bonus action spell restriction (both directions)
+		if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell, isBonusAction); err != nil {
+			return CastResult{}, err
+		}
 	}
 
 	// 4. Look up caster combatant
@@ -443,6 +460,20 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// player who fat-fingers /cast while raging doesn't burn a slot.
 	if caster.IsRaging {
 		return CastResult{}, errors.New("you cannot cast spells while raging")
+	}
+
+	// 4-reaction: reaction spells cost the caster's reaction. Enforce the
+	// reaction economy up front (surprised, or a reaction already spent this
+	// round) so a rejected cast burns no slot. Out of combat (no active turn)
+	// CanDeclareReaction returns true and consumeCastReaction is a no-op.
+	if isReaction {
+		canReact, err := s.CanDeclareReaction(ctx, castEncounterID(cmd, caster), cmd.CasterID)
+		if err != nil {
+			return CastResult{}, fmt.Errorf("checking reaction availability: %w", err)
+		}
+		if !canReact {
+			return CastResult{}, ErrReactionAlreadyUsed
+		}
 	}
 
 	// 4a. med-25 / Phase 61: pre-validate Silence zones. A caster standing
@@ -867,28 +898,37 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
-	// 13. Use action/bonus action resource
-	turn := cmd.Turn
-	turn, err = UseResource(turn, resource)
-	if err != nil {
-		return CastResult{}, err
-	}
-	if isBonusAction {
-		turn.BonusActionSpellCast = true
-	} else {
-		// Casting a spell with your action is the Cast-a-Spell action, not the
-		// Attack action — so there is no weapon attack left to make. Zero the
-		// seeded attack count (a cantrip cast as an action counts too) so /done
-		// and the resource summary don't report a phantom attack.
-		turn.AttacksRemaining = 0
-		if spellLevel > 0 {
-			turn.ActionSpellCast = true
+	// 13. Charge the caster's resource. A reaction spell costs the caster's
+	// reaction (marked used for the round) and never touches the active
+	// creature's turn; every other spell spends the action / bonus action on
+	// cmd.Turn.
+	if isReaction {
+		if err := s.consumeCastReaction(ctx, castEncounterID(cmd, caster), cmd.CasterID, spell.Name); err != nil {
+			return CastResult{}, err
 		}
-	}
+	} else {
+		turn := cmd.Turn
+		turn, err = UseResource(turn, resource)
+		if err != nil {
+			return CastResult{}, err
+		}
+		if isBonusAction {
+			turn.BonusActionSpellCast = true
+		} else {
+			// Casting a spell with your action is the Cast-a-Spell action, not the
+			// Attack action — so there is no weapon attack left to make. Zero the
+			// seeded attack count (a cantrip cast as an action counts too) so /done
+			// and the resource summary don't report a phantom attack.
+			turn.AttacksRemaining = 0
+			if spellLevel > 0 {
+				turn.ActionSpellCast = true
+			}
+		}
 
-	// 14. Persist turn state
-	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
-		return CastResult{}, fmt.Errorf("updating turn: %w", err)
+		// 14. Persist turn state
+		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
+			return CastResult{}, fmt.Errorf("updating turn: %w", err)
+		}
 	}
 
 	// 15. Deduct spell slot and persist (leveled spells, not rituals)
@@ -1022,10 +1062,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// ISSUE-014: persist the resolved cast to action_log so it surfaces in the
 	// DM Console timeline. Best-effort — never aborts a cast that already spent
 	// the slot and applied its effects.
-	castEnc := cmd.EncounterID
-	if castEnc == uuid.Nil {
-		castEnc = cmd.Turn.EncounterID
-	}
+	castEnc := castEncounterID(cmd, caster)
 	s.recordCombatAction(ctx, cmd.Turn.ID, castEnc, cmd.CasterID,
 		nullableCombatantID(cmd.TargetID), actionTypeCast,
 		describeCast(result.CasterName, result.SpellName, result.TargetName)+describeComponents(result.DamageBreakdown))
@@ -1039,6 +1076,62 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	return result, nil
+}
+
+// castEncounterID resolves the encounter a cast belongs to. The command carries
+// it explicitly for combat casts; a reaction cast forwards a synthetic zero
+// turn, so fall back to the caster combatant's own encounter.
+func castEncounterID(cmd CastCommand, caster refdata.Combatant) uuid.UUID {
+	if cmd.EncounterID != uuid.Nil {
+		return cmd.EncounterID
+	}
+	return caster.EncounterID
+}
+
+// consumeCastReaction charges the caster's reaction for a reaction-spell cast.
+// It stamps a "used" reaction declaration with the current round so the
+// reaction economy (CanDeclareReaction / hasUsedReactionThisRound) blocks a
+// second reaction this round, reusing an already-active declaration (e.g. a
+// pre-declared "hellish rebuke if attacked") when one exists rather than
+// orphaning it. Out of combat there is no active turn — reactions aren't
+// tracked, so this is a no-op. The declaration is written directly (not via
+// DeclareReaction) because Cast has already validated the spell is castable;
+// re-running the known-spell check here would be redundant.
+func (s *Service) consumeCastReaction(ctx context.Context, encounterID, casterID uuid.UUID, spellName string) error {
+	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("getting active turn: %w", err)
+	}
+
+	var declID uuid.UUID
+	active, err := s.store.ListActiveReactionDeclarationsByCombatant(ctx, refdata.ListActiveReactionDeclarationsByCombatantParams{
+		CombatantID: casterID,
+		EncounterID: encounterID,
+	})
+	if err != nil {
+		return fmt.Errorf("listing active reactions: %w", err)
+	}
+	if len(active) > 0 {
+		declID = active[0].ID
+	} else {
+		decl, err := s.store.CreateReactionDeclaration(ctx, refdata.CreateReactionDeclarationParams{
+			EncounterID: encounterID,
+			CombatantID: casterID,
+			Description: spellName,
+		})
+		if err != nil {
+			return fmt.Errorf("declaring reaction: %w", err)
+		}
+		declID = decl.ID
+	}
+
+	if _, err := s.stampReactionUsed(ctx, declID, activeTurn.RoundNumber); err != nil {
+		return fmt.Errorf("marking reaction used: %w", err)
+	}
+	return nil
 }
 
 // maybeCreateSpellZone inserts an encounter_zones row when the cast spell has

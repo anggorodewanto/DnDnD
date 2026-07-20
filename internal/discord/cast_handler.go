@@ -287,6 +287,23 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	spell, err := h.resolveSpell(ctx, spellID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
+		return
+	}
+
+	// Reaction-timed spells (Hellish Rebuke, Shield, Feather Fall, ...) are cast
+	// off-turn: the caster is the invoking PC, not the active creature, and the
+	// cost is the caster's reaction — not an action on whoever's turn it is.
+	// Route them before the turn gate (which gates by turn ownership and would
+	// reject an off-turn cast) and resolve the caster from the invoker, exactly
+	// as an exploration cast does.
+	if combat.IsReactionSpell(spell) {
+		h.dispatchInvokerCast(ctx, interaction, encounter, encounterID, spell, targetStr)
+		return
+	}
+
 	if !combat.IsExemptCommand("cast") && h.turnGate != nil {
 		doCast := func(ctx context.Context) error {
 			turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
@@ -298,12 +315,6 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 			caster, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
 			if err != nil {
 				respondEphemeral(h.session, interaction, "Failed to load combatant.")
-				return errAlreadyResponded
-			}
-
-			spell, err := h.resolveSpell(ctx, spellID)
-			if err != nil {
-				respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
 				return errAlreadyResponded
 			}
 
@@ -334,12 +345,6 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 			return
 		}
 
-		spell, err := h.resolveSpell(ctx, spellID)
-		if err != nil {
-			respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
-			return
-		}
-
 		if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
 			h.dispatchAoE(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
 			return
@@ -367,12 +372,20 @@ func (h *CastHandler) handleExplorationCast(
 	encounterID uuid.UUID,
 	spellID, targetStr string,
 ) {
-	combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	spell, err := h.resolveSpell(ctx, spellID)
 	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to list combatants.")
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
 		return
 	}
+	h.dispatchInvokerCast(ctx, interaction, encounter, encounterID, spell, targetStr)
+}
 
+// resolveInvokingCaster resolves the combatant belonging to the player who
+// invoked the command (by guild + Discord user), the same way exploration
+// /move and /action resolve their actor — so a multi-PC party disambiguates by
+// the invoker rather than falling back to whoever's turn it is. Used by both
+// the exploration cast path and the off-turn reaction cast path.
+func (h *CastHandler) resolveInvokingCaster(ctx context.Context, interaction *discordgo.Interaction, combatants []refdata.Combatant) (refdata.Combatant, bool) {
 	var getCampaign func(ctx context.Context, guildID string) (refdata.Campaign, error)
 	if h.campaignProv != nil {
 		getCampaign = h.campaignProv.GetCampaignByGuildID
@@ -381,21 +394,35 @@ func (h *CastHandler) handleExplorationCast(
 	if h.characterLookup != nil {
 		getCharacter = h.characterLookup.GetCharacterByCampaignAndDiscord
 	}
+	return resolveExplorationPC(ctx, combatants, interaction.GuildID, discordUserID(interaction), getCampaign, getCharacter)
+}
 
-	caster, ok := resolveExplorationPC(ctx, combatants, interaction.GuildID, discordUserID(interaction), getCampaign, getCharacter)
+// dispatchInvokerCast runs a cast attributed to the player who invoked the
+// command rather than to whoever owns the active turn: it resolves the caster
+// from the invoker and forwards a synthetic zero turn, so Service.Cast charges
+// the correct economy — no action for an exploration cast, and the caster's
+// reaction for an off-turn reaction spell (Hellish Rebuke, Shield, ...). Shared
+// by the exploration and reaction cast paths.
+func (h *CastHandler) dispatchInvokerCast(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounter refdata.Encounter,
+	encounterID uuid.UUID,
+	spell refdata.Spell,
+	targetStr string,
+) {
+	combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to list combatants.")
+		return
+	}
+
+	caster, ok := h.resolveInvokingCaster(ctx, interaction, combatants)
 	if !ok {
 		respondEphemeral(h.session, interaction, "Could not find your character in this encounter.")
 		return
 	}
 
-	spell, err := h.resolveSpell(ctx, spellID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
-		return
-	}
-
-	// Synthetic empty turn: no action/bonus-action/movement spent, so the
-	// combat service's resource validation passes without an active turn.
 	var noTurn refdata.Turn
 
 	if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
