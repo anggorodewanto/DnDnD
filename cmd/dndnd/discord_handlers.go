@@ -1259,6 +1259,25 @@ func (a *useGiveTurnAdapter) UpdateTurnActions(ctx context.Context, arg refdata.
 	return a.queries.UpdateTurnActions(ctx, arg)
 }
 
+// GetActiveCombatantForCharacter resolves the character's live combat token so
+// /use can heal the HP the fight actually reads rather than the character
+// sheet, which is not refreshed mid-combat. sql.ErrNoRows means the character
+// is not in an active encounter and is surfaced as a clean (zero, false, nil).
+func (a *useGiveTurnAdapter) GetActiveCombatantForCharacter(ctx context.Context, charID uuid.UUID) (refdata.Combatant, bool, error) {
+	combatant, err := a.queries.GetActiveCombatantByCharacterID(ctx, uuid.NullUUID{UUID: charID, Valid: true})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return refdata.Combatant{}, false, nil
+		}
+		return refdata.Combatant{}, false, err
+	}
+	return combatant, true, nil
+}
+
+func (a *useGiveTurnAdapter) UpdateCombatantHP(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+	return a.queries.UpdateCombatantHP(ctx, arg)
+}
+
 // giveCombatProviderAdapter satisfies discord.GiveCombatProvider (T25). It
 // resolves the guild's active encounter (campaign -> active encounter) and
 // returns its combatants so /give can enforce the adjacency/range check. When

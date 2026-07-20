@@ -439,12 +439,20 @@ func TestUseHandler_DMQueueItem(t *testing.T) {
 }
 
 // mockUseCombatProvider implements UseCombatProvider for med-35 tests.
+// combatant/hasCombatant/combatantErr and hpUpdates back the combat-HP path:
+// a zero-value mock reports "no live combatant", which keeps the pre-existing
+// out-of-combat tests on the character-sheet HP branch.
 type mockUseCombatProvider struct {
-	turn      refdata.Turn
-	inCombat  bool
-	lookupErr error
-	updates   []refdata.UpdateTurnActionsParams
-	updateErr error
+	turn         refdata.Turn
+	inCombat     bool
+	lookupErr    error
+	updates      []refdata.UpdateTurnActionsParams
+	updateErr    error
+	combatant    refdata.Combatant
+	hasCombatant bool
+	combatantErr error
+	hpUpdates    []refdata.UpdateCombatantHPParams
+	hpUpdateErr  error
 }
 
 func (m *mockUseCombatProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {
@@ -452,6 +460,25 @@ func (m *mockUseCombatProvider) GetActiveTurnForCharacter(_ context.Context, _ s
 		return refdata.Turn{}, false, m.lookupErr
 	}
 	return m.turn, m.inCombat, nil
+}
+
+func (m *mockUseCombatProvider) GetActiveCombatantForCharacter(_ context.Context, _ uuid.UUID) (refdata.Combatant, bool, error) {
+	if m.combatantErr != nil {
+		return refdata.Combatant{}, false, m.combatantErr
+	}
+	return m.combatant, m.hasCombatant, nil
+}
+
+func (m *mockUseCombatProvider) UpdateCombatantHP(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+	m.hpUpdates = append(m.hpUpdates, arg)
+	if m.hpUpdateErr != nil {
+		return refdata.Combatant{}, m.hpUpdateErr
+	}
+	updated := m.combatant
+	updated.HpCurrent = arg.HpCurrent
+	updated.TempHp = arg.TempHp
+	updated.IsAlive = arg.IsAlive
+	return updated, nil
 }
 
 func (m *mockUseCombatProvider) UpdateTurnActions(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {

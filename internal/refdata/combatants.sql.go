@@ -180,9 +180,15 @@ const getActiveCombatantByCharacterID = `-- name: GetActiveCombatantByCharacterI
 SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name, cb.next_attack_adv_override, cb.rage_started_round FROM combatants cb
 JOIN encounters e ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
+ORDER BY cb.created_at DESC
 LIMIT 1
 `
 
+// ORDER BY matches GetActiveEncounterIDByCharacterID so both resolvers pick the
+// same row. A character may legally hold more than one combatant row in an
+// encounter (the F-13 membership trigger only forbids duplicates across
+// encounters), and an unordered LIMIT 1 let the two queries disagree — which
+// reads downstream as "it is not your turn" on your own turn.
 func (q *Queries) GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (Combatant, error) {
 	row := q.db.QueryRowContext(ctx, getActiveCombatantByCharacterID, characterID)
 	var i Combatant

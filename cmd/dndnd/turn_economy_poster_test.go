@@ -319,6 +319,14 @@ func (s *stubUseGiveProvider) UpdateTurnActions(_ context.Context, _ refdata.Upd
 	return s.turn, s.updateErr
 }
 
+func (s *stubUseGiveProvider) GetActiveCombatantForCharacter(_ context.Context, _ uuid.UUID) (refdata.Combatant, bool, error) {
+	return refdata.Combatant{}, false, nil
+}
+
+func (s *stubUseGiveProvider) UpdateCombatantHP(_ context.Context, _ refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+	return refdata.Combatant{}, nil
+}
+
 func TestEconomyUseGiveProvider_PostsOnSuccess(t *testing.T) {
 	want := refdata.Turn{ID: uuid.New()}
 	inner := &stubUseGiveProvider{turn: want, inCombat: true}

@@ -28,9 +28,18 @@ type UseCharacterStore interface {
 // combat) and persist the per-turn resource flags after a successful /use.
 // med-35: /use of a potion deducts a bonus action; magic-item active abilities
 // deduct an action. When no turn is active (out of combat), no cost is taken.
+//
+// GetActiveCombatantForCharacter / UpdateCombatantHP exist because a character
+// has two HP stores: `characters.hp_current` (the between-sessions sheet) and
+// `combatants.hp_current` (the live combat token). Healing consumed mid-combat
+// must land on the token — the sheet is not refreshed during a fight, so
+// healing it both misses the real HP pool and silently clamps to zero against
+// a full-looking sheet.
 type UseCombatProvider interface {
 	GetActiveTurnForCharacter(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error)
 	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+	GetActiveCombatantForCharacter(ctx context.Context, charID uuid.UUID) (refdata.Combatant, bool, error)
+	UpdateCombatantHP(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 }
 
 // UseMagicItemLookup resolves magic-item reference data so the use handler
@@ -159,38 +168,39 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Magic items with charges short-circuit to the active-ability path.
-	// Consumables fall through to UseConsumable below.
-	if itemHasActiveCharges(items, itemID) {
-		h.handleMagicItemCharge(ctx, interaction, char, items, itemID)
+	// Both /use paths (consumable and magic-item charge) spend turn resources,
+	// so the combat gate is resolved once here and shared. Keeping it above the
+	// magic-item branch is what stops the two paths drifting apart.
+	turn, inCombat, combatant, hasCombatant, ok := h.resolveCombatGate(ctx, interaction, char.ID)
+	if !ok {
 		return
 	}
 
-	// med-35: when a turn is active, deduct the appropriate combat resource
-	// before mutating inventory. Potions cost a bonus action; everything
-	// else (DM-adjudicated consumables) costs an action. Out-of-combat
-	// /use carries no cost.
-	turn, inCombat, costErr := h.lookupActiveTurn(ctx, interaction.GuildID, char.ID)
-	if costErr != nil {
-		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
+	// Magic items with charges short-circuit to the active-ability path.
+	// Consumables fall through to UseConsumable below.
+	if itemHasActiveCharges(items, itemID) {
+		h.handleMagicItemCharge(ctx, interaction, char, items, itemID, turn, inCombat)
 		return
 	}
+
 	if inCombat {
-		resource := combat.ResourceAction
-		if inventory.IsPotion(itemID) {
-			resource = combat.ResourceBonusAction
-		}
-		if err := combat.ValidateResource(turn, resource); err != nil {
+		if err := combat.ValidateResource(turn, useResourceCost(itemID)); err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
 			return
 		}
 	}
 
+	// Heal against whichever HP store is authoritative right now.
+	hpCurrent, hpMax := int(char.HpCurrent), int(char.HpMax)
+	if hasCombatant {
+		hpCurrent, hpMax = int(combatant.HpCurrent), int(combatant.HpMax)
+	}
+
 	result, err := h.invService.UseConsumable(inventory.UseInput{
 		Items:     items,
 		ItemID:    itemID,
-		HPCurrent: int(char.HpCurrent),
-		HPMax:     int(char.HpMax),
+		HPCurrent: hpCurrent,
+		HPMax:     hpMax,
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
@@ -203,25 +213,10 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
 		return
 	}
-	invMsg := pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
 
-	if result.HealingDone > 0 {
-		if _, err := h.store.UpdateCharacterInventoryAndHP(ctx, refdata.UpdateCharacterInventoryAndHPParams{
-			ID:        char.ID,
-			Inventory: invMsg,
-			HpCurrent: int32(result.HPAfter),
-		}); err != nil {
-			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
-			return
-		}
-	} else {
-		if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
-			ID:        char.ID,
-			Inventory: invMsg,
-		}); err != nil {
-			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
-			return
-		}
+	if err := h.persistUse(ctx, char, combatant, hasCombatant, result, invJSON); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
 	}
 
 	// SR-007: refresh #character-cards after a successful /use write.
@@ -230,11 +225,7 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 	// med-35: persist the turn-resource deduction. Best-effort: a save
 	// failure is logged but does not undo the committed inventory change.
 	if inCombat {
-		resource := combat.ResourceAction
-		if inventory.IsPotion(itemID) {
-			resource = combat.ResourceBonusAction
-		}
-		h.spendTurnResource(ctx, turn, resource)
+		h.spendTurnResource(ctx, turn, useResourceCost(itemID))
 	}
 
 	// Post to #dm-queue if item requires DM adjudication.
@@ -279,6 +270,8 @@ func (h *UseHandler) handleMagicItemCharge(
 	char refdata.Character,
 	items []character.InventoryItem,
 	itemID string,
+	turn refdata.Turn,
+	inCombat bool,
 ) {
 	attunement, err := character.ParseAttunementSlots(char.AttunementSlots.RawMessage, char.AttunementSlots.Valid)
 	if err != nil {
@@ -286,11 +279,6 @@ func (h *UseHandler) handleMagicItemCharge(
 		return
 	}
 
-	turn, inCombat, costErr := h.lookupActiveTurn(ctx, interaction.GuildID, char.ID)
-	if costErr != nil {
-		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
-		return
-	}
 	if inCombat {
 		if err := combat.ValidateResource(turn, combat.ResourceAction); err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
@@ -398,6 +386,142 @@ func (h *UseHandler) lookupActiveTurn(ctx context.Context, guildID string, charI
 		return refdata.Turn{}, false, err
 	}
 	return turn, ok, nil
+}
+
+// useResourceCost returns the turn resource a /use of itemID costs. Potions are
+// a bonus action; everything else (magic items, DM-adjudicated consumables)
+// costs an action.
+func useResourceCost(itemID string) combat.ResourceType {
+	if inventory.IsPotion(itemID) {
+		return combat.ResourceBonusAction
+	}
+	return combat.ResourceAction
+}
+
+// lookupCombatant resolves the character's live combat token, if any. A
+// missing provider or a character who is not in an active encounter both
+// report (zero, false, nil) so callers fall back to the character sheet.
+func (h *UseHandler) lookupCombatant(ctx context.Context, charID uuid.UUID) (refdata.Combatant, bool, error) {
+	if h.combatProv == nil {
+		return refdata.Combatant{}, false, nil
+	}
+	return h.combatProv.GetActiveCombatantForCharacter(ctx, charID)
+}
+
+// resolveCombatGate resolves the character's turn and combat token and applies
+// the checks that must hold before any /use spends a resource. It responds to
+// the interaction itself and reports ok=false when the use must not proceed.
+//
+// Out of combat every check is a no-op, so this reduces to a pair of lookups.
+func (h *UseHandler) resolveCombatGate(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	charID uuid.UUID,
+) (turn refdata.Turn, inCombat bool, combatant refdata.Combatant, hasCombatant bool, ok bool) {
+	turn, inCombat, err := h.lookupActiveTurn(ctx, interaction.GuildID, charID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
+		return turn, false, combatant, false, false
+	}
+
+	// A failed lookup must not fall through to the character sheet: mid-combat
+	// the sheet reads full HP, which silently swallows the healing entirely.
+	combatant, hasCombatant, err = h.lookupCombatant(ctx, charID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to check combat state. Please try again.")
+		return turn, false, combatant, false, false
+	}
+
+	if !hasCombatant {
+		return turn, inCombat, combatant, false, true
+	}
+
+	// The turn lookup returns whichever turn the encounter currently has, not
+	// necessarily this character's. Using an item costs an action or bonus
+	// action, so it is only legal on your own turn — without this guard the
+	// cost is validated and spent against another combatant's turn, which for
+	// an enemy NPC silently eats the DM's Action.
+	if inCombat && turn.CombatantID != combatant.ID {
+		respondEphemeral(h.session, interaction, "Cannot use item: it is not your turn.")
+		return turn, inCombat, combatant, hasCombatant, false
+	}
+
+	// is_alive=false means actually dead (three failed death saves, or
+	// exhaustion 6) — not merely dying. A corpse does not drink potions.
+	if !combatant.IsAlive {
+		respondEphemeral(h.session, interaction, "Cannot use item: you are dead.")
+		return turn, inCombat, combatant, hasCombatant, false
+	}
+
+	// Incapacitated characters (Unconscious, Stunned, Paralyzed, ...) take no
+	// actions, so they cannot use an item on themselves. This also stops a
+	// dying character self-administering a potion, which would raise the token
+	// above 0 HP while leaving them Unconscious with their death saves intact
+	// — this path cannot reach combat.Service.MaybeResetDeathSavesOnHeal, so
+	// it must not be allowed to revive anyone. Someone else has to pour it.
+	if combat.IsIncapacitatedRaw(combatant.Conditions) {
+		respondEphemeral(h.session, interaction, "Cannot use item: you cannot act right now.")
+		return turn, inCombat, combatant, hasCombatant, false
+	}
+
+	return turn, inCombat, combatant, hasCombatant, true
+}
+
+// persistUse writes the post-use inventory and any healing. Inventory always
+// belongs to the character sheet; healing goes to the live combat token when
+// one exists and to the sheet otherwise, so a potion drunk mid-fight moves the
+// HP the fight actually reads.
+//
+// The sheet path is a single atomic statement, but the combat path spans two
+// tables and cannot be. The HP write therefore goes FIRST: if the second write
+// fails the player keeps an un-consumed potion alongside a heal they already
+// got, which is bounded by HpMax and visible to the DM. The reverse ordering
+// reproduces the very bug this fixes — potion gone, HP unmoved — and a retry
+// would cost a second potion.
+//
+// Known limit: UpdateCombatantHP is a full-column overwrite computed from a
+// snapshot read earlier in the request, so a temp-HP grant or damage landing
+// in that window is clobbered. Every heal call site in internal/combat shares
+// this shape; narrowing it belongs with that query, not here.
+func (h *UseHandler) persistUse(
+	ctx context.Context,
+	char refdata.Character,
+	combatant refdata.Combatant,
+	hasCombatant bool,
+	result inventory.UseResult,
+	invJSON []byte,
+) error {
+	invMsg := pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
+
+	if result.HealingDone > 0 && !hasCombatant {
+		_, err := h.store.UpdateCharacterInventoryAndHP(ctx, refdata.UpdateCharacterInventoryAndHPParams{
+			ID:        char.ID,
+			Inventory: invMsg,
+			HpCurrent: int32(result.HPAfter),
+		})
+		return err
+	}
+
+	if result.HealingDone > 0 && hasCombatant {
+		// Healing never restores temp HP (it is a separate pool), so carry the
+		// combatant's existing value through untouched. IsAlive is
+		// unconditionally true: resolveCombatGate has already rejected dead and
+		// incapacitated characters, so anyone reaching here was alive already.
+		if _, err := h.combatProv.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+			ID:        combatant.ID,
+			HpCurrent: int32(result.HPAfter),
+			TempHp:    combatant.TempHp,
+			IsAlive:   true,
+		}); err != nil {
+			return err
+		}
+	}
+
+	_, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+		ID:        char.ID,
+		Inventory: invMsg,
+	})
+	return err
 }
 
 // spendTurnResource marks resource as used on turn and persists the change.

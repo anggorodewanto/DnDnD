@@ -103,9 +103,15 @@ WHERE id = $1;
 SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1;
 
 -- name: GetActiveCombatantByCharacterID :one
+-- ORDER BY matches GetActiveEncounterIDByCharacterID so both resolvers pick the
+-- same row. A character may legally hold more than one combatant row in an
+-- encounter (the F-13 membership trigger only forbids duplicates across
+-- encounters), and an unordered LIMIT 1 let the two queries disagree — which
+-- reads downstream as "it is not your turn" on your own turn.
 SELECT cb.* FROM combatants cb
 JOIN encounters e ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
+ORDER BY cb.created_at DESC
 LIMIT 1;
 
 -- name: SetCombatantNextAttackAdvOverride :exec
