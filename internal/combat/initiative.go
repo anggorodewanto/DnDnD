@@ -153,6 +153,9 @@ type CombatCondition struct {
 	// the source spell (COV-19). SaveEndsDC is the frozen save DC.
 	SaveEndsAbility string `json:"save_ends_ability,omitempty"`
 	SaveEndsDC      int    `json:"save_ends_dc,omitempty"`
+	// ACBonus is the Armor Class bonus a marker condition confers while it is
+	// held (Defensive Duelist's lingering +PB). Zero for every other condition.
+	ACBonus int `json:"ac_bonus,omitempty"`
 }
 
 // SurprisedCondition returns the standard surprised condition struct.

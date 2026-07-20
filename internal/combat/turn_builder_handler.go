@@ -336,25 +336,32 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 					step.Attack.ChosenReaction = nil
 				}
 			}
-			// A DM-chosen pre-roll reaction raises the target's AC. Fold its bonus
-			// into the hit check — either at roll time (no pre-roll) or by
-			// recomputing the pre-rolled hit against the boosted AC.
+			// A DM-chosen pre-roll reaction raises the target's AC, and so does a
+			// Defensive Duelist bonus the target bought on an EARLIER attack —
+			// 2024 PHB p.203 keeps that +PB up against melee attacks until the
+			// start of the defender's next turn. The two never stack (same
+			// effect), so take the larger. Fold the result into the hit check —
+			// either at roll time (no pre-roll) or by recomputing the pre-rolled
+			// hit against the boosted AC.
+			target, targetErr := s.store.GetCombatant(ctx, step.Attack.TargetID)
 			acBonus := 0
 			if step.Attack.ChosenReaction != nil {
 				acBonus = step.Attack.ChosenReaction.ACBonus
 			}
+			if targetErr == nil {
+				if lingering := lingeringDefensiveDuelistAC(target, step.Attack); lingering > acBonus {
+					acBonus = lingering
+				}
+			}
 			// If no roll result provided, roll it now
 			if step.Attack.RollResult == nil {
-				target, err := s.store.GetCombatant(ctx, step.Attack.TargetID)
-				if err != nil {
+				if targetErr != nil {
 					continue
 				}
 				result := RollAttack(*step.Attack, int(target.Ac)+acBonus, roller)
 				step.Attack.RollResult = &result
-			} else if step.Attack.ChosenReaction != nil {
-				if target, err := s.store.GetCombatant(ctx, step.Attack.TargetID); err == nil {
-					applyReactionToRoll(step.Attack.RollResult, int(target.Ac), acBonus)
-				}
+			} else if acBonus > 0 && targetErr == nil {
+				applyReactionToRoll(step.Attack.RollResult, int(target.Ac), acBonus)
 			}
 			// A post-hit damage-halving reaction (Uncanny Dodge) only triggers
 			// "when an attacker hits you" — so on a miss it is neither consumed
@@ -368,6 +375,13 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 			// Record the spent reaction so the PC can't react again this round.
 			if step.Attack.ChosenReaction != nil {
 				_ = s.markPCReactionUsed(ctx, encounterID, step.Attack.TargetID, *step.Attack.ChosenReaction)
+				// Defensive Duelist alone lingers: the one Reaction just spent
+				// buys +PB against every melee attack until the start of the
+				// defender's next turn. Gated on the reaction ID so a post-hit
+				// damage-halving reaction (Uncanny Dodge) never inherits it.
+				if step.Attack.ChosenReaction.ID == defensiveDuelistReactionID {
+					_ = s.applyLingeringDefensiveDuelistAC(ctx, step.Attack.TargetID, step.Attack.ChosenReaction.ACBonus)
+				}
 			}
 			// Queue damage if hit, preserving per-attack damage type so the
 			// ApplyDamage R/I/V resolution can match correctly.

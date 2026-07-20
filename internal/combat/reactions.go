@@ -16,6 +16,9 @@ import (
 // nothing retroactive:
 //   - +AC reactions (Defensive Duelist): resolve at roll time — ACBonus is folded
 //     into the hit check, so the only transition is hit→miss (damage untouched).
+//     Defensive Duelist's bonus then lingers against melee attacks until the
+//     start of the defender's next turn (defensive_duelist_ac marker) without
+//     costing a second reaction.
 //   - damage-halving reactions (Uncanny Dodge): resolve post-hit — HalveDamage
 //     halves the pre-rolled damage before it is written to HP, and (being tied to
 //     a hit) is only consumed when the attack lands.
@@ -31,8 +34,11 @@ type ReactionOption struct {
 
 // defensiveDuelistReaction returns the Defensive Duelist option when the target
 // has the feat and is wielding a finesse weapon. The reaction adds the target's
-// proficiency bonus to AC against one melee attack (2024 rules). Pure: reaction
-// availability (a free reaction) is gated by the caller.
+// proficiency bonus to AC against the triggering melee attack AND — per 2024 PHB
+// p.203 — against every melee attack until the start of the defender's next
+// turn; ExecuteEnemyTurn stamps that lingering half via
+// applyLingeringDefensiveDuelistAC. Pure: reaction availability (a free
+// reaction) is gated by the caller.
 func defensiveDuelistReaction(featuresJSON []byte, mainHand refdata.Weapon, profBonus int) (ReactionOption, bool) {
 	if !HasFeatureByName(featuresJSON, "Defensive Duelist") {
 		return ReactionOption{}, false
@@ -41,7 +47,7 @@ func defensiveDuelistReaction(featuresJSON []byte, mainHand refdata.Weapon, prof
 		return ReactionOption{}, false
 	}
 	return ReactionOption{
-		ID:      "defensive-duelist",
+		ID:      defensiveDuelistReactionID,
 		Label:   fmt.Sprintf("Defensive Duelist (+%d AC)", profBonus),
 		ACBonus: profBonus,
 		Reason:  "Defensive Duelist",
