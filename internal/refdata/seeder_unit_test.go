@@ -327,6 +327,33 @@ func TestFeatSeeds_DefensiveDuelistGrantsDex(t *testing.T) {
 	}
 }
 
+// TestFeatSeeds_SkulkerGrantsDex pins the 2024 ruling that Skulker is a
+// half-feat granting +1 DEX (the 2014 version had no ASI). This is what lets a
+// Defensive Duelist -> Skulker retrain leave DEX net unchanged.
+func TestFeatSeeds_SkulkerGrantsDex(t *testing.T) {
+	seeds := featSeeds()
+	var sk *UpsertFeatParams
+	for i := range seeds {
+		if seeds[i].ID == "skulker" {
+			sk = &seeds[i]
+			break
+		}
+	}
+	if sk == nil {
+		t.Fatal("skulker not found in featSeeds()")
+	}
+	if !sk.AsiBonus.Valid {
+		t.Fatal("skulker should grant an ability score increase (2024 half-feat), but asi_bonus is null")
+	}
+	var asi map[string]int
+	if err := json.Unmarshal(sk.AsiBonus.RawMessage, &asi); err != nil {
+		t.Fatalf("unmarshaling asi_bonus: %v", err)
+	}
+	if len(asi) != 1 || asi["dex"] != 1 {
+		t.Fatalf("skulker should grant exactly +1 DEX, got %v", asi)
+	}
+}
+
 func TestSeedAll_ClassesErrorWrapping(t *testing.T) {
 	dbErr := errors.New("class exec failed")
 	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount}

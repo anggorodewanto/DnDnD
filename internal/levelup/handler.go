@@ -55,6 +55,15 @@ type FeatApplyRequest struct {
 	Feat        FeatInfo  `json:"feat"`
 }
 
+// RetrainFeatRequest is the JSON body for swapping one feat for another. The
+// old / new feat payloads mirror FeatApplyRequest's Feat field so the wire shape
+// is identical.
+type RetrainFeatRequest struct {
+	CharacterID uuid.UUID `json:"character_id"`
+	OldFeat     FeatInfo  `json:"old_feat"`
+	NewFeat     FeatInfo  `json:"new_feat"`
+}
+
 // FeatPrereqCheckRequest is the JSON body for checking feat prerequisites.
 type FeatPrereqCheckRequest struct {
 	Prerequisites      FeatPrerequisites       `json:"prerequisites"`
@@ -98,6 +107,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/asi/approve", h.HandleApproveASI)
 		r.Post("/asi/deny", h.HandleDenyASI)
 		r.Post("/feat/apply", h.HandleApplyFeat)
+		r.Post("/feat/retrain", h.HandleRetrainFeat)
 		r.Post("/feat/check", h.HandleCheckFeatPrereqs)
 	})
 }
@@ -203,6 +213,51 @@ func (h *Handler) HandleApplyFeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
+}
+
+// HandleRetrainFeat swaps a character's feat for another (DM-only). It runs the
+// same campaign-DM ownership check as HandleApproveASI, then removes the old
+// feat and applies the new one via the service. Client-side validation failures
+// (stale old feat, unsupported reversal, invalid new-feat choices, same-feat
+// swap) map to 400; anything else is a 500.
+func (h *Handler) HandleRetrainFeat(w http.ResponseWriter, r *http.Request) {
+	var req RetrainFeatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if h.ownershipChecker != nil {
+		userID, ok := auth.DiscordUserIDFromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		dmUserID, err := h.ownershipChecker.GetCampaignDMUserID(r.Context(), req.CharacterID)
+		if err != nil {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		if dmUserID != userID {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	if err := h.service.RetrainFeat(r.Context(), req.CharacterID, req.OldFeat, req.NewFeat); err != nil {
+		h.logger.Error("feat retrain failed", "error", err)
+		if errors.Is(err, ErrFeatNotPresent) ||
+			errors.Is(err, ErrFeatRetrainUnsupported) ||
+			errors.Is(err, ErrFeatRetrainSame) ||
+			errors.Is(err, ErrInvalidFeatChoices) {
+			http.Error(w, "feat retrain failed: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "feat retrain failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "retrained"})
 }
 
 // HandleCheckFeatPrereqs checks whether a character meets feat prerequisites.

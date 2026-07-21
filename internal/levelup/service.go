@@ -487,6 +487,126 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 	return nil
 }
 
+// RemoveFeat is the inverse of ApplyFeat: it drops a previously-granted feat
+// feature and reverses its riders. It undoes the flat HP bonus (Tough) and the
+// ability-score increase (half-feats), recomputing AC and CON-linked HP the same
+// way ApplyFeat applies them — so a removal followed by a fresh ApplyFeat leaves
+// derived stats consistent.
+//
+// It refuses feats whose proficiency grants can't be cleanly reversed
+// (ErrFeatRetrainUnsupported) and reports a not-found feat as ErrFeatNotPresent
+// so a DM never silently loses the effect of a stale request. The ASI reversal
+// reads the chosen ability from the STORED feature's Choices (not the client
+// request), because that is where a choose_ability half-feat recorded which
+// score it actually raised.
+//
+// Ordering mirrors ApplyFeat — features, then HP, then ASI — so the in-memory
+// char snapshot's HP/score deltas compose identically.
+func (s *Service) RemoveFeat(ctx context.Context, characterID uuid.UUID, feat FeatInfo) error {
+	if feat.ID == "resilient" || feat.ID == "skilled" {
+		return fmt.Errorf("%w: %s grants proficiencies that cannot be un-granted", ErrFeatRetrainUnsupported, feat.ID)
+	}
+
+	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("loading character: %w", err)
+	}
+
+	var features []character.Feature
+	if len(char.Features) > 0 {
+		if err := json.Unmarshal(char.Features, &features); err != nil {
+			return fmt.Errorf("parsing features: %w", err)
+		}
+	}
+
+	idx := -1
+	for i := range features {
+		if features[i].Source == "feat" && features[i].Name == feat.Name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return ErrFeatNotPresent
+	}
+	removed := features[idx]
+
+	// Drop the feature, then persist — mirrors ApplyFeat's "features first".
+	features = slices.Delete(features, idx, idx+1)
+	featuresJSON, err := json.Marshal(features)
+	if err != nil {
+		return fmt.Errorf("marshaling features: %w", err)
+	}
+	if err := s.charStore.UpdateFeatures(ctx, characterID, featuresJSON); err != nil {
+		return fmt.Errorf("updating features: %w", err)
+	}
+
+	// Reverse the flat HP bonus (Tough): subtract exactly what ApplyFeat added.
+	if err := s.bumpPersistedHP(ctx, char, -character.FeatFlatHPBonus([]character.Feature{removed}, char.Level)); err != nil {
+		return fmt.Errorf("reversing feat HP bonus: %w", err)
+	}
+
+	s.publishForCharacter(ctx, characterID)
+	s.notifyCardUpdate(ctx, characterID)
+
+	// Reverse the ASI: specialize using the stored feature's chosen ability,
+	// then negate every numeric bonus so applyFeatASI subtracts it (and resyncs
+	// AC + CON-linked HP just as the positive path does).
+	if len(feat.ASIBonus) > 0 {
+		asiBonus := specializeFeatASIBonus(feat.ASIBonus, featChoicesFromFeature(removed))
+		if err := s.applyFeatASI(ctx, char, negateASIBonus(asiBonus)); err != nil {
+			return fmt.Errorf("reversing feat ASI: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RetrainFeat swaps one feat for another: it removes oldFeat then applies
+// newFeat, so two +1 DEX half-feats (e.g. Defensive Duelist -> Skulker) net the
+// score unchanged. A stale oldFeat (ErrFeatNotPresent) aborts before applying
+// newFeat, so the DM learns the character wasn't in the expected state rather
+// than silently gaining a feat.
+func (s *Service) RetrainFeat(ctx context.Context, characterID uuid.UUID, oldFeat, newFeat FeatInfo) error {
+	if oldFeat.Name == newFeat.Name {
+		return fmt.Errorf("%w: %s", ErrFeatRetrainSame, oldFeat.Name)
+	}
+	if err := s.RemoveFeat(ctx, characterID, oldFeat); err != nil {
+		return fmt.Errorf("removing old feat: %w", err)
+	}
+	if err := s.ApplyFeat(ctx, characterID, newFeat); err != nil {
+		return fmt.Errorf("applying new feat: %w", err)
+	}
+	return nil
+}
+
+// featChoicesFromFeature reconstructs the FeatChoices needed to specialize a
+// feat's ASI reversal from a stored feature's Choices map. Only the chosen
+// ability matters for the ASI (a choose_ability half-feat records which score it
+// raised); skills / damage-type choices don't affect score reversal.
+func featChoicesFromFeature(f character.Feature) FeatChoices {
+	if ability, ok := f.Choices["ability"]; ok && len(ability) > 0 {
+		return FeatChoices{Ability: ability[0]}
+	}
+	return FeatChoices{}
+}
+
+// negateASIBonus returns a copy of asiBonus with every numeric value negated so
+// applyFeatASI subtracts the bonus. Non-numeric entries (the "from" list) pass
+// through unchanged; the negated "choose_ability" marker is harmless because
+// applyFeatASI skips it.
+func negateASIBonus(asiBonus map[string]any) map[string]any {
+	out := make(map[string]any, len(asiBonus))
+	for k, v := range asiBonus {
+		if n, ok := toInt(v); ok {
+			out[k] = -n
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
 func specializeFeatASIBonus(asiBonus map[string]any, choices FeatChoices) map[string]any {
 	if choices.Ability == "" {
 		return asiBonus

@@ -3,6 +3,7 @@ package levelup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -1181,6 +1182,198 @@ func TestService_ApplyLevelUp_DeduplicatesFeatures(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected exactly 1 'Extra Attack', got %d in: %+v", count, updatedFeatures)
+	}
+}
+
+// TestService_RemoveFeat_ReversesDexAndAC removes a +1 DEX half-feat and
+// asserts the feature is gone, DEX drops by 1, and the stored base AC is
+// recomputed. Windreth: leather (11) + DEX 18->17 (mod +3) => AC 14.
+func TestService_RemoveFeat_ReversesDexAndAC(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	scores := character.AbilityScores{STR: 8, DEX: 18, CON: 14, INT: 11, WIS: 14, CHA: 10}
+	features := []character.Feature{{Name: "Defensive Duelist", Source: "feat", Description: "Feat: Defensive Duelist"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		Level:         4,
+		Classes:       mustJSON(t, classes),
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, features),
+	}
+	charStore.acInputs[charID] = ACInputs{Armor: &character.ArmorInfo{ACBase: 11, DexBonus: true}}
+
+	svc := NewService(charStore, classStore, &mockNotifier{})
+	feat := FeatInfo{ID: "defensive-duelist", Name: "Defensive Duelist", ASIBonus: map[string]any{"dex": float64(1)}}
+	if err := svc.RemoveFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("RemoveFeat error: %v", err)
+	}
+
+	var updatedFeatures []character.Feature
+	json.Unmarshal(charStore.chars[charID].Features, &updatedFeatures)
+	for _, f := range updatedFeatures {
+		if f.Name == "Defensive Duelist" {
+			t.Fatalf("Defensive Duelist should have been removed, got %+v", updatedFeatures)
+		}
+	}
+
+	var updated character.AbilityScores
+	json.Unmarshal(charStore.chars[charID].AbilityScores, &updated)
+	if updated.DEX != 17 {
+		t.Errorf("DEX = %d, want 17 (reversed +1)", updated.DEX)
+	}
+	if got := charStore.acWritten[charID]; got != 14 {
+		t.Errorf("recomputed AC = %d, want 14 (leather 11 + DEX 17 mod +3)", got)
+	}
+}
+
+// TestService_RemoveFeat_AbsentReturnsSentinel ensures removing a feat the
+// character never had is a clean, identifiable failure.
+func TestService_RemoveFeat_AbsentReturnsSentinel(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Nobody",
+		Level:         4,
+		Classes:       mustJSON(t, []character.ClassEntry{{Class: "rogue", Level: 4}}),
+		AbilityScores: mustJSON(t, character.AbilityScores{DEX: 14}),
+		Features:      mustJSON(t, []character.Feature{}),
+	}
+
+	svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+	err := svc.RemoveFeat(context.Background(), charID, FeatInfo{ID: "alert", Name: "Alert"})
+	if !errors.Is(err, ErrFeatNotPresent) {
+		t.Fatalf("err = %v, want ErrFeatNotPresent", err)
+	}
+}
+
+// TestService_RemoveFeat_UnsupportedProficiencyFeats rejects reversal of feats
+// whose proficiency grants can't be cleanly un-granted (Resilient, Skilled).
+func TestService_RemoveFeat_UnsupportedProficiencyFeats(t *testing.T) {
+	for _, id := range []string{"resilient", "skilled"} {
+		t.Run(id, func(t *testing.T) {
+			charID := uuid.New()
+			charStore := newMockCharacterStore()
+			charStore.chars[charID] = &StoredCharacter{
+				ID:            charID,
+				Name:          "Vera",
+				Level:         4,
+				Classes:       mustJSON(t, []character.ClassEntry{{Class: "rogue", Level: 4}}),
+				AbilityScores: mustJSON(t, character.AbilityScores{DEX: 14}),
+				Features:      mustJSON(t, []character.Feature{{Name: "X", Source: "feat"}}),
+			}
+
+			svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+			err := svc.RemoveFeat(context.Background(), charID, FeatInfo{ID: id, Name: "X"})
+			if !errors.Is(err, ErrFeatRetrainUnsupported) {
+				t.Fatalf("err = %v, want ErrFeatRetrainUnsupported", err)
+			}
+		})
+	}
+}
+
+// TestService_RetrainFeat_DefensiveDuelistToSkulkerNetsDexUnchanged is the
+// motivating case: two +1 DEX half-feats swapped => DEX net zero, feature list
+// ends with Skulker (not Defensive Duelist).
+func TestService_RetrainFeat_DefensiveDuelistToSkulkerNetsDexUnchanged(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	scores := character.AbilityScores{STR: 8, DEX: 18, CON: 14, INT: 11, WIS: 14, CHA: 10}
+	features := []character.Feature{{Name: "Defensive Duelist", Source: "feat", Description: "Feat: Defensive Duelist"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		Level:         4,
+		Classes:       mustJSON(t, classes),
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, features),
+	}
+	charStore.acInputs[charID] = ACInputs{Armor: &character.ArmorInfo{ACBase: 11, DexBonus: true}}
+
+	svc := NewService(charStore, classStore, &mockNotifier{})
+	oldFeat := FeatInfo{ID: "defensive-duelist", Name: "Defensive Duelist", ASIBonus: map[string]any{"dex": float64(1)}}
+	newFeat := FeatInfo{ID: "skulker", Name: "Skulker", ASIBonus: map[string]any{"dex": float64(1)}}
+	if err := svc.RetrainFeat(context.Background(), charID, oldFeat, newFeat); err != nil {
+		t.Fatalf("RetrainFeat error: %v", err)
+	}
+
+	var updated character.AbilityScores
+	json.Unmarshal(charStore.chars[charID].AbilityScores, &updated)
+	if updated.DEX != 18 {
+		t.Errorf("DEX = %d, want 18 (net unchanged after -1 then +1)", updated.DEX)
+	}
+
+	var updatedFeatures []character.Feature
+	json.Unmarshal(charStore.chars[charID].Features, &updatedFeatures)
+	hasSkulker, hasDD := false, false
+	for _, f := range updatedFeatures {
+		if f.Name == "Skulker" {
+			hasSkulker = true
+		}
+		if f.Name == "Defensive Duelist" {
+			hasDD = true
+		}
+	}
+	if !hasSkulker {
+		t.Errorf("expected Skulker feature, got %+v", updatedFeatures)
+	}
+	if hasDD {
+		t.Errorf("Defensive Duelist should have been removed, got %+v", updatedFeatures)
+	}
+	if got := charStore.acWritten[charID]; got != 15 {
+		t.Errorf("recomputed AC = %d, want 15 (leather 11 + DEX 18 mod +4)", got)
+	}
+}
+
+// TestService_RetrainFeat_SameFeatRejected guards against a no-op retrain that
+// would strip then re-add (and could drop grants if the two shapes differ).
+func TestService_RetrainFeat_SameFeatRejected(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Dup",
+		Level:         4,
+		Classes:       mustJSON(t, []character.ClassEntry{{Class: "rogue", Level: 4}}),
+		AbilityScores: mustJSON(t, character.AbilityScores{DEX: 18}),
+		Features:      mustJSON(t, []character.Feature{{Name: "Alert", Source: "feat"}}),
+	}
+
+	svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+	feat := FeatInfo{ID: "alert", Name: "Alert"}
+	if err := svc.RetrainFeat(context.Background(), charID, feat, feat); err == nil {
+		t.Fatal("expected error retraining a feat into itself")
+	}
+}
+
+// TestService_RetrainFeat_MissingOldFeatFails surfaces a stale old-feat so the
+// DM knows the swap did not start from the state they expected.
+func TestService_RetrainFeat_MissingOldFeatFails(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Stale",
+		Level:         4,
+		Classes:       mustJSON(t, []character.ClassEntry{{Class: "rogue", Level: 4}}),
+		AbilityScores: mustJSON(t, character.AbilityScores{DEX: 16}),
+		Features:      mustJSON(t, []character.Feature{}),
+	}
+
+	svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+	old := FeatInfo{ID: "defensive-duelist", Name: "Defensive Duelist", ASIBonus: map[string]any{"dex": float64(1)}}
+	newFeat := FeatInfo{ID: "skulker", Name: "Skulker", ASIBonus: map[string]any{"dex": float64(1)}}
+	if err := svc.RetrainFeat(context.Background(), charID, old, newFeat); !errors.Is(err, ErrFeatNotPresent) {
+		t.Fatalf("err = %v, want ErrFeatNotPresent", err)
 	}
 }
 

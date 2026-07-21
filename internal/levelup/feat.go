@@ -10,6 +10,23 @@ import (
 
 var ErrInvalidFeatChoices = errors.New("invalid feat choices")
 
+// ErrFeatNotPresent is returned by RemoveFeat / RetrainFeat when the character
+// does not carry the feat being removed — the caller (DM) started from a state
+// that no longer matches, so the swap is refused rather than silently ignored.
+var ErrFeatNotPresent = errors.New("feat not present on character")
+
+// ErrFeatRetrainUnsupported is returned when a feat's reversal can't be applied
+// cleanly. Resilient and Skilled grant saving-throw / skill proficiencies via
+// applyFeatProficiencyChoices, and there is no record of whether the character
+// already had those proficiencies before the feat was taken — so un-granting
+// them could strip a proficiency the character legitimately owns. Retraining
+// out of these feats is refused.
+var ErrFeatRetrainUnsupported = errors.New("feat retrain not supported")
+
+// ErrFeatRetrainSame is returned when a retrain names the same feat for both
+// sides of the swap, which would needlessly strip then re-add it.
+var ErrFeatRetrainSame = errors.New("cannot retrain a feat into itself")
+
 // FeatPrerequisites represents the prerequisites for a feat.
 type FeatPrerequisites struct {
 	Ability      map[string]int `json:"ability,omitempty"`

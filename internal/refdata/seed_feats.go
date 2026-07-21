@@ -207,9 +207,10 @@ func featSeeds() []UpsertFeatParams {
 		},
 		{
 			ID: "skulker", Name: "Skulker",
-			Description:      "You are expert at slinking through shadows. You can try to hide when you are lightly obscured from the creature from which you are hiding. When you are hidden from a creature and miss it with a ranged weapon attack, making the attack doesn't reveal your position. You have darkvision out to a range of 60 feet.",
+			Description:      "You gain a +1 bonus to Dexterity (max 20). You have Blindsight with a range of 10 feet. During combat, you gain Advantage on any Dexterity (Stealth) check you make as part of the Hide action. If you make an attack roll while hidden and the roll misses, making the attack doesn't reveal your position.",
 			Prerequisites:    optJSON(map[string]any{"ability": map[string]int{"dex": 13}}),
-			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "hide_lightly_obscured"}, {"effect_type": "missed_ranged_no_reveal"}, {"effect_type": "darkvision_60"}}),
+			AsiBonus:         optJSON(map[string]any{"dex": 1}),
+			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "blindsight_10"}, {"effect_type": "hide_advantage_in_combat"}, {"effect_type": "missed_attack_hidden_no_reveal"}}),
 		},
 		{
 			ID: "spell-sniper", Name: "Spell Sniper",

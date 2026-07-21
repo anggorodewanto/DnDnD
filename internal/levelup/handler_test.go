@@ -668,6 +668,89 @@ func TestHandler_HandleApproveASI_Forbidden_WrongCampaignDM(t *testing.T) {
 	}
 }
 
+func TestHandler_HandleRetrainFeat_Success(t *testing.T) {
+	h, charStore, _, _ := setupTestHandler(t)
+
+	charID := uuid.New()
+	classes := []character.ClassEntry{{Class: "rogue", Level: 4}}
+	scores := character.AbilityScores{STR: 8, DEX: 18, CON: 14, INT: 11, WIS: 14, CHA: 10}
+	features := []character.Feature{{Name: "Defensive Duelist", Source: "feat", Description: "Feat: Defensive Duelist"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		DiscordUserID: "player-1",
+		Level:         4,
+		Classes:       mustJSON(t, classes),
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, features),
+	}
+
+	body, _ := json.Marshal(RetrainFeatRequest{
+		CharacterID: charID,
+		OldFeat:     FeatInfo{ID: "defensive-duelist", Name: "Defensive Duelist", ASIBonus: map[string]any{"dex": float64(1)}},
+		NewFeat:     FeatInfo{ID: "skulker", Name: "Skulker", ASIBonus: map[string]any{"dex": float64(1)}},
+	})
+
+	r := chi.NewRouter()
+	r.Post("/api/levelup/feat/retrain", h.HandleRetrainFeat)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup/feat/retrain", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestHandler_HandleRetrainFeat_Forbidden_WrongCampaignDM(t *testing.T) {
+	h, charStore, _, _ := setupTestHandler(t)
+
+	charID := uuid.New()
+	scores := character.AbilityScores{STR: 8, DEX: 18, CON: 14, INT: 11, WIS: 14, CHA: 10}
+	features := []character.Feature{{Name: "Defensive Duelist", Source: "feat"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Windreth",
+		DiscordUserID: "player-1",
+		Level:         4,
+		Classes:       mustJSON(t, []character.ClassEntry{{Class: "rogue", Level: 4}}),
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, features),
+	}
+
+	oc := &mockOwnershipChecker{charToDM: map[uuid.UUID]string{charID: "dm-campaign-a"}}
+	h.SetOwnershipChecker(oc)
+
+	body, _ := json.Marshal(RetrainFeatRequest{
+		CharacterID: charID,
+		OldFeat:     FeatInfo{ID: "defensive-duelist", Name: "Defensive Duelist", ASIBonus: map[string]any{"dex": float64(1)}},
+		NewFeat:     FeatInfo{ID: "skulker", Name: "Skulker", ASIBonus: map[string]any{"dex": float64(1)}},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup/feat/retrain", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// Authenticated as the DM of a different campaign.
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-campaign-b"))
+	w := httptest.NewRecorder()
+
+	h.HandleRetrainFeat(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	// The swap must not have mutated the character.
+	var updated character.AbilityScores
+	json.Unmarshal(charStore.chars[charID].AbilityScores, &updated)
+	if updated.DEX != 18 {
+		t.Errorf("DEX = %d, want 18 (forbidden request must not mutate)", updated.DEX)
+	}
+}
+
 func TestHandler_HandleApproveASI_Allowed_CorrectCampaignDM(t *testing.T) {
 	h, charStore, _, _ := setupTestHandler(t)
 
