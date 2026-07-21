@@ -79,13 +79,14 @@ func breakdownComponent(t *testing.T, result CastResult, name string) (DamageCom
 func TestCast_EldritchBlast_HexedTarget_Adds1d6Necrotic(t *testing.T) {
 	result, appliedHP := runEBCastAgainst(t, hexConditionsJSON)
 	require.True(t, result.Hit)
-	// 2d10(20) + Agonizing(2 beams*CHA+3 = 6) + Hex 1d6(4) = 30.
-	assert.Equal(t, 30, result.DamageTotal, "2d10(20)+Agonizing(6)+Hex(4)")
-	assert.Equal(t, int32(50-30), appliedHP, "the Hex die must reach the target's HP, not just the log")
+	// Per beam: 1d10(10) + Agonizing(CHA+3) + Hex 1d6(4) = 17; both beams hit the
+	// hexed target, so Hex rides EACH beam (RAW: "whenever you hit"): 2*17 = 34.
+	assert.Equal(t, 34, result.DamageTotal, "2*(1d10(10)+Agonizing(3)+Hex(4))")
+	assert.Equal(t, int32(50-34), appliedHP, "the Hex die must reach the target's HP, not just the log")
 
 	hex, found := breakdownComponent(t, result, "Hex")
 	require.True(t, found, "Hex must be called out: %+v", result.DamageBreakdown)
-	assert.Equal(t, 4, hex.Amount)
+	assert.Equal(t, 8, hex.Amount, "1d6(4) per hit beam * 2 beams")
 	assert.Equal(t, "necrotic", hex.DamageType)
 }
 
@@ -114,11 +115,12 @@ func TestCast_EldritchBlast_HexedByAnotherCaster_NoNecrotic(t *testing.T) {
 func TestCast_EldritchBlast_HuntersMarkedTarget_Adds1d6Force(t *testing.T) {
 	result, appliedHP := runEBCastAgainst(t, huntersMarkConditionsJSON)
 	require.True(t, result.Hit)
-	assert.Equal(t, 30, result.DamageTotal, "2d10(20)+Agonizing(6)+Hunter's Mark(4)")
-	assert.Equal(t, int32(50-30), appliedHP)
+	// Hunter's Mark rides each hit beam, mirroring the per-beam Hex rider.
+	assert.Equal(t, 34, result.DamageTotal, "2*(1d10(10)+Agonizing(3)+Hunter's Mark(4))")
+	assert.Equal(t, int32(50-34), appliedHP)
 
 	hm, found := breakdownComponent(t, result, "Hunter's Mark")
 	require.True(t, found, "Hunter's Mark must be called out: %+v", result.DamageBreakdown)
-	assert.Equal(t, 4, hm.Amount)
+	assert.Equal(t, 8, hm.Amount, "1d6(4) per hit beam * 2 beams")
 	assert.Equal(t, "force", hm.DamageType)
 }

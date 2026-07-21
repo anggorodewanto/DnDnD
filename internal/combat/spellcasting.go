@@ -168,18 +168,22 @@ type CastResult struct {
 	// DepartureSaveTargets names each creature caught in a teleport's departure
 	// burst (Thunder Step) that now has a pending saving throw enqueued. Empty
 	// for non-teleport casts and teleports with no nearby creatures. COV-13.
-	DepartureSaveTargets   []string
-	Concentration          ConcentrationResult
-	ResolutionMode         string
-	SlotUsed               int
-	SlotsRemaining         int
-	UsedPactSlot           bool
-	PactSlotsRemaining     int
-	IsRitual               bool
-	ScaledDamageDice       string                     // damage dice after upcast/cantrip scaling
-	DamageType             string                     // damage type from spell damage JSON
-	DamageTotal            int                        // rolled damage total (applied on hit)
-	DamageBreakdown        []DamageComponent          // per-rider call-outs (e.g. Agonizing Blast); decomposes DamageTotal
+	DepartureSaveTargets []string
+	Concentration        ConcentrationResult
+	ResolutionMode       string
+	SlotUsed             int
+	SlotsRemaining       int
+	UsedPactSlot         bool
+	PactSlotsRemaining   int
+	IsRitual             bool
+	ScaledDamageDice     string            // damage dice after upcast/cantrip scaling
+	DamageType           string            // damage type from spell damage JSON
+	DamageTotal          int               // rolled damage total (applied on hit)
+	DamageBreakdown      []DamageComponent // per-rider call-outs (e.g. Agonizing Blast); decomposes DamageTotal
+	// Beams holds the per-beam outcomes when Eldritch Blast is cast (COV-14):
+	// each beam is an independent attack roll + damage, possibly at a different
+	// target. Empty for every non-Eldritch-Blast cast.
+	Beams                  []BeamOutcome
 	ScaledHealingDice      string                     // healing dice after upcast scaling
 	HealingTotal           int                        // rolled healing total (applied to target)
 	Teleport               *TeleportResult            // teleportation outcome, nil if not a teleport spell
@@ -253,6 +257,28 @@ func FormatCastLog(result CastResult) string {
 	// value on a hit and nothing on a miss (ISSUE-024). For save-based / no-attack
 	// spells the per-target total isn't a single value here, so keep the dice spec.
 	switch {
+	case len(result.Beams) > 0:
+		// Eldritch Blast: one line per beam (its own roll + target + damage),
+		// then the summed total. COV-14.
+		for _, beam := range result.Beams {
+			if beam.Hit {
+				fmt.Fprintf(&b, "\U0001f3af Beam %d → %s: d20(%d) = %d — Hit! \U0001f4a5 %d %s\n",
+					beam.Index, beam.TargetName, beam.AttackRoll, beam.AttackTotal, beam.Damage, result.DamageType)
+			} else {
+				fmt.Fprintf(&b, "\U0001f3af Beam %d → %s: d20(%d) = %d — Miss!\n",
+					beam.Index, beam.TargetName, beam.AttackRoll, beam.AttackTotal)
+			}
+		}
+		if result.DamageTotal > 0 {
+			fmt.Fprintf(&b, "\U0001f4a5 Total: %d %s\n", result.DamageTotal, result.DamageType)
+			for _, c := range result.DamageBreakdown {
+				if c.DamageType != "" {
+					fmt.Fprintf(&b, "        ↳ includes +%d %s (%s)\n", c.Amount, c.DamageType, c.SourceName)
+				} else {
+					fmt.Fprintf(&b, "        ↳ includes +%d (%s)\n", c.Amount, c.SourceName)
+				}
+			}
+		}
 	case result.IsAttack:
 		if result.Hit && result.DamageTotal > 0 {
 			fmt.Fprintf(&b, "\U0001f4a5 Damage: %d %s (%s)\n", result.DamageTotal, result.DamageType, result.ScaledDamageDice)
@@ -273,8 +299,8 @@ func FormatCastLog(result CastResult) string {
 		fmt.Fprintf(&b, "\U0001f49a Healing: %s\n", result.ScaledHealingDice)
 	}
 
-	// Attack roll
-	if result.IsAttack {
+	// Attack roll (single-attack spells; Eldritch Blast renders per-beam above).
+	if result.IsAttack && len(result.Beams) == 0 {
 		hitMiss := "Miss"
 		if result.Hit {
 			hitMiss = "Hit"
@@ -388,7 +414,8 @@ func FormatCastLog(result CastResult) string {
 type CastCommand struct {
 	SpellID              string
 	CasterID             uuid.UUID
-	TargetID             uuid.UUID // zero value for self spells
+	TargetID             uuid.UUID   // zero value for self spells
+	BeamTargetIDs        []uuid.UUID // Eldritch Blast split-fire: per-beam targets in order; empty = all beams at TargetID
 	Turn                 refdata.Turn
 	CurrentConcentration string    // name of current concentration spell, if any
 	SlotLevel            int       // explicit slot choice; 0 = auto-select lowest available
@@ -689,12 +716,16 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.TargetName = target.DisplayName
 	}
 
-	// 9a. Compute scaled damage dice (cantrip scaling or upcast)
+	// 9a. Compute scaled damage dice (cantrip scaling or upcast). baseDamageDice
+	// keeps the UN-scaled per-instance die (e.g. "1d10"), which Eldritch Blast
+	// rolls once per beam rather than as one lumped scaled roll.
+	var baseDamageDice string
 	if hasDamage(spell) {
 		dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
 		if err == nil {
 			result.DamageType = dmgInfo.DamageType
 			result.ScaledDamageDice = ScaleSpellDice(dmgInfo, spellLevel, effectiveSlotLevel, int(char.Level))
+			baseDamageDice = dmgInfo.Dice
 		}
 	}
 
@@ -736,24 +767,45 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.SaveAbility = spell.SaveAbility.String
 	}
 
+	// Eldritch Blast fires each beam as an independent attack (COV-14); detect it
+	// so step 12 routes to the per-beam resolver and the single-attack damage /
+	// repelling blocks below are skipped (the resolver handles them per beam).
+	isEldritchBlastAttack := IsEldritchBlast(spell) && spell.AttackType.Valid && spell.AttackType.String != "" && hasTarget
+
 	// 12. Spell attack roll
 	if spell.AttackType.Valid && spell.AttackType.String != "" {
 		attackMod := SpellAttackModifier(int(char.ProficiencyBonus), spellAbilityScore)
 		// 2024 exhaustion: -2/level penalty applies to spell attack rolls too.
 		attackMod += ExhaustionD20Penalty(int(caster.ExhaustionLevel))
-		d20Result, err := roller.RollD20(attackMod, cmd.SpellAttackRollMode)
-		if err != nil {
-			return CastResult{}, fmt.Errorf("rolling spell attack: %w", err)
+
+		if isEldritchBlastAttack {
+			ebResult, err := s.resolveEldritchBlastBeams(ctx, cmd, spell, char, caster, target, spellAbilityScore, attackMod, baseDamageDice, result.DamageType, roller)
+			if err != nil {
+				return CastResult{}, err
+			}
+			result.IsAttack = true
+			result.Beams = ebResult.Outcomes
+			result.DamageTotal = ebResult.DamageTotal
+			result.DamageBreakdown = append(result.DamageBreakdown, ebResult.Breakdown...)
+			result.DownLogLine = ebResult.DownLine
+			result.RepellingBlastPushed = ebResult.Pushed
+			result.Hit = anyBeamHit(ebResult.Outcomes)
+		} else {
+			d20Result, err := roller.RollD20(attackMod, cmd.SpellAttackRollMode)
+			if err != nil {
+				return CastResult{}, fmt.Errorf("rolling spell attack: %w", err)
+			}
+			result.IsAttack = true
+			result.AttackRoll = d20Result.Chosen
+			result.AttackTotal = d20Result.Total
+			result.TargetAC = int(target.Ac)
+			result.Hit = d20Result.Total >= int(target.Ac)
 		}
-		result.IsAttack = true
-		result.AttackRoll = d20Result.Chosen
-		result.AttackTotal = d20Result.Total
-		result.TargetAC = int(target.Ac)
-		result.Hit = d20Result.Total >= int(target.Ac)
 	}
 
-	// 12α. Roll damage dice on hit and apply to target HP.
-	if result.Hit && result.ScaledDamageDice != "" && hasTarget {
+	// 12α. Roll damage dice on hit and apply to target HP. (Eldritch Blast rolls
+	// and applies its damage per beam inside resolveEldritchBlastBeams.)
+	if !isEldritchBlastAttack && result.Hit && result.ScaledDamageDice != "" && hasTarget {
 		dmgDice := strings.ReplaceAll(result.ScaledDamageDice, "+mod", fmt.Sprintf("+%d", AbilityModifier(spellAbilityScore)))
 		rollResult, err := roller.Roll(dmgDice)
 		if err != nil {
@@ -825,7 +877,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// Repelling Blast invocation pushes the target 10 ft straight away (COV-6).
 	// Reuses the shared push machinery (Push mastery / /shove) and is
 	// auto-applied on a hit, mirroring the auto-resolved Push mastery.
-	if result.Hit && hasTarget && castTriggersRepellingBlast(spell, char) {
+	if !isEldritchBlastAttack && result.Hit && hasTarget && castTriggersRepellingBlast(spell, char) {
 		if err := s.applyPushEffect(ctx, caster, target, 2); err != nil { // Repelling Blast: 10 ft
 			return CastResult{}, fmt.Errorf("applying repelling blast push: %w", err)
 		}

@@ -448,6 +448,20 @@ func (h *CastHandler) resolveSpell(ctx context.Context, spellID string) (refdata
 	return h.encounterProvider.GetSpell(ctx, slug)
 }
 
+// splitBeamTargets splits a comma-separated Eldritch Blast target list into
+// trimmed, non-empty tokens (short IDs or coordinates, both comma-free). A bare
+// single target returns a one-element slice.
+func splitBeamTargets(targetStr string) []string {
+	parts := strings.Split(targetStr, ",")
+	tokens := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			tokens = append(tokens, t)
+		}
+	}
+	return tokens
+}
+
 // dispatchSingleTarget runs the single-target /cast path: resolves the named
 // target (when present), reads current concentration, calls Service.Cast,
 // and posts the formatted log line. SR-025: when --empowered is selected and
@@ -486,13 +500,31 @@ func (h *CastHandler) dispatchSingleTarget(
 	isCasterTeleport := hasTeleport && combat.IsCasterTeleport(teleportInfo.Target)
 
 	var targetID uuid.UUID
+	var beamTargetIDs []uuid.UUID
 	if targetStr != "" && !isCasterTeleport {
-		target, err := combat.ResolveTarget(targetStr, combatants)
-		if err != nil {
-			respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
-			return
+		if combat.IsEldritchBlast(spell) {
+			// Eldritch Blast may fire its beams at different creatures: a
+			// comma-separated target list (e.g. "B2,O2") assigns one target per
+			// beam. A single target sends every beam at it.
+			for _, tok := range splitBeamTargets(targetStr) {
+				bt, err := combat.ResolveTarget(tok, combatants)
+				if err != nil {
+					respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", tok))
+					return
+				}
+				beamTargetIDs = append(beamTargetIDs, bt.ID)
+			}
+			if len(beamTargetIDs) > 0 {
+				targetID = beamTargetIDs[0]
+			}
+		} else {
+			target, err := combat.ResolveTarget(targetStr, combatants)
+			if err != nil {
+				respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
+				return
+			}
+			targetID = target.ID
 		}
-		targetID = target.ID
 	}
 
 	// SR-025: parse the optional twin-target Discord option so Twinned
@@ -516,6 +548,7 @@ func (h *CastHandler) dispatchSingleTarget(
 		SpellID:              spell.ID,
 		CasterID:             caster.ID,
 		TargetID:             targetID,
+		BeamTargetIDs:        beamTargetIDs,
 		Turn:                 turn,
 		CurrentConcentration: currentConc,
 		SlotLevel:            optionInt(interaction, "level"),

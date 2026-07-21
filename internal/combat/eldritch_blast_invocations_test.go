@@ -106,9 +106,10 @@ func TestCast_EldritchBlast_RepellingBlast_PushesTargetOnHit(t *testing.T) {
 	require.True(t, result.Hit, "EB must hit for Repelling Blast to trigger")
 	assert.True(t, result.RepellingBlastPushed, "hit + invocation → target pushed")
 	require.True(t, cap.called, "push must reach the position store")
-	// caster E5, target E6 → pushed 2 squares straight away → E8.
+	// caster E5, target E6. Both beams hit, and Repelling Blast pushes 10 ft
+	// (2 squares) per beam that hits → 4 squares straight away → E10.
 	assert.Equal(t, "E", cap.params.PositionCol)
-	assert.Equal(t, int32(8), cap.params.PositionRow)
+	assert.Equal(t, int32(10), cap.params.PositionRow)
 }
 
 func TestCast_EldritchBlast_NoRepelling_NoPush(t *testing.T) {
