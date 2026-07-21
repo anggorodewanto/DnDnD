@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -260,6 +261,30 @@ func TestSpellCountCap_Multiclass(t *testing.T) {
 	}
 	if cap, ok := spellCountCap(nonCasters); ok || cap != 0 {
 		t.Errorf("spellCountCap(fighter1/barbarian1) = (%d, %v), want (0, false)", cap, ok)
+	}
+}
+
+// TestValidateSpellCount_TomeCantripsDoNotCount proves Pact-of-the-Tome bonus
+// cantrips in the dedicated field never count against the chosen-spell cap: a
+// warlock at exactly the cap (8 at L4: 3 cantrips + 5 known) plus 3 tome
+// cantrips validates, while moving those 3 into the counted `spells` list
+// overflows and fails.
+func TestValidateSpellCount_TomeCantripsDoNotCount(t *testing.T) {
+	spells := make([]string, 8) // warlock L4 spell budget
+	for i := range spells {
+		spells[i] = fmt.Sprintf("s%d", i)
+	}
+	sub := warlockSub(4, spells, "pact_of_the_tome", nil)
+	sub.TomeCantrips = []string{"guidance", "minor-illusion", "prestidigitation"}
+	if errs := validateSpellCount(sub); len(errs) != 0 {
+		t.Errorf("validateSpellCount(warlock4, 8 spells + 3 tome cantrips) = %v, want no errors", errs)
+	}
+
+	// The same three cantrips placed in the counted list overflow the cap.
+	inSpells := append(append([]string{}, spells...), "guidance", "minor-illusion", "prestidigitation")
+	overflow := warlockSub(4, inSpells, "pact_of_the_tome", nil)
+	if errs := validateSpellCount(overflow); len(errs) == 0 {
+		t.Error("validateSpellCount(warlock4, 11 spells) = no errors, want a too-many-spells error")
 	}
 }
 

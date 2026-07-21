@@ -56,6 +56,14 @@ type CharacterSubmission struct {
 	// doubles as the clean-slug mechanical_effect the combat engine reads.
 	PactBoon    string   `json:"pact_boon,omitempty"`
 	Invocations []string `json:"invocations,omitempty"`
+	// TomeCantrips are the Pact of the Tome bonus cantrips (Book of Shadows): up
+	// to three at-will cantrips. They feed the SEPARATE granted-spells store
+	// (grantedSpellsForSubmission → GrantedSpells / character_data "granted_spells"),
+	// NOT the counted `spells` list, so they never count against the chosen-spell
+	// cap (validateSpellCount) and survive a builder rebuild PUT. Honored only when
+	// PactBoon == "pact_of_the_tome"; persisted on the Pact Boon feature's Choices
+	// so an edit round-trip restores them.
+	TomeCantrips []string `json:"tome_cantrips,omitempty"`
 	// FightingStyle is the Fighter/Paladin/Ranger fighting-style pick (COV-15): a
 	// refdata.FightingStyleCatalog id that doubles as the combat-read
 	// mechanical_effect slug (e.g. "archery"). Resolved into a character.Feature
@@ -266,10 +274,10 @@ type CreateCharacterParams struct {
 	Expertise     []string
 	Equipment     []string
 	Spells        []string
-	// GrantedSpells are Warlock Eldritch-Invocation granted spells, persisted
-	// under a SEPARATE character_data "granted_spells" key (not merged into
-	// Spells) so the known-spell budget stays honest. See
-	// invocationGrantedSpellsForSubmission.
+	// GrantedSpells are Warlock class-feature granted spells — Eldritch-Invocation
+	// grants plus Pact-of-the-Tome bonus cantrips — persisted under a SEPARATE
+	// character_data "granted_spells" key (not merged into Spells) so the
+	// known-spell budget stays honest. See grantedSpellsForSubmission.
 	GrantedSpells   []string
 	WeaponMasteries []string
 	Languages       []string
@@ -611,7 +619,7 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 		Expertise:       expertiseSkillsForSubmission(sub),
 		Equipment:       sub.Equipment,
 		Spells:          sub.Spells,
-		GrantedSpells:   invocationGrantedSpellsForSubmission(sub),
+		GrantedSpells:   grantedSpellsForSubmission(sub),
 		WeaponMasteries: sub.WeaponMasteries,
 		Languages:       sub.Languages,
 		Features:        features,

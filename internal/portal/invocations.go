@@ -30,6 +30,21 @@ const (
 // prerequisite spell for the *_blast invocations.
 const eldritchBlastSpellID = "eldritch-blast"
 
+// pactOfTheTomeID is the pact-boon id whose Book of Shadows grants three at-will
+// bonus cantrips. Those picks travel in CharacterSubmission.TomeCantrips → the
+// SEPARATE granted-spells store (grantedSpellsForSubmission), never the counted
+// spells list, exactly like invocation grants.
+const pactOfTheTomeID = "pact_of_the_tome"
+
+// maxTomeCantrips is the Book of Shadows cantrip grant (Pact of the Tome: three
+// cantrips of your choice). Server validation caps TomeCantrips at this.
+const maxTomeCantrips = 3
+
+// tomeCantripsChoiceKey is the character.Feature.Choices key under which the
+// resolved Pact Boon feature persists the tome cantrips, so an edit round-trip
+// (classFeatureChoicesFromFeatures) can restore them.
+const tomeCantripsChoiceKey = "tome_cantrips"
+
 // pactBoonPlaceholder is the mechanical_effect the warlock seed uses for the
 // unresolved Pact Boon feature — aliased to the refdata SSOT so the seed and
 // this stripper can never drift. isInvocationPlaceholder matches the invocation
@@ -105,6 +120,10 @@ func validateSubmittedClassFeatures(sub CharacterSubmission) error {
 		}
 	}
 
+	if err := validateTomeCantrips(sub); err != nil {
+		return err
+	}
+
 	if len(sub.Invocations) == 0 {
 		return nil
 	}
@@ -132,6 +151,34 @@ func validateSubmittedClassFeatures(sub CharacterSubmission) error {
 		if err := checkInvocationPrereq(inv, wl, sub.PactBoon, knowsEB); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateTomeCantrips rejects an illegal Pact-of-the-Tome bonus-cantrip
+// selection (mirrors the invocation validation style): cantrips chosen on any
+// boon other than pact_of_the_tome, more than the three-cantrip Book of Shadows
+// grant, and duplicate or empty ids. Like the invocation validator it does NOT
+// verify each id names a real cantrip. An empty selection is always accepted.
+func validateTomeCantrips(sub CharacterSubmission) error {
+	if len(sub.TomeCantrips) == 0 {
+		return nil
+	}
+	if sub.PactBoon != pactOfTheTomeID {
+		return fmt.Errorf("tome cantrips require %s", pactOfTheTomeID)
+	}
+	if len(sub.TomeCantrips) > maxTomeCantrips {
+		return fmt.Errorf("too many tome cantrips: %d chosen but Pact of the Tome grants %d", len(sub.TomeCantrips), maxTomeCantrips)
+	}
+	seen := make(map[string]struct{}, len(sub.TomeCantrips))
+	for _, id := range sub.TomeCantrips {
+		if id == "" {
+			return fmt.Errorf("tome cantrip id must not be empty")
+		}
+		if _, dup := seen[id]; dup {
+			return fmt.Errorf("duplicate tome cantrip %q", id)
+		}
+		seen[id] = struct{}{}
 	}
 	return nil
 }
@@ -186,13 +233,22 @@ func classFeatureFeaturesForSubmission(sub CharacterSubmission) []character.Feat
 
 	if sub.PactBoon != "" && refdata.PactBoonGranted(wl) {
 		if b, ok := refdata.PactBoonByID()[sub.PactBoon]; ok {
-			out = append(out, character.Feature{
+			boon := character.Feature{
 				Name:             b.Name,
 				Source:           pactBoonFeatureSource,
 				Level:            3,
 				Description:      b.Description,
 				MechanicalEffect: b.ID,
-			})
+			}
+			// Pact of the Tome: persist the kept bonus cantrips on the feature so
+			// the picks round-trip through an edit. Empty selection leaves Choices
+			// nil — byte-identical to a boon without tome cantrips.
+			if b.ID == pactOfTheTomeID {
+				if kept := tomeGrantedSpellsForSubmission(sub); len(kept) > 0 {
+					boon.Choices = map[string][]string{tomeCantripsChoiceKey: kept}
+				}
+			}
+			out = append(out, boon)
 		}
 	}
 
@@ -217,6 +273,43 @@ func classFeatureFeaturesForSubmission(sub CharacterSubmission) []character.Feat
 	return out
 }
 
+// submittedSpellSet returns a set of the submission's manually-known spell ids.
+// It seeds the granted-spell collectors so a granted id the warlock already
+// learned by hand is never double-stored under "granted_spells".
+func submittedSpellSet(sub CharacterSubmission) map[string]struct{} {
+	seen := make(map[string]struct{}, len(sub.Spells))
+	for _, id := range sub.Spells {
+		seen[id] = struct{}{}
+	}
+	return seen
+}
+
+// appendDeduped appends each id in ids to out, skipping ids already recorded in
+// seen (a manually-known spell or an earlier grant) and recording the rest.
+// Callers threading ONE seen set across several grant sources therefore dedup
+// across all of them; order is preserved.
+func appendDeduped(seen map[string]struct{}, out, ids []string) []string {
+	for _, id := range ids {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+// tomeCantripPicks returns the raw Pact-of-the-Tome bonus cantrips the
+// submission carries — sub.TomeCantrips, but ONLY when the chosen boon is
+// pact_of_the_tome (any other boon, or none, learns no Book of Shadows cantrips).
+// Deduplication and manual-known exclusion are the caller's job (appendDeduped).
+func tomeCantripPicks(sub CharacterSubmission) []string {
+	if sub.PactBoon != pactOfTheTomeID {
+		return nil
+	}
+	return sub.TomeCantrips
+}
+
 // invocationGrantedSpellsForSubmission collects the spell ids the submission's
 // kept invocations make castable (Invocation.GrantsSpells), deduplicated and in
 // order, EXCLUDING any spell the warlock already learned manually (present in
@@ -225,21 +318,39 @@ func classFeatureFeaturesForSubmission(sub CharacterSubmission) []character.Feat
 // (validateSpellCount counts len(sub.Spells)) and mirrors the
 // AlwaysPreparedSpells precedent. Returns nil when nothing is granted.
 func invocationGrantedSpellsForSubmission(sub CharacterSubmission) []string {
-	seen := make(map[string]struct{}, len(sub.Spells))
-	for _, id := range sub.Spells {
-		seen[id] = struct{}{}
-	}
+	seen := submittedSpellSet(sub)
 	var out []string
 	for _, inv := range keptInvocationsForSubmission(sub) {
-		for _, spellID := range inv.GrantsSpells {
-			if _, dup := seen[spellID]; dup {
-				continue
-			}
-			seen[spellID] = struct{}{}
-			out = append(out, spellID)
-		}
+		out = appendDeduped(seen, out, inv.GrantsSpells)
 	}
 	return out
+}
+
+// tomeGrantedSpellsForSubmission collects the Pact-of-the-Tome bonus cantrips
+// the submission keeps: tomeCantripPicks, deduplicated and in order, EXCLUDING
+// any id already in sub.Spells. It mirrors invocationGrantedSpellsForSubmission
+// and is the single source of the "kept tome cantrips" — reused to stamp the
+// Pact Boon feature's Choices (so they round-trip). Returns nil for any other
+// boon, or when no cantrips were picked.
+func tomeGrantedSpellsForSubmission(sub CharacterSubmission) []string {
+	return appendDeduped(submittedSpellSet(sub), nil, tomeCantripPicks(sub))
+}
+
+// grantedSpellsForSubmission is the unified granted-spells collector: it unions
+// invocation grants (Invocation.GrantsSpells) and Pact-of-the-Tome bonus
+// cantrips (tomeCantripPicks) into the SEPARATE character_data "granted_spells"
+// store, threading ONE shared seen set (seeded with the manually-known
+// sub.Spells) so an id offered by both sources is emitted once. Invocation
+// grants come first, then tome cantrips; order within each source is preserved.
+// Returns nil when nothing is granted. Keeping these out of "spells" keeps the
+// known-spell budget honest and lets both grants survive a builder rebuild PUT.
+func grantedSpellsForSubmission(sub CharacterSubmission) []string {
+	seen := submittedSpellSet(sub)
+	var out []string
+	for _, inv := range keptInvocationsForSubmission(sub) {
+		out = appendDeduped(seen, out, inv.GrantsSpells)
+	}
+	return appendDeduped(seen, out, tomeCantripPicks(sub))
 }
 
 // injectClassFeatureChoices resolves the submission's pact-boon + invocation
@@ -290,11 +401,16 @@ func injectClassFeatureChoices(base []character.Feature, sub CharacterSubmission
 // submission's PactBoon + Invocations (the inverse of injectClassFeatureChoices)
 // so an edit round-trip preserves a warlock's picks instead of silently
 // resetting them (cf. the builder-edit-resets-live-resources class of bugs).
-func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string, fightingStyle string, metamagic []string) {
+func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon string, invocations []string, fightingStyle string, metamagic []string, tomeCantrips []string) {
 	for _, f := range features {
 		switch f.Source {
 		case pactBoonFeatureSource:
 			pactBoon = f.MechanicalEffect
+			// Pact of the Tome persists its bonus cantrips on the feature's
+			// Choices; restore them so an edit round-trip re-grants them.
+			if f.MechanicalEffect == pactOfTheTomeID {
+				tomeCantrips = append(tomeCantrips, f.Choices[tomeCantripsChoiceKey]...)
+			}
 		case invocationFeatureSource:
 			invocations = append(invocations, f.MechanicalEffect)
 		case fightingStyleFeatureSource:
@@ -303,5 +419,5 @@ func classFeatureChoicesFromFeatures(features []character.Feature) (pactBoon str
 			metamagic = append(metamagic, f.MechanicalEffect)
 		}
 	}
-	return pactBoon, invocations, fightingStyle, metamagic
+	return pactBoon, invocations, fightingStyle, metamagic, tomeCantrips
 }

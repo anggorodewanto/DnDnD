@@ -280,6 +280,156 @@ func TestInvocationGrantedSpellsForSubmission_GrantCapRespected(t *testing.T) {
 	}
 }
 
+// grantedSpellsForSubmission unions invocation grants + Pact-of-the-Tome bonus
+// cantrips into the SEPARATE granted-spells store, deduped against ONE shared
+// seen set (seeded with the manually-known spells), order-preserving.
+func TestGrantedSpellsForSubmission_IncludesTomeCantrips(t *testing.T) {
+	// Warlock 3 with Pact of the Tome: the three bonus cantrips flow through
+	// exactly, order-preserved.
+	sub := warlockSub(3, nil, "pact_of_the_tome", nil)
+	sub.TomeCantrips = []string{"guidance", "minor-illusion", "prestidigitation"}
+	got := grantedSpellsForSubmission(sub)
+	want := []string{"guidance", "minor-illusion", "prestidigitation"}
+	if !slices.Equal(got, want) {
+		t.Errorf("granted = %v, want %v", got, want)
+	}
+
+	// A non-tome boon ignores tome cantrips entirely.
+	nonTome := warlockSub(3, nil, "pact_of_the_blade", nil)
+	nonTome.TomeCantrips = []string{"guidance"}
+	if got := grantedSpellsForSubmission(nonTome); got != nil {
+		t.Errorf("non-tome boon granted = %v, want nil", got)
+	}
+
+	// Empty tome cantrips grant nothing.
+	empty := warlockSub(3, nil, "pact_of_the_tome", nil)
+	if got := grantedSpellsForSubmission(empty); got != nil {
+		t.Errorf("empty tome cantrips granted = %v, want nil", got)
+	}
+
+	// A tome cantrip already learned manually (present in sub.Spells) is
+	// excluded — no double-store.
+	dup := warlockSub(3, []string{"guidance"}, "pact_of_the_tome", nil)
+	dup.TomeCantrips = []string{"guidance", "minor-illusion"}
+	if got := grantedSpellsForSubmission(dup); !slices.Equal(got, []string{"minor-illusion"}) {
+		t.Errorf("granted = %v, want [minor-illusion] (guidance already known)", got)
+	}
+
+	// Union across ONE shared seen set: an invocation granting mage-armor plus a
+	// tome list that repeats it emits it once (invocation first, then the rest).
+	union := warlockSub(5, nil, "pact_of_the_tome", []string{"armor_of_shadows"})
+	union.TomeCantrips = []string{"mage-armor", "minor-illusion"}
+	if got := grantedSpellsForSubmission(union); !slices.Equal(got, []string{"mage-armor", "minor-illusion"}) {
+		t.Errorf("union granted = %v, want [mage-armor minor-illusion]", got)
+	}
+}
+
+// classFeatureFeaturesForSubmission stamps the kept tome cantrips onto the Pact
+// Boon feature's Choices so the picks persist and round-trip. Empty / non-tome
+// selections must NOT stamp Choices (byte-identical to pre-fix behavior).
+func TestClassFeatureFeaturesForSubmission_StampsTomeChoices(t *testing.T) {
+	sub := warlockSub(3, nil, "pact_of_the_tome", nil)
+	sub.TomeCantrips = []string{"guidance", "minor-illusion", "prestidigitation"}
+	boon := pactBoonFeature(t, classFeatureFeaturesForSubmission(sub))
+	want := []string{"guidance", "minor-illusion", "prestidigitation"}
+	if got := boon.Choices["tome_cantrips"]; !slices.Equal(got, want) {
+		t.Errorf("boon Choices[tome_cantrips] = %v, want %v", got, want)
+	}
+
+	// Backward compat: no tome cantrips => nil Choices (no new bytes).
+	bare := warlockSub(3, nil, "pact_of_the_tome", nil)
+	if c := pactBoonFeature(t, classFeatureFeaturesForSubmission(bare)).Choices; c != nil {
+		t.Errorf("empty tome cantrips must not stamp Choices, got %v", c)
+	}
+
+	// A non-tome boon never carries tome choices even if the field is populated.
+	blade := warlockSub(3, nil, "pact_of_the_blade", nil)
+	blade.TomeCantrips = []string{"guidance"}
+	if c := pactBoonFeature(t, classFeatureFeaturesForSubmission(blade)).Choices; c != nil {
+		t.Errorf("non-tome boon must not stamp tome choices, got %v", c)
+	}
+}
+
+// A full round-trip: a tome-warlock submission resolves to features carrying the
+// tome Choices, and reconstructing a submission from those persisted features
+// recovers TomeCantrips (mirrors TestSubmissionFromCharacter_RestoresInvocationsAndBoon).
+func TestSubmissionFromCharacter_RestoresTomeCantrips(t *testing.T) {
+	feats := []character.Feature{
+		{Name: "Pact Magic", Source: "warlock", MechanicalEffect: "pact_magic_cha"},
+		{Name: "Pact of the Tome", Source: "pact_boon", MechanicalEffect: "pact_of_the_tome",
+			Choices: map[string][]string{"tome_cantrips": {"guidance", "minor-illusion", "prestidigitation"}}},
+	}
+	blob, _ := json.Marshal(feats)
+	ch := refdata.Character{
+		Name:     "Tomelock",
+		Race:     "human",
+		Features: pqtype.NullRawMessage{RawMessage: blob, Valid: true},
+	}
+
+	sub := submissionFromCharacter(ch)
+
+	if sub.PactBoon != "pact_of_the_tome" {
+		t.Errorf("PactBoon = %q, want pact_of_the_tome", sub.PactBoon)
+	}
+	want := []string{"guidance", "minor-illusion", "prestidigitation"}
+	if !slices.Equal(sub.TomeCantrips, want) {
+		t.Errorf("TomeCantrips = %v, want %v", sub.TomeCantrips, want)
+	}
+}
+
+func TestValidateSubmittedClassFeatures_TomeCantrips(t *testing.T) {
+	legal := warlockSub(3, nil, "pact_of_the_tome", nil)
+	legal.TomeCantrips = []string{"guidance", "minor-illusion", "prestidigitation"}
+	if err := validateSubmittedClassFeatures(legal); err != nil {
+		t.Fatalf("legal tome selection rejected: %v", err)
+	}
+
+	reject := map[string]func() CharacterSubmission{
+		"tome cantrips on a non-tome boon": func() CharacterSubmission {
+			s := warlockSub(3, nil, "pact_of_the_blade", nil)
+			s.TomeCantrips = []string{"guidance"}
+			return s
+		},
+		"tome cantrips with no boon at all": func() CharacterSubmission {
+			s := warlockSub(3, nil, "", nil)
+			s.TomeCantrips = []string{"guidance"}
+			return s
+		},
+		"more than three cantrips": func() CharacterSubmission {
+			s := warlockSub(3, nil, "pact_of_the_tome", nil)
+			s.TomeCantrips = []string{"a", "b", "c", "d"}
+			return s
+		},
+		"duplicate cantrip": func() CharacterSubmission {
+			s := warlockSub(3, nil, "pact_of_the_tome", nil)
+			s.TomeCantrips = []string{"guidance", "guidance"}
+			return s
+		},
+		"empty cantrip id": func() CharacterSubmission {
+			s := warlockSub(3, nil, "pact_of_the_tome", nil)
+			s.TomeCantrips = []string{"guidance", ""}
+			return s
+		},
+	}
+	for name, build := range reject {
+		if err := validateSubmittedClassFeatures(build()); err == nil {
+			t.Errorf("%s: expected validation error, got nil", name)
+		}
+	}
+}
+
+// pactBoonFeature returns the emitted Pact Boon feature (fails if absent).
+func pactBoonFeature(t *testing.T, features []character.Feature) character.Feature {
+	t.Helper()
+	for _, f := range features {
+		if f.Source == pactBoonFeatureSource {
+			return f
+		}
+	}
+	t.Fatalf("no pact boon feature in %+v", features)
+	return character.Feature{}
+}
+
 func assertFeature(t *testing.T, features []character.Feature, name, source, mechEffect string) {
 	t.Helper()
 	for _, f := range features {
