@@ -12,6 +12,7 @@ import (
 // WeaponStats is the display weapon stat block joined from refdata.weapons by
 // item id. Nil on a non-weapon inventory item / equipped slot.
 type WeaponStats struct {
+	Name       string   // display name, e.g. "Silent Blade" (homebrew fallback)
 	Damage     string   // "1d8 slashing"
 	Versatile  string   // versatile two-handed damage, e.g. "1d10"; "" if none
 	Range      string   // "80/320 ft" for ranged/thrown; "" for pure melee
@@ -30,6 +31,7 @@ type WeaponMasteryDisplay struct {
 // ArmorStats is the display armor stat block joined from refdata.armor by item
 // id. Nil on a non-armor inventory item / equipped slot.
 type ArmorStats struct {
+	Name          string // display name, e.g. "Gloom Plate" (homebrew fallback)
 	AC            string // "16", "12 + DEX (max 2)", "+2" (shield)
 	ArmorType     string // "Light" / "Medium" / "Heavy" / "Shield"
 	StrengthReq   int    // 0 = none
@@ -83,6 +85,7 @@ func wrapInventory(items []character.InventoryItem) []InventoryDisplayItem {
 // weaponStatsFrom builds a display stat block from a reference weapon row.
 func weaponStatsFrom(w refdata.Weapon) *WeaponStats {
 	ws := &WeaponStats{
+		Name:       w.Name,
 		Damage:     formatDamage(w.Damage, w.DamageType),
 		WeaponType: formatUnderscored(w.WeaponType),
 		Mastery:    capitalizeFirst(w.Mastery),
@@ -100,6 +103,7 @@ func weaponStatsFrom(w refdata.Weapon) *WeaponStats {
 // armorStatsFrom builds a display stat block from a reference armor row.
 func armorStatsFrom(a refdata.Armor) *ArmorStats {
 	as := &ArmorStats{
+		Name:          a.Name,
 		AC:            formatArmorAC(a),
 		ArmorType:     capitalizeFirst(a.ArmorType),
 		StealthDisadv: a.StealthDisadv.Valid && a.StealthDisadv.Bool,

@@ -27,6 +27,8 @@ func TestResolveWeaponMasteries(t *testing.T) {
 		"longsword": {Mastery: "Sap"},
 		"shortbow":  {Mastery: "Vex"},
 		"club":      {Mastery: ""}, // weapon without a mastery property → skipped
+		// Homebrew weapon: absent from the static catalog but carries a DB Name.
+		"hb_silent01": {Name: "Silent Blade", Mastery: "Vex"},
 	}
 	catalog := map[string]refdata.ItemCatalogEntry{
 		"longsword": {ID: "longsword", Name: "Longsword"},
@@ -42,6 +44,10 @@ func TestResolveWeaponMasteries(t *testing.T) {
 	// id absent from the catalog falls back to the raw id as the display name.
 	got = resolveWeaponMasteries([]string{"longsword"}, weapons, map[string]refdata.ItemCatalogEntry{})
 	assert.Equal(t, []WeaponMasteryDisplay{{Weapon: "longsword", Mastery: "Sap"}}, got)
+
+	// Homebrew weapon absent from the catalog uses the DB weapon Name, not the raw id.
+	got = resolveWeaponMasteries([]string{"hb_silent01"}, weapons, catalog)
+	assert.Equal(t, []WeaponMasteryDisplay{{Weapon: "Silent Blade", Mastery: "Vex"}}, got)
 
 	assert.Nil(t, resolveWeaponMasteries(nil, weapons, catalog))
 	assert.Nil(t, resolveWeaponMasteries([]string{"club", "unknown"}, weapons, catalog)) // all skipped → nil

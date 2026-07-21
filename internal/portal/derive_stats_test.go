@@ -1219,29 +1219,63 @@ func TestUnarmoredDefenseFormula(t *testing.T) {
 	barb := []character.ClassEntry{{Class: "Barbarian", Level: 1}}
 	monk := []character.ClassEntry{{Class: "Monk", Level: 1}}
 	fighter := []character.ClassEntry{{Class: "Fighter", Level: 1}}
+	warlock := []character.ClassEntry{{Class: "Warlock", Level: 5}}
 
 	tests := []struct {
 		name      string
 		classes   []character.ClassEntry
 		wornArmor string
 		hasShield bool
+		hasAoS    bool
 		want      string
 	}{
-		{"unarmored barbarian", barb, "", false, "10 + DEX + CON"},
-		{"unarmored barbarian + shield", barb, "", true, "10 + DEX + CON"},
-		{"armored barbarian", barb, "chain-mail", false, ""},
-		{"unarmored monk", monk, "", false, "10 + DEX + WIS"},
-		{"unarmored monk + shield (UD void)", monk, "", true, ""},
-		{"armored monk", monk, "leather", false, ""},
-		{"fighter", fighter, "", false, ""},
+		{"unarmored barbarian", barb, "", false, false, "10 + DEX + CON"},
+		{"unarmored barbarian + shield", barb, "", true, false, "10 + DEX + CON"},
+		{"armored barbarian", barb, "chain-mail", false, false, ""},
+		{"unarmored monk", monk, "", false, false, "10 + DEX + WIS"},
+		{"unarmored monk + shield (UD void)", monk, "", true, false, ""},
+		{"armored monk", monk, "leather", false, false, ""},
+		{"fighter", fighter, "", false, false, ""},
 		// Multiclass barbarian+monk prefers barbarian (shield-compatible).
-		{"barbarian+monk", append(append([]character.ClassEntry{}, barb...), monk...), "", false, "10 + DEX + CON"},
-		{"barbarian+monk + shield", append(append([]character.ClassEntry{}, barb...), monk...), "", true, "10 + DEX + CON"},
+		{"barbarian+monk", append(append([]character.ClassEntry{}, barb...), monk...), "", false, false, "10 + DEX + CON"},
+		{"barbarian+monk + shield", append(append([]character.ClassEntry{}, barb...), monk...), "", true, false, "10 + DEX + CON"},
+		// Warlock Armor of Shadows: Mage Armor at will = 13 + DEX while unarmored.
+		{"unarmored warlock + AoS", warlock, "", false, true, "13 + DEX"},
+		{"unarmored warlock, no AoS", warlock, "", false, false, ""},
+		{"armored warlock + AoS (armor wins)", warlock, "leather", false, true, ""},
+		{"warlock + AoS + shield still 13 + DEX", warlock, "", true, true, "13 + DEX"},
+		// A stronger Unarmored Defense (barbarian) takes precedence over AoS.
+		{"barbarian + AoS keeps CON formula", barb, "", false, true, "10 + DEX + CON"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := unarmoredDefenseFormula(tc.classes, tc.wornArmor, tc.hasShield)
+			got := unarmoredDefenseFormula(tc.classes, tc.wornArmor, tc.hasShield, tc.hasAoS)
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestDeriveStats_Warlock_ArmorOfShadows(t *testing.T) {
+	base := CharacterSubmission{
+		Race:          "Tiefling",
+		Classes:       []character.ClassEntry{{Class: "Warlock", Level: 5}},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 15, INT: 14, WIS: 10, CHA: 18},
+	}
+
+	// Unarmored warlock WITHOUT Armor of Shadows: plain 10 + DEX(0) = 10.
+	control := base
+	stats := DeriveStats(control, nil)
+	assert.Equal(t, 10, stats.AC, "unarmored warlock without AoS is 10 + DEX")
+
+	// Unarmored warlock WITH Armor of Shadows: Mage Armor at will = 13 + DEX(0).
+	aos := base
+	aos.Invocations = []string{"armor_of_shadows"}
+	stats = DeriveStats(aos, nil)
+	assert.Equal(t, 13, stats.AC, "Armor of Shadows yields a permanent 13 + DEX while unarmored")
+
+	// Armor still wins when worn (Mage Armor requires no armor).
+	armored := aos
+	armored.WornArmor = "leather"
+	stats = DeriveStats(armored, nil)
+	assert.Equal(t, 11, stats.AC, "worn leather (11 + DEX) overrides the AoS formula")
 }

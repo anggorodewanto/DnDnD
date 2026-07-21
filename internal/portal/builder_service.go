@@ -81,7 +81,11 @@ type CharacterSubmission struct {
 	WeaponMasteries []string `json:"weapon_masteries,omitempty"`
 	Languages       []string `json:"languages,omitempty"`
 	EquippedWeapon  string   `json:"equipped_weapon,omitempty"`
-	WornArmor       string   `json:"worn_armor,omitempty"`
+	// EquippedOffHand is the off-hand item id. A dual-wielded off-hand weapon
+	// (e.g. a second dagger) lives here; a shield rides the Equipment list and is
+	// resolved to the off-hand column separately, so it is not carried here.
+	EquippedOffHand string `json:"equipped_off_hand,omitempty"`
+	WornArmor       string `json:"worn_armor,omitempty"`
 	// Appearance and Backstory are optional free-form descriptive text. They
 	// are display-only flavor (never validated, never queried) — persisted in
 	// the character_data JSONB bag. See character.CharacterProfile.
@@ -282,7 +286,13 @@ type CreateCharacterParams struct {
 	WeaponMasteries []string
 	Languages       []string
 	Features        []character.Feature
+	// Invocations are the Warlock eldritch-invocation ids (refdata invocation
+	// catalog). Threaded through so buildCharacterColumns can persist the same
+	// invocation-derived ac_formula that DeriveStats computes (e.g. Armor of
+	// Shadows → "13 + DEX"), keeping the sheet and in-combat AC in agreement.
+	Invocations     []string
 	EquippedWeapon  string
+	EquippedOffHand string
 	WornArmor       string
 	Appearance      string
 	Backstory       string
@@ -623,7 +633,9 @@ func (svc *BuilderService) prepareCharParams(ctx context.Context, campaignID str
 		WeaponMasteries: sub.WeaponMasteries,
 		Languages:       sub.Languages,
 		Features:        features,
+		Invocations:     sub.Invocations,
 		EquippedWeapon:  sub.EquippedWeapon,
+		EquippedOffHand: sub.EquippedOffHand,
 		WornArmor:       sub.WornArmor,
 		Appearance:      sub.Appearance,
 		Backstory:       sub.Backstory,

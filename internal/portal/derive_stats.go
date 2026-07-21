@@ -79,7 +79,7 @@ func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStat
 
 	armor := lookupArmorInfo(sub.WornArmor)
 	hasShield := hasEquipmentItem(sub.Equipment, "shield")
-	acFormula := unarmoredDefenseFormula(classes, sub.WornArmor, hasShield)
+	acFormula := unarmoredDefenseFormula(classes, sub.WornArmor, hasShield, hasArmorOfShadowsInvocation(sub.Invocations))
 	ac := character.CalculateAC(scores, armor, hasShield, acFormula)
 
 	saveProficiencies := classSaveProficiencies(classes)
@@ -181,7 +181,12 @@ func spellSlotsForClasses(classes []character.ClassEntry) map[string]character.S
 // A multiclass barbarian+monk prefers the barbarian formula because it is
 // shield-compatible; choosing monk would silently void the bonus the moment a
 // shield is equipped.
-func unarmoredDefenseFormula(classes []character.ClassEntry, wornArmor string, hasShield bool) string {
+//
+// hasArmorOfShadows carries the Warlock "Armor of Shadows" invocation, which
+// grants Mage Armor at will (13 + DEX while wearing no armor). It is the weakest
+// of these unarmored sources, so it only applies when no barbarian/monk formula
+// does; a barbarian/monk who also has the invocation keeps the stronger formula.
+func unarmoredDefenseFormula(classes []character.ClassEntry, wornArmor string, hasShield, hasArmorOfShadows bool) string {
 	if wornArmor != "" {
 		return ""
 	}
@@ -201,7 +206,21 @@ func unarmoredDefenseFormula(classes []character.ClassEntry, wornArmor string, h
 	if hasMonk && !hasShield {
 		return "10 + DEX + WIS"
 	}
+	if hasArmorOfShadows {
+		return "13 + DEX"
+	}
 	return ""
+}
+
+// hasArmorOfShadowsInvocation reports whether the Warlock "Armor of Shadows"
+// eldritch invocation (Mage Armor at will) is among the chosen invocations.
+func hasArmorOfShadowsInvocation(invocations []string) bool {
+	for _, inv := range invocations {
+		if strings.EqualFold(inv, "armor_of_shadows") {
+			return true
+		}
+	}
+	return false
 }
 
 // CollectFeatures gathers features from racial traits, class features, and

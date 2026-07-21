@@ -106,6 +106,21 @@ type characterColumns struct {
 	charDataMsg      pqtype.NullRawMessage
 }
 
+// resolveEquippedOffHand picks the equipped_off_hand column value. A shield and
+// an off-hand weapon both occupy the off-hand, so they are mutually exclusive: a
+// shield (flagged off_hand by the inventory builder, ISSUE-011) always wins;
+// otherwise a dual-wielded off-hand weapon id (e.g. a second dagger) is used so
+// an edit/level-up does not silently clear it.
+func resolveEquippedOffHand(p CreateCharacterParams) sql.NullString {
+	if hasEquipmentItem(p.Equipment, "shield") {
+		return sql.NullString{String: "shield", Valid: true}
+	}
+	if p.EquippedOffHand != "" {
+		return sql.NullString{String: p.EquippedOffHand, Valid: true}
+	}
+	return sql.NullString{}
+}
+
 // buildCharacterColumns derives every persistable column from a submission's
 // CreateCharacterParams. Shared by CreateCharacterRecord (INSERT) and
 // UpdateCharacterRecord (UPDATE).
@@ -150,12 +165,7 @@ func buildCharacterColumns(p CreateCharacterParams) (characterColumns, error) {
 	if p.WornArmor != "" {
 		equippedArmor = sql.NullString{String: p.WornArmor, Valid: true}
 	}
-	// ISSUE-011: an equipped shield (flagged off_hand by the inventory builder)
-	// must also populate the dedicated equipped_off_hand column.
-	var equippedOffHand sql.NullString
-	if hasEquipmentItem(p.Equipment, "shield") {
-		equippedOffHand = sql.NullString{String: "shield", Valid: true}
-	}
+	equippedOffHand := resolveEquippedOffHand(p)
 
 	var featureUsesMsg pqtype.NullRawMessage
 	if fu := InitFeatureUses(classEntries, p.AbilityScores); len(fu) > 0 {
@@ -222,7 +232,7 @@ func buildCharacterColumns(p CreateCharacterParams) (characterColumns, error) {
 	// ISSUE-004: persist the Unarmored Defense ac_formula. NULL for armored /
 	// non-UD classes so they are unchanged.
 	var acFormula sql.NullString
-	if f := unarmoredDefenseFormula(classEntries, p.WornArmor, hasEquipmentItem(p.Equipment, "shield")); f != "" {
+	if f := unarmoredDefenseFormula(classEntries, p.WornArmor, hasEquipmentItem(p.Equipment, "shield"), hasArmorOfShadowsInvocation(p.Invocations)); f != "" {
 		acFormula = sql.NullString{String: f, Valid: true}
 	}
 
@@ -365,6 +375,8 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 	hpMax := c.hpMax + featFlatHPBonus(existing.Features, c.level)
 	hpCurrent := min(existing.HpCurrent, hpMax)
 
+	additive := buildIsAdditive(existing.Race, existing.Classes, p.Race, c.classesJSON)
+
 	_, err = a.q.UpdateCharacter(ctx, refdata.UpdateCharacterParams{
 		ID:               charID,
 		Name:             p.Name,
@@ -386,17 +398,81 @@ func (a *BuilderStoreAdapter) UpdateCharacterRecord(ctx context.Context, charact
 		PactMagicSlots:   preserveExpendedPactSlots(existing.PactMagicSlots, c.pactMagicMsg),
 		HitDiceRemaining: c.hitDiceJSON,
 		FeatureUses:      preserveExpendedFeatureUses(existing.FeatureUses, c.featureUsesMsg),
-		Features:         preservePersistedFeats(existing.Features, c.featuresMsg, buildIsAdditive(existing.Race, existing.Classes, p.Race, c.classesJSON)),
+		Features:         preservePersistedFeats(existing.Features, c.featuresMsg, additive),
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: c.profJSON, Valid: true},
 		Gold:             existing.Gold,
 		AttunementSlots:  existing.AttunementSlots,
 		Languages:        c.languages,
-		Inventory:        c.inventoryMsg,
+		Inventory:        preserveInventory(existing.Inventory, c.inventoryMsg, additive),
 		CharacterData:    c.charDataMsg,
 		DdbUrl:           existing.DdbUrl,
 		Homebrew:         existing.Homebrew,
 	})
 	return err
+}
+
+// preserveInventory carries the full stored inventory across an additive
+// builder edit. The fresh build reconstructs inventory from the submission's
+// equipment id list (EquipmentToInventoryWithEquipped), which resolves any
+// off-catalog id — magic items, quest/loot items — to a bare
+// {id, id-as-name, "gear", qty 1} shell, discarding the stored Name,
+// Description, Quantity and IsMagic/Identified flags. On an additive edit
+// (buildIsAdditive: same race, no class dropped — e.g. a level-up or an
+// equip/mastery tweak) we keep each existing item intact and adopt only the
+// fresh item's Equipped/EquipSlot flags, so a main-hand/armor change still
+// lands while custom items survive byte-for-byte. A genuine respec
+// (non-additive) still rebuilds the inventory fresh. Mirrors
+// preserveExpendedSlots / preservePersistedFeats. Falls back to the fresh
+// build when either side is absent or unparseable.
+func preserveInventory(existing, fresh pqtype.NullRawMessage, additive bool) pqtype.NullRawMessage {
+	if !additive || !existing.Valid {
+		return fresh
+	}
+	var exItems []character.InventoryItem
+	if json.Unmarshal(existing.RawMessage, &exItems) != nil {
+		return fresh
+	}
+	if !fresh.Valid {
+		return existing
+	}
+	var frItems []character.InventoryItem
+	if json.Unmarshal(fresh.RawMessage, &frItems) != nil {
+		return fresh
+	}
+
+	exByID := make(map[string]character.InventoryItem, len(exItems))
+	for _, it := range exItems {
+		exByID[strings.ToLower(it.ItemID)] = it
+	}
+	consumed := make(map[string]bool, len(exItems))
+	result := make([]character.InventoryItem, 0, len(frItems)+len(exItems))
+	for _, fr := range frItems {
+		key := strings.ToLower(fr.ItemID)
+		if ex, ok := exByID[key]; ok && !consumed[key] {
+			// Keep the rich stored item; adopt only the fresh equip state.
+			ex.Equipped = fr.Equipped
+			ex.EquipSlot = fr.EquipSlot
+			result = append(result, ex)
+			consumed[key] = true
+			continue
+		}
+		result = append(result, fr)
+	}
+	// Safety: carry forward any existing item the fresh build dropped entirely,
+	// so an edit never silently deletes inventory.
+	for _, ex := range exItems {
+		key := strings.ToLower(ex.ItemID)
+		if !consumed[key] {
+			result = append(result, ex)
+			consumed[key] = true
+		}
+	}
+
+	merged, err := json.Marshal(result)
+	if err != nil {
+		return fresh
+	}
+	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
 }
 
 // preserveExpendedSlots carries forward spell slots already spent before an
@@ -769,6 +845,13 @@ func submissionFromCharacter(ch refdata.Character) CharacterSubmission {
 	}
 	if ch.EquippedMainHand.Valid {
 		sub.EquippedWeapon = ch.EquippedMainHand.String
+	}
+	// A dual-wielded off-hand weapon must round-trip so an edit/level-up does not
+	// drop it. A "shield" off-hand is already represented via the Equipment list
+	// (submissionFromCharacter re-adds it from inventory), so copying it here too
+	// would double-count it.
+	if ch.EquippedOffHand.Valid && ch.EquippedOffHand.String != "shield" {
+		sub.EquippedOffHand = ch.EquippedOffHand.String
 	}
 	if ch.EquippedArmor.Valid {
 		sub.WornArmor = ch.EquippedArmor.String

@@ -173,14 +173,22 @@ func (a *CharacterSheetStoreAdapter) enrichEquipment(ctx context.Context, data *
 		if e, ok := catalog[slot.ItemID]; ok {
 			slot.Name = e.Name
 		}
-		if slot.Name == "" {
-			slot.Name = slot.ItemID
-		}
+		// Homebrew weapons/armor live only in the live DB tables, not the static
+		// catalog, so fall back to the DB row's Name before the raw-id last resort.
 		if w, ok := weapons[slot.ItemID]; ok {
 			slot.Weapon = w
+			if slot.Name == "" {
+				slot.Name = w.Name
+			}
 		}
 		if ar, ok := armor[slot.ItemID]; ok {
 			slot.Armor = ar
+			if slot.Name == "" {
+				slot.Name = ar.Name
+			}
+		}
+		if slot.Name == "" {
+			slot.Name = slot.ItemID
 		}
 	}
 }
@@ -232,6 +240,10 @@ func resolveWeaponMasteries(ids []string, weapons map[string]*WeaponStats, catal
 		name := id
 		if e, ok := catalog[id]; ok {
 			name = e.Name
+		} else if w.Name != "" {
+			// Homebrew weapon: not in the static catalog — use the DB row's name
+			// instead of leaking the raw id (mirrors enrichEquipment).
+			name = w.Name
 		}
 		out = append(out, WeaponMasteryDisplay{Weapon: name, Mastery: w.Mastery})
 	}

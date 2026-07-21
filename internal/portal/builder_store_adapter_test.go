@@ -764,6 +764,62 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_NoShieldNoOffHand(t *testing.
 	assert.False(t, creator.capturedParams.EquippedOffHand.Valid)
 }
 
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsDualWieldOffHand(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:      uuid.New().String(),
+		Name:            "Duelist",
+		Race:            "Human",
+		Class:           "Fighter",
+		AbilityScores:   character.AbilityScores{STR: 12, DEX: 16, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:           12,
+		AC:              15,
+		SpeedFt:         30,
+		ProfBonus:       2,
+		Equipment:       []string{"rapier", "dagger", "leather-armor"},
+		EquippedWeapon:  "rapier",
+		EquippedOffHand: "dagger",
+		WornArmor:       "leather-armor",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// A dual-wielded off-hand weapon (no shield) must populate EquippedOffHand.
+	assert.True(t, creator.capturedParams.EquippedOffHand.Valid)
+	assert.Equal(t, "dagger", creator.capturedParams.EquippedOffHand.String)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_ShieldWinsOverOffHandWeapon(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:      uuid.New().String(),
+		Name:            "Knight",
+		Race:            "Human",
+		Class:           "Fighter",
+		AbilityScores:   character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:           12,
+		AC:              18,
+		SpeedFt:         30,
+		ProfBonus:       2,
+		Equipment:       []string{"longsword", "chain-mail", "shield"},
+		EquippedWeapon:  "longsword",
+		EquippedOffHand: "dagger",
+		WornArmor:       "chain-mail",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// A shield occupies the off-hand and must win over a stray off-hand weapon id.
+	assert.True(t, creator.capturedParams.EquippedOffHand.Valid)
+	assert.Equal(t, "shield", creator.capturedParams.EquippedOffHand.String)
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_NoFeatures(t *testing.T) {
 	creator := &captureCharacterCreator{}
 	adapter := portal.NewBuilderStoreAdapter(creator, nil)

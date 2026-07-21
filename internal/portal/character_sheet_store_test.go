@@ -1044,3 +1044,55 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_OutOfCombatKeepsSheetHP
 	assert.Equal(t, 24, data.HpMax)
 	assert.Equal(t, 0, data.TempHP)
 }
+
+// TestCharacterSheetStoreAdapter_EquippedSlot_HomebrewNameFallback verifies that
+// an equipped item id absent from the static item catalog but present in the live
+// weapons/armor tables resolves to the DB row's Name — not its raw id — while a
+// truly-unknown id still falls back to the raw id.
+func TestCharacterSheetStoreAdapter_EquippedSlot_HomebrewNameFallback(t *testing.T) {
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 3}}
+	classesJSON, _ := json.Marshal(classes)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Thorn",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			// Homebrew weapon: id is not in the static catalog, only in the DB.
+			EquippedMainHand: sql.NullString{String: "hb_silentblade01", Valid: true},
+			// Homebrew armor: same — DB-only id.
+			EquippedArmor: sql.NullString{String: "hb_gloomplate01", Valid: true},
+			// Truly-unknown id: not in catalog, not in weapons/armor.
+			EquippedOffHand: sql.NullString{String: "totally-unknown-id", Valid: true},
+		},
+		weapons: []refdata.Weapon{
+			{ID: "hb_silentblade01", Name: "Silent Blade", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
+		},
+		armor: []refdata.Armor{
+			{ID: "hb_gloomplate01", Name: "Gloom Plate", AcBase: 18, ArmorType: "heavy"},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+	require.NoError(t, err)
+
+	// DB weapon name wins over the raw id, and the stat block is still attached.
+	assert.Equal(t, "Silent Blade", data.EquippedMainHand.Name)
+	require.NotNil(t, data.EquippedMainHand.Weapon)
+
+	// DB armor name wins over the raw id, and the stat block is still attached.
+	assert.Equal(t, "Gloom Plate", data.EquippedArmor.Name)
+	require.NotNil(t, data.EquippedArmor.Armor)
+
+	// Unknown id (no catalog, no weapon, no armor) still falls back to the raw id.
+	assert.Equal(t, "totally-unknown-id", data.EquippedOffHand.Name)
+}
