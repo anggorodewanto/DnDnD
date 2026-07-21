@@ -454,6 +454,14 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 			switch effect {
 			case "rage":
 				defs = append(defs, RageFeature(max(barbarianLevel, 1)))
+			case "fast_movement":
+				// 2024 Barbarian L5: +10 ft turn-start speed while not in Heavy
+				// armor. Level-gated (mirrors aura_of_protection below) so a
+				// mis-seeded feature on a sub-L5 barbarian can't leak the bonus;
+				// the seed only emits this at L5+, so normal derivation is safe.
+				if barbarianLevel >= 5 {
+					defs = append(defs, FastMovementFeature())
+				}
 			case "sneak_attack":
 				defs = append(defs, SneakAttackFeature(max(rogueLevel, 1)))
 			case "evasion":

@@ -288,7 +288,7 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 
 	// D-48a — fold turn-start FES speed modifiers (e.g. Monk Unarmored
 	// Movement) into the base speed before exhaustion / condition halving.
-	speedFt += int32(turnStartSpeedBonus(char, s.hasEquippedShield(ctx, char)))
+	speedFt += int32(turnStartSpeedBonus(char, s.hasEquippedShield(ctx, char), s.wearsHeavyArmor(ctx, char)))
 
 	// F-C02: Apply heavy armor speed penalty if STR is below requirement.
 	if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
@@ -307,8 +307,9 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 // helper builds the same FeatureDefinition list used by the attack pipeline
 // so per-class turn-start effects (Monk Unarmored Movement gated on
 // NotWearingArmor, etc.) fire correctly. Returns 0 when the character has
-// no parseable classes / features.
-func turnStartSpeedBonus(char refdata.Character, hasShield bool) int {
+// no parseable classes / features. wearingHeavyArmor gates 2024 Barbarian Fast
+// Movement (the +10 applies unless the character is in Heavy armor).
+func turnStartSpeedBonus(char refdata.Character, hasShield, wearingHeavyArmor bool) int {
 	var classes []CharacterClass
 	if len(char.Classes) > 0 {
 		_ = json.Unmarshal(char.Classes, &classes)
@@ -322,8 +323,9 @@ func turnStartSpeedBonus(char refdata.Character, hasShield bool) int {
 	// reach the turn-start speed accumulator.
 	defs := BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(char))
 	ctx := EffectContext{
-		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
-		HasShield:    hasShield,
+		WearingArmor:      char.EquippedArmor.Valid && char.EquippedArmor.String != "",
+		WearingHeavyArmor: wearingHeavyArmor,
+		HasShield:         hasShield,
 	}
 	result := ProcessEffects(defs, TriggerOnTurnStart, ctx)
 	return result.SpeedModifier

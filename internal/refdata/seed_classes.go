@@ -31,6 +31,13 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{
 					{"name": "Primal Path", "description": "You choose a path that shapes the nature of your rage.", "mechanical_effect": "subclass_choice"},
 				},
+				// 2024 Barbarian L5. Fast Movement grants +10 ft speed while not
+				// in Heavy armor (folded into turn-start speed by
+				// turnStartSpeedBonus via the FES `fast_movement` effect). Extra
+				// Attack is already modeled via AttacksPerAction {"5": 2} above.
+				"5": []map[string]string{
+					{"name": "Fast Movement", "description": "Your speed increases by 10 feet while you aren't wearing Heavy armor.", "mechanical_effect": "fast_movement"},
+				},
 				// COV-8: Brutal Strike (2024 Barbarian L9). Wired in combat
 				// (brutal_strike.go): while using Reckless Attack you may forgo
 				// Advantage on a Strength melee attack for +1d10 and a forced-

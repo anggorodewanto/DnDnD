@@ -73,6 +73,18 @@ func (s *Service) hasEquippedShield(ctx context.Context, char refdata.Character)
 	return err == nil && a.ArmorType == "shield"
 }
 
+// wearsHeavyArmor reports whether the character's equipped body armor is Heavy.
+// Used to gate 2024 Barbarian Fast Movement at turn start (medium/light/no armor
+// all qualify for the +10 ft; only Heavy armor blocks it). A missing armor row
+// degrades to false so a bad lookup grants the bonus rather than failing the turn.
+func (s *Service) wearsHeavyArmor(ctx context.Context, char refdata.Character) bool {
+	if !char.EquippedArmor.Valid || char.EquippedArmor.String == "" {
+		return false
+	}
+	a, err := s.store.GetArmor(ctx, char.EquippedArmor.String)
+	return err == nil && IsHeavyArmor(a)
+}
+
 // equippedShieldACBonus returns the AC bonus of the shield in the character's
 // off-hand slot (a normal shield is +2; a magic shield may be higher), or 0 when
 // no shield is equipped. Shield Master adds this value to certain DEX saving

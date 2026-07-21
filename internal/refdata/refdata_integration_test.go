@@ -395,6 +395,45 @@ func TestIntegration_SeedBarbarianBrutalStrikeFeature(t *testing.T) {
 	}
 }
 
+// TestIntegration_SeedBarbarianFastMovementFeature locks the 2024 Barbarian L5
+// Fast Movement seed→present link: the seeded Barbarian must carry the
+// `fast_movement` mechanical_effect at level 5 so the level-gated derivation
+// grants the feature and turnStartSpeedBonus adds +10 ft while not in Heavy armor.
+func TestIntegration_SeedBarbarianFastMovementFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := sharedDB.AcquireDB(t)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	barb, err := refdata.New(db).GetClass(ctx, "barbarian")
+	if err != nil {
+		t.Fatalf("GetClass(barbarian) failed: %v", err)
+	}
+
+	var byLevel map[string][]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(barb.FeaturesByLevel, &byLevel); err != nil {
+		t.Fatalf("unmarshal features_by_level: %v", err)
+	}
+
+	found := false
+	for _, f := range byLevel["5"] {
+		if f.MechanicalEffect == "fast_movement" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Barbarian L5 must seed the `fast_movement` mechanical_effect; got %+v", byLevel["5"])
+	}
+}
+
 // TestIntegration_SeedFighterTacticalMasterFeature locks the COV-10/COV-8
 // seed→present link: the seeded Fighter must carry the `tactical_master`
 // mechanical_effect at level 9 so the level-gated derivation grants the feature,

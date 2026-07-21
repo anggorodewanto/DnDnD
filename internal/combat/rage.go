@@ -90,6 +90,29 @@ func RageFeature(barbarianLevel int) FeatureDefinition {
 	}
 }
 
+// FastMovementFeature returns the FeatureDefinition for Fast Movement, the 2024
+// Barbarian L5 feature: "Your speed increases by 10 feet while you aren't wearing
+// Heavy armor." Unlike Monk Unarmored Movement (gated on wearing NO armor + NO
+// shield), this only cares about Heavy armor — medium, light, and no armor all
+// qualify, and a shield never blocks it. The flat +10 does not scale with level.
+// Folded into turn-start speed via turnStartSpeedBonus at TriggerOnTurnStart.
+func FastMovementFeature() FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Fast Movement",
+		Source: "barbarian",
+		Effects: []Effect{
+			{
+				Type:     EffectModifySpeed,
+				Trigger:  TriggerOnTurnStart,
+				Modifier: 10,
+				Conditions: EffectConditions{
+					NotWearingHeavyArmor: true,
+				},
+			},
+		},
+	}
+}
+
 // RageRounds is the hard duration cap on a Rage: 2024 PHB says 10 minutes,
 // which is 100 rounds. The rage almost always lapses long before this — the
 // turn-by-turn sustain check (ShouldRageEndOnTurnEnd) is the real clock — but
