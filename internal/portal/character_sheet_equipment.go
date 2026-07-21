@@ -62,7 +62,8 @@ type InventoryDisplayItem struct {
 // armor stats, or magic-item specifics — vs. a plain one-line row.
 func (i InventoryDisplayItem) HasDetail() bool {
 	return i.Weapon != nil || i.Armor != nil || i.IsMagic ||
-		i.MagicProperties != "" || i.RequiresAttunement || i.MaxCharges > 0
+		i.MagicProperties != "" || i.RequiresAttunement || i.MaxCharges > 0 ||
+		i.Description != ""
 }
 
 // wrapInventory lifts stored inventory items into display items (stats attached

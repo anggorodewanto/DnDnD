@@ -637,6 +637,7 @@ const characterSheetTemplate = `{{define "weaponStat"}}<dl class="eq-meta">
                 <div class="item-detail-body">
                     {{with .Weapon}}{{template "weaponStat" .}}{{end}}
                     {{with .Armor}}{{template "armorStat" .}}{{end}}
+                    {{if .Description}}<p class="item-description">{{.Description}}</p>{{end}}
                     {{if .MagicProperties}}<p class="item-magic-props">{{.MagicProperties}}</p>{{end}}
                     {{if .RequiresAttunement}}<p class="item-note">Requires attunement{{if .AttunementRestriction}} ({{.AttunementRestriction}}){{end}}{{if .IsAttuned}} — attuned{{end}}</p>{{end}}
                     {{if gt .MaxCharges 0}}<p class="item-note">Charges: {{.Charges}}/{{.MaxCharges}}</p>{{end}}

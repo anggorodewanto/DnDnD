@@ -112,6 +112,36 @@ func TestHandleAddItem(t *testing.T) {
 	assert.Equal(t, 2, updatedItems[1].Quantity)
 }
 
+func TestHandleAddItem_PersistsDescription(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria"}
+
+	handler := NewAPIHandler(store)
+
+	body, _ := json.Marshal(AddItemRequest{
+		CharacterID: charID.String(),
+		Item: character.InventoryItem{
+			ItemID:      "guild-letter",
+			Name:        "Sealed Letter",
+			Quantity:    1,
+			Type:        "quest",
+			Description: "A wax-sealed note bearing the mark of the Thieves' Guild.",
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/add", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleAddItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var updatedItems []character.InventoryItem
+	require.NoError(t, json.Unmarshal(store.lastInvUpdate[charID], &updatedItems))
+	require.Len(t, updatedItems, 1)
+	assert.Equal(t, "A wax-sealed note bearing the mark of the Thieves' Guild.", updatedItems[0].Description)
+}
+
 func TestHandleAddItem_ExistingItem(t *testing.T) {
 	charID := uuid.New()
 	store := newMockStore()

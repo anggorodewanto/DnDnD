@@ -185,6 +185,48 @@ func TestServeCharacterSheet_SpellDetails(t *testing.T) {
 	assert.Contains(t, body, "<details")
 }
 
+func TestServeCharacterSheet_InventoryDescription(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Rogue",
+			Race:             "Halfling",
+			Level:            3,
+			ProficiencyBonus: 2,
+			Classes:          []character.ClassEntry{{Class: "Rogue", Level: 3}},
+			AbilityScores:    character.AbilityScores{STR: 8, DEX: 16, CON: 12, INT: 10, WIS: 13, CHA: 14},
+			HpMax:            21,
+			HpCurrent:        21,
+			AC:               14,
+			SpeedFt:          25,
+			AbilityModifiers: map[string]int{"STR": -1, "DEX": 3, "CON": 1, "INT": 0, "WIS": 1, "CHA": 2},
+			ClassSummary:     "Rogue 3",
+			Inventory: []portal.InventoryDisplayItem{
+				{InventoryItem: character.InventoryItem{
+					ItemID:      "guild-letter",
+					Name:        "Sealed Letter",
+					Quantity:    1,
+					Type:        "quest",
+					Description: "A wax-sealed note bearing the mark of the Thieves Guild.",
+				}},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	// A plain-gear item with flavor text renders an expandable detail row.
+	assert.Contains(t, body, "A wax-sealed note bearing the mark of the Thieves Guild.")
+	assert.Contains(t, body, `class="item-description"`)
+	assert.Contains(t, body, "<details")
+}
+
 func TestServeCharacterSheet_Unauthenticated(t *testing.T) {
 	h := portal.NewCharacterSheetHandler(slog.Default(), nil)
 	rec := httptest.NewRecorder()

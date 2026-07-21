@@ -131,4 +131,6 @@ func TestInventoryDisplayItem_HasDetail(t *testing.T) {
 	assert.True(t, InventoryDisplayItem{Armor: &ArmorStats{}}.HasDetail())
 	assert.True(t, InventoryDisplayItem{InventoryItem: character.InventoryItem{IsMagic: true}}.HasDetail())
 	assert.True(t, InventoryDisplayItem{InventoryItem: character.InventoryItem{MaxCharges: 3}}.HasDetail())
+	// Plain gear with only flavor text still gets an expandable detail body.
+	assert.True(t, InventoryDisplayItem{InventoryItem: character.InventoryItem{Name: "Sealed Letter", Description: "A wax-sealed note from the guild."}}.HasDetail())
 }

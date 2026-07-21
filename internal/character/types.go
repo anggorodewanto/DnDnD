@@ -101,6 +101,7 @@ type AttunementSlot struct {
 type InventoryItem struct {
 	ItemID                string `json:"item_id"`
 	Name                  string `json:"name"`
+	Description           string `json:"description,omitempty"` // optional free-text flavor for quest/loot items
 	Quantity              int    `json:"quantity"`
 	Equipped              bool   `json:"equipped"`
 	EquipSlot             string `json:"equip_slot,omitempty"`
