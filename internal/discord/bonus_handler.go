@@ -36,6 +36,11 @@ type BonusCombatService interface {
 	// COV-9: Shield Master bonus-action shove (knock prone or push 5 ft after the
 	// Attack action; requires a shield equipped).
 	ShieldMasterShove(ctx context.Context, cmd combat.ShoveCommand, roller *dice.Roller) (combat.ShoveResult, error)
+
+	// 2024 Great Weapon Master bonus-action swing with the same Heavy melee
+	// weapon, offered after a crit or dropping a creature to 0 HP. The player
+	// names a live target so the swing is not stuck on the creature just felled.
+	GWMBonusAttack(ctx context.Context, cmd combat.GWMBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	StepOfTheWind(ctx context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error)
 	PatientDefense(ctx context.Context, cmd combat.KiAbilityCommand) (combat.KiAbilityResult, error)
 	FontOfMagicConvertSlot(ctx context.Context, cmd combat.FontOfMagicCommand) (combat.FontOfMagicResult, error)
@@ -194,6 +199,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 			h.dispatchPolearm(ctx, interaction, bctx, args)
 		case "crossbow", "crossbow-expert", "crossbowexpert":
 			h.dispatchCrossbowExpert(ctx, interaction, bctx, args)
+		case "gwm", "great-weapon-master", "greatweaponmaster":
+			h.dispatchGWM(ctx, interaction, bctx, args)
 		case "shield", "shield-master", "shieldmaster":
 			h.dispatchShieldMaster(ctx, interaction, bctx, args)
 		case "step-of-the-wind", "stepofthewind":
@@ -395,6 +402,31 @@ func (h *BonusHandler) dispatchCrossbowExpert(ctx context.Context, interaction *
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Crossbow Expert failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))
+}
+
+// dispatchGWM wires /bonus gwm <target> — the 2024 Great Weapon Master
+// bonus-action swing. GWM's rider triggers on a crit or dropping a creature to
+// 0 HP, which means the felled creature is usually the wrong target; unlike the
+// old post-hit button (which re-swung the original target), the command takes a
+// fresh live target. The feat, Heavy melee main-hand, and free bonus action are
+// enforced inside the service; Walls are forwarded for cover parity with the
+// other feat bonus attacks.
+func (h *BonusHandler) dispatchGWM(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "gwm <target>")
+	if !ok {
+		return
+	}
+	result, err := h.combatService.GWMBonusAttack(ctx, combat.GWMBonusAttackCommand{
+		Attacker: bctx.actor,
+		Target:   *target,
+		Turn:     bctx.turn,
+		Walls:    h.loadWalls(ctx, bctx.encounter),
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Great Weapon Master failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))

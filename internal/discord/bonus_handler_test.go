@@ -25,6 +25,7 @@ type mockBonusCombatService struct {
 	martialCalls    []combat.MartialArtsBonusAttackCommand
 	polearmCalls    []combat.PolearmMasterBonusAttackCommand
 	crossbowCalls   []combat.CrossbowExpertBonusAttackCommand
+	gwmCalls        []combat.GWMBonusAttackCommand
 	shieldCalls     []combat.ShoveCommand
 	stepCalls       []combat.StepOfTheWindCommand
 	patientCalls    []combat.KiAbilityCommand
@@ -43,6 +44,7 @@ type mockBonusCombatService struct {
 	martialResult    combat.AttackResult
 	polearmResult    combat.AttackResult
 	crossbowResult   combat.AttackResult
+	gwmResult        combat.AttackResult
 	shieldResult     combat.ShoveResult
 	stepResult       combat.KiAbilityResult
 	patientResult    combat.KiAbilityResult
@@ -108,6 +110,11 @@ func (m *mockBonusCombatService) PolearmMasterBonusAttack(_ context.Context, cmd
 func (m *mockBonusCombatService) CrossbowExpertBonusAttack(_ context.Context, cmd combat.CrossbowExpertBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
 	m.crossbowCalls = append(m.crossbowCalls, cmd)
 	return m.crossbowResult, nil
+}
+
+func (m *mockBonusCombatService) GWMBonusAttack(_ context.Context, cmd combat.GWMBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
+	m.gwmCalls = append(m.gwmCalls, cmd)
+	return m.gwmResult, nil
 }
 
 func (m *mockBonusCombatService) ShieldMasterShove(_ context.Context, cmd combat.ShoveCommand, _ *dice.Roller) (combat.ShoveResult, error) {
@@ -704,6 +711,28 @@ func TestBonusHandler_CrossbowExpert_MissingTarget(t *testing.T) {
 	h, sess, svc, _ := setupBonusHandler()
 	h.Handle(makeBonusInteraction("crossbow", ""))
 	if len(svc.crossbowCalls) != 0 {
+		t.Error("expected no service call without target")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {
+		t.Errorf("expected missing-target rejection, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestBonusHandler_GWM(t *testing.T) {
+	h, _, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("gwm", "OS"))
+	if len(svc.gwmCalls) != 1 {
+		t.Fatalf("expected 1 gwm call, got %d", len(svc.gwmCalls))
+	}
+	if svc.gwmCalls[0].Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", svc.gwmCalls[0].Target.ShortID)
+	}
+}
+
+func TestBonusHandler_GWM_MissingTarget(t *testing.T) {
+	h, sess, svc, _ := setupBonusHandler()
+	h.Handle(makeBonusInteraction("gwm", ""))
+	if len(svc.gwmCalls) != 0 {
 		t.Error("expected no service call without target")
 	}
 	if !strings.Contains(sess.lastResponse.Data.Content, "Missing target") {

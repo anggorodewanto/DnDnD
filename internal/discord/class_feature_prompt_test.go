@@ -242,48 +242,6 @@ func TestClassFeaturePromptPoster_BardicInspiration_Use(t *testing.T) {
 	}
 }
 
-func TestClassFeaturePromptPoster_GWMBonusAttack_Swing(t *testing.T) {
-	mock, sent := captureSentComplex()
-	store := NewReactionPromptStoreWithTTL(mock, time.Hour)
-	poster := NewClassFeaturePromptPoster(store)
-
-	swing := atomic.Bool{}
-	forfeited := atomic.Bool{}
-	if err := poster.PromptGWMBonusAttack(GWMBonusAttackPromptArgs{
-		ChannelID:    "ch-1",
-		AttackerName: "Grog",
-		TargetName:   "Ogre",
-		WeaponName:   "Greataxe",
-	}, func(res GWMBonusAttackPromptResult) {
-		if res.Forfeited {
-			forfeited.Store(true)
-		}
-		if res.Attack {
-			swing.Store(true)
-		}
-	}); err != nil {
-		t.Fatalf("PromptGWMBonusAttack: %v", err)
-	}
-	row := (*sent)[0].Components[0].(discordgo.ActionsRow)
-	if len(row.Components) != 2 {
-		t.Fatalf("expected 2 buttons, got %d", len(row.Components))
-	}
-	if !strings.Contains((*sent)[0].Content, "Greataxe") {
-		t.Errorf("content should name the weapon, got %q", (*sent)[0].Content)
-	}
-	swingBtn := row.Components[0].(discordgo.Button)
-	store.HandleComponent(&discordgo.Interaction{
-		Type: discordgo.InteractionMessageComponent,
-		Data: discordgo.MessageComponentInteractionData{CustomID: swingBtn.CustomID},
-	})
-	if !swing.Load() {
-		t.Errorf("Attack was not selected")
-	}
-	if forfeited.Load() {
-		t.Errorf("unexpected forfeit")
-	}
-}
-
 func TestClassFeaturePromptPoster_RejectsEmptyInputs(t *testing.T) {
 	mock, _ := captureSentComplex()
 	store := NewReactionPromptStore(mock)

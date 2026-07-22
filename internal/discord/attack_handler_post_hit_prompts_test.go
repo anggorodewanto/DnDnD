@@ -164,15 +164,18 @@ func TestAttackHandler_BardicInspirationHolder_PostsBardicPrompt(t *testing.T) {
 		"expected a Bardic Inspiration prompt in the captured sends")
 }
 
-func TestAttackHandler_GWMEligible_PostsBonusAttackPrompt(t *testing.T) {
+func TestAttackHandler_GWMEligible_PostsBonusAttackHint(t *testing.T) {
 	h, _, sent, combatSvc, _, _ := setupAttackHandlerWithPrompts(t)
 	combatSvc.attackResult.PromptGWMBonusAttackEligible = true
 	combatSvc.attackResult.WeaponName = "Greataxe"
 
 	h.Handle(makeAttackInteractionWithChannel("ch-1", map[string]any{"target": "OS"}))
 
+	require.NotEmpty(t, *sent, "expected a GWM bonus-attack hint to be posted")
 	assert.True(t, sendsContain(*sent, "Great Weapon Master"),
-		"expected a GWM bonus-attack prompt in the captured sends")
+		"expected a GWM bonus-attack hint in the captured sends")
+	assert.True(t, sendsContain(*sent, "/bonus gwm"),
+		"hint should point the player at the retargetable /bonus gwm command")
 }
 
 func TestAttackHandler_NotGWMEligible_NoBonusAttackPrompt(t *testing.T) {
@@ -183,53 +186,6 @@ func TestAttackHandler_NotGWMEligible_NoBonusAttackPrompt(t *testing.T) {
 
 	assert.False(t, sendsContain(*sent, "Great Weapon Master"),
 		"did not expect a GWM bonus-attack prompt when not eligible")
-}
-
-func TestAttackHandler_GWMBonusAttack_Swing_InvokesService(t *testing.T) {
-	h, _, sent, combatSvc, _, _ := setupAttackHandlerWithPrompts(t)
-	combatSvc.attackResult.PromptGWMBonusAttackEligible = true
-	combatSvc.attackResult.WeaponName = "Greataxe"
-
-	h.Handle(makeAttackInteractionWithChannel("ch-1", map[string]any{"target": "OS"}))
-
-	var promptMsg *discordgo.MessageSend
-	for _, m := range *sent {
-		if m != nil && strings.Contains(m.Content, "Great Weapon Master") {
-			promptMsg = m
-			break
-		}
-	}
-	require.NotNil(t, promptMsg, "GWM bonus-attack prompt was not captured")
-	swingBtn := promptMsg.Components[0].(discordgo.ActionsRow).Components[0].(discordgo.Button)
-
-	require.NotNil(t, h.classFeaturePrompts)
-	h.classFeaturePrompts.prompts.HandleComponent(&discordgo.Interaction{
-		Type:   discordgo.InteractionMessageComponent,
-		Data:   discordgo.MessageComponentInteractionData{CustomID: swingBtn.CustomID},
-		Member: &discordgo.Member{User: &discordgo.User{ID: "u1"}},
-	})
-
-	require.True(t, waitForGWMBonusCmd(combatSvc, time.Second),
-		"expected GWMBonusAttack service to be invoked on the swing click")
-	combatSvc.mu.Lock()
-	cmd := combatSvc.gwmBonusCalls[0]
-	combatSvc.mu.Unlock()
-	assert.Equal(t, "Aria", cmd.Attacker.DisplayName)
-	assert.Equal(t, "Orc", cmd.Target.DisplayName)
-}
-
-func waitForGWMBonusCmd(m *mockAttackCombatService, within time.Duration) bool {
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		n := len(m.gwmBonusCalls)
-		m.mu.Unlock()
-		if n > 0 {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
 }
 
 // sendsContain reports whether any captured ChannelMessageSendComplex
