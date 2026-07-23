@@ -1459,6 +1459,7 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	if ammoLine := FormatAmmoRecoverySummary(cleaned, ammoSnap); ammoLine != "" {
 		s.postCombatLog(ctx, encounterID, ammoLine)
 	}
+	s.postCombatStats(ctx, enc, cleaned)
 
 	// Drop the per-encounter hostiles-defeated dedupe state now that the
 	// encounter is closed — a re-roll / new encounter starts clean.
@@ -1515,11 +1516,21 @@ func (s *Service) carryOutPCStatus(ctx context.Context, c refdata.Combatant, con
 // header reuses the encounter's player-facing display name when set, so
 // the message stays consistent with the running #initiative-tracker label.
 func FormatCombatEndedAnnouncement(enc refdata.Encounter, roundsElapsed int32, casualties int) string {
-	name := enc.Name
-	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
-		name = enc.DisplayName.String
+	return fmt.Sprintf("⚔️ **Combat ended** — %s · %d round(s), %d casualty(ies)", encounterDisplayName(enc), roundsElapsed, casualties)
+}
+
+// postCombatStats aggregates the encounter's logged attack outcomes into a
+// "fun stats" summary and posts it to #combat-log. Best-effort: a failed read
+// or an empty summary simply skips the post so a stats hiccup never disturbs a
+// successfully-ended combat.
+func (s *Service) postCombatStats(ctx context.Context, enc refdata.Encounter, combatants []refdata.Combatant) {
+	rows, err := s.store.ListActionLogByEncounterID(ctx, enc.ID)
+	if err != nil {
+		return
 	}
-	return fmt.Sprintf("⚔️ **Combat ended** — %s · %d round(s), %d casualty(ies)", name, roundsElapsed, casualties)
+	if line := FormatCombatStats(AggregateCombatStats(rows, combatants), encounterDisplayName(enc)); line != "" {
+		s.postCombatLog(ctx, enc.ID, line)
+	}
 }
 
 // FormatAmmoRecoverySummary renders a per-character ammunition-recovery

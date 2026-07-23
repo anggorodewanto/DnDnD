@@ -49,6 +49,30 @@ func (s *Service) recordCombatAction(ctx context.Context, turnID, encounterID, a
 	})
 }
 
+// recordAttackAction persists an attack to action_log like recordCombatAction,
+// but also serializes the structured outcome (hit/crit/damage per swing) into
+// the dice_rolls column so EndCombat can aggregate post-combat "fun stats"
+// without re-parsing the description prose. Pure observability: the write is
+// best-effort and errors are swallowed, exactly as recordCombatAction.
+func (s *Service) recordAttackAction(ctx context.Context, turnID, encounterID, actorID uuid.UUID, targetID uuid.NullUUID, r AttackResult) {
+	if turnID == uuid.Nil || encounterID == uuid.Nil || actorID == uuid.Nil {
+		return
+	}
+	var tid uuid.UUID
+	if targetID.Valid {
+		tid = targetID.UUID
+	}
+	_, _ = s.CreateActionLog(ctx, CreateActionLogInput{
+		TurnID:      turnID,
+		EncounterID: encounterID,
+		ActionType:  actionTypeAttack,
+		ActorID:     actorID,
+		TargetID:    targetID,
+		Description: describeAttack(r),
+		DiceRolls:   encodeAttackSwings(attackResultSwings(r, tid)),
+	})
+}
+
 // nullableCombatantID wraps a combatant UUID into uuid.NullUUID, treating the
 // zero UUID (self-targeted or area spells with no single target) as NULL.
 func nullableCombatantID(id uuid.UUID) uuid.NullUUID {

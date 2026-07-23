@@ -356,6 +356,9 @@ func (m *mockStore) CreateActionLog(ctx context.Context, arg refdata.CreateActio
 	return m.createActionLogFn(ctx, arg)
 }
 func (m *mockStore) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error) {
+	if m.listActionLogByEncounterIDFn == nil {
+		return nil, nil
+	}
 	return m.listActionLogByEncounterIDFn(ctx, encounterID)
 }
 func (m *mockStore) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error) {

@@ -116,6 +116,66 @@ func endCombatStoreWithCombatants(t *testing.T, _ uuid.UUID, combatants []refdat
 	return store
 }
 
+func TestEndCombat_PostsCombatStats(t *testing.T) {
+	encID := uuid.New()
+	aID := uuid.New()
+	gID := uuid.New()
+	combatants := []refdata.Combatant{
+		{ID: gID, IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)},
+		{ID: aID, IsNpc: false, IsAlive: true, HpCurrent: 20, DisplayName: "Aragorn", Conditions: json.RawMessage(`[]`)},
+	}
+	store := endCombatStoreWithCombatants(t, encID, combatants)
+	store.listActionLogByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.ActionLog, error) {
+		return []refdata.ActionLog{
+			{ActionType: actionTypeAttack, ActorID: aID, DiceRolls: diceRollsFor(t,
+				attackSwing{Target: gID.String(), Hit: true, Crit: true, Damage: 18},
+			)},
+			{ActionType: "enemy_turn", ActorID: gID, DiceRolls: diceRollsFor(t,
+				attackSwing{Target: aID.String(), Hit: false},
+			)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	logNotifier := &fakeCombatLog{}
+	svc.SetCombatLogNotifier(logNotifier)
+
+	_, err := svc.EndCombat(context.Background(), encID)
+	require.NoError(t, err)
+
+	var statsPost string
+	for _, p := range logNotifier.all() {
+		if strings.Contains(p.content, "Combat Stats") {
+			statsPost = p.content
+		}
+	}
+	require.NotEmpty(t, statsPost, "EndCombat must post a combat-stats summary to #combat-log")
+	assert.Contains(t, statsPost, "The Goblin Ambush")
+	assert.Contains(t, statsPost, "Biggest hit")
+	assert.Contains(t, statsPost, "Aragorn")
+	assert.Contains(t, statsPost, "18")
+	assert.Contains(t, statsPost, "Most evasive")
+}
+
+func TestEndCombat_NoAttacksLogged_NoStatsPosted(t *testing.T) {
+	encID := uuid.New()
+	combatants := []refdata.Combatant{
+		{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, DisplayName: "Aragorn", Conditions: json.RawMessage(`[]`)},
+	}
+	store := endCombatStoreWithCombatants(t, encID, combatants)
+	// default listActionLogByEncounterIDFn returns no rows → no stats line.
+	svc := NewService(store)
+	logNotifier := &fakeCombatLog{}
+	svc.SetCombatLogNotifier(logNotifier)
+
+	_, err := svc.EndCombat(context.Background(), encID)
+	require.NoError(t, err)
+
+	for _, p := range logNotifier.all() {
+		assert.NotContains(t, p.content, "Combat Stats", "no stats summary when no attacks were logged")
+	}
+}
+
 func TestEndCombat_PostsCombatLogAnnouncement(t *testing.T) {
 	encID := uuid.New()
 	combatants := []refdata.Combatant{

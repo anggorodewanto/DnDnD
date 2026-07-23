@@ -456,6 +456,9 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		Description: nullString(combatLog),
 		BeforeState: beforeState,
 		AfterState:  afterState,
+		// Persist the structured per-attack outcomes (post-resistance damage is
+		// now baked into the roll results) so EndCombat can aggregate combat stats.
+		DiceRolls: nullRawMessage(encodeAttackSwings(enemyTurnSwings(plan))),
 	}); err != nil {
 		return nil, fmt.Errorf("creating action log: %w", err)
 	}

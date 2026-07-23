@@ -160,8 +160,8 @@ func (s *Service) CrossbowExpertBonusAttack(ctx context.Context, cmd CrossbowExp
 	s.markRageAttacked(ctx, cmd.Attacker)
 
 	// ISSUE-014: persist to action_log for the DM Console timeline.
-	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
-		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+	s.recordAttackAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), result)
 
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
 	// The shot counts as an attack vs the target, so it spends any help/vex

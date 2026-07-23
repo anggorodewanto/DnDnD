@@ -1716,8 +1716,8 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	}
 
 	// ISSUE-014: persist the attack to action_log for the DM Console timeline.
-	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
-		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+	s.recordAttackAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), result)
 
 	return result, nil
 }
@@ -1808,8 +1808,8 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 
 	// ISSUE-014: persist the improvised attack to action_log for the DM Console.
-	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
-		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+	s.recordAttackAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), result)
 
 	return result, nil
 }
@@ -2045,8 +2045,8 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 
 	// ISSUE-014: persist the off-hand attack to action_log for the DM Console.
-	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
-		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+	s.recordAttackAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), result)
 
 	// Phase 37 parity: a thrown off-hand weapon leaves the hand. Clear
 	// EquippedOffHand so the same dagger can't be re-thrown without re-equipping;
@@ -2194,8 +2194,8 @@ func (s *Service) GWMBonusAttack(ctx context.Context, cmd GWMBonusAttackCommand,
 	s.markRageAttacked(ctx, cmd.Attacker)
 
 	// ISSUE-014: persist to action_log for the DM Console timeline.
-	s.recordCombatAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
-		nullableCombatantID(cmd.Target.ID), actionTypeAttack, describeAttack(result))
+	s.recordAttackAction(ctx, cmd.Turn.ID, cmd.Attacker.EncounterID, cmd.Attacker.ID,
+		nullableCombatantID(cmd.Target.ID), result)
 
 	return result, nil
 }
