@@ -26,6 +26,7 @@ import (
 	"github.com/ab/dndnd/internal/asset"
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/channelpost"
 	"github.com/ab/dndnd/internal/charactercard"
 	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/combat"
@@ -414,6 +415,7 @@ type dmOnlyAPIDeps struct {
 	homebrewHandler          *homebrew.Handler
 	campaignHandler          *campaign.Handler
 	narrationHandler         *narration.Handler
+	channelPostHandler       *channelpost.Handler
 	narrationTemplateHandler *narration.TemplateHandler
 	characterOverviewHandler *characteroverview.Handler
 	messagePlayerHandler     *messageplayer.Handler
@@ -455,6 +457,9 @@ func mountDMOnlyAPIs(router chi.Router, deps dmOnlyAPIDeps, dmAuthMw func(http.H
 		}
 		if deps.narrationHandler != nil {
 			deps.narrationHandler.RegisterRoutes(r)
+		}
+		if deps.channelPostHandler != nil {
+			deps.channelPostHandler.RegisterRoutes(r)
 		}
 		if deps.narrationTemplateHandler != nil {
 			deps.narrationTemplateHandler.RegisterRoutes(r)
@@ -1073,6 +1078,18 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		narrationSvc := narration.NewService(narrationStore, narrationPoster, narrationAssets, narrationCampaigns)
 		narrationHandler := narration.NewHandler(narrationSvc, narration.WithCampaignVerifier(dashboardCampaignLookup{queries: queries}))
 
+		// Wire the Channel-Post API handler: lets the DM broadcast arbitrary
+		// text (with :::read-aloud support) to any of the campaign's
+		// configured channels as the bot, from the dashboard. Falls back to a
+		// nil poster when the bot is offline (Post then returns
+		// ErrPosterUnavailable). DM-gated via mountDMOnlyAPIs like narration.
+		var channelPoster channelpost.Poster
+		if discordSession != nil {
+			channelPoster = discord.NewChannelPoster(discordSession)
+		}
+		channelPostSvc := channelpost.NewService(newCampaignChannelLookup(queries), channelPoster)
+		channelPostHandler := channelpost.NewHandler(channelPostSvc)
+
 		// Wire Narration Template API handler (Phase 100b).
 		narrationTemplateStore := narration.NewTemplateDBStore(queries)
 		narrationTemplateSvc := narration.NewTemplateService(narrationTemplateStore)
@@ -1241,6 +1258,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			homebrewHandler:          homebrewHandler,
 			campaignHandler:          campaignHandler,
 			narrationHandler:         narrationHandler,
+			channelPostHandler:       channelPostHandler,
 			narrationTemplateHandler: narrationTemplateHandler,
 			characterOverviewHandler: characterOverviewHandler,
 			messagePlayerHandler:     messagePlayerHandler,

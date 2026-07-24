@@ -45,6 +45,7 @@ export const dashboardNavItems = Object.freeze([
   { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', section: 'Run Session', group: ['combat'] },
   { id: 'exploration', label: 'Exploration', view: 'exploration', hash: '#exploration', section: 'Run Session', group: ['exploration'] },
   { id: 'narrate', label: 'Narrate', view: 'narrate', hash: '#narrate', section: 'Run Session', group: ['narrate'] },
+  { id: 'post-channel', label: 'Post to Channel', view: 'post-channel', hash: '#post-channel', section: 'Run Session', group: ['post-channel'] },
   { id: 'dm-console', label: 'DM Console', view: 'dm-console', hash: '#dm-console', section: 'Run Session', group: ['dm-console'] },
   { id: 'dm-queue', label: 'DM Queue', view: 'dm-queue', hash: '#dm-queue', section: 'Run Session', group: ['dm-queue'] },
 
@@ -99,6 +100,7 @@ const VIEW_TITLES = Object.freeze({
   'shop-list': 'Shops & Merchants',
   'shop-editor': 'Shops & Merchants',
   narrate: 'Narrate',
+  'post-channel': 'Post to Channel',
   homebrew: 'Homebrew Editor',
   party: 'Party Overview',
   'stat-block-library': 'Stat Block Library',

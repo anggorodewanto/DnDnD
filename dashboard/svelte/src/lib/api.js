@@ -1364,6 +1364,34 @@ export async function postNarration(payload) {
   return res.json();
 }
 
+// --- Channel Post API: broadcast arbitrary text to any campaign channel as the bot ---
+
+const CHANNEL_BASE = '/api/channel';
+
+/**
+ * List the campaign's configured channel name keys (for the dropdown).
+ * @param {string} campaignId
+ * @returns {Promise<string[]>}
+ */
+export async function listChannels(campaignId) {
+  const res = await apiFetch(`${CHANNEL_BASE}/list?campaign_id=${campaignId}`);
+  const data = await res.json();
+  return data.channels || [];
+}
+
+/**
+ * Post text to a named campaign channel as the bot.
+ * @param {{campaign_id:string, channel:string, body:string}} payload
+ */
+export async function postToChannel(payload) {
+  const res = await apiFetch(`${CHANNEL_BASE}/post`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 /**
  * List recent narration posts for a campaign.
  * @param {string} campaignId

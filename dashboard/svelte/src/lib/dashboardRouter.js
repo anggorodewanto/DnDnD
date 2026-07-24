@@ -10,6 +10,7 @@ const HASH_TO_VIEW = Object.freeze({
   '#shops': 'shop-list',
   '#shop-new': 'shop-editor',
   '#narrate': 'narrate',
+  '#post-channel': 'post-channel',
   '#homebrew': 'homebrew',
   '#party': 'party',
   '#stat-block-library': 'stat-block-library',

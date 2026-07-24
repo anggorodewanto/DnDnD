@@ -8,6 +8,7 @@
   import ShopBuilder from './ShopBuilder.svelte';
   import CombatManager from './CombatManager.svelte';
   import NarratePanel from './NarratePanel.svelte';
+  import PostToChannelPanel from './PostToChannelPanel.svelte';
   import HomebrewEditor from './HomebrewEditor.svelte';
   import CharacterOverview from './CharacterOverview.svelte';
   import StatBlockLibrary from './StatBlockLibrary.svelte';
@@ -254,6 +255,8 @@
       <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
     {:else if currentView === 'narrate'}
       <NarratePanel {campaignId} />
+    {:else if currentView === 'post-channel'}
+      <PostToChannelPanel {campaignId} />
     {:else if currentView === 'homebrew'}
       <HomebrewEditor {campaignId} />
     {:else if currentView === 'party'}
