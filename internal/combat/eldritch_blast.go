@@ -16,12 +16,14 @@ import (
 // a separate ranged spell attack that may target a different creature, so each
 // carries its own attack roll and damage (COV-14).
 type BeamOutcome struct {
-	Index       int    // 1-based beam number
-	TargetName  string // display name of this beam's target
-	AttackRoll  int    // chosen d20 face (before modifiers)
-	AttackTotal int    // face + spell attack modifier
+	Index       int       // 1-based beam number
+	TargetID    uuid.UUID // this beam's target combatant (credits its defender in stats)
+	TargetName  string    // display name of this beam's target
+	AttackRoll  int       // chosen d20 face (before modifiers)
+	AttackTotal int       // face + spell attack modifier
 	Hit         bool
-	Damage      int // damage applied by this beam (0 on a miss)
+	Crit        bool // chosen d20 face was a natural 20
+	Damage      int  // damage applied by this beam (0 on a miss)
 }
 
 // eldritchBlastResult bundles the aggregate outcome of resolving every beam so
@@ -144,10 +146,12 @@ func (s *Service) resolveEldritchBlastBeams(
 		}
 		beam := BeamOutcome{
 			Index:       j + 1,
+			TargetID:    tid,
 			TargetName:  tc.DisplayName,
 			AttackRoll:  d20Result.Chosen,
 			AttackTotal: d20Result.Total,
 			Hit:         d20Result.Total >= int(tc.Ac),
+			Crit:        d20Result.CriticalHit,
 		}
 
 		if beam.Hit {

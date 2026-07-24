@@ -147,6 +147,58 @@ func TestRecordCombatAction_SwallowsStoreError(t *testing.T) {
 	svc.recordCombatAction(context.Background(), uuid.New(), uuid.New(), uuid.New(), uuid.NullUUID{}, "cast", "x")
 }
 
+// A spell that makes an attack roll (Eldritch Blast, Fire Bolt, ...) must
+// persist its swings into dice_rolls so post-combat fun stats count spell
+// attacks — hits, crits (nat-20 beams), damage, damage tanked — alongside
+// weapon attacks.
+func TestRecordCastAction_WritesSwingsForAttackSpells(t *testing.T) {
+	ms := defaultMockStore()
+	logged := captureActionLog(ms)
+	svc := NewService(ms)
+
+	turnID, encID, actorID := uuid.New(), uuid.New(), uuid.New()
+	tgt := uuid.New()
+	swings := []attackSwing{{Target: tgt.String(), Hit: true, Crit: true, Damage: 14}}
+	svc.recordCastAction(context.Background(), turnID, encID, actorID,
+		uuid.NullUUID{UUID: tgt, Valid: true}, "Vale cast Eldritch Blast on Porter", swings)
+
+	require.Len(t, *logged, 1)
+	got := (*logged)[0]
+	assert.Equal(t, "cast", got.ActionType)
+	assert.Equal(t, actorID, got.ActorID)
+	require.True(t, got.DiceRolls.Valid, "attack-spell cast must persist swings for fun stats")
+	assert.Contains(t, string(got.DiceRolls.RawMessage), `"kind":"attack"`)
+}
+
+// A save-based or utility cast has no attack swings — dice_rolls must stay NULL
+// so it contributes no phantom "attacks" to the stats (parity with the pre-fix
+// recordCombatAction behaviour).
+func TestRecordCastAction_NullDiceRollsForNonAttackSpells(t *testing.T) {
+	ms := defaultMockStore()
+	logged := captureActionLog(ms)
+	svc := NewService(ms)
+
+	svc.recordCastAction(context.Background(), uuid.New(), uuid.New(), uuid.New(),
+		uuid.NullUUID{}, "Vale cast Hold Person on Ghoul", nil)
+
+	require.Len(t, *logged, 1)
+	assert.False(t, (*logged)[0].DiceRolls.Valid, "save/utility cast must leave dice_rolls NULL")
+}
+
+// A missing NOT-NULL parent skips the write, exactly like recordCombatAction.
+func TestRecordCastAction_SkipsWhenParentMissing(t *testing.T) {
+	ms := defaultMockStore()
+	logged := captureActionLog(ms)
+	svc := NewService(ms)
+
+	good := uuid.New()
+	svc.recordCastAction(context.Background(), uuid.Nil, good, good, uuid.NullUUID{}, "x", nil)
+	svc.recordCastAction(context.Background(), good, uuid.Nil, good, uuid.NullUUID{}, "x", nil)
+	svc.recordCastAction(context.Background(), good, good, uuid.Nil, uuid.NullUUID{}, "x", nil)
+
+	assert.Empty(t, *logged, "writes with a nil parent id must be skipped")
+}
+
 func TestFreeformAction_RecordsActionLog(t *testing.T) {
 	_, combatantID, _, ms := makeStdTestSetup()
 	encounterID := uuid.New()

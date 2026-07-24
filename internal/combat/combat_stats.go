@@ -76,6 +76,43 @@ func attackResultSwings(r AttackResult, targetID uuid.UUID) []attackSwing {
 	return swings
 }
 
+// castAttackSwings turns a resolved spell CAST into the swings persisted on its
+// action_log row, so spell attacks fold into the same post-combat stats as
+// weapon attacks (attacks / hit rate / crits / most damage / damage tanked).
+// Eldritch Blast contributes one swing per beam — each its own attack roll,
+// crit, target, and damage. Any other single-target spell attack contributes
+// one swing against the cast's target. Save-based and utility casts are not
+// attacks and return nil, so their dice_rolls stays SQL NULL (no phantom
+// attacks in the stats). Crit is credited only on a hit, mirroring the weapon
+// path's swingFromResult.
+func castAttackSwings(result CastResult, targetID uuid.UUID) []attackSwing {
+	if len(result.Beams) > 0 {
+		swings := make([]attackSwing, 0, len(result.Beams))
+		for _, b := range result.Beams {
+			sw := attackSwing{Hit: b.Hit, Crit: b.Hit && b.Crit}
+			if b.TargetID != uuid.Nil {
+				sw.Target = b.TargetID.String()
+			}
+			if b.Hit {
+				sw.Damage = b.Damage
+			}
+			swings = append(swings, sw)
+		}
+		return swings
+	}
+	if !result.IsAttack {
+		return nil
+	}
+	sw := attackSwing{Hit: result.Hit, Crit: result.Hit && result.Crit}
+	if targetID != uuid.Nil {
+		sw.Target = targetID.String()
+	}
+	if result.Hit {
+		sw.Damage = result.DamageTotal
+	}
+	return []attackSwing{sw}
+}
+
 // enemyTurnSwings extracts one swing per resolved attack step of an executed
 // NPC turn plan. Steps that were never rolled (no RollResult) are skipped. The
 // post-resistance FinalDamage is preferred once damage has landed so the stats

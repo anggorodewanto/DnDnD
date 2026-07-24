@@ -73,6 +73,29 @@ func (s *Service) recordAttackAction(ctx context.Context, turnID, encounterID, a
 	})
 }
 
+// recordCastAction persists a resolved spell cast to action_log like
+// recordCombatAction, but also serializes any spell-attack swings (Eldritch
+// Blast beams / a single-target spell attack, each with its crit + damage) into
+// the dice_rolls column so EndCombat's fun stats count spell attacks alongside
+// weapon attacks. When swings is empty (save-based or utility casts)
+// encodeAttackSwings returns nil → the column stays NULL, exactly as
+// recordCombatAction wrote it before. Best-effort observability: errors are
+// swallowed and a missing NOT-NULL parent is skipped.
+func (s *Service) recordCastAction(ctx context.Context, turnID, encounterID, actorID uuid.UUID, targetID uuid.NullUUID, description string, swings []attackSwing) {
+	if turnID == uuid.Nil || encounterID == uuid.Nil || actorID == uuid.Nil {
+		return
+	}
+	_, _ = s.CreateActionLog(ctx, CreateActionLogInput{
+		TurnID:      turnID,
+		EncounterID: encounterID,
+		ActionType:  actionTypeCast,
+		ActorID:     actorID,
+		TargetID:    targetID,
+		Description: description,
+		DiceRolls:   encodeAttackSwings(swings),
+	})
+}
+
 // nullableCombatantID wraps a combatant UUID into uuid.NullUUID, treating the
 // zero UUID (self-targeted or area spells with no single target) as NULL.
 func nullableCombatantID(id uuid.UUID) uuid.NullUUID {

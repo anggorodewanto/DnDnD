@@ -170,6 +170,63 @@ func TestAggregateCombatStats(t *testing.T) {
 	assert.Equal(t, 25, g.DamageTaken) // soaked Aragorn's 7 + 18
 }
 
+func TestCastAttackSwings(t *testing.T) {
+	t1 := uuid.New()
+	t2 := uuid.New()
+
+	t.Run("eldritch blast one swing per beam with crit + target", func(t *testing.T) {
+		got := castAttackSwings(CastResult{Beams: []BeamOutcome{
+			{TargetID: t1, Hit: true, Crit: true, Damage: 14},
+			{TargetID: t2, Hit: false},
+		}}, uuid.Nil)
+		require.Len(t, got, 2)
+		assert.Equal(t, attackSwing{Target: t1.String(), Hit: true, Crit: true, Damage: 14}, got[0])
+		assert.Equal(t, attackSwing{Target: t2.String(), Hit: false}, got[1])
+	})
+
+	t.Run("single-target spell attack crit", func(t *testing.T) {
+		got := castAttackSwings(CastResult{IsAttack: true, Hit: true, Crit: true, DamageTotal: 12}, t1)
+		require.Len(t, got, 1)
+		assert.Equal(t, attackSwing{Target: t1.String(), Hit: true, Crit: true, Damage: 12}, got[0])
+	})
+
+	t.Run("single-target spell miss carries target but no damage", func(t *testing.T) {
+		got := castAttackSwings(CastResult{IsAttack: true, Hit: false}, t1)
+		require.Len(t, got, 1)
+		assert.Equal(t, attackSwing{Target: t1.String(), Hit: false}, got[0])
+	})
+
+	t.Run("save-based / utility cast returns nil", func(t *testing.T) {
+		assert.Nil(t, castAttackSwings(CastResult{IsAttack: false}, t1))
+	})
+}
+
+// TestAggregateCombatStats_CountsSpellAttackCrits proves that a "cast" action_log
+// row carrying spell-attack swings folds into the same crit/damage/tanked tallies
+// as weapon attacks — the fix for Eldritch Blast nat-20s being invisible in stats.
+func TestAggregateCombatStats_CountsSpellAttackCrits(t *testing.T) {
+	vID := uuid.New() // Vale (warlock)
+	eID := uuid.New() // Porter (target)
+	combatants := []refdata.Combatant{
+		{ID: vID, DisplayName: "Vale"},
+		{ID: eID, DisplayName: "Porter"},
+	}
+	swings := castAttackSwings(CastResult{Beams: []BeamOutcome{
+		{TargetID: eID, Hit: true, Crit: true, Damage: 11},
+		{TargetID: eID, Hit: true, Damage: 12},
+	}}, uuid.Nil)
+	rows := []refdata.ActionLog{
+		{ActionType: actionTypeCast, ActorID: vID, DiceRolls: diceRollsFor(t, swings...)},
+	}
+
+	cs := AggregateCombatStats(rows, combatants)
+	assert.Equal(t, 2, cs.Total)
+	assert.Equal(t, 1, cs.Crits)
+	assert.Equal(t, 1, cs.ByID[vID].Crits)
+	assert.Equal(t, 23, cs.ByID[vID].TotalDamage)
+	assert.Equal(t, 23, cs.ByID[eID].DamageTaken)
+}
+
 func TestAggregateCombatStats_IgnoresMalformedAndForeignRows(t *testing.T) {
 	aID := uuid.New()
 	rows := []refdata.ActionLog{

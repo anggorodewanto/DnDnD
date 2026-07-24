@@ -157,6 +157,7 @@ type CastResult struct {
 	AttackTotal   int
 	TargetAC      int
 	Hit           bool
+	Crit          bool // single-target spell attack rolled a natural 20 (stats only; EB crits live on each BeamOutcome)
 	TargetName    string
 	SaveDC        int
 	SaveAbility   string
@@ -800,6 +801,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			result.AttackTotal = d20Result.Total
 			result.TargetAC = int(target.Ac)
 			result.Hit = d20Result.Total >= int(target.Ac)
+			result.Crit = d20Result.CriticalHit
 		}
 	}
 
@@ -1115,9 +1117,10 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// DM Console timeline. Best-effort — never aborts a cast that already spent
 	// the slot and applied its effects.
 	castEnc := castEncounterID(cmd, caster)
-	s.recordCombatAction(ctx, cmd.Turn.ID, castEnc, cmd.CasterID,
-		nullableCombatantID(cmd.TargetID), actionTypeCast,
-		describeCast(result.CasterName, result.SpellName, result.TargetName)+describeComponents(result.DamageBreakdown))
+	s.recordCastAction(ctx, cmd.Turn.ID, castEnc, cmd.CasterID,
+		nullableCombatantID(cmd.TargetID),
+		describeCast(result.CasterName, result.SpellName, result.TargetName)+describeComponents(result.DamageBreakdown),
+		castAttackSwings(result, cmd.TargetID))
 
 	// 19. med-26 / Phase 67: auto-create persistent zones for known
 	// AoE / area-effect spells. Best-effort — zone creation errors are
