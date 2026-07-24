@@ -114,6 +114,7 @@ type CombatantStat struct {
 	TotalDamage int
 	MaxHit      int
 	Evaded      int // attacks that missed this combatant while it was the target
+	DamageTaken int // damage this combatant soaked as the target of landed hits
 }
 
 // CombatStats is the whole-encounter aggregate plus per-combatant breakdowns.
@@ -169,6 +170,9 @@ func AggregateCombatStats(rows []refdata.ActionLog, combatants []refdata.Combata
 			cs.Hits++
 			attacker.Hits++
 			attacker.TotalDamage += sw.Damage
+			if tid, err := uuid.Parse(sw.Target); err == nil && tid != uuid.Nil {
+				ensure(tid).DamageTaken += sw.Damage
+			}
 			if sw.Damage > attacker.MaxHit {
 				attacker.MaxHit = sw.Damage
 			}
@@ -245,6 +249,9 @@ func FormatCombatStats(cs CombatStats, encName string) string {
 	}
 	if name, val := leader(cs, func(s *CombatantStat) int { return s.Crits }); val > 0 {
 		fmt.Fprintf(&b, "🍀 Most crits — %s (%d)\n", name, val)
+	}
+	if name, val := leader(cs, func(s *CombatantStat) int { return s.DamageTaken }); val > 0 {
+		fmt.Fprintf(&b, "🛡️ Most damage tanked — %s (%d taken)\n", name, val)
 	}
 	if name, val := leader(cs, func(s *CombatantStat) int { return s.Evaded }); val > 0 {
 		fmt.Fprintf(&b, "🌫️ Most evasive — %s (%d dodged)\n", name, val)

@@ -159,13 +159,15 @@ func TestAggregateCombatStats(t *testing.T) {
 	assert.Equal(t, 1, a.Crits)
 	assert.Equal(t, 25, a.TotalDamage)
 	assert.Equal(t, 18, a.MaxHit)
-	assert.Equal(t, 1, a.Evaded) // dodged the goblin's one miss
+	assert.Equal(t, 1, a.Evaded)      // dodged the goblin's one miss
+	assert.Equal(t, 5, a.DamageTaken) // soaked the goblin's one landed hit
 
 	g := cs.ByID[gID]
 	require.NotNil(t, g)
 	assert.Equal(t, 2, g.Attacks)
 	assert.Equal(t, 5, g.TotalDamage)
-	assert.Equal(t, 1, g.Evaded) // dodged Aragorn's one miss
+	assert.Equal(t, 1, g.Evaded)       // dodged Aragorn's one miss
+	assert.Equal(t, 25, g.DamageTaken) // soaked Aragorn's 7 + 18
 }
 
 func TestAggregateCombatStats_IgnoresMalformedAndForeignRows(t *testing.T) {
@@ -207,6 +209,8 @@ func TestFormatCombatStats_RendersAwards(t *testing.T) {
 	assert.Contains(t, out, "Aragorn")
 	assert.Contains(t, out, "18")
 	assert.Contains(t, out, "Most evasive")
+	// Goblin soaked Aragorn's 18-dmg crit; Aragorn took nothing → Goblin wins tank award
+	assert.Contains(t, out, "Most damage tanked")
 	// no crits by anyone with >0 besides Aragorn → Aragorn wins the crit award
 	assert.Contains(t, out, "Most crits")
 	// trailing newline trimmed
