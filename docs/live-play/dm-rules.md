@@ -33,6 +33,48 @@ big-party technique is in [`big-party.md`](big-party.md).
   posted in #roll-history; the queue only held the 20.) It rarely changes a clear
   success, but the total, crits, and near-DC calls depend on it — **read
   #roll-history before adjudicating so the reported number is the whole number.**
+- **Keep reading #in-character *during combat*, every turn — not just out of
+  combat.** Players post To-DM questions, rules checks, reaction declarations, and
+  target choices in **#in-character mid-combat**, and none of it surfaces in the DM
+  Console, #dm-queue, the #your-turn banner, or the combat log. **Poll #in-character
+  on every combat beat** — each time you pull the board, and both before and after
+  resolving a turn — or you silently miss a player's question or declared action
+  while you drive the enemy turns. (Seen 07-22: Windreth asked "does my Stealth
+  already apply advantage?" in #in-character *mid-combat* — invisible everywhere but
+  that channel; combat is exactly when it's easiest to tunnel on the queue + banner
+  and miss it.)
+- **Refresh Discord *properly* before you conclude "no new messages" — the message
+  list is virtualized and lies.** Reading a channel is not "look at the tab"; it is a
+  procedure, and skipping it has now silently eaten player declarations **twice**
+  (07-25: Forge's *"prepare to breach, waiting for Windreth's signal"* and Vale's
+  *"mage hand snuffs the lamp"* both sat unread while the poll reported an empty
+  board — so the next beat re-asked players for a move they had already made). The
+  procedure:
+  1. **Don't use `get_page_text`.** It returns a single `<article>`, frequently not
+     the newest one. Use `javascript_tool` against the DOM.
+  2. **Force the scroller to the bottom in a loop, not once** — Discord renders lazily,
+     so one `scrollTop = scrollHeight` lands mid-list and the newest messages are
+     never mounted:
+     ```js
+     const sc = document.querySelector('main [class*="scroller"]');
+     for (let i = 0; i < 4; i++) { sc.scrollTop = sc.scrollHeight; await new Promise(r => setTimeout(r, 700)); }
+     ```
+  3. **Assert you actually reached the tail** before trusting the read — return
+     `sc.scrollHeight - sc.scrollTop - sc.clientHeight` and require `0`. Anything
+     else means more messages exist below what you just read; scroll again.
+  4. **Select by timestamp, never by `.slice(-N)`.** Slicing the rendered tail returns
+     whatever happens to be mounted. Read every
+     `li[id^="chat-messages-"]`, pull `time[datetime]`, and filter
+     `t > <the timestamp of the last beat you resolved>` — that way a stale mount
+     shows up as a suspiciously empty result instead of a confident wrong answer.
+  5. **Treat "the newest message is my own bot post" as a red flag, not an answer.**
+     If the last thing in the channel is the DM's own narration, players have almost
+     certainly replied since; re-scroll (or re-`navigate` to the channel URL, which
+     forces Discord to jump to newest) before concluding the board is idle.
+  6. Escaped/blocked content: if the JS result comes back
+     `[BLOCKED: Cookie/query string data]`, strip non-alphanumerics from the returned
+     text (`.replace(/[^a-zA-Z0-9 ,.'?!:;()\-\/+]/g, '')`) and truncate — the block is
+     triggered by the *returned string*, not by the read itself.
 - **Reading is open; typing in Discord is not.** Claude observes any Discord channel
   through the browser, but **never types in Discord** — no slash commands (Discord
   forbids bot-to-bot invocation) and no messages. The human types `/` commands;
