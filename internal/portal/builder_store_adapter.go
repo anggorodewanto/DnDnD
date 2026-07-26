@@ -459,13 +459,22 @@ func preserveInventory(existing, fresh pqtype.NullRawMessage, additive bool) pqt
 		result = append(result, fr)
 	}
 	// Safety: carry forward any existing item the fresh build dropped entirely,
-	// so an edit never silently deletes inventory.
+	// so an edit never silently deletes inventory. Its stored equip flags only
+	// survive while nothing in the fresh build claims that slot — otherwise the
+	// edit would leave two items flagged into one slot, and combat (which reads
+	// the equipped_* columns, not this JSON) would keep wielding the stale one.
+	claimed := claimedEquipSlots(result)
 	for _, ex := range exItems {
 		key := strings.ToLower(ex.ItemID)
-		if !consumed[key] {
-			result = append(result, ex)
-			consumed[key] = true
+		if consumed[key] {
+			continue
 		}
+		if ex.Equipped && claimed[ex.EquipSlot] {
+			ex.Equipped = false
+			ex.EquipSlot = ""
+		}
+		result = append(result, ex)
+		consumed[key] = true
 	}
 
 	merged, err := json.Marshal(result)
@@ -473,6 +482,18 @@ func preserveInventory(existing, fresh pqtype.NullRawMessage, additive bool) pqt
 		return fresh
 	}
 	return pqtype.NullRawMessage{RawMessage: merged, Valid: true}
+}
+
+// claimedEquipSlots returns the set of equip slots already taken by the given
+// items, so a carry-forward cannot double-claim one.
+func claimedEquipSlots(items []character.InventoryItem) map[string]bool {
+	claimed := make(map[string]bool, 3)
+	for _, it := range items {
+		if it.Equipped && it.EquipSlot != "" {
+			claimed[it.EquipSlot] = true
+		}
+	}
+	return claimed
 }
 
 // preserveExpendedSlots carries forward spell slots already spent before an

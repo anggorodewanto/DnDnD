@@ -66,6 +66,60 @@ func TestPreserveInventory_AdditiveKeepsCustomItems(t *testing.T) {
 	assert.Equal(t, "main_hand", byID["hb_silent"].EquipSlot)
 }
 
+// Regression: the carry-forward safety net (which re-adds items the fresh
+// build dropped entirely, so an edit never deletes inventory) re-added them
+// with their STORED equip flags intact. When the fresh build equipped a
+// different item into the same slot, the character ended up with TWO items
+// flagged equipped in main_hand — and since combat reads the scalar
+// equipped_main_hand column, they silently swung whichever one the column
+// happened to point at. That is how Windreth kept swinging a plain shortsword
+// while holding the Silent Blade, so its Vex mastery never fired.
+func TestPreserveInventory_CarryForwardDoesNotDoubleClaimSlot(t *testing.T) {
+	existing := invMsg(t, []character.InventoryItem{
+		{ItemID: "shortsword", Name: "Shortsword", Quantity: 1, Type: "weapon", Equipped: true, EquipSlot: "main_hand"},
+		{ItemID: "hb_silent", Name: "Silent Blade", Quantity: 1, Type: "weapon", Description: "assassin's shortsword"},
+	})
+	// The submission's equipment list no longer mentions the shortsword, so the
+	// fresh build drops it; only the carry-forward loop puts it back.
+	fresh := invMsg(t, []character.InventoryItem{
+		{ItemID: "hb_silent", Name: "hb_silent", Quantity: 1, Type: "gear", Equipped: true, EquipSlot: "main_hand"},
+	})
+
+	got := parseInv(t, preserveInventory(existing, fresh, true))
+	byID := map[string]character.InventoryItem{}
+	for _, it := range got {
+		byID[it.ItemID] = it
+	}
+
+	require.Len(t, got, 2, "the dropped item is still carried forward")
+	assert.True(t, byID["hb_silent"].Equipped, "the fresh build's main hand wins")
+	assert.False(t, byID["shortsword"].Equipped,
+		"a carried-forward item must not keep a slot the fresh build already claimed")
+	assert.Empty(t, byID["shortsword"].EquipSlot)
+}
+
+// A carried-forward item whose slot nobody else claims keeps its equip state —
+// the fix must not silently disarm characters on an unrelated edit.
+func TestPreserveInventory_CarryForwardKeepsUncontestedSlot(t *testing.T) {
+	existing := invMsg(t, []character.InventoryItem{
+		{ItemID: "hb_silent", Name: "Silent Blade", Quantity: 1, Type: "weapon", Equipped: true, EquipSlot: "main_hand"},
+		{ItemID: "leather", Name: "Leather Armor", Quantity: 1, Type: "armor", Equipped: true, EquipSlot: "armor"},
+	})
+	fresh := invMsg(t, []character.InventoryItem{
+		{ItemID: "leather", Name: "leather", Quantity: 1, Type: "gear", Equipped: true, EquipSlot: "armor"},
+	})
+
+	got := parseInv(t, preserveInventory(existing, fresh, true))
+	byID := map[string]character.InventoryItem{}
+	for _, it := range got {
+		byID[it.ItemID] = it
+	}
+
+	assert.True(t, byID["hb_silent"].Equipped, "nothing else claims main_hand, so the blade stays drawn")
+	assert.Equal(t, "main_hand", byID["hb_silent"].EquipSlot)
+	assert.True(t, byID["leather"].Equipped)
+}
+
 func TestPreserveInventory_NonAdditiveRebuildsFresh(t *testing.T) {
 	existing := invMsg(t, []character.InventoryItem{
 		{ItemID: "quest-item", Name: "Quest Item", Quantity: 1, Type: "gear", Description: "flavor"},

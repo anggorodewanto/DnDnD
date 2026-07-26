@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -136,6 +137,10 @@ func (h *EquipHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Failed to read attunement data. Please contact the DM.")
 		return
 	}
+
+	// Accept the item's display name as well as its id — looted/homebrew gear
+	// has ids no player ever sees.
+	itemID = resolveEquipItemID(items, itemID)
 
 	// SR-004: when the combat service is wired, route through combat.Equip
 	// so the spec'd validations and column writes happen. Otherwise fall
@@ -340,9 +345,36 @@ func mirrorInventoryFlag(items []character.InventoryItem, itemID string, offhand
 	slot := equipSlotFor(offhand, armor)
 	updated := make([]character.InventoryItem, len(items))
 	copy(updated, items)
+	// A slot holds exactly one item. Clearing the previous occupant keeps the
+	// JSON single-valued and in step with the equipped_* column combat.Equip
+	// just wrote — two items flagged into one slot leaves the sheet and the
+	// combat engine disagreeing about which weapon is actually in hand.
+	for i := range updated {
+		if i != idx && updated[i].Equipped && updated[i].EquipSlot == slot {
+			updated[i].Equipped = false
+			updated[i].EquipSlot = ""
+		}
+	}
 	updated[idx].Equipped = true
 	updated[idx].EquipSlot = slot
 	return updated, true
+}
+
+// resolveEquipItemID maps whatever the player typed to a concrete inventory
+// item id, accepting the display name or slug as well as the id itself. Looted
+// and homebrew gear carries opaque ids ("hb_6d6a20d35c09") that never appear in
+// the fiction, so requiring the raw id made /equip useless for exactly the
+// items most likely to need re-equipping. An unmatched query passes through
+// untouched so refdata still answers for catalog ids the character does not
+// carry, and "none" is left alone because it is the unequip sentinel.
+func resolveEquipItemID(items []character.InventoryItem, query string) string {
+	if strings.EqualFold(query, "none") {
+		return query
+	}
+	if id, ok := inventory.ResolveItemID(items, query); ok {
+		return id
+	}
+	return query
 }
 
 // equipSlotFor returns the inventory JSON `equip_slot` string for the given

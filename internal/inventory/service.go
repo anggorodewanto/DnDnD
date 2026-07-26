@@ -47,6 +47,18 @@ func findItemIndex(items []character.InventoryItem, itemID string) int {
 // Precedence: exact ItemID, then case-insensitive ItemID, then
 // case-insensitive display Name, then the slugified display Name. Returns -1
 // when nothing matches. Mirrors the forgiving match in combat.ResolveTarget.
+// ResolveItemID maps a player-typed query — item id, display name, or slug —
+// to the concrete item id in the character's inventory. Reports false when
+// nothing matches, so callers can fall back to treating the query as a
+// catalog id the character does not carry.
+func ResolveItemID(items []character.InventoryItem, query string) (string, bool) {
+	idx := resolveItemIndex(items, query)
+	if idx < 0 {
+		return "", false
+	}
+	return items[idx].ItemID, true
+}
+
 func resolveItemIndex(items []character.InventoryItem, query string) int {
 	if idx := findItemIndex(items, query); idx >= 0 {
 		return idx
