@@ -28,6 +28,8 @@ make sqlc-check   # fail if sqlc-generated code drifts from schema/queries
 - Always use red/green TDD: write a failing test first, then write the minimal code to make it pass, then refactor
 - Aim for 90% code coverage (overall) and 85% per-package, enforced by `make cover-check`
 - Run /simplify after coding to review for reuse, quality, and efficiency
+- **Always commit and push when the work is done** — after a bug fix (once `make cover-check` is green) and after a live-play DM beat (once the memory/live-play notes are written). Do not wait to be asked. Never commit red tests or a half-finished fix; if the work is genuinely incomplete, say so instead of committing.
+- Leave unrelated dirty files out of the commit — stage the paths you touched, not `git add -A`. Another agent may be working in `docs/live-play/` concurrently.
 
 ## Gotchas
 
