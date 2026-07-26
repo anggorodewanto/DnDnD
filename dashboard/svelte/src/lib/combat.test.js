@@ -18,6 +18,9 @@ import {
   isWallBetween,
   findPath,
   collectSurprisedShortIDs,
+  collectHiddenShortIDs,
+  collectHiddenCharacterIDs,
+  shiftFlagsAfterRemoval,
   combatantsAtTile,
   nextStackedSelection,
   stackedTileCounts,
@@ -493,6 +496,105 @@ describe('collectSurprisedShortIDs', () => {
     expect(collectSurprisedShortIDs(null, null)).toEqual([]);
     expect(collectSurprisedShortIDs(undefined, { 0: true })).toEqual([]);
     expect(collectSurprisedShortIDs([{ short_id: 'A' }], null)).toEqual([]);
+  });
+});
+
+// Initially-hidden combatants: the same toggle-map-to-short-ID mapping, feeding
+// `hidden_combatant_short_ids`. A creature can be both surprised and hidden
+// (an ambusher lying in wait who is themselves caught out), so the two toggle
+// maps are independent.
+describe('collectHiddenShortIDs', () => {
+  it('returns short IDs for creatures whose hidden flag is true', () => {
+    const creatures = [
+      { short_id: 'GB1' },
+      { short_id: 'GB2' },
+      { short_id: 'OR1' },
+    ];
+    expect(collectHiddenShortIDs(creatures, { 0: true, 1: false, 2: true })).toEqual(['GB1', 'OR1']);
+  });
+
+  it('returns empty array when nothing is hidden', () => {
+    expect(collectHiddenShortIDs([{ short_id: 'GB1' }], {})).toEqual([]);
+  });
+
+  it('ignores creatures without a short_id', () => {
+    const creatures = [{ short_id: 'GB1' }, { display_name: 'no short id' }];
+    expect(collectHiddenShortIDs(creatures, { 0: true, 1: true })).toEqual(['GB1']);
+  });
+
+  it('handles null/undefined inputs defensively', () => {
+    expect(collectHiddenShortIDs(null, null)).toEqual([]);
+    expect(collectHiddenShortIDs(undefined, { 0: true })).toEqual([]);
+    expect(collectHiddenShortIDs([{ short_id: 'A' }], null)).toEqual([]);
+  });
+
+  it('is independent of the surprised map', () => {
+    const creatures = [{ short_id: 'GB1' }, { short_id: 'GB2' }];
+    const hidden = { 0: true };
+    const surprised = { 1: true };
+    expect(collectHiddenShortIDs(creatures, hidden)).toEqual(['GB1']);
+    expect(collectSurprisedShortIDs(creatures, surprised)).toEqual(['GB2']);
+  });
+});
+
+// The surprised/hidden toggles are keyed by index into the builder's
+// `creatures` array, so deleting a creature slides every later flag onto the
+// wrong creature — flag GB3, delete GB1, and GB2 starts combat surprised.
+describe('shiftFlagsAfterRemoval', () => {
+  it('shifts flags above the removed index down by one', () => {
+    // [GB1, GB2, GB3] with GB3 flagged; remove GB1 → GB3 is now index 1.
+    expect(shiftFlagsAfterRemoval({ 2: true }, 0)).toEqual({ 1: true });
+  });
+
+  it('drops the removed index own flag', () => {
+    expect(shiftFlagsAfterRemoval({ 0: true, 1: true }, 0)).toEqual({ 0: true });
+  });
+
+  it('leaves flags below the removed index untouched', () => {
+    expect(shiftFlagsAfterRemoval({ 0: true, 3: true }, 2)).toEqual({ 0: true, 2: true });
+  });
+
+  it('drops falsy flags rather than carrying them forward', () => {
+    expect(shiftFlagsAfterRemoval({ 0: false, 1: true }, 2)).toEqual({ 1: true });
+  });
+
+  it('handles null/undefined inputs defensively', () => {
+    expect(shiftFlagsAfterRemoval(null, 0)).toEqual({});
+    expect(shiftFlagsAfterRemoval(undefined, 1)).toEqual({});
+  });
+
+  it('keeps the flag pointing at the same creature end to end', () => {
+    const creatures = [{ short_id: 'GB1' }, { short_id: 'GB2' }, { short_id: 'GB3' }];
+    const flags = { 2: true };
+    expect(collectHiddenShortIDs(creatures, flags)).toEqual(['GB3']);
+
+    const remaining = creatures.filter((_, i) => i !== 0);
+    expect(collectHiddenShortIDs(remaining, shiftFlagsAfterRemoval(flags, 0))).toEqual(['GB3']);
+  });
+});
+
+// Hidden PCs are addressed by character UUID, not by a 2-letter short ID, so
+// two party members whose names share a prefix ("Vale" / "Valen" → both "VA")
+// can't hide each other by accident. Only *selected* PCs may be hidden — a
+// stale toggle on a PC the DM later removed from the roster must not leak into
+// the payload and hide a combatant that was never seated.
+describe('collectHiddenCharacterIDs', () => {
+  it('returns the ids of selected PCs whose hidden flag is true', () => {
+    expect(collectHiddenCharacterIDs(['a', 'b', 'c'], { a: true, c: true })).toEqual(['a', 'c']);
+  });
+
+  it('drops hidden flags for PCs not in the selected roster', () => {
+    expect(collectHiddenCharacterIDs(['a'], { a: true, b: true })).toEqual(['a']);
+  });
+
+  it('returns empty array when nothing is hidden', () => {
+    expect(collectHiddenCharacterIDs(['a', 'b'], {})).toEqual([]);
+  });
+
+  it('handles null/undefined inputs defensively', () => {
+    expect(collectHiddenCharacterIDs(null, null)).toEqual([]);
+    expect(collectHiddenCharacterIDs(undefined, { a: true })).toEqual([]);
+    expect(collectHiddenCharacterIDs(['a'], null)).toEqual([]);
   });
 });
 

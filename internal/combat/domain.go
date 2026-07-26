@@ -189,6 +189,15 @@ type StartCombatInput struct {
 	CharacterIDs       []uuid.UUID            `json:"character_ids"`
 	CharacterPositions map[uuid.UUID]Position `json:"character_positions"`
 	SurprisedShortIDs  []string               `json:"surprised_short_ids,omitempty"`
+	// HiddenShortIDs and HiddenCharacterIDs seat combatants unseen (is_visible
+	// = false) at combat start, for the fiction where someone was already hiding
+	// when initiative was rolled. Without this the only route to Hidden was an
+	// in-combat Hide action, so a round-1 ambush opener resolved flat — no
+	// attacker-hidden advantage and therefore no Sneak Attack. Short IDs match
+	// any combatant (template creature or PC); HiddenCharacterIDs addresses PCs
+	// by character UUID, which can't collide the way a 2-letter short ID can.
+	HiddenShortIDs     []string    `json:"hidden_short_ids,omitempty"`
+	HiddenCharacterIDs []uuid.UUID `json:"hidden_character_ids,omitempty"`
 	// CharacterInitiatives, keyed by character UUID, supplies player-authoritative
 	// initiative for PCs so the DM never rolls a player's die (APP-1). Combatants
 	// without an entry (NPCs, and any un-supplied PC) auto-roll as before.

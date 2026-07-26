@@ -8,7 +8,12 @@
     listCreatures,
     startCombat,
   } from './lib/api.js';
-  import { collectSurprisedShortIDs } from './lib/combat.js';
+  import {
+    collectSurprisedShortIDs,
+    collectHiddenShortIDs,
+    collectHiddenCharacterIDs,
+    shiftFlagsAfterRemoval,
+  } from './lib/combat.js';
   import {
     terrainByGid,
     getWalls,
@@ -72,6 +77,13 @@
   // Phase 114 — per-creature surprised toggle, keyed by index into `creatures`.
   // Reset whenever the encounter is reloaded.
   let surprisedByIndex = $state({});
+  // Per-creature "starts hidden" toggle, same keying. Independent of surprise:
+  // hidden is about being unseen (advantage on the opener, untargetable by the
+  // enemy planner), surprise is about losing the round-1 turn.
+  let hiddenByIndex = $state({});
+  // Per-PC "starts hidden" toggle, keyed by character UUID — for the rogue who
+  // was already in cover when initiative was rolled.
+  let hiddenByPCId = $state({});
   // Start-combat flow state.
   let startingCombat = $state(false);
   let startCombatError = $state(null);
@@ -228,6 +240,10 @@
 
   function removeCreature(index) {
     creatures = creatures.filter((_, i) => i !== index);
+    // The toggle maps are keyed by array index, so they have to slide with the
+    // splice or they'd re-point at whichever creature took the free slot.
+    surprisedByIndex = shiftFlagsAfterRemoval(surprisedByIndex, index);
+    hiddenByIndex = shiftFlagsAfterRemoval(hiddenByIndex, index);
     dirty = true;
     drawMap();
   }
@@ -400,11 +416,24 @@
       if (surprisedShortIDs.length > 0) {
         payload.surprised_combatant_short_ids = surprisedShortIDs;
       }
+      const hiddenShortIDs = collectHiddenShortIDs(creatures, hiddenByIndex);
+      if (hiddenShortIDs.length > 0) {
+        payload.hidden_combatant_short_ids = hiddenShortIDs;
+      }
+      const hiddenCharacterIDs = collectHiddenCharacterIDs(payload.character_ids, hiddenByPCId);
+      if (hiddenCharacterIDs.length > 0) {
+        payload.hidden_character_ids = hiddenCharacterIDs;
+      }
       const result = await startCombat(payload);
-      const surprisedCount = surprisedShortIDs.length;
-      const suffix = surprisedCount === 0
-        ? ''
-        : ` with ${surprisedCount} surprised combatant${surprisedCount === 1 ? '' : 's'}`;
+      const parts = [];
+      if (surprisedShortIDs.length > 0) {
+        parts.push(`${surprisedShortIDs.length} surprised`);
+      }
+      const hiddenCount = hiddenShortIDs.length + hiddenCharacterIDs.length;
+      if (hiddenCount > 0) {
+        parts.push(`${hiddenCount} hidden`);
+      }
+      const suffix = parts.length === 0 ? '' : ` with ${parts.join(', ')}`;
       startCombatMsg = `Combat started${suffix}. Encounter: ${result?.encounter?.id ?? savedEncounterId}`;
     } catch (e) {
       startCombatError = e.message;
@@ -531,6 +560,12 @@
                        onchange={(e) => (surprisedByIndex = { ...surprisedByIndex, [idx]: e.target.checked })} />
                 Surprised
               </label>
+              <label class="surprised-label" title="Starts hidden — unseen until it attacks or is spotted">
+                <input type="checkbox"
+                       checked={!!hiddenByIndex[idx]}
+                       onchange={(e) => (hiddenByIndex = { ...hiddenByIndex, [idx]: e.target.checked })} />
+                Hidden
+              </label>
               <span class="placement-status">
                 {creature.position_col != null ? `(${creature.position_col},${creature.position_row})` : 'Not placed'}
               </span>
@@ -561,21 +596,31 @@
             <p class="no-results">No approved PCs in this campaign.</p>
           {:else}
             {#each availablePCs as pc}
-              <label class="pc-option">
-                <input
-                  type="checkbox"
-                  checked={selectedPCIds.includes(pc.id || pc.character_id)}
-                  onchange={(e) => {
-                    const id = pc.id || pc.character_id;
-                    if (e.target.checked) {
-                      selectedPCIds = [...selectedPCIds, id];
-                    } else {
-                      selectedPCIds = selectedPCIds.filter((x) => x !== id);
-                    }
-                  }}
-                />
-                {pc.name || pc.character_name || 'Unknown'}
-              </label>
+              {@const pcId = pc.id || pc.character_id}
+              <div class="pc-row">
+                <label class="pc-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedPCIds.includes(pcId)}
+                    onchange={(e) => {
+                      if (e.target.checked) {
+                        selectedPCIds = [...selectedPCIds, pcId];
+                      } else {
+                        selectedPCIds = selectedPCIds.filter((x) => x !== pcId);
+                      }
+                    }}
+                  />
+                  {pc.name || pc.character_name || 'Unknown'}
+                </label>
+                <label class="surprised-label"
+                       title="Starts hidden — was already in cover when initiative was rolled. Their first attack gets the unseen-attacker advantage (so Sneak Attack fires) and reveals them.">
+                  <input type="checkbox"
+                         disabled={!selectedPCIds.includes(pcId)}
+                         checked={!!hiddenByPCId[pcId]}
+                         onchange={(e) => (hiddenByPCId = { ...hiddenByPCId, [pcId]: e.target.checked })} />
+                  Hidden
+                </label>
+              </div>
             {/each}
           {/if}
         </div>
@@ -948,6 +993,12 @@
     font-size: 1rem;
   }
 
+  .pc-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
   .pc-option {
     display: flex;
     align-items: center;
@@ -955,6 +1006,11 @@
     padding: 0.25rem 0;
     cursor: pointer;
     font-size: 0.9rem;
+  }
+
+  .pc-row .surprised-label input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .error {

@@ -367,20 +367,98 @@ export function isWallBetween(col1, row1, col2, row2, walls, tileSize) {
  * @returns {string[]}
  */
 export function collectSurprisedShortIDs(creatures, surprisedByIndex) {
+  return collectFlaggedShortIDs(creatures, surprisedByIndex);
+}
+
+/**
+ * Collect `short_id` values for creatures the DM has toggled "hidden" —
+ * already in cover / unseen when initiative was rolled. Feeds the
+ * `hidden_combatant_short_ids` field on /api/combat/start, which seats them
+ * with is_visible=false so their opener gets the attacker-hidden advantage
+ * instead of resolving flat.
+ *
+ * @param {Array<{short_id?:string}>|null|undefined} creatures
+ * @param {Object<number,boolean>|null|undefined} hiddenByIndex
+ * @returns {string[]}
+ */
+export function collectHiddenShortIDs(creatures, hiddenByIndex) {
+  return collectFlaggedShortIDs(creatures, hiddenByIndex);
+}
+
+/**
+ * Shared index-map-to-short-ID mapping behind the surprised and hidden
+ * collectors. Creatures without a short_id can't be addressed by the API and
+ * are skipped rather than sent as undefined.
+ *
+ * @param {Array<{short_id?:string}>|null|undefined} creatures
+ * @param {Object<number,boolean>|null|undefined} flagByIndex
+ * @returns {string[]}
+ */
+function collectFlaggedShortIDs(creatures, flagByIndex) {
   if (!Array.isArray(creatures) || creatures.length === 0) {
     return [];
   }
-  if (!surprisedByIndex || typeof surprisedByIndex !== 'object') {
+  if (!flagByIndex || typeof flagByIndex !== 'object') {
     return [];
   }
   const out = [];
   for (let i = 0; i < creatures.length; i++) {
-    if (!surprisedByIndex[i]) continue;
+    if (!flagByIndex[i]) continue;
     const shortID = creatures[i]?.short_id;
     if (!shortID) continue;
     out.push(shortID);
   }
   return out;
+}
+
+/**
+ * Re-key an index-keyed toggle map after the creature at `removedIndex` is
+ * spliced out of the array. Flags above the removal shift down one; the
+ * removed creature's own flag is dropped.
+ *
+ * Without this the flags stay pinned to positions rather than creatures, so
+ * deleting a creature silently moves "surprised"/"hidden" onto whichever
+ * creature slid into that slot.
+ *
+ * @param {Object<number,boolean>|null|undefined} flagByIndex
+ * @param {number} removedIndex
+ * @returns {Object<number,boolean>}
+ */
+export function shiftFlagsAfterRemoval(flagByIndex, removedIndex) {
+  if (!flagByIndex || typeof flagByIndex !== 'object') {
+    return {};
+  }
+  const out = {};
+  for (const [key, on] of Object.entries(flagByIndex)) {
+    if (!on) continue;
+    const i = Number(key);
+    if (i === removedIndex) continue;
+    out[i > removedIndex ? i - 1 : i] = true;
+  }
+  return out;
+}
+
+/**
+ * Collect character UUIDs for PCs the DM has toggled "hidden". PCs are
+ * addressed by UUID rather than short ID because a short ID is only the first
+ * two letters of the name, so party members with a shared prefix would collide.
+ *
+ * Only ids present in `selectedPCIds` are returned: a toggle left over from a
+ * PC the DM has since deselected must not hide a combatant that was never
+ * seated. Order follows the selected roster.
+ *
+ * @param {string[]|null|undefined} selectedPCIds
+ * @param {Object<string,boolean>|null|undefined} hiddenByPCId
+ * @returns {string[]}
+ */
+export function collectHiddenCharacterIDs(selectedPCIds, hiddenByPCId) {
+  if (!Array.isArray(selectedPCIds) || selectedPCIds.length === 0) {
+    return [];
+  }
+  if (!hiddenByPCId || typeof hiddenByPCId !== 'object') {
+    return [];
+  }
+  return selectedPCIds.filter((id) => id && hiddenByPCId[id]);
 }
 
 /**

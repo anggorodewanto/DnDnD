@@ -1194,6 +1194,10 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 	// into the map's "player" spawn zones (the same zones exploration mode
 	// uses) so they don't all stack on the zero-value tile (col "", row 0).
 	positions := s.seatPCsInSpawnZones(ctx, enc, input.CharacterIDs, input.CharacterPositions)
+	hiddenChars := make(map[uuid.UUID]bool, len(input.HiddenCharacterIDs))
+	for _, id := range input.HiddenCharacterIDs {
+		hiddenChars[id] = true
+	}
 	for _, charID := range input.CharacterIDs {
 		char, err := s.store.GetCharacter(ctx, charID)
 		if err != nil {
@@ -1203,6 +1207,12 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		pos := positions[charID]
 		shortID := ShortIDFromName(char.Name)
 		params := CombatantFromCharacter(char, shortID, pos.Col, pos.Row)
+		// A PC who was already hiding in the fiction is seated unseen, so their
+		// opener gets the attacker-hidden advantage (and Sneak Attack) instead
+		// of resolving flat. Set on create — no follow-up write needed.
+		if hiddenChars[charID] {
+			params.IsVisible = false
+		}
 
 		if _, err := s.AddCombatant(ctx, enc.ID, params); err != nil {
 			return StartCombatResult{}, fmt.Errorf("adding character combatant %s: %w", char.Name, err)
@@ -1211,6 +1221,12 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 
 	// Step 3: Resolve surprised short IDs to combatant UUIDs and mark surprised
 	if err := s.markSurprisedByShortIDs(ctx, enc.ID, input.SurprisedShortIDs); err != nil {
+		return StartCombatResult{}, err
+	}
+
+	// Step 3b: Hide combatants the DM flagged by short ID. Runs after the PCs
+	// are seated so a PC short ID resolves too.
+	if err := s.hideByShortIDs(ctx, enc.ID, input.HiddenShortIDs); err != nil {
 		return StartCombatResult{}, err
 	}
 
@@ -1296,6 +1312,37 @@ func (s *Service) markSurprisedByShortIDs(ctx context.Context, encounterID uuid.
 		}
 		if err := s.MarkSurprised(ctx, c.ID); err != nil {
 			return fmt.Errorf("marking combatant %s surprised: %w", c.ShortID, err)
+		}
+	}
+	return nil
+}
+
+// hideByShortIDs seats the named combatants unseen (is_visible = false) at
+// combat start. Unmatched short IDs are ignored — a DM typo shouldn't abort a
+// combat that is otherwise ready to run.
+func (s *Service) hideByShortIDs(ctx context.Context, encounterID uuid.UUID, shortIDs []string) error {
+	if len(shortIDs) == 0 {
+		return nil
+	}
+
+	allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return fmt.Errorf("listing combatants to hide: %w", err)
+	}
+
+	shortIDSet := make(map[string]bool, len(shortIDs))
+	for _, sid := range shortIDs {
+		shortIDSet[sid] = true
+	}
+
+	for _, c := range allCombatants {
+		if !shortIDSet[c.ShortID] {
+			continue
+		}
+		if _, err := s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
+			ID: c.ID, IsVisible: false,
+		}); err != nil {
+			return fmt.Errorf("hiding combatant %s: %w", c.ShortID, err)
 		}
 	}
 	return nil

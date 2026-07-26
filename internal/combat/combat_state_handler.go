@@ -42,6 +42,10 @@ type combatStateCombatant struct {
 	IsNpc           bool   `json:"is_npc"`
 	IsAlive         bool   `json:"is_alive"`
 	IsActive        bool   `json:"is_active"`
+	// IsVisible is false while the combatant is Hidden — either seated unseen at
+	// combat start or from an in-combat Hide. The DM tracker shows it so a hidden
+	// combatant doesn't quietly stop being treated as hidden.
+	IsVisible bool `json:"is_visible"`
 }
 
 // CombatState handles GET /api/combat/{encounterID}/state (APP-8).
@@ -115,6 +119,7 @@ func buildCombatStateResponse(enc refdata.Encounter, combatants []refdata.Combat
 			IsNpc:           c.IsNpc,
 			IsAlive:         c.IsAlive,
 			IsActive:        hasActiveCombatant && c.ID == activeCombatantID,
+			IsVisible:       c.IsVisible,
 		}
 	}
 	return resp

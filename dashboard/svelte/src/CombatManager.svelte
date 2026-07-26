@@ -1313,6 +1313,7 @@
                   >
                     {comb.short_id} - {comb.display_name}
                     ({comb.hp_current}/{comb.hp_max} HP)
+                    {#if comb.is_visible === false}<span class="hidden-badge">Hidden</span>{/if}
                   </button>
                   {#if comb.is_npc}
                     <button
@@ -1539,7 +1540,17 @@
         <!-- HP & Condition Tracker (shown when a token is selected) -->
         {#if selectedCombatant}
           <div class="tracker-panel" data-testid="tracker-panel">
-            <h3>{selectedCombatant.display_name} ({selectedCombatant.short_id})</h3>
+            <h3>
+              {selectedCombatant.display_name} ({selectedCombatant.short_id})
+              {#if selectedCombatant.is_visible === false}
+                <!-- The dimmed token alone is easy to misread, so name the state.
+                     Hidden = attacks from here roll with advantage (Sneak Attack
+                     fires) and the enemy planner won't target them. -->
+                <span class="hidden-badge"
+                      data-testid="hidden-badge"
+                      title="Unseen. Attacks made from here get advantage; the enemy turn planner won't target them. Attacking reveals them.">Hidden</span>
+              {/if}
+            </h3>
 
             {#if selectedCombatant.character_id}
               <!-- PC combatants carry a character_id; NPCs don't, so they get
@@ -1851,6 +1862,21 @@
   .tracker-panel h3 {
     margin: 0 0 0.5rem 0;
     color: #e94560;
+  }
+
+  .hidden-badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid #a78bfa;
+    border-radius: 3px;
+    background: rgba(167, 139, 250, 0.15);
+    color: #c4b5fd;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    vertical-align: middle;
   }
 
   .sheet-link {

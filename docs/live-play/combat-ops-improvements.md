@@ -264,12 +264,29 @@ Verified against the code and DB on 2026-07-09. Re-check only if the source has 
   "character_positions": {
     "<charID>": { "col": "D", "row": 5 }   // col is a LETTER (A=0,B=1,…); row is 1-based
   },
-  "surprised_combatant_short_ids": []       // omit/empty for a mutual reveal
+  "surprised_combatant_short_ids": [],      // omit/empty for a mutual reveal
+  "hidden_combatant_short_ids": [],         // seat these unseen (template creatures or PCs)
+  "hidden_character_ids": ["<uuid>", ...]   // seat these PCs unseen, by character UUID
 }
 ```
 - Response: `{ encounter, combatants[], initiative_tracker, first_turn }`. Each combatant
   carries `id, short_id, display_name, initiative_roll, initiative_order, hp_max, hp_current,
-  ac, is_npc, is_alive`. `first_turn.combatant_id` is the auto-seated first actor.
+  ac, is_npc, is_alive, is_visible`. `first_turn.combatant_id` is the auto-seated first actor.
+
+#### Starting hidden
+`hidden_*` seats a combatant with `is_visible = false`, for the fiction where someone was
+already in cover when initiative was rolled. Without it the only route to Hidden was an
+in-combat Hide action, so a round-1 ambush opener resolved **flat** — no unseen-attacker
+advantage, and therefore **no Sneak Attack**.
+
+- Hidden is independent of surprised: *hidden* = unseen (advantage on the opener, the enemy
+  planner won't target them); *surprised* = loses the round-1 turn. A creature can be both.
+- Attacking **reveals** the attacker automatically (hit or miss).
+- Prefer `hidden_character_ids` for PCs: a short ID is only the first two letters of the
+  name, so `Vale` and `Valen` would collide. Unmatched short IDs are ignored, not an error.
+- Both are settable from the Encounter Builder — a "Hidden" checkbox on each creature row and
+  each party member. The DM's Combat Manager shows a **Hidden** badge (and dims the token)
+  for anyone still unseen.
 - **Auto-rolls initiative for everyone, including PCs — no opt-out** (this is APP-1).
 
 ### Initiative override (`POST /api/combat/{enc}/override/combatant/{cb}/initiative`)

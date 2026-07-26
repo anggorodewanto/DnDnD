@@ -74,6 +74,11 @@ type startCombatRequest struct {
 	CharacterPositions         map[string]positionRequest `json:"character_positions"`
 	SurprisedCombatantShortIDs []string                   `json:"surprised_combatant_short_ids,omitempty"`
 	CharacterInitiatives       map[string]InitiativeInput `json:"character_initiatives,omitempty"`
+	// HiddenCombatantShortIDs / HiddenCharacterIDs seat combatants unseen for a
+	// round-1 ambush (see StartCombatInput). Short IDs cover template creatures
+	// and PCs alike; character IDs address PCs unambiguously.
+	HiddenCombatantShortIDs []string `json:"hidden_combatant_short_ids,omitempty"`
+	HiddenCharacterIDs      []string `json:"hidden_character_ids,omitempty"`
 }
 
 // positionRequest is the wire form of a character_positions entry. col accepts
@@ -133,6 +138,9 @@ type combatantResponse struct {
 	Ac              int32  `json:"ac"`
 	IsNpc           bool   `json:"is_npc"`
 	IsAlive         bool   `json:"is_alive"`
+	// IsVisible is false while the combatant is Hidden, so the DM can confirm an
+	// ambush actually took from the start-combat response.
+	IsVisible bool `json:"is_visible"`
 }
 
 // turnInfoResponse is the JSON representation of turn info.
@@ -223,6 +231,7 @@ func toCombatantResponses(combatants []refdata.Combatant) []combatantResponse {
 			Ac:              c.Ac,
 			IsNpc:           c.IsNpc,
 			IsAlive:         c.IsAlive,
+			IsVisible:       c.IsVisible,
 		}
 	}
 	return resp
@@ -273,6 +282,16 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		charIDs[i] = id
 	}
 
+	hiddenCharIDs := make([]uuid.UUID, len(req.HiddenCharacterIDs))
+	for i, s := range req.HiddenCharacterIDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			http.Error(w, "invalid hidden character_id: "+s, http.StatusBadRequest)
+			return
+		}
+		hiddenCharIDs[i] = id
+	}
+
 	positions := make(map[uuid.UUID]Position, len(req.CharacterPositions))
 	for k, v := range req.CharacterPositions {
 		id, err := uuid.Parse(k)
@@ -312,6 +331,8 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		CharacterPositions:   positions,
 		SurprisedShortIDs:    req.SurprisedCombatantShortIDs,
 		CharacterInitiatives: inits,
+		HiddenShortIDs:       req.HiddenCombatantShortIDs,
+		HiddenCharacterIDs:   hiddenCharIDs,
 	}
 
 	result, err := h.svc.StartCombat(r.Context(), input, h.roller)
