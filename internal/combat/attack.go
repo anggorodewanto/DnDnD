@@ -36,11 +36,74 @@ func hasFeatureEffect(features pqtype.NullRawMessage, effectID string) bool {
 		return false
 	}
 	for _, f := range feats {
-		if strings.EqualFold(f.MechanicalEffect, effectID) {
+		if featureMatches(f, effectID) {
 			return true
 		}
 	}
 	return false
+}
+
+// featureMatches reports whether one stored feature answers to the given id.
+// Three shapes are accepted, because the character row carries all three:
+//
+//   - a flat mechanical_effect slug ("two_weapon_fighting") — fighting styles;
+//   - a JSON-encoded array of {"effect_type": …} in mechanical_effect — how the
+//     feat seeder writes every feat, e.g. Skulker and Great Weapon Master;
+//   - the feat id derived from the display name ("Great Weapon Master" →
+//     "great-weapon-master") — how the HasFeat call sites ask for feats.
+//
+// Only the first was recognised before, which left every seeded feat inert: the
+// array-shaped blob equalled no slug, and no feat id equalled its display name.
+func featureMatches(f CharacterFeature, effectID string) bool {
+	if strings.EqualFold(f.MechanicalEffect, effectID) {
+		return true
+	}
+	if strings.EqualFold(featureIDFromName(f.Name), effectID) {
+		return true
+	}
+	return hasNestedEffectType(f.MechanicalEffect, effectID)
+}
+
+// hasNestedEffectType decodes a mechanical_effect that is itself a JSON array of
+// effect objects and reports whether any entry carries the wanted effect_type.
+// A non-JSON slug simply fails to decode and reports false.
+func hasNestedEffectType(mechanicalEffect, effectID string) bool {
+	trimmed := strings.TrimSpace(mechanicalEffect)
+	if !strings.HasPrefix(trimmed, "[") {
+		return false
+	}
+	var effects []struct {
+		EffectType string `json:"effect_type"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &effects); err != nil {
+		return false
+	}
+	for _, e := range effects {
+		if strings.EqualFold(e.EffectType, effectID) {
+			return true
+		}
+	}
+	return false
+}
+
+// featureIDFromName slugifies a display name into the feat id the gates use
+// ("Great Weapon Master" → "great-weapon-master").
+func featureIDFromName(name string) string {
+	if name == "" {
+		return ""
+	}
+	return strings.ToLower(strings.Join(strings.Fields(name), "-"))
+}
+
+// keepsHiddenOnMiss reports whether a hidden attacker stays hidden after this
+// attack. Skulker (seeded effect "missed_attack_hidden_no_reveal"): "If you make
+// an attack roll while hidden and the roll misses, making the attack doesn't
+// reveal your position." A hit always reveals.
+func keepsHiddenOnMiss(features pqtype.NullRawMessage, hit bool) bool {
+	if hit {
+		return false
+	}
+	return hasFeatureEffect(features, "missed_attack_hidden_no_reveal")
 }
 
 // HasFightingStyle checks whether a character's features include a fighting style
@@ -917,19 +980,6 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
 		dmgMod += dmgResult.FlatModifier
 		fesDamageEffects = dmgResult.AppliedEffects
-		// SR-010: surface once-per-turn effect types that actually fired
-		// so the service layer can mark them used for this combatant's
-		// "turn window" (since their own turn last started). The damage
-		// trigger is where Sneak Attack's extra_damage_dice lives.
-		for _, re := range dmgResult.AppliedEffects {
-			if !re.Effect.Conditions.OncePerTurn {
-				continue
-			}
-			result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, string(re.Effect.Type))
-			// Display-only: keep the feature name so FormatAttackLog can tag
-			// e.g. "Sneak Attack" by name rather than hard-coding the dice.
-			result.OncePerTurnEffectNames = append(result.OncePerTurnEffectNames, re.FeatureName)
-		}
 	}
 
 	// COV-8 Brutal Strike: carry the eligibility-gated effect onto the result for
@@ -949,6 +999,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 			result.SavageAttackerUsed = true
 			result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, savageAttackerUsedEffect)
 		}
+		recordOncePerTurnFESRiders(&result, fesDamageEffects)
 		extra, comps := buildFESDamageBreakdown(fesDamageEffects, true, roller)
 		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 		result.DamageBreakdown = comps
@@ -1016,6 +1067,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.SavageAttackerUsed = true
 		result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, savageAttackerUsedEffect)
 	}
+	recordOncePerTurnFESRiders(&result, fesDamageEffects)
 	extra, comps := buildFESDamageBreakdown(fesDamageEffects, result.CriticalHit, roller)
 	result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 	result.DamageBreakdown = comps
@@ -1045,6 +1097,28 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	recordFrenzy(&result, input)
 
 	return result, nil
+}
+
+// recordOncePerTurnFESRiders stamps the once-per-turn on-damage effects that
+// actually fired so the service layer can mark them used for this combatant's
+// turn window (SR-010). The damage trigger is where Sneak Attack's
+// extra_damage_dice lives.
+//
+// This is called ONLY from the hit paths. The effects are resolved before the
+// d20 is rolled (they feed the damage modifier), but a rider that deals no
+// damage is not spent: "once per turn you can deal extra damage to one creature
+// you HIT". Stamping them at resolve time burned a Rogue's whole-turn Sneak
+// Attack on their first whiff.
+func recordOncePerTurnFESRiders(result *AttackResult, effects []ResolvedEffect) {
+	for _, re := range effects {
+		if !re.Effect.Conditions.OncePerTurn {
+			continue
+		}
+		result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, string(re.Effect.Type))
+		// Display-only: keep the feature name so FormatAttackLog can tag
+		// e.g. "Sneak Attack" by name rather than hard-coding the dice.
+		result.OncePerTurnEffectNames = append(result.OncePerTurnEffectNames, re.FeatureName)
+	}
 }
 
 // buildFESDamageBreakdown rolls each on-damage Feature Effect System effect
@@ -1380,6 +1454,22 @@ func writeDroppedToZero(b *strings.Builder, result AttackResult) {
 	fmt.Fprintf(b, "\n    \u2192 %s", result.DownLogLine)
 }
 
+// skulkerHidesMiss reports whether the attacker's Skulker feat lets them stay
+// hidden after this attack. The character row is only fetched on the narrow path
+// that can matter — an already-hidden attacker who missed — so the common case
+// costs no extra query. A lookup failure falls back to revealing, which is the
+// safe default (the attacker is no worse off than before the feat existed).
+func (s *Service) skulkerHidesMiss(ctx context.Context, attacker refdata.Combatant, hit bool) bool {
+	if hit || !attacker.CharacterID.Valid {
+		return false
+	}
+	char, err := s.store.GetCharacter(ctx, attacker.CharacterID.UUID)
+	if err != nil {
+		return false
+	}
+	return keepsHiddenOnMiss(char.Features, hit)
+}
+
 // resolveAndPersistAttack resolves an attack from the given input, persists the
 // turn resource update, and returns the result with the updated turn attached.
 func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput, updatedTurn refdata.Turn, attacker refdata.Combatant, roller *dice.Roller) (AttackResult, error) {
@@ -1393,8 +1483,9 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
 
-	// Auto-reveal: hidden attacker is revealed after attacking (hit or miss)
-	if !attacker.IsVisible {
+	// Auto-reveal: a hidden attacker is revealed by attacking, hit or miss —
+	// unless Skulker covers the miss (see skulkerHidesMiss).
+	if !attacker.IsVisible && !s.skulkerHidesMiss(ctx, attacker, result.Hit) {
 		if _, err := s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
 			ID:        attacker.ID,
 			IsVisible: true,

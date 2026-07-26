@@ -41,13 +41,16 @@ type GrappleResult struct {
 }
 
 // Grapple handles the /action grapple command.
-// Costs an action. Contested Athletics (STR) vs target's Athletics or Acrobatics.
+// Costs ONE attack of the Attack action — 2024 rules make Grapple an option of
+// an Unarmed Strike, and an Unarmed Strike is one of the attacks the Attack
+// action grants. A grappler with Extra Attack therefore keeps their remaining
+// swing. Contested Athletics (STR) vs target's Athletics or Acrobatics.
 // On success, target gains the grappled condition.
 func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.Roller) (GrappleResult, error) {
 	if ok, reason := CanActRaw(cmd.Grappler.Conditions); !ok {
 		return GrappleResult{}, fmt.Errorf("%s", reason)
 	}
-	if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
+	if err := ValidateResource(cmd.Turn, ResourceAttack); err != nil {
 		return GrappleResult{}, err
 	}
 
@@ -89,8 +92,8 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 		return GrappleResult{}, err
 	}
 
-	// Use action
-	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
+	// Spend one attack (UseAttack also marks the Action used on the first one).
+	updatedTurn, err := UseAttack(cmd.Turn)
 	if err != nil {
 		return GrappleResult{}, err
 	}
@@ -174,16 +177,19 @@ type ShoveResult struct {
 }
 
 // Shove handles the /shove command.
-// Costs an action. Contested Athletics (STR) vs target's Athletics or Acrobatics.
+// Costs ONE attack of the Attack action (2024: Shove is an Unarmed Strike
+// option, and an Unarmed Strike is one of the Attack action's attacks), so a
+// shover with Extra Attack keeps their remaining swing. Contested Athletics
+// (STR) vs target's Athletics or Acrobatics.
 // On success: --prone knocks target prone, --push pushes 5ft away.
 func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roller) (ShoveResult, error) {
 	if ok, reason := CanActRaw(cmd.Shover.Conditions); !ok {
 		return ShoveResult{}, fmt.Errorf("%s", reason)
 	}
-	if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
+	if err := ValidateResource(cmd.Turn, ResourceAttack); err != nil {
 		return ShoveResult{}, err
 	}
-	return s.resolveShove(ctx, cmd, roller, ResourceAction)
+	return s.resolveShove(ctx, cmd, roller, ResourceAttack)
 }
 
 // resolveShove runs the resource-agnostic core of a shove: the size / adjacency /
@@ -257,9 +263,10 @@ func (s *Service) resolveShove(ctx context.Context, cmd ShoveCommand, roller *di
 		return ShoveResult{}, err
 	}
 
-	// Spend the caller's resource (action for /shove, bonus action for the
-	// Shield Master shove).
-	updatedTurn, err := UseResource(cmd.Turn, resource)
+	// Spend the caller's resource: one attack for /shove, a bonus action for the
+	// Shield Master shove. Attacks are a count rather than a boolean, so they go
+	// through UseAttack (which also marks the Action used on the first one).
+	updatedTurn, err := spendShoveResource(cmd.Turn, resource)
 	if err != nil {
 		return ShoveResult{}, err
 	}
@@ -339,6 +346,15 @@ func (s *Service) resolveShove(ctx context.Context, cmd ShoveCommand, roller *di
 		TargetRoll: targetRoll.Total,
 		PushDest:   pushLabel,
 	}, nil
+}
+
+// spendShoveResource spends the shove's resource, routing ResourceAttack to
+// UseAttack (a count, not a boolean) and everything else to UseResource.
+func spendShoveResource(turn refdata.Turn, resource ResourceType) (refdata.Turn, error) {
+	if resource == ResourceAttack {
+		return UseAttack(turn)
+	}
+	return UseResource(turn, resource)
 }
 
 // --- Dragging ---

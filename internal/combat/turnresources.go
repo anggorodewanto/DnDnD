@@ -86,6 +86,13 @@ func UseResource(turn refdata.Turn, resource ResourceType) (refdata.Turn, error)
 	switch resource {
 	case ResourceAction:
 		turn.ActionUsed = true
+		// Spending the Action also consumes the Attack action's attacks.
+		// UseAttack couples the other direction (the first attack marks
+		// ActionUsed), but without this the coupling was one-way: Service.Attack
+		// gates only on AttacksRemaining and never reads ActionUsed, so a
+		// combatant who Dodged / Dashed / Grappled still had a full, free Attack
+		// action left over.
+		turn.AttacksRemaining = 0
 	case ResourceBonusAction:
 		turn.BonusActionUsed = true
 	case ResourceReaction:
