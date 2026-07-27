@@ -166,28 +166,43 @@ room to turn around). Forge declared **in, stripped**, kit cached in the reeds. 
 Stealth resolved at **DC 14 — Windreth 26 ✅ / Forge 18 ✅ / Vale 7 ❌**; the failure paid out as
 pre-declared and *not* as a capture — a scrape, not a splash — but a watch skiff's lantern
 stopped and dwelt on the culvert mouth. **Vale answered it with a minor illusion** (a rat falling
-in and swimming off) and it worked cleanly: **no roll owed** — seeing through it requires a
+in and swimming off) and it worked cleanly — **no roll owed**, since seeing through it requires a
 creature to take the **Study** action against her **DC 15**, and a bored skiff-hand at 40 ft in
 the dark is not studying anything. He said *"Rat,"* took the light off the mouth, and poled on.
 **The cost landed on the kit instead:** the lantern raked the reed line on the turn and he hooked
 **Forge's breastplate** out of the mud as *salvage* — it is now in the bottom of a watch skiff
 going down-cut, unconnected to anyone, and boats tie up somewhere. That consequence was
 **planted, not sprung** (the kit was stated as recoverable *and findable* when it was cached).
-They crossed the forty feet under the illusion's own noise — a second payout of the same cantrip
-— and are now **at the eaten grate**, iron gone to pencil-lead. **The washer is ~2 minutes out
-and coming here:** she works the broom and grey salt back from the chalk line, and **her round
-ends at this grate** (she salts it from the inside nightly, which is why it is eaten). No weapon,
-no lantern, *remembers*. Their move.
+
+**They are now inside the outer yard.** They crossed the forty feet under the illusion's own
+noise, waited out the washer's round at the eaten grate, and took her: Vale's second illusion put
+a small sound at her back, and **Windreth alone** — Forge was thirty feet down a one-man-wide
+throat and could not reach — took her through the bars with the Silent Blade, **non-lethal per
+the standing house rule**, catching her weight so the flagstone got a lowering and not a fall.
+Again **no rolls**: a tired washerwoman glancing at a noise never takes the *Study* action, and
+the take was surprise + unaware + unarmed + unarmoured at arm's reach. Everything uncertain in
+that beat was a **consequence**, not a check — and the consequences are real. **The grate was
+destroyed, not opened** (pencil-lead iron came away in lengths), so their exit is a hole that
+cannot be closed, on a grate she salts nightly. **She is unconscious in the open**, alive, and she
+is the one person in this operation who **keeps her memory** — the only witness the system cannot
+erase, pointed at them. **Vale is holding the yard's sound** with a working-noise illusion copied
+from twenty minutes of listening (1 min / 30 ft / max 3 active — it needs renewing). And with the
+yard quiet and theirs, they heard what her broom had been covering every night: **from inside the
+windowless stone building, past the chalk line, at this hour with no lamp lit — paper, a great
+deal of it, worked by hands.** The chalk line is still uncrossed. Their move.
 
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), what is inside the stone building past the chalk line, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **⏳ the washer's night round** — ~2 minutes out and *ending at their grate* (no
-weapon, no lantern, *remembers*) · **🔴 Forge's breastplate on a watch skiff**, taken as salvage
-and going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's
-breastplate pulled from a canal is a thread the watch now holds · ~~the dwelling lantern~~
-(cleared by the illusion) · two sunk counters
+**Clocks:** **🔴 the washer** — down, alive, in the open, and she *remembers*: she wakes up
+eventually and she is the only witness this system can't erase · **🔴 the destroyed grate** — a
+hole that can't be closed, on iron she salts nightly, and still their only proved exit ·
+**⏳ Vale's mask** — the yard's working-noise illusion on a 1-minute renew, within 30 ft, the only
+thing covering the silence · **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
+going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
+pulled from a canal is a thread the watch now holds · ~~the dwelling lantern~~ (cleared by the
+illusion) · two sunk counters
 in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
 gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
 delivered confidently** · COL the Collector loose with all three faces · a bakery yard man has
@@ -209,12 +224,18 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    #roll-history — and again *immediately before* writing a compressed beat. The one-beat tempo
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
-2. **The culvert run and the lantern both resolved 07-27** (one beat each, as designed). Next:
-   whatever they declare at the grate, against **~2 minutes of the washer's pace**. Don't prompt
-   their levers (Name-Muffle, another illusion, letting her finish and pass, going through before
-   she arrives, or simply letting her find them); let them find them. **Non-lethal MO stands
-   until a player flips it.** **Forge is AC 14** and stays that way — his breastplate left with
-   the skiff (see the equipment note below).
+2. **The culvert run, the lantern, and the washer ambush all resolved 07-27** (one beat each, as
+   designed). Next: whatever they declare **inside the outer yard** — a body at their feet, a hole
+   behind them, a mask on a 1-minute renew, and paper being worked thirty feet past a chalk line
+   nobody has crossed. Don't prompt their levers (the Name-Muffle, the washer as someone who can
+   be *asked* rather than merely left, more illusion, the line itself); let them find them.
+   **Non-lethal MO stands until a player flips it.** **Forge is AC 14** and stays that way — his
+   breastplate left with the skiff (see the equipment note below).
+   **Two adjudications worth reusing:** hold established physical constraints against a group
+   declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
+   with the reversible alternative priced), and **substitute the tool while honouring the intent**
+   (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
+   subdue-and-KO was resolved with the blade, flagged in-post, free rerun offered).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
