@@ -12,12 +12,14 @@
 > player-facing half lives in [`world.md`](world.md), and only what players have
 > actually earned gets revealed.
 
-_Last updated: 2026-07-12 — added **"The forward shape"** structural scaffold up top
-(act map + name-assembly tracker + the live **Leg-3 Sesh** arc structure + the endgame
-convergence + railroad guardrails), so the spine has a bird's-eye plan and not only a
-beat-log. Underlying canon current to the party **deep inside Sesh** (Bertran's shed;
-runner at the door). Earlier base written 2026-07-04 after Ashfall / Windreth's join /
-the Palewatch heading (see [`sessions/session-01.md`](sessions/session-01.md))._
+_Last updated: 2026-07-27 — **arc-track pass.** The spine was current only to 07-19 (the
+canopy reading) while play had run eight further days into a whole sub-leg; added
+**"Leg 3b — the paper trail"** to the act map and a structured section for it, refreshed
+the reveal ledger, and logged the **one real drift** (this leg has handed the party
+*mechanism*, not a **scrap** — see the tracker note). Prior revision 2026-07-12 added
+**"The forward shape"** (act map + name-assembly tracker + Leg-3 Sesh structure + the
+endgame convergence + railroad guardrails). Earlier base written 2026-07-04 after Ashfall /
+Windreth's join / the Palewatch heading (see [`sessions/session-01.md`](sessions/session-01.md))._
 
 ---
 
@@ -72,7 +74,8 @@ an answer, with the Order, the patron, and their own history all pulling differe
 | **0 — Ashfall** | ✅ resolved | Freed the Faceless God; learned the name was drowned on purpose. | Token (the counter-to-erasure key) + scraps **#1 & #2**. | Chose a heading (→ the road). |
 | **1 — Road + Palewatch** | ✅ resolved | Chased & **killed the renegade**; met the Order's fled wardens (Mave); learned the scatter-doctrine + the *"a hand bought him"* dread. | The Order's **kept scrap** — taken from the vault (= the warded prize = DM-secret Windreth's own name). | Disc cracked → **Sesh**. |
 | **2 — Ash-road to Sesh** | ✅ resolved | The **Follower** (a *made* hunter) killed; Mave's five scattered ahead toward Sesh. | The grey man's **cut-name harvest bundle** (off his corpse). | Entered Sesh. |
-| **3 — SESH, the Mask Market** | 🔴 **LIVE** (reading ✅ 07-19) | Get the warded prize **read safely**, hunt the buyer's *money not his face*, gather more pieces — while the **one sealed-name reader is the buyer's own hand.** | Bertran's **iron box** taken; **the safe reading is DONE** (Sabinnet, under the canopy → prize = Windreth's own name, confirmed); the **next heading** is the remaining prize. | ✅ Safe reading landed; still open → a new scrap-mark / heading, and what to do with Sabinnet (who now knows). |
+| **3a — SESH, the Mask Market** | ✅ resolved 07-19 | Get the warded prize **read safely** while the one sealed-name reader is the buyer's own hand. | Bertran's **iron box**; the reading itself (prize = Windreth's own name, confirmed). | Reading landed → the party turned on the **buyer's money**, not his face → Leg 3b. |
+| **3b — THE PAPER TRAIL (Far Quarter)** | 🔴 **LIVE** (07-21 → now) | *Hunt the money, never the face.* Follow the buyer's **paper** up-chain through people who are all cutouts: weighhouse → drop-barge → counting floor → the Quiet Window → the bread cart's round → **the yard at the top of Stair Hill.** | **Mechanism, not a scrap** (see tracker note): the yard **unmakes paper and eats the memory of anyone in its book**; grey salt as the craft's working substance; a **Name-Muffle** dose. | Open. Likeliest: what's inside the stone building past the chalk line — or the **Pike & Iron waybill book** (sender/destination/date) as the cheaper read. |
 | **4+ — Morran's Reach / further seeds** | ⬜ ahead | More scraps, more pulls; the name keeps assembling. | Each leg = one more piece. | Toward the convergence. |
 | **★ Convergence** | ⬜ endgame | Enough of the name is gathered → the **trilemma is forced**, all three hands present. | — | The players' answer *is* the campaign's ending. |
 
@@ -96,9 +99,24 @@ that a proper reading of the prize — or a market that can read the *set* — s
 tip toward "the name can be spoken." That is the trip-wire into the convergence; keep it
 in view when deciding how loud Sesh's hand reacts.
 
-### Leg 3 — the Sesh arc, structured (they are IN it now)
+> **⚠ TRACKER NOTE (logged 07-27 — the one genuine drift):** the act map promises each
+> leg hands them **a piece**, and **Leg 3b has not handed one.** Six days of excellent play
+> have handed them *mechanism* instead — how names are unmade, what the grey salt is for,
+> that the book is the instrument — plus one usable tool (the **Name-Muffle**). That is not
+> a mistake (a leg whose whole subject is *erasure infrastructure* earning erasure-lore is
+> on-theme, and the tracker is a meter, not a quota), but the meter has not moved, so **the
+> yard's payoff should include a piece or a hard heading**, not only another mechanism
+> reveal. Candidates already standing in the fiction, no invention required: the **pulped
+> silt** in Windreth's pouch (names on their way to being unmade — the counter-to-erasure
+> token is exactly the thing that might hold one); whatever the carter carries **flat and
+> wrapped** across the chalk line; the **waybill book** as a destination rather than a piece.
+> Do not force it into the next beat — but do not let the leg close without it.
 
-The pre-arrival "future seed" (see "The Mask Market of Sesh" below) is now live. Its shape:
+### Leg 3a — the Sesh arc, structured (✅ resolved 07-19 — kept for its four-hands model)
+
+The pre-arrival "future seed" (see "The Mask Market of Sesh" below) went live and closed
+when the prize was read under the canopy. **Its four-hands model still governs Leg 3b** —
+only the venue changed. Its shape:
 
 - **The knot (the whole leg in one line):** the only reader in Sesh who can read a
   *sealed* name is **Sabinnet, the Reader-under-glass — and she answers to the faceless
@@ -130,6 +148,41 @@ The pre-arrival "future seed" (see "The Mask Market of Sesh" below) is now live.
   Sesh); a face-to-face or a burn with the buyer's hand; or an alliance/rupture with the
   fled wardens. Build the interior room-by-room as they move; do not pre-place Sabinnet's
   parlour until they walk toward it.
+
+### Leg 3b — the paper trail, structured (🔴 they are IN it now, 07-21 → 07-27)
+
+- **The knot (the whole leg in one line):** the buyer has **no address and no face** by
+  design, so the party stopped hunting a person and started hunting **his paper** — and every
+  rung of that chain is a cutout who can only name the next rung. The leg is them walking the
+  money up-chain far enough that the thing at the top has to exist somewhere physical.
+- **What it turned out to be about (emergent, and better than the seed):** the top of the
+  chain does not *store* what it buys — it **unmakes** it. The Stair Hill yard washes paper to
+  grey water, and buys the **forgetting** of everyone who works it: names go into a gate-clerk's
+  book in metallic ink over **grey salt**, and a struck-out name takes its owner's day with it.
+  Names spoken inside the yard slide the same way. **This is the renegade's erasure craft as
+  industry** — the same art the Order made a sacred duty, running as a business with wages,
+  a rota, and a chalk line.
+- **Why that matters to the spine, stated plainly:** the campaign's engine is *a name can be
+  kept, therefore it can be got back*. This leg puts the party in front of a hand that is
+  **destroying** what it collects. If the buyer is unmaking names rather than hoarding them,
+  **THE SEAL has a shelf life**, and "keep it scattered" stops being the safe option — which
+  is exactly the pressure the convergence trilemma needs.
+- **The four hands, mapped onto this leg:** the **party** (walking the paper up); the
+  **buyer** (still never a face — kept sealed *by observation* now, not by refusal: they have
+  watched four rounds of paper go in and nothing come out); the **Order** (this is their craft,
+  industrialised — a live source of judgement later); **Vale's patron** (untouched, still
+  steering; patron = buyer remains **primed, unconfirmed**).
+- **Clocks (texture, not stopwatches):** two sunk bodies on a 1–3 day fuse with the watch now
+  dragging the canal **at night** · a rotated countersign that is now a *wrong answer delivered
+  confidently* · a Collector walking around alive having seen all three faces · a yard man at
+  the bakery who has seen them at the counter.
+- **Likely exits (any, none pre-chosen):** inside the stone building past the chalk line; the
+  **Pike & Iron waybill book** (paper about paper — no salt, no memory); a face-to-face with
+  whatever fills that lit doorway; or a burn that turns the Far Quarter hostile and drives them
+  back to the road with what they have.
+- **Guardrail for this leg specifically:** the party's own deduction — *the book is the
+  mechanism, and Forge and Vale are both unlisted* — is **theirs, and is not to be confirmed by
+  the DM.** They are betting two characters on good evidence. Let the fiction answer it.
 
 ### The convergence (the endgame situation — loose)
 
@@ -260,6 +313,9 @@ answer, and that's the point. Never resolve it *for* them.
     - **PRIMED (inferable, not confirmed):** ~~the **warded prize = Windreth's own stolen name**~~ → **SPENT / CONFIRMED 07-19** (see below); **Vale's patron = the faceless buyer** behind the renegade (Mave near-matched the shapes — *"fits like a glove"* — but could not swear it) — *still primed, unconfirmed.*
     - **★★ SPENT 07-19 (confirmed to the table — Sesh name-market, warding-canopy read):** the **warded prize IS Windreth's own stolen name** — Sabinnet read it under the canopy (safe gate: thread drank the sound, buyer felt nothing, no bell); it came off the scrap as a *living, freshly-cut* human true name and it is unmistakably **his**. Literal name text still **offstage** (kept a driver per "don't invent its content yet"). **Restoration NOT granted** — reading ≠ re-seating; the ward is still a blanket over a candle, and undoing it runs through the god's own scattered name (the endgame lever). **Loaded fallout now live:** Sabinnet (the buyer's reader) knows whose name it is; and Windreth has heard his own name for the first time (his to play).
     - **SEALED (needs a higher source / the endgame):** ~~*whose* the prize name is~~ (now confirmed); **how the stolen name is *restored*** (runs through the god's assembled name); *what* exactly the Watch keeps; the full **reassemble / scatter / hand-over** trilemma; patron = buyer stated flat; the buyer's true identity; what the faceless god *is*.
+    - **★ SPENT 07-27 (Leg 3b, all earned on player rolls — the erasure craft's *industry* layer):** the buyer's operation **unmakes** what it buys (culvert silt packed with years of pulped paper, names in metallic ink that will not stay in the eye); it buys **forgetting as a wage** (day-hands blank past the chalk line — *"that's what the eight silver's for"*); the instrument is a **book that takes a name** in metallic ink over **grey salt**, and a struck-out name takes its owner's day with it; **spoken** names slide inside the yard too. The **Name-Muffle** (grey-salt suspension) is now in Vale's hands as a working lever on a sealed name — the convergence with the clerk's inkpot is planted and **deliberately unspoken**.
+    - **STILL SEALED after 07-27:** the buyer (a shape filled the lit doorway and did not come out — un-described on purpose); what is inside the stone building past the chalk line; whether the **book** really is the mechanism (the party's own deduction — **do not confirm it**); patron = buyer.
+    - **⏳ LOOSE END, unresolved since 07-19 — SABINNET.** The buyer's own reader was released knowing whose name the prize is. Six days of Far-Quarter play have not touched her. She is the single most dangerous fact in the arc sitting in a person who can walk. Bring her back **as a consequence, not a reminder** — she surfaces when the buyer's side needs a face the party already knows, or when they need a reader who is not the enemy.
     - **Rulings to carry forward:** erasure **does not lift at the scene** — only reaching the source might (Windreth's hope points at a reading, not a quick fix); the prize's ward is a **blanket over a candle, not a lock**, and **reading it on Sesh's floor thins the ward → the hand feels it** (Mave), so a proper reading must be **by a keeper who hands it back, off the floor, reader-and-ground picked first**; **Windreth naming his own lifted name** is the single strongest social key to the prize layer; the faceless buyer is **never a lootable address** (scatter-doctrine). Vale can now **wear the grey man's face at will** (she studied his corpse).
 
 ---
@@ -358,6 +414,13 @@ or campaign. Add sparingly (see "Loose-thread policy"); don't rush to answer the
   the bones of something enormous, older than any story they know, half-drowned in the
   moor. Never named, never explained. A future-campaign seed (an elder thing / a dead
   titan / a first age).
+- **The cistern two centuries older than the wall** _(planted 07-27, under Stair Hill)_ —
+  the culvert Windreth went in by predates everything built on top of it, and whoever laid
+  the grey-salt line put it along the wall because *that is where you put a line*. Somebody
+  drained that hill long before anyone thought a hilltop was worth warding. Never explained.
+- **The washer who is not a blank** _(planted 07-27)_ — she works alone after dark inside a
+  place that eats memory, salts its drain nightly as routine, and remembers. Whether she is
+  staff, warden, or something the yard keeps is deliberately unanswered.
 
 ## Open loops + rulings to honor
 
@@ -378,21 +441,30 @@ or campaign. Add sparingly (see "Loose-thread policy"); don't rush to answer the
 
 ---
 
+## Arc-track check — run 2026-07-27
+
+**Verdict: on track.** Leg 3b is doing exactly what the leg-3 design asked for — *"hunt the
+buyer's money, not his face"* — and the buyer has stayed sealed **because the fiction never
+shows one**, not because the DM refused. The yard's erasure-industry is the Order's craft
+turned commercial, which is on-theme and raises the stakes on THE SEAL rather than diluting
+them. Four things to hold, in priority order:
+
+1. **The tracker has not moved this leg** — see the ⚠ note under the name-assembly tracker.
+   Mechanism ≠ a piece. Don't close Leg 3b without a piece or a hard heading.
+2. **Sabinnet is eight days cold** and still knows whose name the prize is. She is a
+   consequence waiting to be spent, not a loose thread to tie off.
+3. **Patron = buyer is still primed and unconfirmed** — and the Far Quarter is a *better*
+   venue to crack it than Sesh was, because the buyer here has a physical operation. Hold it
+   for an earned beat; do not let it leak out as a deduction the DM hands over.
+4. **Forge's original thread is the least-paid of the three.** Vale's patron-pull runs under
+   everything and Windreth's stolen name *is* the spine, but Forge's "the reader / comprehend
+   it" payoff has never landed — and he now carries both the **Jeweler's Reading-Lens** and a
+   set of **waxed sealed name-scraps**. The tools are in his hands; give him the beat where
+   the smith-eye reads what nobody else can.
+
 ## The immediate next beat (build live)
 
-Vale asked the DM directly (#in-character 07-04 3:18 PM): *"can we get description of
-how far and the terrain, and also what we can find along the way from here to
-there?"* — the road **Ashfall → Palewatch**. Build it live as a travel situation, not
-a script. Skeleton to improvise from:
-
-- **Distance/terrain seed:** grey moor giving way to rising **cliff country** toward
-  the coast/highlands where the Palewatch sits — several days on the **moor-road**
-  (the mode implied; they can still hire a caravan / take the river if they say so).
-- **Two road-beat seeds** (use / drop / reshape): (a) an early sign of the renegade's
-  wake — a wayhouse or traveler that's gone **blank** (someone no one can quite name),
-  planting the antagonist without naming them; (b) a travel challenge that lets each
-  PC's kit matter (Windreth scouts, Forge's endurance/strength, Vale's patron-pull as
-  a compass). Scale per [`big-party.md`](big-party.md) — 3-PC party, more expected.
-- **Then** narrate the approach to Palewatch and let the players decide how they enter
-  (petition the wardens / scout / disguise via Vale's *Mask of Many Faces*). **Never
-  decide their approach for them.**
+**The culvert run, tonight** — all three under the wall, resolved in ONE beat once Forge's
+in/out and the three Stealth rolls land. Then the yard proper: a building they have only seen
+the doorway of, a washer who remembers, and a doorway something filled. Build the interior
+live when they are inside it; **never pre-place the room they haven't walked into.**
