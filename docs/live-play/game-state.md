@@ -76,7 +76,7 @@ recent action timeline are **generated** — read them live, never transcribe th
 | PC | Player | Class (L5) | Char ID | The numbers that keep mattering |
 | --- | --- | --- | --- | --- |
 | **Windreth** (he/him) | posts as `Windreth` | Rogue 5 Thief, elf | `b2c436da-6762-458f-8016-3fe8f18e35e6` | Stealth **+10** & Investigation **+6** (both expertise) · SoH +7 · Perception +5 · STR 8 |
-| **Forge Anvilbearer** (he/him) | `JonathanEka` | Barbarian 5 Berserker, dwarf | `d2d98745-d322-4380-924f-3296a0c447b7` | Athletics +5 · Insight +3 · greataxe is two-handed (a shield costs him GWM) |
+| **Forge Anvilbearer** (he/him) | `JonathanEka` | Barbarian 5 Berserker, dwarf | `d2d98745-d322-4380-924f-3296a0c447b7` | Athletics +5 · Insight +3 · greataxe is two-handed (a shield costs him GWM) · **AC 14 while stripped in the culvert**, 16 with the breastplate back on |
 | **Vale** (she/her) | `dewa` (the user) | Warlock 5 Fiend, tiefling | `b6ca7f49-c173-4290-8c80-6fb785fbe733` | Deception **+7** (proficient) · Persuasion +4 (raw CHA 18, *not* proficient) · Stealth **+0** · AC from *Armor of Shadows*, no armour equipped · spell DC 15 |
 
 `dewa` is the user's own account and also speaks for the party as a whole ("we pivot…") —
@@ -86,6 +86,17 @@ a declaration from `dewa` is not automatically Vale's action.
 - **Forge's `player_characters` row is `status=rejected`** (stale since the 07-03 L4 rework — plays
   fine; his party-overview card is missing, so out-of-combat status edits go via
   `POST /api/character-overview/d2d98745…/status`).
+- **⚠ Never read worn/held gear from the `inventory` jsonb.** The scalar columns
+  `equipped_main_hand` / `equipped_off_hand` / `equipped_armor` are what combat actually reads, and
+  the two stores drift. Caught live 07-27: Forge's jsonb listed **no armour at all** while
+  `equipped_armor` said `breastplate` (the real source of his AC 16) — the DM narrated a strip as
+  costing nothing and had to correct it publicly. In the same sheet the jsonb had **Greataxe *and*
+  Handaxe both `equipped:true` in `main_hand`** while the scalar correctly held only the greataxe —
+  the recurring duplicate-slot bug. Both reconciled by a builder PUT (`worn_armor:""`, plus pushing
+  `breastplate` onto `equipment` so it survives as carried-not-worn); the PUT is additive, so HP,
+  gold, rage uses and all quest items were preserved. Note the field names differ between layers:
+  the builder submission calls it `equipped_weapon` / `worn_armor`, the table calls it
+  `equipped_main_hand` / `equipped_armor`.
 
 ## Maps
 
@@ -186,9 +197,7 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    pipe. Two live pressures, both already on the table — the **dwelling lantern** behind and the
    **washer** ahead. Don't prompt their levers (Name-Muffle, Mage Hand, minor illusion, waiting,
    or simply going past her); let them find them. **Non-lethal MO stands until a player flips it.**
-   Note also: **Forge owns no armour on his sheet** — "stripping" was fiction, no mechanical change
-   is owed — and his **Greataxe + Handaxe are both `equipped:true` in `main_hand`**, the known
-   duplicate-slot bug, live and unfixed.
+   **Forge is AC 14 while stripped** (see the equipment note below).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
