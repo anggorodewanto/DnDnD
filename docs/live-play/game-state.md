@@ -145,18 +145,26 @@ unlisted crew) and Vale (riding the cart's under-bed sling) might be the first i
 and keep it.**
 
 **The live beat:** they pivoted off the dawn plan — *"we sneak in through the way Windreth
-found, now"* — so all three are going down the culvert tonight. Awaiting **Forge's in/out** (the
-drain narrows to a throat at the wall's footing: a dwarf in mail goes stripped or not at all)
-and **Stealth from all three** at the water margin, where a watch skiff is dragging the cut.
+found, now"* — and **all three are now inside the culvert throat** (Windreth → Vale → Forge;
+40 ft of stone, no room to turn around). Forge declared **in, stripped**, kit cached in the reeds.
+Water-margin Stealth resolved at **DC 14 — Windreth 26 ✅ / Forge 18 ✅ / Vale 7 ❌.** The failure
+paid out exactly as pre-declared, *not* as a capture: her boot went on the salt-polished lip,
+Windreth's margin caught her before the scrape became a splash, and **the watch skiff's lantern
+swung, stopped, and now dwells on the culvert mouth** — it doesn't know what it heard, but it
+sits on the one proved exit. Windreth's +12 also bought the read ahead: **the washer is inside
+that grate right now**, sweeping and salting. Lantern behind, washer ahead. Their move.
 
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), what is inside the stone building past the chalk line, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** two sunk counters in the canal ~1.5 days into a 1–3 day fuse · the watch now
-dragging the cut **at night** · the gate-post found by the relief watch · **the countersign has
-rotated — it is now a wrong answer delivered confidently** · COL the Collector loose with all
-three faces · a bakery yard man has seen them at the counter.
+**Clocks:** **🔴 the dwelling lantern** — a watch skiff's light stopped on the culvert mouth,
+blocking the proved exit and sitting over Forge's cached kit · **the washer's night round**,
+happening now on the inside of the grate (no weapon, no lantern, *remembers*) · two sunk counters
+in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
+gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
+delivered confidently** · COL the Collector loose with all three faces · a bakery yard man has
+seen them at the counter.
 
 **Owed to a player:** **Windreth's second bonus action**, credited to his first turn of the next
 combat (a debt of the DM's isn't cancelled by a fight ending).
@@ -174,9 +182,13 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    #roll-history — and again *immediately before* writing a compressed beat. The one-beat tempo
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
-2. **Resolve the culvert run in ONE beat** once Forge's in/out and the three Stealth rolls land
-   (or Windreth's Perception timing-buy). Failure at the water margin is **a lantern that stops
-   and dwells**, not a capture — keep bad dice as clock pressure.
+2. **The culvert run resolved 07-27** (one beat, as designed). Next: whatever they declare in the
+   pipe. Two live pressures, both already on the table — the **dwelling lantern** behind and the
+   **washer** ahead. Don't prompt their levers (Name-Muffle, Mage Hand, minor illusion, waiting,
+   or simply going past her); let them find them. **Non-lethal MO stands until a player flips it.**
+   Note also: **Forge owns no armour on his sheet** — "stripping" was fiction, no mechanical change
+   is owed — and his **Greataxe + Handaxe are both `equipped:true` in `main_hand`**, the known
+   duplicate-slot bug, live and unfixed.
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
