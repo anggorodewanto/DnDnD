@@ -240,6 +240,17 @@ gate-post found by the relief watch · **the countersign has rotated — it is n
 delivered confidently** · COL the Collector loose with all three faces · a bakery yard man has
 seen them at the counter.
 
+**Pinned by a To-DM answer (Forge's player asked whether the grate is gone and whether they can
+roam):** answered OOC in #in-character, no beat spent, and the answers are now table-facts that
+must be honoured. **The grate is an open drain mouth, passable at a crouch, both ways, unlimited** —
+a guaranteed exit that also guarantees discovery. **Nothing is watching that yard: no dog, no
+patrol, no watchman, no alarm raised — nobody in the world knows they are in there**, because the
+windowless building cannot see out (the same fact that stopped them seeing in). **Moving around an
+empty yard costs no check.** What "freely" does *not* cover was stated too: the building itself is
+shut and barred from within; they have looked at exactly **one face of it**; the stair gate is the
+clerk's gate and this is not first light; the wall's top course is still unbroken grey salt. **Do
+not retcon a watcher into this yard later** — the quiet was earned and was promised out loud.
+
 **Owed to a player:** **Windreth's second bonus action**, credited to his first turn of the next
 combat (a debt of the DM's isn't cancelled by a fight ending).
 
