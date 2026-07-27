@@ -202,6 +202,15 @@ big-party technique is in [`big-party.md`](big-party.md).
   rounds of detailed step by step. Compact it concisely into generalized chain of
   action. This group likes problem solving and combat, but no long multi-beat RP."*)
   Corollaries:
+  - **Re-poll #in-character immediately before writing a compressed beat** — not just at
+    the top of the turn. Compression multiplies a stale read: one beat now asserts a
+    dozen steps, so an unseen declaration means a dozen wrong assertions instead of one.
+    (Real correction 07-27, the *first* beat under this rule: a narration had the party
+    stacking the crate, hiding the bodies under a floor-hatch, and shadowing an NPC —
+    while a declaration sinking the crate, sinking the bodies, and going straight to the
+    destination had been sitting unread in #in-character for 35 minutes.) When it does
+    happen, **rewind publicly and at zero cost.** That promise is what buys the licence
+    to compress; pay it immediately and without argument.
   - **Roll only what has a real failure state**, and prefer **one roll for the whole
     plan** over one per step. Everything else is narrated as done.
   - **Free actions stay free and stay silent** — do them on the party's behalf as part
