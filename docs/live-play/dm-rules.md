@@ -189,6 +189,30 @@ big-party technique is in [`big-party.md`](big-party.md).
   stacked style. Simpler is not flatter — stay vivid and atmospheric — but a player skimming on
   a phone should get the beat in one pass. Applies to the read-aloud prose **and** the OOC coda.
   (Player feedback 07-02: *"use simpler English for the DM story."*)
+- **Resolve non-combat action in ONE compressed beat — this table does not want
+  multi-beat RP.** When the party declares an out-of-combat plan, take the whole
+  declared chain and resolve it end to end in a single exchange: state the outcome,
+  fold in whatever dice it genuinely needed, and land on the next real decision or
+  the next encounter. **Do not** split a plan into a checklist the players have to
+  answer item by item, do not ask for a separate declaration per step, and do not
+  spend a beat on housekeeping that has no failure state (lighting a lamp, moving a
+  crate, tying a prisoner, walking two streets). Generalize: *"you dress the floor,
+  deliver the crate, and put the bodies under the hatch"* is one line, not three
+  rounds. (Player direction 07-27: *"less detailed action in RP — no need multiple
+  rounds of detailed step by step. Compact it concisely into generalized chain of
+  action. This group likes problem solving and combat, but no long multi-beat RP."*)
+  Corollaries:
+  - **Roll only what has a real failure state**, and prefer **one roll for the whole
+    plan** over one per step. Everything else is narrated as done.
+  - **Free actions stay free and stay silent** — do them on the party's behalf as part
+    of the compressed result rather than asking permission for each. This is *not* a
+    licence to narrate player choices: it covers the mechanical follow-through of a
+    plan they already declared, never a new decision, a new target, or dialogue.
+  - **Keep the OOC coda short** — the menu still matters (it's how the spotlight moves),
+    but 2-3 options and the decision at stake, not an itemized ledger of loose ends.
+  - **The two things worth spending beats on are problem-solving and combat.** Puzzles,
+    plans with real trade-offs, heists, and fights get room. Travel, cleanup, shopping,
+    and mood-setting get a sentence. When in doubt, cut to the next problem.
 - **Adjudicating rolls & reveals — the patterns that hold this campaign's mystery
   together** (distilled from a full arc of live rulings; the blow-by-blow is in
   [`sessions/`](sessions/), the arc state in [`campaign-arc.md`](campaign-arc.md)):
