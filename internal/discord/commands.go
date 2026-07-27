@@ -502,8 +502,12 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "type",
-					Description: "Rest type: short or long",
+					Description: "Rest type",
 					Required:    true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "short (1 hour — hit dice, short-rest features)", Value: "short"},
+						{Name: "long (8 hours — full HP, slots, hit dice)", Value: "long"},
+					},
 				},
 			},
 		},

@@ -199,6 +199,40 @@ func TestCommandDefinitions_NoParamCommands(t *testing.T) {
 	}
 }
 
+// TestCommandDefinitions_RestTypeChoices verifies /rest offers "short" and
+// "long" as a Discord choice picker instead of a free-text field, so players
+// select the rest type the same way they toggle advantage on /roll.
+func TestCommandDefinitions_RestTypeChoices(t *testing.T) {
+	cmd, ok := commandMap()["rest"]
+	if !ok {
+		t.Fatal("command rest not found")
+	}
+
+	var opt *discordgo.ApplicationCommandOption
+	for _, o := range cmd.Options {
+		if o.Name == "type" {
+			opt = o
+			break
+		}
+	}
+	if opt == nil {
+		t.Fatal("rest option type not found")
+	}
+
+	want := []string{"short", "long"}
+	if len(opt.Choices) != len(want) {
+		t.Fatalf("expected %d choices, got %d", len(want), len(opt.Choices))
+	}
+	for i, value := range want {
+		if opt.Choices[i].Value != value {
+			t.Errorf("choice %d: expected value %q, got %v", i, value, opt.Choices[i].Value)
+		}
+		if opt.Choices[i].Name == "" {
+			t.Errorf("choice %d: expected a display name", i)
+		}
+	}
+}
+
 // TestCommandDefinitions_ReactionSubcommands verifies /reaction is a
 // subcommand group with declare/cancel/cancel-all. Phase 106c restructured
 // the command so the Discord handler can route declare vs cancel vs
