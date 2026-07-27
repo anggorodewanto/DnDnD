@@ -97,6 +97,11 @@ a declaration from `dewa` is not automatically Vale's action.
   gold, rage uses and all quest items were preserved. Note the field names differ between layers:
   the builder submission calls it `equipped_weapon` / `worn_armor`, the table calls it
   `equipped_main_hand` / `equipped_armor`.
+- **⚠ Known sheet-vs-fiction drift, opened 07-27:** the **breastplate is still in Forge's
+  `equipment` as carried-not-worn** while, in the fiction, it is in the bottom of a watch skiff
+  going down-cut. **AC 14 is correct either way**, so no mutation was made — remove it from the
+  sheet only if the party abandons the chase. Flagged here so it doesn't quietly rot into the same
+  two-stores drift described above.
 
 ## Maps
 
@@ -156,22 +161,33 @@ unlisted crew) and Vale (riding the cart's under-bed sling) might be the first i
 and keep it.**
 
 **The live beat:** they pivoted off the dawn plan — *"we sneak in through the way Windreth
-found, now"* — and **all three are now inside the culvert throat** (Windreth → Vale → Forge;
-40 ft of stone, no room to turn around). Forge declared **in, stripped**, kit cached in the reeds.
-Water-margin Stealth resolved at **DC 14 — Windreth 26 ✅ / Forge 18 ✅ / Vale 7 ❌.** The failure
-paid out exactly as pre-declared, *not* as a capture: her boot went on the salt-polished lip,
-Windreth's margin caught her before the scrape became a splash, and **the watch skiff's lantern
-swung, stopped, and now dwells on the culvert mouth** — it doesn't know what it heard, but it
-sits on the one proved exit. Windreth's +12 also bought the read ahead: **the washer is inside
-that grate right now**, sweeping and salting. Lantern behind, washer ahead. Their move.
+found, now"* — and went down the culvert, all three (Windreth → Vale → Forge; 40 ft of stone, no
+room to turn around). Forge declared **in, stripped**, kit cached in the reeds. Water-margin
+Stealth resolved at **DC 14 — Windreth 26 ✅ / Forge 18 ✅ / Vale 7 ❌**; the failure paid out as
+pre-declared and *not* as a capture — a scrape, not a splash — but a watch skiff's lantern
+stopped and dwelt on the culvert mouth. **Vale answered it with a minor illusion** (a rat falling
+in and swimming off) and it worked cleanly: **no roll owed** — seeing through it requires a
+creature to take the **Study** action against her **DC 15**, and a bored skiff-hand at 40 ft in
+the dark is not studying anything. He said *"Rat,"* took the light off the mouth, and poled on.
+**The cost landed on the kit instead:** the lantern raked the reed line on the turn and he hooked
+**Forge's breastplate** out of the mud as *salvage* — it is now in the bottom of a watch skiff
+going down-cut, unconnected to anyone, and boats tie up somewhere. That consequence was
+**planted, not sprung** (the kit was stated as recoverable *and findable* when it was cached).
+They crossed the forty feet under the illusion's own noise — a second payout of the same cantrip
+— and are now **at the eaten grate**, iron gone to pencil-lead. **The washer is ~2 minutes out
+and coming here:** she works the broom and grey salt back from the chalk line, and **her round
+ends at this grate** (she salts it from the inside nightly, which is why it is eaten). No weapon,
+no lantern, *remembers*. Their move.
 
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), what is inside the stone building past the chalk line, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 the dwelling lantern** — a watch skiff's light stopped on the culvert mouth,
-blocking the proved exit and sitting over Forge's cached kit · **the washer's night round**,
-happening now on the inside of the grate (no weapon, no lantern, *remembers*) · two sunk counters
+**Clocks:** **⏳ the washer's night round** — ~2 minutes out and *ending at their grate* (no
+weapon, no lantern, *remembers*) · **🔴 Forge's breastplate on a watch skiff**, taken as salvage
+and going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's
+breastplate pulled from a canal is a thread the watch now holds · ~~the dwelling lantern~~
+(cleared by the illusion) · two sunk counters
 in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
 gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
 delivered confidently** · COL the Collector loose with all three faces · a bakery yard man has
@@ -193,11 +209,12 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    #roll-history — and again *immediately before* writing a compressed beat. The one-beat tempo
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
-2. **The culvert run resolved 07-27** (one beat, as designed). Next: whatever they declare in the
-   pipe. Two live pressures, both already on the table — the **dwelling lantern** behind and the
-   **washer** ahead. Don't prompt their levers (Name-Muffle, Mage Hand, minor illusion, waiting,
-   or simply going past her); let them find them. **Non-lethal MO stands until a player flips it.**
-   **Forge is AC 14 while stripped** (see the equipment note below).
+2. **The culvert run and the lantern both resolved 07-27** (one beat each, as designed). Next:
+   whatever they declare at the grate, against **~2 minutes of the washer's pace**. Don't prompt
+   their levers (Name-Muffle, another illusion, letting her finish and pass, going through before
+   she arrives, or simply letting her find them); let them find them. **Non-lethal MO stands
+   until a player flips it.** **Forge is AC 14** and stays that way — his breastplate left with
+   the skiff (see the equipment note below).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
