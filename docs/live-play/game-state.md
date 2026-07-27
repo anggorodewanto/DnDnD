@@ -189,17 +189,49 @@ erase, pointed at them. **Vale is holding the yard's sound** with a working-nois
 from twenty minutes of listening (1 min / 30 ft / max 3 active — it needs renewing). And with the
 yard quiet and theirs, they heard what her broom had been covering every night: **from inside the
 windowless stone building, past the chalk line, at this hour with no lamp lit — paper, a great
-deal of it, worked by hands.** The chalk line is still uncrossed. Their move.
+deal of it, worked by hands.**
+
+**Then they crossed the chalk line, and nothing happened.** Their declaration was *"we approach
+the building, trying to see what is going on inside"* — and the building sits past the line, so
+the line went with it. **No roll:** a windowless building has no eyes, they had already removed
+the only watcher in that yard, and Vale's mask was manufacturing their exact kind of noise on wet
+flagstone while they walked on wet flagstone. Crossing was never a check; it was a bet they had
+placed an hour earlier. **Nothing took anything from them — and I told them plainly that this is
+evidence for their theory and not proof of it**, because they do not know whether the bill is
+presented at the line, at the gate, or at dawn. It stays unconfirmed.
+
+They followed a **hand's-width runnel** cut arrow-straight from the building's foot back to the
+drain they came up through — the grey water's path, and therefore the source of the pulped paper
+in the culvert silt: they walked up the far end of the thing they crawled in through. **The
+building has one door** — iron-strapped, no keyhole outside, barred from within — with the
+flagstone before it scrubbed to a pale blister about four feet wide, worn like a threshold one man
+crosses daily carrying something flat. **No window, no vent, no seam of light anywhere.** So the
+honest answer to *see inside* was **there is nothing to see**: the work happens in the pitch dark.
+The answer arrived through a different sense instead of being refused — at the wall's foot the
+runnel ends in a **low arch a hand's breadth high**, the water's exit, breathing warm wet air sour
+with soaked paper and grey salt. Through it: **several pairs of hands, not one. Nobody talking.**
+And under the hands **a single flat unhurried voice reading one word at a time, with a pause after
+each — and after each pause, a small wet sound. Paper going into water. Then the next word.** The
+words themselves are unintelligible through a hand's breadth of stone. Something in there is
+**named aloud and then unmade, item by item.** Their move.
+
+**The cost of their own success, surfaced not sprung:** at the wall Vale is ~50 ft from the
+washer-noises, and minor illusion is 1 min / 30 ft — **she cannot renew the mask from where she is
+standing.** Walk back into range, or cast fresh working-noises at the wall and put the washer's
+broom somewhere it has never been in twenty years. Theirs to solve.
 
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
-deliberately un-described), what is inside the stone building past the chalk line, how THE SEAL
+deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 the washer** — down, alive, in the open, and she *remembers*: she wakes up
-eventually and she is the only witness this system can't erase · **🔴 the destroyed grate** — a
-hole that can't be closed, on iron she salts nightly, and still their only proved exit ·
-**⏳ Vale's mask** — the yard's working-noise illusion on a 1-minute renew, within 30 ft, the only
-thing covering the silence · **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
+**Clocks:** **🔴 the washer** — down, alive, in the open *between them and their only exit*, and
+she *remembers*: she wakes up eventually and she is the only witness this system can't erase ·
+**🔴 the destroyed grate** — a hole that can't be closed, on iron she salts nightly, and still
+their only proved exit · **⏳ Vale's mask, now out of range of its own target** — 1 min / 30 ft,
+and she is ~50 ft from it at the wall · **📄 the voice in the stone building** — reading and
+drowning things one at a time in the dark, words unintelligible from outside ·
+**🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
+**🔴 Forge's breastplate on a watch skiff**, taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
 pulled from a canal is a thread the watch now holds · ~~the dwelling lantern~~ (cleared by the
 illusion) · two sunk counters
@@ -224,18 +256,24 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    #roll-history — and again *immediately before* writing a compressed beat. The one-beat tempo
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
-2. **The culvert run, the lantern, and the washer ambush all resolved 07-27** (one beat each, as
-   designed). Next: whatever they declare **inside the outer yard** — a body at their feet, a hole
-   behind them, a mask on a 1-minute renew, and paper being worked thirty feet past a chalk line
-   nobody has crossed. Don't prompt their levers (the Name-Muffle, the washer as someone who can
-   be *asked* rather than merely left, more illusion, the line itself); let them find them.
-   **Non-lethal MO stands until a player flips it.** **Forge is AC 14** and stays that way — his
-   breastplate left with the skiff (see the equipment note below).
-   **Two adjudications worth reusing:** hold established physical constraints against a group
+2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
+   beat each, zero dice across all four). Next: whatever they declare **at the wall** — a barred
+   door, a hand's-breadth water mouth, a voice reading and drowning things in the dark, a mask
+   about to lapse out of range behind them, and a body in the open between them and their exit.
+   Don't prompt their levers (the Name-Muffle, the washer as someone who can be *asked* rather
+   than merely left, more illusion, Mage Hand through the outflow, the door, making light); let
+   them find them. **Non-lethal MO stands until a player flips it.** **Forge is AC 14** and stays
+   that way — his breastplate left with the skiff (see the equipment note below).
+   **Four adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
-   with the reversible alternative priced), and **substitute the tool while honouring the intent**
+   with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
-   subdue-and-KO was resolved with the blade, flagged in-post, free rerun offered).
+   subdue-and-KO was resolved with the blade, flagged in-post, free rerun offered);
+   **answer the declared question through a different sense rather than refusing it** (they asked
+   to *see* into a building that physically has nothing to see into, so the answer came by ear
+   through the water outflow — a real answer, and the *next* step priced honestly rather than
+   rolled); and **charge their own success** (the mask that bought them the yard cannot reach the
+   yard from where the mask's success let them stand).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
