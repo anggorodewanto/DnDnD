@@ -221,8 +221,44 @@ not a retroactive gotcha:
   (Vale is adjacent to the reader at O6/P6). Do not conflate that with the hide; only *advantage*
   is denied.
 
-**🧭 TURN STATE:** action spent (Study), **bonus action available + the owed second**, 15 ft,
-1 attack, reaction. **⏭ Still Windreth's turn.**
+**🏃 HE RAN, AND THE HOUSE LET HIM.** Windreth spent the refunded bonus on **Cunning Action: Dash**
+(11:40Z) and moved **P5 → G5 — the full 45 ft, straight west, with the book** (11:41Z). He never
+attacked. Turn closed 11:41:18Z with **reaction unspent**. Leaving reach at O5 queued an
+**opportunity attack for the man at the stand** (`1759def9-e3d3-4b5e-95a9-c4862b899f81`).
+
+**⚔️ THE OA WAS DECLINED — the antagonist's win condition is the book, and he did not reach for
+it.** Narrated in #the-story `f8868674-e117-48e8-ab09-0b7bce676d18`, queue resolved 204 at 11:53Z,
+mechanical note #in-character `1531630643455328316`. His hand *"has been up since the book left it.
+It does not close. It does not follow."* He tracks Windreth the whole 45 ft with his chin level and
+**his eyes doing none of the work**, keeps turning **past** him to the west doorway, and says one
+line: **"Mind the yard."** Ambiguous on purpose — this room *is* inside the Stair Hill yard, so it
+reads as threat or as genuine warning and the DM never picks. **No watcher was added outside; the
+pinned promise holds.** The seven did not move and **not one of them turned to watch the book go.**
+**His reaction is therefore still up, and the table was told so** — the decline is one ruling, not a
+promise about the next one.
+
+**🚪 MAP FACTS PUBLISHED (BFS'd off `maps.tiled_json`, map `6081877c-…`, 18×12, 48 px tiles).** Two
+exits, both already visible on the rendered map, so distances were given rather than hidden:
+**west doorway = the gap in the west wall at rows 6–7** (Windreth at G5 is **~30 ft** off it — he
+ran 45 ft and is **still inside**); **south doorway = the gap in the south wall at cols I–J**
+(Forge at N7 = **25 ft**, Vale at O6 = **30 ft**). East and north walls are solid.
+
+**❓ VALE'S TO-DM ANSWERED (11:48Z, "if we go out while carrying the book, do we exit combat?").**
+Yes — **all three out a doorway and the encounter ends**, they keep the book, and the outside is
+played in the open with no rounds. *"I am not going to make you roll dice to walk down a corridor."*
+Three caveats stated **before** anyone moves: his reaction is up and **Vale at O6 is adjacent, so
+moving provokes** (she is a warlock — Disengage costs her whole action, and that trade is hers to
+make); **leaving the room is not leaving the yard**; and **the delivery clock does not pause.**
+
+**↩️ THE OWED BONUS ACTION CARRIES.** The refunded one went to Dash, which is what it was refunded
+for. The **07-27 culvert bonus action is still owed**; his turn is closed and there is no rewind,
+so it was booked publicly as **credit on his round 2 turn**. Not lost.
+
+**🧭 TURN STATE:** **⏭ Forge is up** (active 11:41:18Z — action, bonus, reaction, **2 attacks,
+35 ft**, nearest exit 25 ft south). Then the man at the stand, then Vale. Windreth: turn closed,
+book in hand, at G5, **reaction unspent**. Party intent from #player-chat is unambiguous —
+*"retreat?"*, *"moco buku nang njobo"* (read the book outside), *"hooh coba wae kita pergi"* — so
+**the likely next beat is the encounter ending on an exit, not on a kill.**
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
