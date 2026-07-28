@@ -97,11 +97,14 @@ a declaration from `dewa` is not automatically Vale's action.
   gold, rage uses and all quest items were preserved. Note the field names differ between layers:
   the builder submission calls it `equipped_weapon` / `worn_armor`, the table calls it
   `equipped_main_hand` / `equipped_armor`.
-- **⚠ Known sheet-vs-fiction drift, opened 07-27:** the **breastplate is still in Forge's
-  `equipment` as carried-not-worn** while, in the fiction, it is in the bottom of a watch skiff
-  going down-cut. **AC 14 is correct either way**, so no mutation was made — remove it from the
-  sheet only if the party abandons the chase. Flagged here so it doesn't quietly rot into the same
-  two-stores drift described above.
+- **⚠ Known sheet-vs-fiction drift, opened 07-27 — AND IT BIT A PLAYER 07-28.** The **breastplate is
+  still in Forge's `equipment` as carried-not-worn** while, in the fiction, it is in the bottom of a
+  watch skiff going down-cut. `equipped_armor` is correctly empty and **AC 14 is right either way**,
+  so no mutation was made — remove it from the sheet only if the party abandons the chase.
+  **07-28: Forge's player read that line and declared "equipping his breastplate" mid-scene.** Ruled
+  in the open, charged nothing, AC unchanged, and the line was re-read for the table as a *recovery
+  thread, not an item in hand*. If it bites a second time, delete it from `equipment` and keep the
+  skiff purely as a fiction hook.
 
 ## Maps
 
@@ -355,6 +358,28 @@ to a name on it is theirs to work out. The mockery cost nothing visible, which *
 are now the party carrying a word this room cannot process, refusing its provenance, and asking to be
 shown who stands above him — interesting to a house whose whole trade is interest in names.
 
+**Then Forge stepped up and put the axe in the air.** *"Forge comes and make appearance. Equipping his
+breastplate. Brandishing his greataxe without hesitation, 'So, anyone want to talk to my boss.'"* Two
+rulings, both said in-post. **(a) The breastplate is not there and it cost him nothing.** He went into
+the culvert *stripped* — that is what got a dwarf through the drain — and the watch skiff took the
+plate down-cut last night; **AC 14 unchanged, no penalty applied**, and the sheet's carried-gear line
+was re-read for the table as **a recovery thread, not an item in his hands**. Free reversal offered
+and priced honestly: the version where he is wearing it is the version where he is not in the room.
+**(b) Brandishing is a display and a display cannot fail**, so no roll — and **the room did nothing.**
+Not one of the seven lifted a head; *a greataxe is not a name*, the third time that rule has held.
+What it *did* buy is real and was named as such: **his attention came off Vale and onto Forge**, the
+first time all night he has changed who he is talking to. **Still no initiative** — a raised axe is
+not a swing, and the table was told the word *swings* starts it.
+
+**And the reader turned the threat straight back into the trade.** He did not step back, reach, or
+call out. He looked at the **flat** of the blade and along the haft — *at the places where a smith
+stamps a mark and a dwarf cuts a word* — and said *"You say boss. That is a title. I can say a
+title."* Then he laid two fingers on the empty line: ***"Does it have a name?"*** Flagged in-post
+rather than sprung: **the trap is built out of the players' own words** — they held up an object and
+called it a boss, and he asked the only question his trade knows. Told them plainly I am still not
+saying what the book does to a written name, and pointed out that **he asked about the axe and not
+about them** — *mercy or shopping* is theirs to decide.
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -370,9 +395,13 @@ room it arrives at, and the timing is withheld but askable · ~~**🗣 "Do you h
 (spent — she answered with a question and a prop, and he let it go for a better one) ·
 **🗣 "Where did you get a piece I cannot say?"** — asked, **dodged**, and *left lying there*: he said
 *"You did not answer me"* and did not press, so it is still owed and he still wants it ·
-**📖 THE PRICE ON THE LINE** — **the new live offer, and it is his**: a name written on the book for a
+**📖 THE PRICE ON THE LINE** — **the live offer, and it is his**: a name written on the book for a
 name read off it, one for one, both aloud. **What the book does to a written name is unstated and
-stays unstated** · **🔥 the fragment he cannot read** — the yard's
+stays unstated** · **🪓 "DOES IT HAVE A NAME?"** — the same price, now aimed at **Forge's greataxe**,
+because he held it up and called it his boss; his two fingers are on the empty line and the axe is
+**unnamed on the sheet**, so whatever gets said is the players' invention ·
+**🛡 THE BREASTPLATE IS NOT IN THE ROOM** — ruled out loud when Forge tried to equip it; the culvert
+strip is what got him in, the skiff has it, **AC 14 unchanged**, sheet line = recovery thread · **🔥 the fragment he cannot read** — the yard's
 first proved limit, now witnessed by him *and* by the seven · **🏷 every word for the people above
 him is a title, never a name** — Weighmaster, boss, the third of the month; given free, meaning
 withheld · **👁 eight in the room** — seven
@@ -424,8 +453,10 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    all resolved 07-28**, the **name question was answered 07-28 with a question and a prop**, and his
    follow-up (*where did you get it*) was **dodged 07-28** — she put the scrap away mockingly and
    demanded his boss, so **he quoted a price instead of answering: a name on the book's next empty
-   line, for a name read off it.** The open question posted to the table is now
-   ***"He wants a name for the line. What do you put on it — or what do you do instead?"*** Next:
+   line, for a name read off it.** **Forge then brandished the greataxe and called it his boss
+   (07-28) — no roll, no initiative, the room did not react, and the reader aimed the same price at
+   the axe: *"Does it have a name?"*** The open question posted to the table is now
+   ***"Does the axe have a name — and are you going to say it in here?"*** Next:
    whatever they do with that offer — **and the whole faceless-god arc is now standing
    in the room**, so keep the buyer, "patron = buyer", and the book deduction all sealed while
    answering honestly about *this room*. **Do not narrate what a written name costs**; if they write
@@ -438,7 +469,7 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
    before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
    equipment note below).
-   **Thirteen adjudications worth reusing:** hold established physical constraints against a group
+   **Fifteen adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -478,7 +509,17 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    offering *a name written on the book for a name read off it* — which is not a no, costs the DM
    no seal, is priced in exactly the resource the arc is about, and makes the players' own book
    deduction supply the dread that the DM must not confirm. Say what the price **is** and refuse to
-   describe **the goods**).
+   describe **the goods**); and
+   **when a declaration reaches for gear the fiction already took away, rule it in the open and
+   charge nothing** (Forge declared he was equipping a breastplate that has been in a watch skiff
+   since last night — the drift was surfaced in-post, **AC 14 confirmed unchanged with no penalty
+   applied**, the misleading sheet line was re-read for the table as a *recovery thread*, and the
+   reversal was priced honestly rather than refused: wearing it means not fitting through the drain,
+   i.e. not being in the room. **Never let a stale sheet line silently eat a player's beat**); and
+   **flag a trap made of the players' own words instead of springing it** (they held an object up and
+   called it a boss inside a house that buys names, so the NPC asked whether it *has* one — and the
+   table was told plainly that the hook is theirs, that the book's cost is still unstated, and that
+   *he asked about the axe and not about you* is theirs to read as mercy or as shopping).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
