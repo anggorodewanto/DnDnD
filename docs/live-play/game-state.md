@@ -309,6 +309,31 @@ nobody has touched it, and opening it from inside is a pull with no check and no
 were ruled inside** when it closed, since nobody declared otherwise and Windreth had his hand on the
 door; **his player can put him on the yard side instead, free, with no roll and no retcon tax.**
 
+**She did not answer it.** *"I was hoping you would tell me"* — and then she **showed, without
+giving,** the faceless god's name-scrap, held in her own hand at ten feet and never inside his reach.
+**No roll was charged and the reason was said out loud:** showing cannot fail, and his reaction was
+physical enough that no check was needed to read it. **He tried to read it.** His lips shaped it the
+way they had shaped *Tallow* and *Third of the month* — and **no sound came out.** He tried twice,
+with no strain and no drama, the way a man tries a door he is certain of, then wet his lips and
+stopped trying. **Behind him all seven pairs of hands stopped over the water at once**, dripping
+where they were, nobody turning, nobody looking — the room that ignored a door coming off its bar
+went completely still over a scrap none of them had looked at — and then went back to work at
+exactly the old rhythm without a sound. He took his hand off the book, turned fully toward her (the
+first whole attention anything in that room has given anything), and said: ***"I do not give names.
+I take them."*** … ***"That is not a name. That is a piece of one."*** … ***"Where did you get a
+piece I cannot say?"***
+
+**What that bought:** this yard **cannot unmake that fragment** — he unmade a woman's whole day one
+slip at a time tonight and could not get one stroke of the scrap off the page and into the air; and
+**the seven do not react to people, they reacted to a name**, which spends part of the blank Forge's
+Insight found. **What it did not buy, said in-post:** whether he knows what he was looking at, whose
+name it is, or anything about who this room works for — *he asked her*, and the table was told
+explicitly that I am not saying whether he can't answer or won't. And it was flagged as **evidence,
+not proof**, for their book theory: a room tuned to names is not a book that eats days. Two
+assumptions stated as free to reverse: the prop read as the **Name-Scrap (Faceless Mark)** (swap to
+the Ashen Face-Shard / Grey Clay Face-Disc / patron-conduit on request, rerun at no cost), and
+"shows, not gives" read as never released and never in reach — **he did not reach for it.**
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -320,10 +345,13 @@ their only proved exit · **🔴 Vale's mask has LAPSED** — the minute ran out
 be renewed from the wall, so the yard is now silent and nothing covers them; recastable, but only
 *here* · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
 **⏰ the delivery** — something is due at that door, they are early for it, they are standing in the
-room it arrives at, and the timing is withheld but askable · **🗣 "Do you have a name for me?"** —
-live, unanswered, and deliberately unpriced · **👁 eight in the room, unbothered** — seven pulping,
-one reading, no alarm, no attack, no initiative; not unaware, just indifferent, and the seven give
-off no social signal at all (a good Insight came back blank), and *why* is unspent ·
+room it arrives at, and the timing is withheld but askable · ~~**🗣 "Do you have a name for me?"**~~
+(spent — she answered with a question and a prop, and he let it go for a better one) ·
+**🗣 "Where did you get a piece I cannot say?"** — **the new live question**, his, and the first
+thing he has wanted more than the delivery · **🔥 the fragment he cannot read** — the yard's
+first proved limit, now witnessed by him *and* by the seven · **👁 eight in the room** — seven
+pulping, one reading, no alarm, no attack, no initiative; **the seven broke their blank exactly
+once, for a name, and went straight back to work**, and *why* is still unspent ·
 **🧂 the broken threshold salt** — the second salted boundary they have broken tonight, in a place
 that checks its salt nightly · **📄 the voice in the stone building** — now audible and reading a
 day apart, piece by piece ·
@@ -366,9 +394,12 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
 2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
    beat each, zero dice across all four); **the door, the slam, and the room's first conversation
-   all resolved 07-28.** The open question posted to the table is verbatim ***"He is waiting. What
-   do you say?"*** Next: how they answer **"Do you have a name for me?"** — put to Vale, live,
-   unanswered. **That question is the whole beat: do not steer it and do not price it.** Two
+   all resolved 07-28**, and **the name question was answered 07-28 with a question and a prop.**
+   The open question posted to the table is now **his**, verbatim ***"He has asked you where you got
+   a piece he cannot say, and his hand is off the book. What do you tell him?"*** Next: whatever
+   Vale tells him about the fragment's provenance — **and the whole faceless-god arc is now standing
+   in the room**, so keep the buyer, "patron = buyer", and the book deduction all sealed while
+   answering honestly about *this room*. Two
    offers open and unclaimed: Windreth on the yard side rather than inside (free, no roll), and
    his free rerun of the blade-for-grapple substitution. Don't prompt their levers (the
    Name-Muffle, THE SEAL / Windreth's Kept Name, Vale's Deception +7 and Mask of Many Faces,
@@ -377,7 +408,7 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
    before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
    equipment note below).
-   **Eleven adjudications worth reusing:** hold established physical constraints against a group
+   **Twelve adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -405,7 +436,13 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    apron is worse than any monster, and the reveal should not be walked back into one); and
    **convert a withheld line into a clock rather than an explanation** ("you are early" became
    *a delivery is due and you are standing where it arrives* — timing withheld, and they were told
-   they could simply ask him, which keeps the pressure live and the answer theirs to go get).
+   they could simply ask him, which keeps the pressure live and the answer theirs to go get); and
+   **when a player spends a campaign-long artifact on a scene, pay it in full and take the answer
+   off the DM** (Vale showed the god's name-scrap to a man whose entire trade is reading names
+   aloud and drowning them — so he *tried*, and failed, and the seven broke their blank for it,
+   which is a real limit of the antagonist proved on the table; then he asked **her** where she got
+   it, which converts an interrogation into a trade, hands the next move back, and lets the sealed
+   material stay sealed because the NPC is the one who does not know).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
