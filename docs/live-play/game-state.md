@@ -121,9 +121,14 @@ a declaration from `dewa` is not automatically Vale's action.
 **Always flood-fill a hand-authored map on the PERSISTED bytes before using it** — one map once
 shipped as five sealed pockets. Walls are edge *segments* (w/h = 0): rasterize by segment.
 
-## Encounters — ⚔ ACTIVE
+## Encounters — ✅ NONE ACTIVE (the yard plays with no rounds)
 
-**The Reading Room** — encounter `caecc5b8-69e0-4f7a-8ad8-b7e54606f791`, template
+**The Reading Room** — ✅ **CLOSED 2026-07-28 at 13:0xZ, round 2, `status: completed`.** The party
+**won it by theft and by walking**: Windreth took the book off the stand, all three crossed to a
+doorway, and **@dewa declared *"We are out."*** — the trigger I had published, fired by a player,
+honoured on the spot. **Zero damage taken all encounter** (38/38 · 50/50 · 38/38) and **zero damage
+dealt** — the only blow struck by anyone was Forge's shove. Encounter
+`caecc5b8-69e0-4f7a-8ad8-b7e54606f791`, template
 `53305a10-1cd8-453a-af55-f4032399e56b`, map `6081877c-258f-4f45-9b05-f90a762a564d`.
 Started 2026-07-28 on Forge's declaration *"we want to fight them… non-lethal as usual"*.
 
@@ -358,34 +363,51 @@ say.** Nothing sealed leaked; the price of a written name still never described.
 Movement**). Corrected in the open and credited to the engine, not to me. **Read movement off the
 `turns` row, never off the sheet's base speed.**
 
-**🚪 ALL THREE ARE NOW STANDING IN DOORWAYS AND NOT ONE HAS DECLARED GOING THROUGH.** Forge moved
-**N12 → J12** at 12:58:24Z (20 ft, **15 ft still in hand**, action/bonus/reaction/2 attacks all
-unspent) — again *one minute before* the post that gave him the number. Board: **Windreth A6** (west
-doorway, turn done), **Forge J12** (south arch, **turn LIVE**), **Vale I12** (south arch, acts last),
-**the reader K5**. ⚠ **Standing in the gap is not being out — the declaration is the trigger and it
-is the player's to make.** Told them it costs no movement and no action, and that **two out is not
-the deal**. Clarifier #in-character `1531647587327934627`.
+**🚪 "WE ARE OUT." — THE TRIGGER FIRED BY A PLAYER, AND HONOURED WITHOUT HAGGLING.** Board at the
+moment it landed: Windreth **A6** (west doorway, turn closed), Forge **J12** (south arch, turn
+**live**, 15 ft + action + bonus + reaction + 2 attacks all unspent), Vale **I12** (south arch), the
+reader **K5**. At 13:02:54Z **@dewa** answered my own published line *"Say you go through and you
+are out"* with **"We are out."** — plural. ⚖ **I took the plural at face value for all three rather
+than demanding three separate declarations**, because pedantry there would have been bad faith with
+a rule I wrote myself, and because the one-beat directive forbids per-item checklists. **What made
+that safe: it spent nothing.** Forge walked out with everything in hand; nobody rolled, nobody took
+a point of damage. And the reversal was published as **free and needing no engine work** — *"the
+door is fifteen feet behind him and the reader does not fight; walking back in costs you an
+encounter's worth of nothing."* ⚠ The one thing I did **not** do is convert anyone's silence into a
+declaration on my own; a **player** said it.
 
-**🧾 DEBTS** (#in-character `1531647254354722826` / `1531647256560926900`) — **the culvert bonus
-action went unspent and simply CARRIES to Windreth's round-3 turn**; he acted before the offer was
-posted, so nothing was lost and he was told he owes nothing for it. **Still unpaid:** the **20+
-Investigation tier**. ⚠ The freeform `/action` **again zeroed `attacks_remaining`** — harmless here
-(Study consumes the Action anyway), so no correction was applied, but the bug stands.
+**🔎 FORGE'S TO-DM QUESTION ANSWERED WITHOUT TAKING HIS ACTION.** He asked (13:00:28Z) *"should i
+perception check toward south entrance, before heading out"*. **Ruled no** — he is standing **in**
+the arch, and *"looking through an open arch you are standing in is not a Search, it is having
+eyes."* A check is for finding something **hidden**, and **nothing is watching that yard** was
+promised in writing on 07-27. **I will not charge a roll to re-confirm my own promise.** The free
+look paid the whole yard: the lapsed mask, the runnel, the washer beside the grate, the unbroken
+salt on the wall's top course. **No watcher was retconned in — the pin holds.**
 
-**⚠ SNEAK ATTACK IS OFF, AND THAT WAS DISCLOSED PRE-ROLL.** Last round it survived on **Vale's
-adjacency** to the reader; she is at the far end of the room now. Windreth has **neither advantage**
-(blindsight 60 denies the Hide) **nor an ally within 5 ft of him** ⇒ **no Sneak Attack** unless
-something changes. Said out loud *before* any dice, per standing practice.
+**🧾 DEBTS — BOTH SURVIVE THE ENCOUNTER ENDING, SAID SO OUT LOUD.**
+› **The culvert bonus action** — *"a debt of mine is not cancelled by a fight ending."* It was
+already booked as *credited to his first turn of the next combat*, and that is exactly where it
+still sits.
+› **The 20+ Investigation tier** — I named **three** conditions (light · time · no clock) and I
+**did not add a fourth**. Two are now cleared. What remains is a lamp and a place nobody is due at,
+and the payout was upgraded in public: **when he has light and no clock he does not roll again — he
+just gets it.** Two 18s bought it outright.
+⚠ The freeform `/action` bug (zeroes `attacks_remaining`) stands, unfixed, logged.
 
-**🧭 TURN STATE:** **⏭ FORGE IS UP AND HIS TURN IS LIVE — J12, 15 ft, action, bonus, reaction, 2
-attacks.** Then the reader, then Vale. The reader's reaction is **still unspent** and **nobody is
-adjacent to him** — a current fact, not a promise. Exit promise restated verbatim and unchanged.
+**🧭 STATE: NO ROUNDS, NO INITIATIVE, NO TURN ORDER.** The party is in the outer yard with the book.
+The reader **did not follow, did not call out, did not raise an alarm** — he walked back to the empty
+stand and stood at it, and the seven never looked up. Live in the yard: the **washer** (down, alive,
+beside the grate, and she *remembers*), the **unclosable grate**, **Vale's lapsed mask** (nothing is
+covering them), the **unbroken wall salt**, the **delivery still coming** (they are early; timing
+withheld but askable), **line eight**, the **dodged question**, 48 gp. ⚠ **"Sound carries in a
+yard"** was restated unsoftened: **do not read a name aloud out there.**
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
 
 | Encounter | id | Outcome |
 | --- | --- | --- |
+| The Reading Room | `caecc5b8-69e0-4f7a-8ad8-b7e54606f791` | **Won by theft, 07-28** — book taken off the stand, all three out a doorway on *"We are out."*; **0 damage dealt or taken**; the reader never fought |
 | The Collector (counting floor, R2) | `4c0e014c-43ae-4017-9243-b6771e7cd710` | **Took terms** — walked alive on the party's word, 07-26 |
 | The Counting Floor | `6a7ba24e-aca9-4415-8009-2fbcff83f285` | Victory 07-26 — CT2 + tally-runner dead, CT1 alive; alarm never went out |
 | The Far-Quarter Front — the breach | `a46b1472-72c6-49aa-a36c-2343bd613299` | Victory 07-23 — 4 captured alive |
@@ -398,7 +420,8 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE FAR QUARTER, night of 07-27 — the culvert under the Stair Hill yard.**
+**★ Now: THE STAIR HILL YARD, night of 07-28 — out of the reading room, with the book, no rounds.**
+*(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
 The party is deep in **Leg 3b, "the paper trail"** — hunting the faceless buyer's *money and
 paper*, never his face, exactly as the leg's design intends. The chain they have walked:
