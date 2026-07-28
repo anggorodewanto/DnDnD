@@ -243,6 +243,37 @@ two feet of wet oak has to clear iron cradles one-handed on a door he is also ho
 went back to the table with a standing offer attached: *say "open it regardless of the noise" and it
 runs straight from the bar-lift with no new roll.*
 
+**They took the loud option, and the room did not care.** Forge declared *"slam the door
+forcefully"* and rolled **Athletics 23**. The bar was already loose, so the outcome was never in
+doubt — the roll bought the **manner**: he is *through* the door and inside on his feet on a wet
+sloping floor, axe up, rather than framed in the opening with his balance gone. Windreth's hand came
+out of the seam free, uncharged. The noise was enormous, and **nothing answered it.** Nothing
+outside — the yard is still empty and no watcher was retconned in to punish the volume. Not the
+washer — she is **unconscious, not asleep**, and noise doesn't undo that, so she still wakes on her
+own clock. And, worst of all, not the room: **not one head turned and not one pair of hands
+stopped.** They were told plainly that this is the fact rather than the DM withholding, and that
+*they are not being punished for the volume, they are being answered by it.*
+
+**What is in there.** A long low room, floor tilting to the outflow arch, so everything spilled
+here leaves by the thread of water they walked up. Two trestle rows, troughs of standing water,
+warm wet sour air. **Seven figures** in aprons with sleeves wet past the elbow, working paper to
+pulp with their hands **in absolute dark, never once feeling for anything** — every reach exact
+from repetition. Eyes open. Barely blinking. An **eighth** at a stand with a book open on it, **not
+looking at the book**, one finger resting on the page and not moving down it. All three PCs have
+**darkvision 60 ft** and this is ordinary dark rather than `magical_darkness`, so everyone sees it;
+that was stated up front so nobody had to ask, along with the note that making a light is a *choice
+with a price*, not a requirement.
+
+**And with the door open the words came clean — they are not names, they are pieces.**
+*"Tallow."* — a slip into the water. *"The lower yard."* — another. *"A woman who limps."* —
+another. *"Third of the month."* — another. **One person's day, cut into the smallest parts a day
+can be cut into, each part drowned by itself.** That shows the industry of the thing without
+confirming or denying the players' book-deduction, which stays theirs. Then the reader stopped
+mid-list — **not startled**, the way a man stops reading when someone comes in — **did not turn
+around**, and said in exactly the voice it had been using all night: ***"You are early. Shut the
+door."*** What "early" means was refused in-post. **No initiative was rolled**: nobody in that room
+has done anything hostile, and it stays a conversation with an axe in it until a player flips it.
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -252,12 +283,13 @@ she *remembers*: she wakes up eventually and she is the only witness this system
 **🔴 the destroyed grate** — a hole that can't be closed, on iron she salts nightly, and still
 their only proved exit · **🔴 Vale's mask has LAPSED** — the minute ran out at ~50 ft and could not
 be renewed from the wall, so the yard is now silent and nothing covers them; recastable, but only
-*here* · **🚪 the loud bar** — the door was never locked, and the timber can be lifted but not
-quietly (standing offer: *"open it regardless"* runs from the bar-lift with no new roll) ·
+*here* · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
+**🗣 "You are early"** — the reader expects someone here tonight, and that arrival is the live
+pressure if they linger · **👁 eight in the room, unbothered** — seven pulping, one reading, no
+alarm, no attack, no initiative; not unaware, just indifferent, and *why* is unspent ·
 **🧂 the broken threshold salt** — the second salted boundary they have broken tonight, in a place
-that checks its salt nightly · **📄 the voice in the stone building** — reading and
-drowning things one at a time in the dark, words unintelligible from outside, and it has not
-faltered once ·
+that checks its salt nightly · **📄 the voice in the stone building** — now audible and reading a
+day apart, piece by piece ·
 **🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
 **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
@@ -296,19 +328,19 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
 2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
-   beat each, zero dice across all four); **the door resolved 07-28 on a single roll.** The open
-   question posted to the table is verbatim ***"The bar is loose under his blade. What do you
-   do?"*** Next: whatever they declare there — a door that was never locked, a bar that will come
-   up loud, a silent yard with no cover left, an unlit room of hands that has not noticed them, a
-   broken salt line at their feet, and a body in the open between them and their exit. **Two
-   offers are open and unanswered:** *"open it regardless of the noise"* (runs from the bar-lift,
-   no new roll) and Windreth's free rerun of the blade-for-grapple substitution. Don't prompt
-   their levers (the Name-Muffle, the washer as someone who can be *asked* rather than merely
-   left, fresh illusion at the wall, Mage Hand through the outflow, the other faces of the
-   building, making light); let them find them. **Non-lethal MO stands until a player flips it.**
-   **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the equipment
-   note below).
-   **Six adjudications worth reusing:** hold established physical constraints against a group
+   beat each, zero dice across all four); **the door and the slam resolved 07-28, one roll each.**
+   The open question posted to the table is verbatim ***"It has not turned around. What do you
+   do?"*** Next: whatever they declare inside — an open door, Forge three paces in with his axe
+   up, seven pairs of working hands that do not care, a reader that expects someone, and an
+   instruction they have been handed: *shut the door*. **Obeying it and refusing it are both real
+   choices; do not steer either way.** Windreth's free rerun of the blade-for-grapple substitution
+   is still open and unclaimed. Don't prompt their levers (the Name-Muffle, the washer as someone
+   who can be *asked* rather than merely left, fresh illusion, Mage Hand, the other faces of the
+   building, making light, and simply *talking to the thing at the stand*); let them find them.
+   **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
+   before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
+   equipment note below).
+   **Eight adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -324,7 +356,12 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    no-new-roll offer attached); and **give them the damage they just did, immediately** (the
    broken threshold salt was reported in the same breath as the discovery, not saved for a later
    ambush — the same reason a telegraphed fuse like the lapsing mask gets narrated plainly when it
-   lands).
+   lands); **when the players knowingly buy a cost, answer the volume instead of punishing it**
+   (the slam got no retconned watcher, no woken washer — unconscious is not asleep, ruled out
+   loud — and no alarm; the consequence was that the room *did not care*, which is worse, and a
+   roll landing on an outcome the fiction already settled gets spent on the **manner**); and
+   **don't roll initiative just because a scene got tense** (nobody in that room had been hostile,
+   so it stayed a conversation with an axe in it — say explicitly that a swing starts it).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
