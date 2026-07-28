@@ -274,6 +274,41 @@ around**, and said in exactly the voice it had been using all night: ***"You are
 door."*** What "early" means was refused in-post. **No initiative was rolled**: nobody in that room
 has done anything hostile, and it stays a conversation with an axe in it until a player flips it.
 
+**Vale obeyed it, and the reader turned around.** Two declarations folded into one beat: Forge's
+*"comprehend their speech, chosen language, intonation"* on **Insight 16**, and Vale's *"walks in,
+closes the door, and approach the head of the room — 'You've been expecting us?'"* The Insight
+bought three real things: the language is **Common**, plain and local and unaccented, with nothing
+hidden in the word-choice; the **flatness is a technique rather than a mood** — no emphasis
+anywhere, every word the same weight and the same silence after it, the discipline of a smith
+counting strikes he cannot afford to miscount, because *you talk like that so that nothing you say
+can mean more than anything else you say*; and **he did not change register to address living people
+in his doorway**, so either he cannot or he does not hold reading and speaking apart. It explicitly
+did *not* buy what he is, whether he is one, or what "early" meant. **Off the seven workers it came
+back completely blank** — no hostility, no fear, not even the deliberate blankness of being ignored,
+because there is no social signal there to read. That blank was handed over as a finding rather than
+allowed to feel like fizzled dice.
+
+Then Vale crossed to ten feet from the stand and asked. **The finger came off the page and he turned
+around, and there is nothing wrong with him** — a man in an apron, middle years, thinning at the
+front, sleeves wet past the elbow like all the rest, a face you would forget on a stair, looking up
+the way a man looks up from work. *Ordinary is the horror here; it should not be walked back into a
+monster reveal without a reason.* He answered in the same cadence: ***"Expecting." … "I am expecting
+a delivery. You are not it." … "You may wait."*** — which converts the withheld line into a **clock
+rather than an explanation**: something is due at that door, he thinks it is due later than now, and
+they are standing in the room it arrives at. The timing was withheld and they were told they can
+simply ask him. (Private fit, unconfirmed at the table: the Quiet Window takes paper in all night
+and the cart brings it up at **first light**, which is what "early" means.)
+
+Then his eyes went to Vale's empty hands and came back to her face, and he asked the only thing he
+appears to want: ***"Do you have a name for me?"*** **That question is live and unanswered, and the
+cost of answering was deliberately not priced** — said out loud, with the reason: naming is the
+exact thing this yard does, and pre-pricing it would hand over the mystery they spent three sessions
+walking up a drain to reach. Answering, refusing, lying, and asking him something back are all live
+and none of them is the safe one. **The door is shut but not barred** — the bar lies where it fell,
+nobody has touched it, and opening it from inside is a pull with no check and no cost. **All three
+were ruled inside** when it closed, since nobody declared otherwise and Windreth had his hand on the
+door; **his player can put him on the yard side instead, free, with no roll and no retcon tax.**
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -284,9 +319,11 @@ she *remembers*: she wakes up eventually and she is the only witness this system
 their only proved exit · **🔴 Vale's mask has LAPSED** — the minute ran out at ~50 ft and could not
 be renewed from the wall, so the yard is now silent and nothing covers them; recastable, but only
 *here* · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
-**🗣 "You are early"** — the reader expects someone here tonight, and that arrival is the live
-pressure if they linger · **👁 eight in the room, unbothered** — seven pulping, one reading, no
-alarm, no attack, no initiative; not unaware, just indifferent, and *why* is unspent ·
+**⏰ the delivery** — something is due at that door, they are early for it, they are standing in the
+room it arrives at, and the timing is withheld but askable · **🗣 "Do you have a name for me?"** —
+live, unanswered, and deliberately unpriced · **👁 eight in the room, unbothered** — seven pulping,
+one reading, no alarm, no attack, no initiative; not unaware, just indifferent, and the seven give
+off no social signal at all (a good Insight came back blank), and *why* is unspent ·
 **🧂 the broken threshold salt** — the second salted boundary they have broken tonight, in a place
 that checks its salt nightly · **📄 the voice in the stone building** — now audible and reading a
 day apart, piece by piece ·
@@ -328,19 +365,19 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
 2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
-   beat each, zero dice across all four); **the door and the slam resolved 07-28, one roll each.**
-   The open question posted to the table is verbatim ***"It has not turned around. What do you
-   do?"*** Next: whatever they declare inside — an open door, Forge three paces in with his axe
-   up, seven pairs of working hands that do not care, a reader that expects someone, and an
-   instruction they have been handed: *shut the door*. **Obeying it and refusing it are both real
-   choices; do not steer either way.** Windreth's free rerun of the blade-for-grapple substitution
-   is still open and unclaimed. Don't prompt their levers (the Name-Muffle, the washer as someone
-   who can be *asked* rather than merely left, fresh illusion, Mage Hand, the other faces of the
-   building, making light, and simply *talking to the thing at the stand*); let them find them.
+   beat each, zero dice across all four); **the door, the slam, and the room's first conversation
+   all resolved 07-28.** The open question posted to the table is verbatim ***"He is waiting. What
+   do you say?"*** Next: how they answer **"Do you have a name for me?"** — put to Vale, live,
+   unanswered. **That question is the whole beat: do not steer it and do not price it.** Two
+   offers open and unclaimed: Windreth on the yard side rather than inside (free, no roll), and
+   his free rerun of the blade-for-grapple substitution. Don't prompt their levers (the
+   Name-Muffle, THE SEAL / Windreth's Kept Name, Vale's Deception +7 and Mask of Many Faces,
+   asking *when* the delivery comes, the book on the stand, the washer as someone who can be
+   *asked* rather than merely left, the other faces of the building); let them find them.
    **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
    before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
    equipment note below).
-   **Eight adjudications worth reusing:** hold established physical constraints against a group
+   **Eleven adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -361,7 +398,14 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    loud — and no alarm; the consequence was that the room *did not care*, which is worse, and a
    roll landing on an outcome the fiction already settled gets spent on the **manner**); and
    **don't roll initiative just because a scene got tense** (nobody in that room had been hostile,
-   so it stayed a conversation with an axe in it — say explicitly that a swing starts it).
+   so it stayed a conversation with an axe in it — say explicitly that a swing starts it);
+   **a good roll that comes back blank is information, so hand the blank over** (Insight 16 read
+   nothing at all off the seven workers, and saying *there is no signal here to read* beats
+   letting the dice feel wasted); **make the operator ordinary** (a forgettable tired man in a wet
+   apron is worse than any monster, and the reveal should not be walked back into one); and
+   **convert a withheld line into a clock rather than an explanation** ("you are early" became
+   *a delivery is due and you are standing where it arrives* — timing withheld, and they were told
+   they could simply ask him, which keeps the pressure live and the answer theirs to go get).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
