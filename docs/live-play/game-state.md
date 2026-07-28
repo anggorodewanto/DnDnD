@@ -333,25 +333,53 @@ the small wet sound that came after each word** — there is no word to finish, 
 30 ft from his own stand with empty hands. *"The work goes on. It is simply no longer about anyone."*
 An honest consequence of the theft, costing the players nothing and confirming nothing sealed.
 
-**🧭 TURN STATE:** **⏭ ROUND 2 IS OPEN — Windreth is up and is FIRST** (G5, 30 ft, action, bonus,
-reaction, 1 attack, **has the book**). Order: Windreth → Forge → the reader → Vale. Board: Forge
-**N12**, Vale **I12** (in the south gap), the reader **K5**, 20 ft east of Windreth.
-**⚠ ALL THREE CAN BE OUT THIS ROUND, and that was published as measurement, not as a hint:**
-Windreth **G5 → A6/A7 = exactly 30 ft**, one ordinary move, no Dash, **nothing on that line
-provokes**; Forge **N12 → J12 = 20 ft** (speed **25**, so it fits); Vale **already in the gap**.
-⚠ **The reader's reaction is STILL unspent — but nobody is adjacent to him, so right now nobody
-provokes**; published as a *current fact*, not a promise. The exit promise was restated verbatim.
+**📖 ROUND 2, WINDRETH: HE WALKED INTO THE WEST DOORWAY AND READ THE BOOK AGAIN.** `/move` **G5 →
+A6** (12:48:12Z, exactly 30 ft, **A6 is the west gap square**), then a freeform `/action` —
+*"read for himself and investigate the book"* (12:49:20Z) — and **Investigation `d20(8) + 6 +
+1d4(4) = 18`**, the *same total as his first look*. ⚠ **He acted at 12:48–12:49, two minutes BEFORE
+the round-2 post landed at 12:51**, so he never saw the exit measurement or the bonus-action offer.
 
-**🧾 DEBTS, STATED IN PUBLIC AGAIN** (#in-character `1531645150076600433` / `1531645152446382130`) —
-**the culvert bonus action is being paid ON THIS TURN**: Windreth spends his bonus action normally
-and I immediately `restore-bonus-action`, giving him two. He does not have to ask. **Still unpaid:**
-the **20+ Investigation tier**, explicitly *not* evaporated by the 18 — still in the book, still
-findable, to be collected when nobody is counting rounds.
+**⚖ THE RULING ON A REPEATED CHECK — stated plainly rather than fudged** (queue
+`f8a868f8-63e8-4060-9191-d1ab4e308473` narrated, 204). **An 18 does not clear the tier above 18, and
+repeating the same check at the same DC in the same dark will never grind it out.** It needs
+different conditions — light, time, no clock. **Out of the building with the book, he gets the long
+look and he gets that tier**; the debt is explicitly still standing. **But the action was not
+wasted:** because he asked a *narrower* question from a *new* place, the 18 bought one genuinely new
+forensic tell, derived from evidence he already held — **the ruled line numbers 1–8 were all inked in
+a single loading of the nib, before any name went in.** Same logic that proved the seven strikes were
+one sitting. So it is not handwriting, it is a **count**: tonight was set at eight lines before
+tonight had eight names. Seven are filled and all seven struck. **Line eight is not the next one — it
+is the one that has not come in yet.** ⛔ **Whose it is was refused out loud, and the book does not
+say.** Nothing sealed leaked; the price of a written name still never described. Fiction #the-story
+`996e04df-5d5b-4995-8ff3-868a4341ceb1`.
 
-**⚠ SNEAK ATTACK IS NOW OFF, AND THAT WAS DISCLOSED PRE-ROLL.** Last round it survived on **Vale's
-adjacency** to the reader; she is now at the far end of the room. Windreth currently has **neither
-advantage** (blindsight 60 denies the Hide) **nor an ally within 5 ft of him** ⇒ **no Sneak Attack**
-unless something changes. Said out loud *before* any dice, per standing practice.
+**🛠 PUBLIC CORRECTION — FORGE'S SPEED IS 35, NOT 25.** I published *"you have 25"* off
+`characters.speed_ft`; his **turn row** has always said **35** (dwarf 25 **+10 Barbarian Fast
+Movement**). Corrected in the open and credited to the engine, not to me. **Read movement off the
+`turns` row, never off the sheet's base speed.**
+
+**🚪 ALL THREE ARE NOW STANDING IN DOORWAYS AND NOT ONE HAS DECLARED GOING THROUGH.** Forge moved
+**N12 → J12** at 12:58:24Z (20 ft, **15 ft still in hand**, action/bonus/reaction/2 attacks all
+unspent) — again *one minute before* the post that gave him the number. Board: **Windreth A6** (west
+doorway, turn done), **Forge J12** (south arch, **turn LIVE**), **Vale I12** (south arch, acts last),
+**the reader K5**. ⚠ **Standing in the gap is not being out — the declaration is the trigger and it
+is the player's to make.** Told them it costs no movement and no action, and that **two out is not
+the deal**. Clarifier #in-character `1531647587327934627`.
+
+**🧾 DEBTS** (#in-character `1531647254354722826` / `1531647256560926900`) — **the culvert bonus
+action went unspent and simply CARRIES to Windreth's round-3 turn**; he acted before the offer was
+posted, so nothing was lost and he was told he owes nothing for it. **Still unpaid:** the **20+
+Investigation tier**. ⚠ The freeform `/action` **again zeroed `attacks_remaining`** — harmless here
+(Study consumes the Action anyway), so no correction was applied, but the bug stands.
+
+**⚠ SNEAK ATTACK IS OFF, AND THAT WAS DISCLOSED PRE-ROLL.** Last round it survived on **Vale's
+adjacency** to the reader; she is at the far end of the room now. Windreth has **neither advantage**
+(blindsight 60 denies the Hide) **nor an ally within 5 ft of him** ⇒ **no Sneak Attack** unless
+something changes. Said out loud *before* any dice, per standing practice.
+
+**🧭 TURN STATE:** **⏭ FORGE IS UP AND HIS TURN IS LIVE — J12, 15 ft, action, bonus, reaction, 2
+attacks.** Then the reader, then Vale. The reader's reaction is **still unspent** and **nobody is
+adjacent to him** — a current fact, not a promise. Exit promise restated verbatim and unchanged.
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
