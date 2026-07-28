@@ -116,13 +116,41 @@ a declaration from `dewa` is not automatically Vale's action.
 | Palewatch — kept vault | `cc356cc4…` | 14×10, **zero walls** — the reusable open box; re-skinned as the chandlery store-room. |
 | Ashfall waystation (common / cellar / cold vault) | `1ad14481…` / `d2fe03c6…` / `2899165e…` | 12×10 blanks. |
 | Buried Gallery of the Faceless God | `39ecd023-51d8-44bb-bf8e-29e1eff3a231` | 12×12 blank stone. |
+| The Stair Hill Yard — the reading room | `6081877c-258f-4f45-9b05-f90a762a564d` | 18×12 @48px. **Door = west-wall gap rows 6–7; outflow arch = south-wall gap cols I–J.** Two trough rows (water) at rows 4 and 9 spanning D–O, drain channel I–J rows 10–11, reading stand = difficult terrain at Q6. Flood-filled on the persisted bytes: **216/216 reachable, no sealed pockets.** Lighting layer all-zero on purpose — the dark here is ordinary and DM-adjudicated, and all three PCs have darkvision 60. |
 
 **Always flood-fill a hand-authored map on the PERSISTED bytes before using it** — one map once
 shipped as five sealed pockets. Walls are edge *segments* (w/h = 0): rasterize by segment.
 
-## Encounters — none active
+## Encounters — ⚔ ACTIVE
 
-The party is **out of combat**. Closed encounters, newest first (full chronology in
+**The Reading Room** — encounter `caecc5b8-69e0-4f7a-8ad8-b7e54606f791`, template
+`53305a10-1cd8-453a-af55-f4032399e56b`, map `6081877c-258f-4f45-9b05-f90a762a564d`.
+Started 2026-07-28 on Forge's declaration *"we want to fight them… non-lethal as usual"*.
+
+**Round 1 order:** Windreth 13 (d20 9 +4) → Forge 13 (d20 11 +2, DEX breaks the tie) →
+**the man at the stand 4** → Vale 3 (d20 3, +0). Start seats: Vale **O6** (adjacent to the
+reader), Forge **N7**, Windreth **M6**, the reader **P6**, the book on its stand **Q6**.
+**The reader acts before Vale** — that ordering is load-bearing and was told to the table.
+
+Combatant ids: Windreth `348be098-8e6c-40e3-8a9c-23d2d969c29d` (WI), Forge
+`14b6eb94-e481-4280-861a-9b042daddbd3` (FO), the reader
+`6a7522cc-0e7b-4333-9a41-a298348643b8` (RDR).
+
+**Statblocks (homebrew, sealed from players):** The Reader `hb_22f8eec8f60e` — an ordinary
+unarmed man, AC 11, one token Open Hand attack, no resistances or immunities. His win condition
+is **`Hands Off The Page`: shut / take / drown the book and he cannot read a name.** Track that
+before tracking his hit points. One of the Seven `hb_8a05eeb7088b` — **deliberately NOT seated.**
+The seven are *not in the initiative order*; they enter only via
+`POST /api/combat/{enc}/summon` if a name is read off the book. That was disclosed to the table
+in full, with the reason (three separate times they failed to react to a *person*) and the honest
+conditional: *whether it holds is not up to the DM, it is up to what gets said in this room.*
+Promise made publicly: **if a PC swings at a worker, say out loud what that is BEFORE dice.**
+
+Standing this fight: **non-lethal granted flat for everyone, all fight, no re-declaring**;
+**Windreth is owed a second bonus action** — the turn-resources override is *refund-only*, so
+spend his first, then `POST /api/combat/{enc}/combatants/348be098-.../restore-bonus-action`.
+
+Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
 
 | Encounter | id | Outcome |
@@ -455,9 +483,12 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    demanded his boss, so **he quoted a price instead of answering: a name on the book's next empty
    line, for a name read off it.** **Forge then brandished the greataxe and called it his boss
    (07-28) — no roll, no initiative, the room did not react, and the reader aimed the same price at
-   the axe: *"Does it have a name?"*** The open question posted to the table is now
-   ***"Does the axe have a name — and are you going to say it in here?"*** Next:
-   whatever they do with that offer — **and the whole faceless-god arc is now standing
+   the axe: *"Does it have a name?"*** **They answered that question by declaring a fight
+   (07-28, Forge: *"we want to fight them. and we need answer, non-lethal as usual"*), so the
+   axe question is now dead as dialogue and live as a threat.** Initiative was rolled by all three
+   players and **combat is running** — see *Encounters — ⚔ ACTIVE* above for order, seats and ids.
+   **Windreth is up first and the table has been told so.** Next: run his turn when he declares —
+   **and the whole faceless-god arc is now standing
    in the room**, so keep the buyer, "patron = buyer", and the book deduction all sealed while
    answering honestly about *this room*. **Do not narrate what a written name costs**; if they write
    one, let the fiction bill them. Two
@@ -466,9 +497,10 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    Name-Muffle, THE SEAL / Windreth's Kept Name, Vale's Deception +7 and Mask of Many Faces,
    asking *when* the delivery comes, the book on the stand, the washer as someone who can be
    *asked* rather than merely left, the other faces of the building); let them find them.
-   **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
-   before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
-   equipment note below).
+   **Non-lethal MO held and was honoured on the flip: the party declared the fight themselves
+   (07-28) and non-lethal was granted flat for the whole encounter with no roll tax and no
+   re-declaring.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see
+   the equipment note below).
    **Fifteen adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
