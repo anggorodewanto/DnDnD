@@ -165,6 +165,17 @@ neutral* **before** it could cost anything, and the choice is the player's. **Hi
 live** — action, bonus action (+ the owed second), 15 ft, 1 attack, reaction; only the free
 interact is spent.
 
+**Table stalled on "what is an action even for here" (09:31 player-chat: *"meh action opo?"* /
+*"gebuki?"* / *"mosok attack unarmed person"*).** Answered in #in-character
+`1531598167852978292` with an explicit **non-exhaustive, non-hint** list: hitting him is on the
+table and will be neither lectured against nor punished; the book is an object now, so any
+further handling of it (shut, pocket, pass to Vale, put it somewhere it does not return from)
+costs the **action** because the free interact is spent; an action can be a question; an action
+can set someone else up. Re-flagged the unmade read-aloud fork. Pre-answered **Forge's shove**
+idea (from 09:25 player-chat) — legal, and he will be told *what he contests and what a win
+does* **before** he rolls, with enemy numbers still sealed. Re-stated the standing promise that
+swinging at one of the seven gets narrated **before** dice.
+
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
 
