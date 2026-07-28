@@ -220,6 +220,29 @@ washer-noises, and minor illusion is 1 min / 30 ft — **she cannot renew the ma
 standing.** Walk back into range, or cast fresh working-noises at the wall and put the washer's
 broom somewhere it has never been in twenty years. Theirs to solve.
 
+**Then Windreth went at the door — and the fuse landed while he worked it.** He declared *"trying
+to lockpick the door"* and rolled **Sleight of Hand 13**. Two things came out of that. First,
+Vale's minute ran out: the broom finished its stroke, the bucket settled, and **the yard went
+properly silent**, which is the abnormal state in a place where someone inside has heard that broom
+every night for years. It was narrated as a minute simply running out — the price had been posted
+in advance, so it landed as a clock, not a gotcha. Second, **the declared action turned out not to
+exist.** That door has no keyhole, no plate, no ward, no escutcheon and **not one scratch of a key
+ever turned on the outside face** — it has never been locked, only ever *shut*. So there was no
+check to fail: the picks were charged nothing and became the free means of *learning* that, and the
+declaration was read generously as *work the door with his tools*. What the 13 actually bought was
+the seam. His blade found **one timber across two iron cradles, unfastened, merely heavy** — it
+moves. Through the gap came three things: **no lamp, candle, rushlight, oil or smoke, and no warmth
+at all on a draught blowing outward** (the work is fast and it is done in absolute dark, on
+purpose); **the reading has never once faltered or hurried** since they reached the wall, so nothing
+in there has noticed them; and packed into the threshold joint at the door's foot, **a line of grey
+salt** — the same grey as the wall's top course and the clerk's inkpot. Every boundary of this place
+is salted. **His blade broke that one to reach the bar**, and they were told so on the spot rather
+than having it banked for a later ambush. The roll bought **capability and the price, never the
+outcome**: he can lift the bar, he cannot lift it quietly — ruled impossible rather than hard, since
+two feet of wet oak has to clear iron cradles one-handed on a door he is also holding. The choice
+went back to the table with a standing offer attached: *say "open it regardless of the noise" and it
+runs straight from the bar-lift with no new roll.*
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -227,9 +250,14 @@ is restored, and "patron = buyer" stated flat.
 **Clocks:** **🔴 the washer** — down, alive, in the open *between them and their only exit*, and
 she *remembers*: she wakes up eventually and she is the only witness this system can't erase ·
 **🔴 the destroyed grate** — a hole that can't be closed, on iron she salts nightly, and still
-their only proved exit · **⏳ Vale's mask, now out of range of its own target** — 1 min / 30 ft,
-and she is ~50 ft from it at the wall · **📄 the voice in the stone building** — reading and
-drowning things one at a time in the dark, words unintelligible from outside ·
+their only proved exit · **🔴 Vale's mask has LAPSED** — the minute ran out at ~50 ft and could not
+be renewed from the wall, so the yard is now silent and nothing covers them; recastable, but only
+*here* · **🚪 the loud bar** — the door was never locked, and the timber can be lifted but not
+quietly (standing offer: *"open it regardless"* runs from the bar-lift with no new roll) ·
+**🧂 the broken threshold salt** — the second salted boundary they have broken tonight, in a place
+that checks its salt nightly · **📄 the voice in the stone building** — reading and
+drowning things one at a time in the dark, words unintelligible from outside, and it has not
+faltered once ·
 **🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
 **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
@@ -268,14 +296,19 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    ([`dm-rules.md`](dm-rules.md) "At the table") multiplies the cost of a stale read, because one
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
 2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
-   beat each, zero dice across all four). Next: whatever they declare **at the wall** — a barred
-   door, a hand's-breadth water mouth, a voice reading and drowning things in the dark, a mask
-   about to lapse out of range behind them, and a body in the open between them and their exit.
-   Don't prompt their levers (the Name-Muffle, the washer as someone who can be *asked* rather
-   than merely left, more illusion, Mage Hand through the outflow, the door, making light); let
-   them find them. **Non-lethal MO stands until a player flips it.** **Forge is AC 14** and stays
-   that way — his breastplate left with the skiff (see the equipment note below).
-   **Four adjudications worth reusing:** hold established physical constraints against a group
+   beat each, zero dice across all four); **the door resolved 07-28 on a single roll.** The open
+   question posted to the table is verbatim ***"The bar is loose under his blade. What do you
+   do?"*** Next: whatever they declare there — a door that was never locked, a bar that will come
+   up loud, a silent yard with no cover left, an unlit room of hands that has not noticed them, a
+   broken salt line at their feet, and a body in the open between them and their exit. **Two
+   offers are open and unanswered:** *"open it regardless of the noise"* (runs from the bar-lift,
+   no new roll) and Windreth's free rerun of the blade-for-grapple substitution. Don't prompt
+   their levers (the Name-Muffle, the washer as someone who can be *asked* rather than merely
+   left, fresh illusion at the wall, Mage Hand through the outflow, the other faces of the
+   building, making light); let them find them. **Non-lethal MO stands until a player flips it.**
+   **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the equipment
+   note below).
+   **Six adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -283,8 +316,15 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    **answer the declared question through a different sense rather than refusing it** (they asked
    to *see* into a building that physically has nothing to see into, so the answer came by ear
    through the water outflow — a real answer, and the *next* step priced honestly rather than
-   rolled); and **charge their own success** (the mask that bought them the yard cannot reach the
-   yard from where the mask's success let them stand).
+   rolled); **charge their own success** (the mask that bought them the yard cannot reach the
+   yard from where the mask's success let them stand); **never charge a roll against an action
+   the fiction has already ruled out** (a lockpick on a door with no lock is not a failure — make
+   the attempt the free means of *learning* that, read the declaration generously, and let the
+   roll buy **capability and the price rather than the outcome**, then hand the choice back with a
+   no-new-roll offer attached); and **give them the damage they just did, immediately** (the
+   broken threshold salt was reported in the same breath as the discovery, not saved for a later
+   ambush — the same reason a telegraphed fuse like the lapsing mask gets narrated plainly when it
+   lands).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
