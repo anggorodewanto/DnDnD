@@ -176,6 +176,32 @@ idea (from 09:25 player-chat) — legal, and he will be told *what he contests a
 does* **before** he rolls, with enemy numbers still sealed. Re-stated the standing promise that
 swinging at one of the seven gets narrated **before** dice.
 
+**Fork resolved by the player: silent.** Windreth declared (#in-character 09:40Z, repeated as a
+To-DM 09:45Z) *"read the book for himself, he does not speak out loud: study the dates, payments,
+handwriting, and crossed-out names for investigation."* **No name has left the room.** That is
+the **Study action**; there is no engine command for it, so `action_used` was marked by hand via
+`override/combatant/.../turn-resources` (200). **Remaining this turn: bonus action + the owed
+second, 15 ft, 1 attack, reaction.**
+
+Committing the action bought the **surface with no roll** (#the-story narration
+`eb579c85-8ce0-4615-bf8e-6b96479e0c85`, pointer #in-character `1531623553580007444`): numbers are
+mostly **8 but not always**, one far-back figure pressed through to the next page, and **nowhere in
+the book is there a currency mark** — no coin stamp, no *s*, no *gp*, just the figure. On tonight's
+page **a handful of names are not struck yet**; everything older is. The man's only line: *"You
+have it open to tonight."*
+
+**⏸ WAITING ON `/check investigation` FROM WINDRETH.** Floor stated publicly in advance: *no
+result takes anything away from him and no result gets him hurt* — a low roll is "ran out of page
+before he ran out of time." **Payload prepped, release by tier, and none of it confirms the buyer
+or says what a struck name costs:**
+
+| Roll | Released |
+| --- | --- |
+| any | On every line the strike is the **same sitting** as the writing — same ink, pen, pressure, unbroken. A name is not recorded and later cancelled; **the crossing is the transaction.** |
+| 12+ | **Page numbers skip near the front.** Pages have been cut out cleanly, with a blade. |
+| 16+ | The empty ruled line under tonight's last entry **already carries its number in the right column — 8 — and no name.** |
+| 20+ | A few names **repeat, months apart**; in every repeat the earlier instance is the struck one. Implication left hanging, unexplained. |
+
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
 
