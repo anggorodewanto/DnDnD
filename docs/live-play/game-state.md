@@ -190,17 +190,39 @@ the book is there a currency mark** — no coin stamp, no *s*, no *gp*, just the
 page **a handful of names are not struck yet**; everything older is. The man's only line: *"You
 have it open to tonight."*
 
-**⏸ WAITING ON `/check investigation` FROM WINDRETH.** Floor stated publicly in advance: *no
-result takes anything away from him and no result gets him hurt* — a low roll is "ran out of page
-before he ran out of time." **Payload prepped, release by tier, and none of it confirms the buyer
-or says what a struck name costs:**
+**✅ RESOLVED — Investigation 18** (11:26Z, queue `c497c017-a77a-4283-91c6-09e6920d5c0f`,
+narrate 204, resolved 11:35Z). Fiction in #the-story `65ed5a99-9a76-4930-a33f-08eccf64e70f`.
+**Three tiers released (any / 12+ / 16+), the 20+ tier withheld and said so out loud** — told him
+it is still in the book and still findable, since the book is in his hands. Payload table below;
+none of it confirms the buyer or says what a struck name costs:
 
 | Roll | Released |
 | --- | --- |
 | any | On every line the strike is the **same sitting** as the writing — same ink, pen, pressure, unbroken. A name is not recorded and later cancelled; **the crossing is the transaction.** |
 | 12+ | **Page numbers skip near the front.** Pages have been cut out cleanly, with a blade. |
 | 16+ | The empty ruled line under tonight's last entry **already carries its number in the right column — 8 — and no name.** |
-| 20+ | A few names **repeat, months apart**; in every repeat the earlier instance is the struck one. Implication left hanging, unexplained. |
+| 20+ | ⛔ **NOT RELEASED — still owed if anyone rolls it again.** A few names **repeat, months apart**; in every repeat the earlier instance is the struck one. Implication left hanging, unexplained. |
+
+**🫥 THE HIDE RULING — the honest one, made in the open.** Windreth then spent his bonus action on
+**Cunning Action: Hide, Stealth 25**, and the engine flagged him *Hidden from all hostiles*. **The
+reader has blindsight 60**, so hiding does nothing against him. Handled as disclosure-before-cost,
+not a retroactive gotcha:
+
+- **The Hidden condition was left in place** — it is genuinely true against everything else in that
+  room and anything that comes through the door. Stripping it would have taken away something real.
+- **Stated publicly instead: it grants NO ADVANTAGE against the man at the stand**, and that will
+  be applied by hand if Windreth swings. Pre-declared, never retroactive.
+- **Blindsight was shown, not statted** — his head turned and followed Windreth into the dark
+  "with his eyes doing none of the work." Numbers stay sealed; the effect does not.
+- **The bonus action was refunded** (`restore-bonus-action`, 200) because he was not told before he
+  spent it. **The 07-27 culvert bonus action is STILL OWED on top of that** — he was told so
+  explicitly: spend this one and it comes back once more.
+- ⚠ Note for the next attack roll: Windreth would have **Sneak Attack anyway** via the ally clause
+  (Vale is adjacent to the reader at O6/P6). Do not conflate that with the hide; only *advantage*
+  is denied.
+
+**🧭 TURN STATE:** action spent (Study), **bonus action available + the owed second**, 15 ft,
+1 attack, reaction. **⏭ Still Windreth's turn.**
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
