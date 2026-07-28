@@ -254,11 +254,39 @@ make); **leaving the room is not leaving the yard**; and **the delivery clock do
 for. The **07-27 culvert bonus action is still owed**; his turn is closed and there is no rewind,
 so it was booked publicly as **credit on his round 2 turn**. Not lost.
 
-**🧭 TURN STATE:** **⏭ Forge is up** (active 11:41:18Z — action, bonus, reaction, **2 attacks,
-35 ft**, nearest exit 25 ft south). Then the man at the stand, then Vale. Windreth: turn closed,
-book in hand, at G5, **reaction unspent**. Party intent from #player-chat is unambiguous —
-*"retreat?"*, *"moco buku nang njobo"* (read the book outside), *"hooh coba wae kita pergi"* — so
-**the likely next beat is the encounter ending on an exit, not on a kill.**
+**🪓 FORGE DID NOT RUN — HE CLOSED.** He moved **N7 → O7** (5 ft, 30 left), putting himself
+**adjacent to the reader at P6**, and declared a **shove**. He is covering the retreat, not taking it.
+
+**🔧 THE FREEFORM-ACTION TRAP — a real UX bug, ruled in the player's favour and fixed by hand.**
+He sent it as `/action "shove RDR"`, which is the **freeform** action: the engine correctly reads
+that as *spending the whole Action on something with no command*, so it set `action_used` **and
+zeroed both attacks** (`action_log` `freeform_action`, 11:55:15Z; queue
+`7d5d84dc-6827-4793-b94a-0754aefe0b69`). His subsequent real `/shove` was then rejected by
+`ValidateResource(turn, ResourceAttack)` at `internal/combat/grapple_shove.go:189` for having no
+attacks left — and he called it out (#in-character 11:55:40Z, *"i can't shove despite hasn't spend
+any attack"*). **He is right.** Shove costs **one attack, not the Action**
+(`grapple_shove.go:180-184`). Restored `attacks_remaining` to **2** via
+`override/combatant/.../turn-resources` (200); **`action_used` deliberately left true** because he
+*is* taking the Attack action, which is where a shove comes from. Queue resolved 204. Ruling posted
+#in-character `1531633484899029032` — told him plainly the tooling failed him, not his declaration.
+
+**📏 THE PROMISED PRE-ROLL DISCLOSURE, NOW PAID.** Forge was owed *"what he contests and what a win
+does, before he rolls, with enemy numbers still sealed"* — delivered in full: contest is **his
+Athletics (STR) vs the reader's Athletics or Acrobatics, whichever is better**; what he can *see*
+was given free (*a tired man in a wet apron who has not braced, has not raised his hands once all
+night, carries no weapon*) with the honest read **"I am not going to pretend this is a coin flip"**;
+and each mode's exact effect spelled out (`prone` → down, half movement to stand, advantage on close
+melee; `push` → 5 ft directly away and no further; `grapple` → speed 0). **What a win does NOT do
+was said before the dice, not after: it will not make him answer, and it will not end the fight —
+"never going to be settled on his balance any more than on his hit points."** Nothing about the
+sealed statblock leaked. Correct syntax handed over: `/shove target:RDR mode:prone|push|grapple`.
+
+**🧭 TURN STATE:** **⏭ Still Forge**, at **O7**, waiting on his `/shove` roll — action spent (Attack
+action), **2 attacks restored**, bonus, reaction, 30 ft. Then the man at the stand, then Vale.
+Windreth: turn closed, book in hand, at G5, **reaction unspent**. ⚠ **The reader's reaction is still
+up and both Forge (O7) and Vale (O6) are adjacent — either one moving away provokes**, and that was
+said out loud before anyone commits. Party intent from #player-chat is still to leave —
+*"retreat?"*, *"moco buku nang njobo"* (read the book outside), *"hooh coba wae kita pergi"*.
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
@@ -683,7 +711,14 @@ creatures** (and the template PUT needs `campaign_id` as a *query* param too); e
 mastery is keyed by weapon **ID** not **kind**, so a homebrew clone burns its own mastery slot;
 `/enemy-turn` does not auto-apply a defender's standing Uncanny Dodge (halve by hand);
 ISSUE-059 (DM-Queue Resolve button fires no POST → use `POST /dashboard/queue/<id>/resolve`),
-ISSUE-060 (builder omits Warlock pact boon / invocations).
+ISSUE-060 (builder omits Warlock pact boon / invocations);
+**NEW 07-28 — freeform `/action` silently eats a turn when the action *does* have a command.**
+`/action "shove RDR"` spends the Action and zeroes `AttacksRemaining`, so the player's real `/shove`
+is then rejected for having no attacks (it cost Forge his whole turn mid-fight, restored by hand).
+`internal/refdata/action_catalog.go` already knows every action's key, economy and command string
+(`{Key: "shove", Economy: EconomyAction, Command: "/shove <target> [prone|push]"}`), so the freeform
+handler can match the description against the catalog and **reject before spending anything** with
+*"that is `/shove` — use it instead"*. Fix is bounded and has an obvious SSOT; not yet written.
 
 Durable lore → [`world.md`](world.md); secret spine → [`campaign-arc.md`](campaign-arc.md);
 play-by-play → [`sessions/session-01.md`](sessions/session-01.md).
