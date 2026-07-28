@@ -334,6 +334,27 @@ assumptions stated as free to reverse: the prop read as the **Name-Scrap (Facele
 the Ashen Face-Shard / Grey Clay Face-Disc / patron-conduit on request, rerun at no cost), and
 "shows, not gives" read as never released and never in reach — **he did not reach for it.**
 
+**She did not answer that one either.** She put the fragment away **slowly, mockingly**, and asked to
+be taken to his boss — *"maybe he can say it."* He watched the scrap the whole way into wherever it
+went, the first time all night his attention has followed an **object** rather than a word. Then he
+said **"Boss"** once, flat, testing its shape in his mouth the way he had tested *Tallow* — and **it
+came out fine, because it is a title.** He noted *"You did not answer me,"* did not press it, and put
+his hand **back** on the open book. Then he quoted a price: *"Names come off this book. Names go on
+it. One for one, both aloud, and I do the reading either way."* — ***"Give me a name to put on the
+line, and I will say you one off it."*** **The seven did not stop this time**, which is the rule they
+just learned holding: *boss* is not a name.
+
+**No roll charged, and why:** putting a thing away cannot fail, and his answer is **character, not a
+favour** — a house that trades in names quotes a price when you ask it for one. Given free in-post
+because they earned it by standing there: **every word this man has used for the people above him is
+a title or a function** — Weighmaster, boss, the third of the month — *never* a name; what that means
+was explicitly not confirmed. **What he did not say:** whose name comes off the book, whether he
+means a stranger's or one of theirs, and **one word about what happens to a name once written** — he
+quoted a price and did not describe the goods, and the table was told flatly that what the book does
+to a name on it is theirs to work out. The mockery cost nothing visible, which *is* the cost: they
+are now the party carrying a word this room cannot process, refusing its provenance, and asking to be
+shown who stands above him — interesting to a house whose whole trade is interest in names.
+
 **Still sealed:** the buyer's identity (a shape filled the lit doorway and did not come out —
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
@@ -347,11 +368,17 @@ be renewed from the wall, so the yard is now silent and nothing covers them; rec
 **⏰ the delivery** — something is due at that door, they are early for it, they are standing in the
 room it arrives at, and the timing is withheld but askable · ~~**🗣 "Do you have a name for me?"**~~
 (spent — she answered with a question and a prop, and he let it go for a better one) ·
-**🗣 "Where did you get a piece I cannot say?"** — **the new live question**, his, and the first
-thing he has wanted more than the delivery · **🔥 the fragment he cannot read** — the yard's
-first proved limit, now witnessed by him *and* by the seven · **👁 eight in the room** — seven
+**🗣 "Where did you get a piece I cannot say?"** — asked, **dodged**, and *left lying there*: he said
+*"You did not answer me"* and did not press, so it is still owed and he still wants it ·
+**📖 THE PRICE ON THE LINE** — **the new live offer, and it is his**: a name written on the book for a
+name read off it, one for one, both aloud. **What the book does to a written name is unstated and
+stays unstated** · **🔥 the fragment he cannot read** — the yard's
+first proved limit, now witnessed by him *and* by the seven · **🏷 every word for the people above
+him is a title, never a name** — Weighmaster, boss, the third of the month; given free, meaning
+withheld · **👁 eight in the room** — seven
 pulping, one reading, no alarm, no attack, no initiative; **the seven broke their blank exactly
-once, for a name, and went straight back to work**, and *why* is still unspent ·
+once, for a name, and went straight back to work** — and did *not* break it for *boss*, which is that
+rule holding; *why* is still unspent ·
 **🧂 the broken threshold salt** — the second salted boundary they have broken tonight, in a place
 that checks its salt nightly · **📄 the voice in the stone building** — now audible and reading a
 day apart, piece by piece ·
@@ -394,12 +421,15 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    beat now asserts a dozen steps. When it happens, **rewind publicly and free.**
 2. **The culvert run, the lantern, the washer ambush, and the crossing all resolved 07-27** (one
    beat each, zero dice across all four); **the door, the slam, and the room's first conversation
-   all resolved 07-28**, and **the name question was answered 07-28 with a question and a prop.**
-   The open question posted to the table is now **his**, verbatim ***"He has asked you where you got
-   a piece he cannot say, and his hand is off the book. What do you tell him?"*** Next: whatever
-   Vale tells him about the fragment's provenance — **and the whole faceless-god arc is now standing
+   all resolved 07-28**, the **name question was answered 07-28 with a question and a prop**, and his
+   follow-up (*where did you get it*) was **dodged 07-28** — she put the scrap away mockingly and
+   demanded his boss, so **he quoted a price instead of answering: a name on the book's next empty
+   line, for a name read off it.** The open question posted to the table is now
+   ***"He wants a name for the line. What do you put on it — or what do you do instead?"*** Next:
+   whatever they do with that offer — **and the whole faceless-god arc is now standing
    in the room**, so keep the buyer, "patron = buyer", and the book deduction all sealed while
-   answering honestly about *this room*. Two
+   answering honestly about *this room*. **Do not narrate what a written name costs**; if they write
+   one, let the fiction bill them. Two
    offers open and unclaimed: Windreth on the yard side rather than inside (free, no roll), and
    his free rerun of the blade-for-grapple substitution. Don't prompt their levers (the
    Name-Muffle, THE SEAL / Windreth's Kept Name, Vale's Deception +7 and Mask of Many Faces,
@@ -408,7 +438,7 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    **Non-lethal MO stands until a player flips it — and if one swings, roll initiative then, not
    before.** **Forge is AC 14** and stays that way — his breastplate left with the skiff (see the
    equipment note below).
-   **Twelve adjudications worth reusing:** hold established physical constraints against a group
+   **Thirteen adjudications worth reusing:** hold established physical constraints against a group
    declaration (the one-man-wide throat meant Forge simply could not join the grab — surfaced,
    with the reversible alternative priced); **substitute the tool while honouring the intent**
    (a grapple through bars at STR 8 is the weakest thing Windreth owns, so the declared
@@ -442,7 +472,13 @@ DM's campaign memory note `project_night_weigh_weighhouse_staged`; the secret sp
    aloud and drowning them — so he *tried*, and failed, and the seven broke their blank for it,
    which is a real limit of the antagonist proved on the table; then he asked **her** where she got
    it, which converts an interrogation into a trade, hands the next move back, and lets the sealed
-   material stay sealed because the NPC is the one who does not know).
+   material stay sealed because the NPC is the one who does not know); and
+   **when a player demands the sealed thing, quote a price in the setting's own currency instead of
+   refusing** (Vale demanded to be taken to the boss; a house whose trade is names answered by
+   offering *a name written on the book for a name read off it* — which is not a no, costs the DM
+   no seal, is priced in exactly the resource the arc is about, and makes the players' own book
+   deduction supply the dread that the DM must not confirm. Say what the price **is** and refuse to
+   describe **the goods**).
 3. **Keep the buyer sealed by observation, not refusal.** Every seal so far has held because the
    fiction genuinely doesn't show a face, not because the DM said no.
 4. **48 gp is still unspent** (Forge 26 / Vale 11 / Windreth 11) against a 50 gp potion — a
