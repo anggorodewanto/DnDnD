@@ -420,8 +420,61 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE STAIR HILL YARD, night of 07-28 — out of the reading room, with the book, no rounds.**
+**★ Now: THE REED LINE AT THE CULVERT MOUTH, night of 07-28 — out of the yard entirely, with the
+book AND the washer, one pre-priced group Stealth check standing between them and gone.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🌾 THE EXIT BEAT — "take the washer alive, out through the grate, before the delivery, no names
+aloud."** Windreth declared it at 13:16:57Z, **@dewa** answered *"We follow Windreth"* at 13:21:25Z,
+and Forge asked *"where can Windreth go to find a place with better light?"* — **one plan, one
+beat.** Everything up to the reeds resolved **with zero rolls**, and the reason was published: the
+grate was already ruled an **open drain mouth, passable at a crouch, both ways, unlimited**;
+**nothing was watching that yard** (my own written promise, not walked back); and **carrying her is
+slow and awkward, not uncertain** — consequences, not checks.
+
+**⚙ Defaults applied, all published as freely reversible at no cost:** **Forge carries her** (STR 15
+→ 225 lb capacity, nowhere near it, **no encumbrance, no speed penalty**); **the book rode inside
+Windreth's shirt** and is dry; **Forge re-equipped his cached kit free** in the reeds (⚠ still **no
+breastplate** — watch skiff, **AC 14 unchanged**); **she is alive, unconscious and stable**, no
+repeated rolls to keep her that way.
+
+**⚠ THE PRICE OF TAKING HER, STATED NOT SPRUNG.** An unconscious washer who wakes in that yard is a
+confused woman with a story nobody credits. A washer who is **simply gone**, over a destroyed grate
+and broken threshold salt, is **a hole in a nightly routine** — they have upgraded a survivable mess
+into **a disappearance**. In exchange they hold **the only witness this system cannot erase**, in
+custody, able to answer questions when she wakes. Told them plainly it was a real trade made with
+open eyes. *Mercy or shopping* still theirs. ⚠ **Whether she is staff, warden, or something the yard
+keeps stays deliberately unanswered** (orphan thread, `campaign-arc.md`).
+
+**🗣 "No names aloud until we have light, distance, and time."** — logged and honoured, with the
+mechanism published: **the summon trigger is a player choice, not a random event.** It will never be
+fired on a die roll or a whim. It is theirs to not pull.
+
+**📣 THE DELIVERY ARRIVED WHILE THEY WERE UNDER IT** — heard through the stone from inside the
+culvert, **never seen, nothing described**: *"Something arrives at the stair gate."* Buyer stays
+sealed; the clock paid off as tension, not as an ambush, and **no watcher was invented in the yard**.
+
+**🪨 THE CISTERN SEED SURFACED** (planted 07-27, orphan thread): halfway down, Windreth places what
+he noticed on the way up — **the culvert changes hands.** Yard-end stone is squared, warded, young;
+this stone is older than the wall, older than the salt. Never explained.
+
+**🎲 ⏳ PENDING — the one roll, pre-priced before any die was touched:** **GROUP Stealth check, DC 15**
+(`/check skill:stealth`, one each; **half or more succeed ⇒ party succeeds**, RAW group check, used
+deliberately). **DC 15 not 14 because "a body does not crouch when you tell it to."** ✅ Pass = gone
+clean, destination free. ❌ Fail = **not a capture** — the lantern sits on the reed line, the watch
+marks the spot, the **lit** options die for tonight and they go to ground close and dark.
+
+**💡 "WHERE IS BETTER LIGHT?" ANSWERED WITH THREE REAL OPTIONS + HONEST PRICES** (and the tier
+payout restated: *with a lamp and no clock he does not roll again, he just gets it*):
+**① dawn on open water down the cut** — free light, no owner; costs **~2 hours** holding a stolen
+book and a stolen woman · **② the bakery / the Quiet Window** — lit oven right now, indoors, warm;
+costs the **yard man who has already seen them** and means reading the book **inside the chain that
+made it** · **③ the old culvert, the stone that changes hands** — dry, private, unknown, **20 ft
+behind them**; costs **pitch dark, so it does not buy the tier** (buys privacy, time, and a place to
+let her wake).
+
+Fiction #the-story `1af887a2-29f1-4f3d-8152-30ee5488ce18`; mechanics #in-character
+`1531653947591360512` / `1531653949160034385` / `1531653951437406290`.
 
 The party is deep in **Leg 3b, "the paper trail"** — hunting the faceless buyer's *money and
 paper*, never his face, exactly as the leg's design intends. The chain they have walked:
@@ -666,14 +719,18 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 the washer** — down, alive, in the open *between them and their only exit*, and
-she *remembers*: she wakes up eventually and she is the only witness this system can't erase ·
-**🔴 the destroyed grate** — a hole that can't be closed, on iron she salts nightly, and still
-their only proved exit · **🔴 Vale's mask has LAPSED** — the minute ran out at ~50 ft and could not
-be renewed from the wall, so the yard is now silent and nothing covers them; recastable, but only
-*here* · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
-**⏰ the delivery** — something is due at that door, they are early for it, they are standing in the
-room it arrives at, and the timing is withheld but askable · ~~**🗣 "Do you have a name for me?"**~~
+**Clocks:** **🔴 THE WASHER IS TAKEN** — no longer a clock in the yard, now a **person in their
+custody**: alive, unconscious, stable, carried out over Forge's shoulders on 07-28. She *remembers*,
+she wakes up eventually, and she is still the only witness this system can't erase. ⚠ Taking her
+**converted a survivable mess into a disappearance** — a missing washer is a hole in a nightly
+routine in a way a confused one is not. *Mercy or shopping* undecided; **what she is stays
+unanswered** · **🔴 the destroyed grate** — a hole that can't be closed, on iron she salted nightly,
+and the route they just used **out** · ~~🔴 Vale's mask~~ (lapsed and now moot — they are out of the
+yard) · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
+**✅ ⏰ THE DELIVERY LANDED** — it arrived at the stair gate 07-28 while the party was face down in
+the culvert **eight feet under it**: heard through stone, **never seen, nothing described**, buyer
+still sealed. They got out ahead of it by minutes. **What it was, and what it does now it has found
+an empty stand and a missing book, is entirely open** · ~~**🗣 "Do you have a name for me?"**~~
 (spent — she answered with a question and a prop, and he let it go for a better one) ·
 **🗣 "Where did you get a piece I cannot say?"** — asked, **dodged**, and *left lying there*: he said
 *"You did not answer me"* and did not press, so it is still owed and he still wants it ·
