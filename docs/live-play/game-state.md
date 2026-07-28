@@ -317,12 +317,41 @@ no second turn spent on a doorway. Also published: **it does not have to be the 
 #player-chat has Vale set on the south one — *"Aku penasaran pintu selatan"*, *"Gas"* — while
 Windreth is already at the west end, so the party is splitting on purpose.
 
-**🧭 TURN STATE:** **⏭ Vale is up — O6, round 1, last in the order, nothing spent** (30 ft, action,
-bonus, reaction). Round 1 done: Windreth (G5, book, reaction unspent), Forge (N12, turn closed,
-reaction unspent), the reader (K5, turn closed). ⚠ **The reader's reaction is STILL unspent — but
-nobody is adjacent to him any more, so right now nobody provokes**; that was published as a *current
-fact*, not a promise. He now sits **20 ft behind Windreth**, and Windreth acts **before** him in
-round 2 (init 13 vs 4). The exit promise was restated verbatim and is unchanged.
+**🏃 VALE RAN THE WHOLE ROOM AND STOPPED IN THE DOORWAY.** `/move` **O6 → I12**, six diagonal
+squares = **exactly 30 ft**, no Dash — and **I12 is inside the south gap** (row 12, cols I–J). She
+crossed the row-9 trough on the way (water is flavour here, *not* difficult terrain — the engine
+charged her 30 for 6 squares). **She kept everything else**: action, bonus action, reaction, 1
+attack, all unspent, turn ended voluntarily. **No opportunity attack** — her path never entered the
+reader's reach at K5, and she was moving away from him the whole time. Her turn closed round 1.
+⚠ **She is standing IN the gap, not through it — she did not declare going through.** Under the
+published ruling that declaration is hers to make on her own turn; **do not make it for her.**
+
+**🕯️ WHAT TAKING THE BOOK ACTUALLY DID TO THE ROOM** (#the-story narration
+`8ef84bcf-80fe-4912-b11a-78d5d9c24043`) — the seven's **hands have not stopped and nobody has looked
+up**, exactly as before, so this is *not* the seven reacting. But **the voice has stopped, and so has
+the small wet sound that came after each word** — there is no word to finish, because the reader is
+30 ft from his own stand with empty hands. *"The work goes on. It is simply no longer about anyone."*
+An honest consequence of the theft, costing the players nothing and confirming nothing sealed.
+
+**🧭 TURN STATE:** **⏭ ROUND 2 IS OPEN — Windreth is up and is FIRST** (G5, 30 ft, action, bonus,
+reaction, 1 attack, **has the book**). Order: Windreth → Forge → the reader → Vale. Board: Forge
+**N12**, Vale **I12** (in the south gap), the reader **K5**, 20 ft east of Windreth.
+**⚠ ALL THREE CAN BE OUT THIS ROUND, and that was published as measurement, not as a hint:**
+Windreth **G5 → A6/A7 = exactly 30 ft**, one ordinary move, no Dash, **nothing on that line
+provokes**; Forge **N12 → J12 = 20 ft** (speed **25**, so it fits); Vale **already in the gap**.
+⚠ **The reader's reaction is STILL unspent — but nobody is adjacent to him, so right now nobody
+provokes**; published as a *current fact*, not a promise. The exit promise was restated verbatim.
+
+**🧾 DEBTS, STATED IN PUBLIC AGAIN** (#in-character `1531645150076600433` / `1531645152446382130`) —
+**the culvert bonus action is being paid ON THIS TURN**: Windreth spends his bonus action normally
+and I immediately `restore-bonus-action`, giving him two. He does not have to ask. **Still unpaid:**
+the **20+ Investigation tier**, explicitly *not* evaporated by the 18 — still in the book, still
+findable, to be collected when nobody is counting rounds.
+
+**⚠ SNEAK ATTACK IS NOW OFF, AND THAT WAS DISCLOSED PRE-ROLL.** Last round it survived on **Vale's
+adjacency** to the reader; she is now at the far end of the room. Windreth currently has **neither
+advantage** (blindsight 60 denies the Hide) **nor an ally within 5 ft of him** ⇒ **no Sneak Attack**
+unless something changes. Said out loud *before* any dice, per standing practice.
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
