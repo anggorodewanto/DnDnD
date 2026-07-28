@@ -420,9 +420,46 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE REED LINE AT THE CULVERT MOUTH, night of 07-28 — out of the yard entirely, with the
-book AND the washer, one pre-priced group Stealth check standing between them and gone.**
+**★ Now: THE THREE-WAY FORK ON THE MUD PATH, night of 07-28 — clean away from Stair Hill with the
+book AND the washer, no pursuit, no mark left, and NOTHING PENDING BUT A DESTINATION.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**✅ THE GROUP STEALTH CHECK PASSED — resolved exactly as pre-priced.** **Windreth 17** (`d20 6 + 10
++ 1d4 1`) ✅ · **Forge 23** (`d20 **20** + 2 + 1d4 1`) ✅ vs **DC 15**. Two of three is half or more
+⇒ **the party succeeds**; **Vale never needed to roll and owes nothing**. Windreth's player made
+exactly this argument in a To-DM at 13:42:04Z and **I confirmed his read out loud rather than
+re-litigating a line I published before any die was touched** — moving the bar after seeing the
+numbers would have been bad faith. Forge's **natural 20 while carrying an unconscious adult** was
+paid back in the fiction (the man with a body on his shoulder is the quietest thing on the reed
+line). Both `dm_queue_items` resolved via `POST /dashboard/queue/{id}/narrate` → 204.
+**Consequence: the lantern crossed the reed line and kept going.** No mark, no report, nobody
+looking for them, **and the destination stays free — all three options still on the table.**
+
+**🎒 FORGE'S KIT — "can we grab Forge's gears back?" answered YES, and it was already free.**
+@dewa asked at 13:44:47Z (JonathanEka in #player-chat: *"nganti lali klambi ku"*). Ruled: the
+re-equip was **already applied last beat as a published default** — belt, pack, boots, clothes, no
+roll, no cost, no time, because the kit was cached in the open at the reed line and they came out
+on top of it. ⚠ **The breastplate is the one thing not there, and that is planted-not-sprung** —
+the skiff-hand hooked it as salvage on **07-27**, in the same beat the kit was stated to be
+recoverable *and findable*. **Forge is AC 14 and stays AC 14 until it is back on his chest.** Told
+them plainly it is **not gone forever: boats tie up somewhere** — a thread to pull, not a loss to
+eat.
+
+**🔢 "EIGHT." — SHE TALKS IN HER SLEEP, AND IT IS NOT A NAME.** Carried out of the reeds, the
+washer says one word twice, flat, *the way people count*: **"Eight."** Deliberately **a number and
+not a name**, so it plants **LINE EIGHT** without touching the summon trigger (which stays a
+player choice) and without confirming the party's own book/unlisted deduction (`campaign-arc.md`
+guardrail). **Refused to explain it in public** and will keep refusing.
+
+**🧭 THE FORK — the only thing pending is a player declaration.** Forty feet on, the mud path
+splits three ways in the dark: **left** bends with the cut toward open water and a dawn ~2 hrs off;
+**right** climbs a broken towpath toward the one warm chimney in the quarter (flour on the wind);
+**behind them** the old culvert mouth breathes cold. Same three options, same honest prices, **not
+changed by the roll**. Also still theirs and unsteered: **she is going to wake up — mercy or
+shopping.**
+
+Fiction #the-story `5891fd33-7cc7-4d31-93df-57fc0ed56805`; mechanics #in-character
+`1531660440625479742` / `1531660442496274603`.
 
 **🌾 THE EXIT BEAT — "take the washer alive, out through the grate, before the delivery, no names
 aloud."** Windreth declared it at 13:16:57Z, **@dewa** answered *"We follow Windreth"* at 13:21:25Z,
@@ -458,11 +495,12 @@ sealed; the clock paid off as tension, not as an ambush, and **no watcher was in
 he noticed on the way up — **the culvert changes hands.** Yard-end stone is squared, warded, young;
 this stone is older than the wall, older than the salt. Never explained.
 
-**🎲 ⏳ PENDING — the one roll, pre-priced before any die was touched:** **GROUP Stealth check, DC 15**
+**🎲 ✅ RESOLVED — the one roll, pre-priced before any die was touched:** **GROUP Stealth check, DC 15**
 (`/check skill:stealth`, one each; **half or more succeed ⇒ party succeeds**, RAW group check, used
 deliberately). **DC 15 not 14 because "a body does not crouch when you tell it to."** ✅ Pass = gone
 clean, destination free. ❌ Fail = **not a capture** — the lantern sits on the reed line, the watch
 marks the spot, the **lit** options die for tonight and they go to ground close and dark.
+**Outcome: PASSED 2-of-3 (17 / 23), pass branch paid in full, nothing spent.**
 
 **💡 "WHERE IS BETTER LIGHT?" ANSWERED WITH THREE REAL OPTIONS + HONEST PRICES** (and the tier
 payout restated: *with a lamp and no clock he does not roll again, he just gets it*):
@@ -724,7 +762,9 @@ custody**: alive, unconscious, stable, carried out over Forge's shoulders on 07-
 she wakes up eventually, and she is still the only witness this system can't erase. ⚠ Taking her
 **converted a survivable mess into a disappearance** — a missing washer is a hole in a nightly
 routine in a way a confused one is not. *Mercy or shopping* undecided; **what she is stays
-unanswered** · **🔴 the destroyed grate** — a hole that can't be closed, on iron she salted nightly,
+unanswered**; **🔢 she talks in her sleep and said a NUMBER, not a name — "Eight," twice, flat,
+the way people count** (plants LINE EIGHT without touching the summon trigger; refused explanation
+in public) · **🔴 the destroyed grate** — a hole that can't be closed, on iron she salted nightly,
 and the route they just used **out** · ~~🔴 Vale's mask~~ (lapsed and now moot — they are out of the
 yard) · ~~the loud bar~~ (spent — thrown, door open, and nothing answered the noise) ·
 **✅ ⏰ THE DELIVERY LANDED** — it arrived at the stair gate 07-28 while the party was face down in
