@@ -281,12 +281,48 @@ was said before the dice, not after: it will not make him answer, and it will no
 "never going to be settled on his balance any more than on his hit points."** Nothing about the
 sealed statblock leaked. Correct syntax handed over: `/shove target:RDR mode:prone|push|grapple`.
 
-**🧭 TURN STATE:** **⏭ Still Forge**, at **O7**, waiting on his `/shove` roll — action spent (Attack
-action), **2 attacks restored**, bonus, reaction, 30 ft. Then the man at the stand, then Vale.
-Windreth: turn closed, book in hand, at G5, **reaction unspent**. ⚠ **The reader's reaction is still
-up and both Forge (O7) and Vale (O6) are adjacent — either one moving away provokes**, and that was
-said out loud before anyone commits. Party intent from #player-chat is still to leave —
-*"retreat?"*, *"moco buku nang njobo"* (read the book outside), *"hooh coba wae kita pergi"*.
+**💪 THE SHOVE LANDED, AND IT WAS THE PLAY OF THE NIGHT — 20 vs 6** (12:22:17Z, #combat-log).
+`mode:push`, so the reader went **P6 → Q5** — pushed *diagonally*, directly away from Forge at O7.
+That single push **broke contact before Forge moved**, which is why his run out cost him **no
+opportunity attack at all**: the reader's threatened squares no longer touched O7. One attack spent,
+one kept. Forge then ran **O7 → O12 → N12**, all 35 ft gone, turn closed at 12:25:14Z with an attack,
+his bonus action, free interact and reaction all still unspent. The player saw the trick himself in
+#player-chat — *"apik yo, ter-push diagonal"*, *"dirimu terbebas seko opportunity attack"*.
+
+**🚶 THE READER'S TURN — HE WALKED, AND HE DID NOT SWING.** The statblock settled it before I chose
+anything: **`Hands Off The Page` is his stated WIN CONDITION** — *"If the book is shut, taken out of
+his reach, or in the water, he cannot take Reads a Name. **Track this before tracking his hit
+points.**"* Windreth has the book 50 ft away, so **Reads a Name is mechanically locked out**, and
+`He Does Not Fight` marks his only attack (Open Hand, 1d4) as *"a last resort, used badly."* So he
+took the one turn that is true to both: **movement only, Q5 → K5, 30 ft, no attack, no ability**
+(`POST /enemy-turn`, 200, `"Moves 30ft"`). Executed as a hand-authored movement step — note the
+payload's `Row` is **0-based** (`turn_builder_handler.go:314` does `dest.Row + 1`), so K5 is
+`{Col:10, Row:4}`. That endpoint also auto-resolves the `enemy_turn_ready` queue row.
+
+**🗣️ WHAT HE SAID WHILE WALKING** (#the-story narration `8ee1fa30-753a-4668-afc3-a91658261b5d`) —
+*"You are faster than me."* … *"Everyone is faster than me. It has never once mattered."* …
+*"Line eight is empty tonight. It was empty in my hands. It is empty in yours."* … and, stopping:
+**"I would not read it out there, if I were you. Sound carries in a yard."** That last line
+re-arms the established summon trigger **without inventing a watcher in the Stair Hill yard** — it
+stays undecidable, advice or threat, exactly as promised. **The seven still have not moved**, and
+that was said in the prose deliberately: the book left the room and not one of them looked up. They
+remain **out of the initiative order**.
+
+**🚪 EXIT DISTANCES PUBLISHED AGAIN, RE-MEASURED OFF THE WALL DATA.** West gap = **col A, rows 6–7**;
+south gap = **row 12, cols I–J** (the `walls` objectgroup is six perimeter segments only — no
+interior walls, the floor is open). Windreth **G5 → 30 ft** from the west gap, one ordinary move, no
+Dash. Forge **N12 → 20 ft** from the south gap. Vale **O6 → 30 ft**, *exactly* her full move. **New
+ruling published: standing IN the gap square and declaring you are going through COUNTS AS OUT** —
+no second turn spent on a doorway. Also published: **it does not have to be the same doorway.**
+#player-chat has Vale set on the south one — *"Aku penasaran pintu selatan"*, *"Gas"* — while
+Windreth is already at the west end, so the party is splitting on purpose.
+
+**🧭 TURN STATE:** **⏭ Vale is up — O6, round 1, last in the order, nothing spent** (30 ft, action,
+bonus, reaction). Round 1 done: Windreth (G5, book, reaction unspent), Forge (N12, turn closed,
+reaction unspent), the reader (K5, turn closed). ⚠ **The reader's reaction is STILL unspent — but
+nobody is adjacent to him any more, so right now nobody provokes**; that was published as a *current
+fact*, not a promise. He now sits **20 ft behind Windreth**, and Windreth acts **before** him in
+round 2 (init 13 vs 4). The exit promise was restated verbatim and is unchanged.
 
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
