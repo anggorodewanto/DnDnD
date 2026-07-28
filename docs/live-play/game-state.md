@@ -150,6 +150,21 @@ Standing this fight: **non-lethal granted flat for everyone, all fight, no re-de
 **Windreth is owed a second bonus action** — the turn-resources override is *refund-only*, so
 spend his first, then `POST /api/combat/{enc}/combatants/348be098-.../restore-bonus-action`.
 
+**Round 1, mid-turn: Windreth has the book.** He moved M6 → **P5** (15 ft — the one square that
+touches *both* the reader at P6 and the stand at Q6), then spent his **free interact**: *"grab the
+book and read."* **Ruled: it lands, no roll** — two fingers *resting* on a page is not a grip and
+the reader does not fight, and the book had been publicly declared reachable, so no contest was
+invented after the fact. His hand did not close or follow; **the seven did not react** (a name
+moves them, an object does not). The silent read was given free and in full: names in many hands,
+a date and the recurring number **8**, nearly every entry struck with a single line **in the same
+ink and pen as the writing itself**, the top of the page dated tonight, one empty ruled line
+below the last entry. That is the fiction answering the party's 8-silver deduction **without
+confirming it** — do not explain what a struck line does. **Fork left open and explicitly
+unmade:** reading silently is free; reading **a name aloud** was flagged as *not free and not
+neutral* **before** it could cost anything, and the choice is the player's. **His turn is still
+live** — action, bonus action (+ the owed second), 15 ft, 1 attack, reaction; only the free
+interact is spent.
+
 Closed encounters, newest first (full chronology in
 [`sessions/session-01.md`](sessions/session-01.md)):
 
