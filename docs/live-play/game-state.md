@@ -206,7 +206,7 @@ none of it confirms the buyer or says what a struck name costs:
 | any | On every line the strike is the **same sitting** as the writing — same ink, pen, pressure, unbroken. A name is not recorded and later cancelled; **the crossing is the transaction.** |
 | 12+ | **Page numbers skip near the front.** Pages have been cut out cleanly, with a blade. |
 | 16+ | The empty ruled line under tonight's last entry **already carries its number in the right column — 8 — and no name.** |
-| 20+ | ⛔ **NOT RELEASED — still owed if anyone rolls it again.** A few names **repeat, months apart**; in every repeat the earlier instance is the struck one. Implication left hanging, unexplained. |
+| 20+ | ✅ **RELEASED 07-28 in the culvert, with NO roll**, once light (Forge's hooded lantern) · time · no clock were all met. A few names **repeat, months apart** — four or five out of hundreds, different inks, same hand — and **in every repeat the EARLIER instance is the struck one**; the later entry stands clean and unmarked. Implication left hanging, **unexplained on purpose**. |
 
 **🫥 THE HIDE RULING — the honest one, made in the open.** Windreth then spent his bonus action on
 **Cunning Action: Hide, Stealth 25**, and the engine flagged him *Hidden from all hostiles*. **The
@@ -420,9 +420,57 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE THREE-WAY FORK ON THE MUD PATH, night of 07-28 — clean away from Stair Hill with the
-book AND the washer, no pursuit, no mark left, and NOTHING PENDING BUT A DESTINATION.**
+**★ Now: INSIDE THE OLD CULVERT, night of 07-28 — lamplit, private, the book READ TO THE BOTTOM,
+and the washer coming round. Pending: one player declaration, does Windreth go for the plate.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🧭 DESTINATION CHOSEN — ③ THE OLD CULVERT.** Worked out by the players in #player-chat (Javanese)
+at 14:02–14:04Z: Windreth proposed *the old culvert first, wait for the washer to wake so she can be
+questioned, then read the book at open water at dawn*; **@dewa** agreed and proposed the split
+(*"me and Jona wait for her to wake, you go find Jona's armour with stealth?"*); Windreth answered
+*"boleh."* Ran the move as **free — 20 ft, no hurry, nobody watching, no rolls.** They are 40 ft in,
+**past where the stone changes hands**, on a dry ledge above the waterline. No salt anywhere.
+
+**🏮 A DM CORRECTION MADE IN PUBLIC, AND IT WENT THEIR WAY: FORGE HAS BEEN CARRYING A LANTERN ALL
+NIGHT.** `lantern-hooded` ×1 and `lamp-oil` ×1 are on Forge's sheet, in the pack he cached at the
+reeds and got back an hour ago. **I had published that option ③ was "pitch dark, so it does not buy
+the tier" — that was wrong and I said so plainly rather than making them argue me out of it.**
+Darkness plus a lamp is lamplight; the condition I named was *light*, not *sunlight*. **All three
+conditions met: light ✅ (hooded to a coin, nothing reaches the mouth) · time ✅ (2 hrs to dawn,
+nothing to spend them on) · no clock ✅ (a stone room nobody in Sesh knows is a room).**
+
+**📖 THE 20+ INVESTIGATION TIER — RELEASED, WITH NO ROLL, EXACTLY AS PROMISED.** Payload delivered
+verbatim to the table row on `game-state.md:209`: **a few names repeat** — four or five out of
+hundreds, months apart, different inks, same careful hand — **and in every repeat it is the EARLIER
+entry that is struck through**; the later one stands clean and unmarked. **Left unexplained on
+purpose.** Nothing confirmed about the buyer, about what a struck name costs, or about the party's
+own book/unlisted deduction (`campaign-arc.md` guardrail holds). ⚠ **Said explicitly in public: the
+plate deadline is a clock on the PLATE, not on the reading — no fourth condition added through the
+back door after the fact. The tier is paid and stays paid.**
+
+**🛡 THE BREASTPLATE QUESTION ANSWERED IN FULL** (JonathanEka To-DM 14:04:11Z: *"is it simply a check
+to find the right boat? or need to travel to a pier nearby (if such exist)"*). Answered as **a
+place, a clock, and one uncertain moment — not one check, not a dungeon**: › **the pier exists** —
+night-watch skiffs tie up at a **watch pontoon down-cut** at shift's end; municipal, not secret, so
+**finding it costs time not a roll**, **~25 min each way** from the culvert mouth · › **the clock is
+dawn and it is real** — loose salvage in a boat bottom belongs to nobody, but **once it comes off at
+shift's end it gets logged**, and a dwarf's breastplate out of the canal in the same week the watch
+is dragging that canal for two sunk bodies gets looked at twice (built from existing canon, not
+invented pressure) · › **the roll, if any, is TAKING it, not finding it** — moored skiff, a hand
+maybe asleep aboard, maybe a watchman on the pontoon; Stealth / Sleight of Hand, **to be priced out
+loud before anyone goes** · › **the honest cost of the split: ~1 hour, and Windreth is not in the
+room when she wakes.**
+
+**⏳ SHE IS COMING UP — inside the hour, well before dawn.** Set concretely as a DM call, **no roll**,
+consistent with the published "no repeated rolls to keep her stable." Her hand closes and opens on
+the ledge. **Not played out** — the interrogation waits on whether Windreth is present for it.
+
+**🧭 PENDING — THE ONE OPEN DECLARATION: does Windreth go for the plate, or do all three stay?** The
+split was agreed in #player-chat but **not declared in-character**, so I asked for it in the open
+and stated **I have no preference and both are real plays**. Not deciding it for them.
+
+Fiction #the-story `aac4cec8-8ae0-4f27-92b6-0baf5d68880a`; mechanics #in-character
+`1531666661529223338` / `1531666663324389419` / `1531666665367142400`.
 
 **✅ THE GROUP STEALTH CHECK PASSED — resolved exactly as pre-priced.** **Windreth 17** (`d20 6 + 10
 + 1d4 1`) ✅ · **Forge 23** (`d20 **20** + 2 + 1d4 1`) ✅ vs **DC 15**. Two of three is half or more
@@ -793,7 +841,10 @@ day apart, piece by piece ·
 **🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
 **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
-pulled from a canal is a thread the watch now holds · ~~the dwelling lantern~~ (cleared by the
+pulled from a canal is a thread the watch now holds — **07-28: the recovery was fully specced in
+public — watch pontoon down-cut, ~25 min each way, finding it costs time not a roll, the roll is
+TAKING it, and the deadline is DAWN because logged salvage becomes an item with a question attached
+to it** · ~~the dwelling lantern~~ (cleared by the
 illusion) · two sunk counters
 in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
 gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
