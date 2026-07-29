@@ -420,14 +420,49 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE HAND WAS QUESTIONED, GIVEN EVERYTHING BACK — KEY INCLUDED — AND WALKED BACK TO HIS
-OWN BENCH. MERCY BRANCH #2, AND IT PAID: UNPROMPTED, HE OFFERED TO OPEN THE DOOR. Free, no roll, no
-persuasion, still standing: *"Then you will want the door open… Say when."* ⏰ ~40 MINUTES LEFT to
-the bells and the reader. ⚠ ANNOUNCED, NOT SPRUNG: he has now SEEN ALL THREE FACES, he does not lie,
-and he will answer the reader as completely as he answered them — stated as board state, explicitly
-NOT as a punishment for the mercy; asking him to say nothing is a free, no-roll option that would
-very likely just work. Pending: the door, the book, line eight, or walking away.**
+**★ Now: THEY WENT BACK IN — THROUGH THE CLERK'S OWN DOOR, WITH THE CLERK HOLDING IT. No roll, no
+noise, ~2 min. THE YARD IS SIX, NOT SEVEN — the washer's trestle stands empty, her water cold and
+skinned, nobody redistributed the work (explicitly flagged as NOT a hook and NOT a thread about her;
+the mercy promise restated). THE QUIRE IS ON THE STAND NOW, squared twice, ink and nib and sand set,
+and he is standing at it waiting for a voice — WHEN THE READER WALKS IN, A NEW BOOK STARTS. 💧 AND
+THE TROUGHS GAVE THEM THE ROOM'S ANSWER FOR FREE: the pulp still holds ruling, cut edges, letters, a
+numeral — ALL IN ONE HAND, AND IT IS HIS HAND, ten feet from where he stands and has never once
+turned around. ⏰ ~35 MINUTES TO THE BELLS. Pending: the stand, the six, line eight, the book, the
+arch, or being here when the reader comes.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🚪 BACK INSIDE THE READING ROOM — NO ROLL, NO CHECK, NO NOISE** (declared 12:08: *"let's go in
+now" says Vale*). He got off the bench, unlocked the low iron-banded west door with the cord key and
+**went in first, because he is always first**, then **closed it behind them, because he always closes
+it.** Cost ~2 minutes off the hour. Map `6081877c…` is the live board again (18×12, west-wall gap
+rows 6–7, outflow arch south cols I–J, stand at Q6, ordinary dark + darkvision 60 all round).
+
+**🧍 THERE ARE SIX.** The seventh trestle is where the washer left it, **the water in front of it flat,
+cold and skinned, and nobody moved into the gap or took up her share** — six work at the pace six
+worked at when there were seven. ⚠ **Said in public, unprompted: this is NOT a hook and NOT a thread
+about her; she walked, she is gone, she is fine, and the binding promise stands** — her fate is not a
+trap. *The room simply has a hole in it and no way to notice one.*
+🚫 **The name-rule held a FOURTH time: nobody looked up. "A door is not a name."** Restated unsoftened
+in-post: **do not read a name aloud in this room unless that is the thing you are choosing to do.**
+
+**📄 THE STAND — WHAT THE CLOCK IS ACTUALLY COUNTING TOWARD.** He crossed without looking at the six
+(*"you learn not to look at the stand"* — and he has spent eleven years learning not to look at
+anything else), found it empty, **did not react**, and set up: **quire down, squared twice, inkhorn,
+nib, sand shaker on the right.** He now stands with his hands at his sides waiting for a voice.
+**When the bells go and the reader walks in, a NEW BOOK STARTS.**
+
+**💧 THE TROUGHS — GIVEN FREE, NO ROLL, AND WHY.** Looking into an open trough in a room where nobody
+objects to being looked at is not a Search, **and the identification was already PAID FOR by the 20+
+Investigation tier** (*one hand, start to finish, no second pen*). The pulp has not finished being
+paper: thumbnail pieces still holding ruling, cut edges, a squared page corner, **and writing on some
+of them — three letters, half a word, a numeral pressed heavier.** ⚡ **ALL ONE HAND. IT IS HIS HAND.**
+⚠ **Explicitly NOT explained: what the water is for, or what it says about the book in their bag —
+evidence, not proof, the read stays theirs** (`campaign-arc.md:184` holds; same treatment as the
+blank quire and *"There must have been."*).
+Fiction #the-story `29b64de5-5071-42c5-ad9a-fc31477bb754`; mechanics #in-character
+`1531997579330715700` / `1531997581448843416`.
+
+**Prior (07-29 ~11:56Z) — the second interrogation and the release:**
 
 **🗣 THE SECOND INTERROGATION — ONE DECLARATION, ONE BEAT, NO DICE** (declared 11:48:
 *"Vale asks about the delivery and the reader. And giving him back his stuff and walk him back to the
@@ -1138,7 +1173,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 ~40 MINUTES TO THE BELLS — THE READER ARRIVES AT THIS DOOR, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise; ~20 min of the hour was spent on the second interrogation. **The grey is spent/harmless.** ⚠ **The clerk has been RELEASED with all his property incl. the key and is back on his bench outside that door** — he has now seen all three faces too, he does not lie, and he will answer the reader completely; **announced as board state, explicitly not a punishment for the mercy.** 🚪 **He has offered, unprompted and for free, to OPEN THE DOOR — no roll, still on the table** · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🔴 ~35 MINUTES TO THE BELLS — THE READER WALKS INTO THIS ROOM, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise (~20 min spent on the second interrogation, ~2 more going in). **The grey is spent/harmless.** 🚪 **THEY ARE INSIDE THE READING ROOM AGAIN**, let in by the clerk with his own key; he closed it behind them. **He is at the stand with the blank quire squared and the ink set, waiting for a voice — when the reader arrives, A NEW BOOK STARTS.** ⚠ The clerk has seen all three faces too and does not lie; **board state, explicitly not a punishment for the mercy** — asking him to say nothing is a free no-roll option · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
