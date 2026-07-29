@@ -420,9 +420,63 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE PLATE IS BACK AND UNLOGGED, THE WASHER WALKED FREE, AND THE PARTY IS SETTING A TAIL
-ON THE HAND before first light of 07-29. Pending: follow-or-ambush, and whether Windreth joins.**
+**★ Now: THE TAIL IS RUNNING ON THE LOW LANE. Leg one HELD on Vale's 18 in spite of Forge's 6,
+Windreth joined for free, and Forge is in the breastplate at AC 16. The hand stopped, walked a
+counter-surveillance loop around a block, and is four to five minutes from where the lane bends
+inland. Pending: leg two, and follow-vs-ambush at the bend.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🛡 FORGE IS AC 16 — WRITTEN TO THE SHEET, NOT PROMISED.** The pickup happened (Windreth crossed
+back with the plate), he strapped it on, and the write went in: builder PUT with
+`worn_armor:"breastplate"` on `d2d98745-…` → **`ac` 14 → 16, `equipped_armor` = breastplate**,
+verified in DB with HP 50/50, gold 26 and all 20 inventory items preserved (additive edit, so
+`preserveInventory` held). `ac_formula` is now empty by design — the armour branch supersedes
+`10 + DEX + CON`. **Breastplate carries no Stealth penalty in the rules and that was said out loud**,
+so nothing that happens on this tail is the armour's fault.
+
+**🕵 LEG ONE HELD — 1 of 2, which is exactly half, which is a pass under the published rule.**
+Vale `d20(18) = 18` vs DC 13 (queue `6b03b3a8`, `/narrate` → 204); Forge `d20(2) + 2 + 1d4(2) = 6`
+(queue `0c289930`, `/narrate` → 204). The d4 was counted, it just had nothing to save. **Nobody was
+lost and nothing has to be re-run.**
+
+**🔍 FORGE'S FAILURE BOUGHT A CLUE, NOT A PUNISHMENT — and that was the promise, kept.** One boot
+edge on a wet flag; the old man stopped for three breaths without turning around, then **walked a
+pointless loop up between two blind warehouse walls and came out on the same lane further along.**
+Ruled in public: **that is counter-surveillance, and a clerk does not know it.** *Who taught him,
+or what did,* is deliberately left unexplained. He now walks slower and stands at corners.
+
+**🧭 WINDRETH JOINED — declared 07-29 03:44Z, and the catch-up was ruled FREE, no roll.** Crossing
+the quarter alone in the dark is the one thing he is better at than anyone at the table.
+
+**📐 LEG TWO PRICED, ARITHMETIC SHOWN BEFORE THE DICE:** Dex (Stealth) **DC 13** each — he is more
+careful, they know he checks, those cancel. **Three tailers means half-or-more is now TWO of three**
+(it was one of two). **If Forge takes an out it is Vale + Windreth and the bar is back to one of
+two.** Stated explicitly as arithmetic, **not** as steering. Forge's two free outs re-offered with
+no judgement attached: hang back a street (no roll, no eyes on the ending) or **walk it openly**
+(no roll, price is being *seen* and describable later).
+
+**🏃 THE BOLT CLAUSE — PRICED, AS DECLARED.** @dewa in-character 02:36Z: *"We try to follow, but if
+we notice him running away, we will capture him."* Ruled: **running him down is not the risk and I
+refused to pretend it was** — he is old, slow, satchel on a long strap, and Forge alone moves 35.
+**The risk is that he does not run *away*, he runs *somewhere*** — a door, a yard, earshot of people
+paid to be awake early. **Taking him is cheap; taking him quietly where nobody hears is the real
+roll, and it gets priced once there is an actual place to price it against.** Grabbing him **opens
+combat**, and combat at dawn on a waterfront is loud.
+
+**🎯 AMBUSH AT THE BEND IS STILL FULLY LIVE** — @JonathanEka's original shape (ride it to the
+destination, then take him there) is untouched; they may walk leg two and still decide at the
+corner. **Also named neutrally and then left alone: they have never ruled out simply speaking to
+him.** *No DM preference, and it was said in public that no preference is going to develop.*
+
+**🕊 THE WASHER IS GONE, AND THE PROMISE WAS KEPT.** She was still at the culvert when Windreth came
+down the bank — note folded up her sleeve — and **she handed it over even though he had already
+arrived and the message was now pointless, because that was the arrangement.** Then she went up the
+bank and away in no particular direction. **She is not a trap and she was not made into one.**
+
+Fiction #the-story `42b36e3d-48dc-4f16-abfb-bb92286ba107`; leg-two pricing + bolt clause
+#in-character `1531873346575143067` / `1531873348751986818`.
+
+**Prior (07-29 02:24Z) — the lift, the mercy, and the tail pricing:**
 
 **🤏 THE QUIET LIFT LANDED BY EXACTLY ONE.** Windreth declared it in-character 07-29 02:03Z — *waits
 for the duty hand's attention to settle on the slate, then slips the breastplate from the salvage
@@ -910,7 +964,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🔴 THE TAIL IS RUNNING — LEG ONE HELD, LEG TWO UNROLLED.** Three PCs on the low lane before the grey, four to five minutes behind the bend where it turns inland. **He knows how to check for a tail** and has already done it once. Losing him is the failure state; it is explicitly not a fight · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
