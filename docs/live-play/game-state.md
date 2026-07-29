@@ -420,9 +420,70 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: INSIDE THE OLD CULVERT, night of 07-28 — lamplit, private, the book READ TO THE BOTTOM,
-and the washer coming round. Pending: one player declaration, does Windreth go for the plate.**
+**★ Now: THE PARTY IS SPLIT, night of 07-28 running into first light — Vale + Forge in the culvert
+with a washer who has TALKED, Windreth alone on the watch pontoon three feet from the plate.
+Pending: which of four priced ways Windreth takes it, and mercy-or-shopping on her.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🧭 THE SPLIT WAS DECLARED IN-CHARACTER — I did not decide it.** Windreth, #in-character 07-28
+23:04Z: *"The woman can wait. The plate cannot."* … *"Let her wake. Keep her calm, give her water,
+but ask no names and show her nothing from the book. I will be back before dawn."* **He goes alone.**
+Vale + Forge hold the room. @JonathanEka 01:47Z declared **Forge Helps** Vale (pre-built cover
+story); @dewa 01:53Z declared the approach: *wait until she is fully awake, then with kindness
+persuade her to tell what she knows — operations, owners, any clue.*
+
+**🗣 PERSUASION 17 — LANDS. DC 15, and I gave them the number plus the reason it was 15.** Roll and
+declaration arrived together so I never got to pre-price it; **I said that out loud and then priced
+it exactly as I would have beforehand.** 15 *because of how they did it* — waited for her to be
+fully awake · led with kindness and water · **asked no names** · **showed her nothing from the
+book** (Windreth's own instruction, actually followed). Said publicly: opening that book in front of
+her is **not** a DC 15 conversation, and I would have warned them before the roll. **Forge's Help was
+already inside the roll** — `d20(6/13 → 13) + 4 = 17`, advantage applied, Help spent, no re-roll
+owed. Queue row `af9ad04c` resolved via `/narrate` → 204.
+
+**🕯 WHAT SHE GAVE — and the wall a 25 would not have broken either.** *Bought:* the **quiet window
+from the inside** (*"an hour they send us out"* — bar on the side door, bucket to the lane, come back
+to a used room, chairs moved, boots on the wet; *"you learn not to look at the stand"*) · **the
+count** — she cannot read, which is exactly why they let her stay while it is read aloud: she holds
+the tally out loud while **the hand** writes · **the night it went to eight and did not go on** —
+pen down, room silent, she was sent to the lane and stood there a long time. **She does not know
+what is on line eight and never has.** · **THE HAND** — *"He is the one whose writing it is. All of
+it. The whole book is one man's hand."* No name. **When the stand is empty and a delivery comes,
+they send for him, and he comes at FIRST LIGHT to write.** *"They will have sent for him already."*
+*Not bought — and stated as a real ceiling, not a stonewall:* **the owners.** She is a washer; they
+put her in the lane before that door opens, every time, without exception. Heard the boots, never
+the face. **Said in public: no d20 result makes a person have seen a face they were never in the
+room for — the owners are up the ladder, not through her.** ⚠ Guardrails held: **nothing confirmed
+about the buyer, nothing about what a struck name costs, and their own book/unlisted deduction
+explicitly left to them.** What she *is* still unanswered — never touched. **Her one ask, flat, the
+only thing she requested: "Do not take me back there."**
+
+**⚔ WINDRETH ON THE PONTOON — TAKING ROLL PRICED OUT LOUD, NO DIE TOUCHED YET.** Travel ran **free,
+25 min, no roll** (public towpath, as pre-promised). Board: plank shelf on floats, six skiffs in on
+their lines, shift's end, crews gone up the stair. **One duty hand with a hooded lamp and a slate,
+working the night's salvage crate.** Crate open, three feet from his boot; **the breastplate is in it
+and NOT YET ON THE SLATE.** Window closes at the bottom of the crate or sunrise, whichever is first.
+Four ways published, all binding: › **quiet lift** — Sleight of Hand *or* Stealth, player's pick,
+**DC 15**; fail = he looks up, **not a fight** (municipal worker at end of shift), it becomes a
+conversation with Windreth's face in it › **from the water** — no roll to get under the pontoon,
+**Athletics DC 13** to bring a breastplate up out of water quietly; fail = noise + he comes to the
+rail, and either way soaked, cold, more night gone › **straight at him** — **Persuasion/Deception
+DC 13**, will probably clear, **the cost is not the roll: he writes a description on the slate**,
+a name-shaped thing in the week they are avoiding name-shaped things › **walk away free**, no roll,
+no cost, Forge stays AC 14. Also said as information not threat: **he is alone and help is 25 min
+out — nobody knows his face and nobody is coming.**
+
+**⏳ THE DAWN CLOCK IS NOW DOUBLE-BOOKED — and that is the pressure, not an ambush.** At first light:
+**the plate stops being unlogged** AND **the hand arrives at the stair hill to write.** Same sunrise,
+two places, and it was said in public that he cannot be in both.
+
+**🕯 LINE EIGHT REMAINS A PLAYER CHOICE AND NEVER A DIE ROLL** — re-stated in the open: reading it,
+or saying aloud what is written on it, is elected, never sprung.
+
+Fiction #the-story `c10ff231-1497-4c1a-9fe4-17e1e16e50ba`; mechanics #in-character
+`1531843400104677507` / `1531843402117808159` + the `/narrate` resolution.
+
+**Prior (07-28, 14:16Z) — the lamp correction and the book read to the bottom:**
 
 **🧭 DESTINATION CHOSEN — ③ THE OLD CULVERT.** Worked out by the players in #player-chat (Javanese)
 at 14:02–14:04Z: Windreth proposed *the old culvert first, wait for the washer to wake so she can be
@@ -805,8 +866,20 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 THE WASHER IS TAKEN** — no longer a clock in the yard, now a **person in their
-custody**: alive, unconscious, stable, carried out over Forge's shoulders on 07-28. She *remembers*,
+**Clocks:** **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
+no name known to her, and **when the stand is empty and a delivery comes they send for him — he
+arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
+deadline**, so the two clocks are double-booked and it was said in public that Windreth cannot be in
+both places. What he *is* beyond "the one whose writing it is" stays sealed; **do not narrate what a
+written name costs** · **🟡 THE WASHER HAS TALKED AND ASKED FOR ONE THING** — awake, calm, given
+water, **asked no names and shown nothing from the book** (Windreth's standing instruction, followed
+by his players): she gave the quiet window from the inside, the stand, the count, the night it
+stopped at eight, and the hand. She did **not** give the owners and **cannot** — a washer is put in
+the lane before that door opens, every time; ruled in public as a **real ceiling, not a stonewall**,
+and that no d20 result changes it. **Her one ask: "Do not take me back there."** *Mercy or shopping*
+still undecided; **what she is stays unanswered** · no longer a clock in the yard, now a **person in their
+custody**: alive, awake, stable, carried out over Forge's shoulders on 07-28. She *remembers*,
 she wakes up eventually, and she is still the only witness this system can't erase. ⚠ Taking her
 **converted a survivable mess into a disappearance** — a missing washer is a hole in a nightly
 routine in a way a confused one is not. *Mercy or shopping* undecided; **what she is stays
@@ -841,10 +914,16 @@ day apart, piece by piece ·
 **🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
 **🔴 Forge's breastplate on a watch skiff**, taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
-pulled from a canal is a thread the watch now holds — **07-28: the recovery was fully specced in
-public — watch pontoon down-cut, ~25 min each way, finding it costs time not a roll, the roll is
-TAKING it, and the deadline is DAWN because logged salvage becomes an item with a question attached
-to it** · ~~the dwelling lantern~~ (cleared by the
+pulled from a canal is a thread the watch now holds — **07-29: Windreth is STANDING ON THE PONTOON,
+alone, help 25 min away.** Travel ran free and no-roll as promised. The plate is in an **open salvage
+crate three feet from a duty hand's boot**, lamp and slate in his hands, **and it is not on the slate
+yet** — the window closes at the bottom of the crate or at sunrise. **Four ways priced out loud and
+binding before any die:** quiet lift **DC 15** (Sleight of Hand *or* Stealth, player's pick; fail =
+he looks up, **not a fight**, a conversation with Windreth's face in it) · from the water, no roll to
+get under, **Athletics DC 13** to lift it out quietly (fail = noise + rail, either way soaked and
+cold) · straight at him **Persuasion/Deception DC 13** (will likely clear — **the cost is the slate**,
+a written description in the week they are dodging written things) · **walk away free.** No die
+touched yet · ~~the dwelling lantern~~ (cleared by the
 illusion) · two sunk counters
 in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
 gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
