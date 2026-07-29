@@ -420,13 +420,67 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE CLERK IS TAKEN, AND IT WAS CLEAN. Option ① executed with TWO, needing one —
-Windreth Stealth 27, Forge Stealth 20 vs DC 13. No combat, no initiative rolled, no noise, no lamp
-on Stair Hill: NOBODY KNOWS. He never saw a face. In hand: one old clerk (alive, unhurt,
-unrestrained, sitting where the lane bends) and his SATCHEL, UNOPENED. Vale arrived ~60s later to a
-finished job — full party on the ground. ~8 minutes to grey. Pending: what they do with the man,
-the bag, and the door.**
+**★ Now: THE BAG IS OPEN AND THE HAND HAS TALKED — FREELY, COMPLETELY, AND FOR NO DIE AT ALL. He
+is the writer, eleven years, and he is a MECHANISM not a mind: he does not read the book, he is READ
+TO, one line at a time, and a line is called by its NUMBER. Strikes are ORDERED by the reader
+(*"strike"* + a number) and he has never asked what one means. He does not know what happens to a
+name and never asked in eleven years. He has never been given the owners' name and has never been in
+a room with them. In the satchel: his instruments, the DOOR KEY on a leather cord, breakfast — and a
+QUIRE OF BLANK RULED PAPER, because he was summoned to start a new book. ⏰ ANNOUNCED CLOCK: THE
+READER COMES TO THIS DOOR WHEN THE BELLS GO, ~1 HOUR AFTER FIRST LIGHT — AND HE HAS SEEN ALL THREE
+FACES. Pending: what they do with the man, the key, and the hour.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🎒 THE SATCHEL — OPENED FREE, NO ROLL** (Forge, declared 10:22: *"Forge inspects the satchel that
+he holds"*). An open flap is not a challenge. Contents: waxed inkhorn + a second holding something
+greyer · three cut nibs in a cloth fold · a nib knife worn to a sliver · a dark-wood straightedge
+polished pale on the working edge · a sand shaker · **a key on a leather cord gone black with thumb
+wear — that is the door** · a heel of yesterday's bread in a napkin · and flat against the back where
+nothing could crease it, **a QUIRE OF RULED, CUT, SQUARED, BLANK PAPER. Enough to make a book.**
+⚠ **Said in public: I will NOT tell them what the blank quire does or does not mean about the book
+they are carrying — that read stays theirs** (`campaign-arc.md:184` guardrail holds).
+
+**🗣 THE INTERROGATION — NO ROLL CHARGED, AND WHY** (Vale, declared 10:20: *"Vale questions him. The
+operations, the writer, the owner, anything he can give"*). **A check overcomes UNWILLINGNESS and he
+has none** — not holding out, not bargaining, not lying. Toll-booth rolls refused out loud.
+⛔ **Ceiling ruling restated verbatim from the washer precedent: the limit is KNOWLEDGE, not will —
+no d20 makes a man know a name he was never told; a 30 and a 9 get the same answer, so no 30 gets
+handed back a shrug and called a failure.**
+**What he gave:** *"You want to know if I am the one who writes it. I am. Eleven years."* · **he does
+not read — he is read to**, writes what is spoken, in the order spoken, **and a line is called by its
+number** (this is the natural hook to line eight, and line eight itself was NOT touched — still
+player-elected, never a die) · **strikes are ordered**: the reader says *strike* + a number, he goes
+back and pulls the line out sideways, ***"I do not ask why. I have never asked why."*** — **the
+repeat-names / earlier-entry-struck mystery therefore stays UNEXPLAINED, honestly, from inside the
+fiction** · **operations**: first in because the work must finish before the room is wanted, he holds
+the key because someone has to be first, **the washers are put into the lane while it is read**
+(*"that is not for me to arrange, that is how it is done"*), he cleans his nibs and goes and has
+never once looked back at the stand · **owners: nothing, and not the nothing of a man protecting
+somebody** — never given a name, never in a room with them, does not know if it is one or four, money
+left in the same place on the same day, ***"you are asking the wrong end of it. I am the hand. Nobody
+explains anything to the hand."*** · **the summons: empty stand + a delivery = two knocks low on the
+door, a boy's fist, no words, ever.** He comes first. He is always first. · **what a name costs:
+HE DOES NOT KNOW.** *"I have never been told. And I have never asked… Eleven years, and I did not
+ask, not one time. You will want that to be a lie. It is not a lie."* ✅ **The don't-narrate-what-a-
+written-name-costs guardrail is now CHARACTER TRUTH rather than DM silence.**
+🫥 **He has not asked who they are, what they want, or about the book. He asked twice more whether he
+was late.** Flagged to the players openly as a pullable thread (*why is a man who knows nothing this
+frightened of being late*) rather than hidden.
+
+**⏰ THE NEW TIMER, ANNOUNCED BEFORE IT RUNS (promise kept):** **the man who READS comes to this door
+when the bells go, ~1 hour after first light.** The grey now costs them nothing — the only man due
+inside at first light is in the lane with them. ⚠ **The reader is the NPC from the Reading Room who
+watched all three walk out with the book and said *"The work goes on. It is simply no longer about
+anyone."* — HE HAS SEEN EVERY ONE OF THEIR FACES.** Given as board state, explicitly not as a threat.
+
+**📣 LIVE AND FREE:** tie him or not (**he has made no move to run; they will be told if that
+changes**) · **show him the book** (they are carrying it; he has not asked) · the delivery · the
+reader · the late-flinch · the key and the door. **No preference stated.** OOC in #player-chat they
+floated storming the door after questioning — **not treated as a declaration.**
+Fiction #the-story `c4551d68-33f6-41c6-9408-2cd7b1857d31`; mechanics #in-character
+`1531977232803954792` / `1531977234607505409`.
+
+**Prior (07-29 ~10:15Z) — the quiet take:**
 
 **🤐 THE TAKE — ONE ROLL, EXACTLY AS PRICED, RESOLVED AS PRICED.** Windreth
 `d20(16) + 10 + 1d4(1) = 27` (queue `ebae4719`), Forge `d20(15) + 2 + 1d4(3) = 20` (queue
@@ -1053,7 +1107,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 ~8 MINUTES TO THE GREY — AND THE MAN WHO WAS SUPPOSED TO WALK THROUGH THAT DOOR IS NOW IN THEIR HANDS.** ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🔴 THE READER ARRIVES AT THIS DOOR WHEN THE BELLS GO — ~1 HOUR AFTER FIRST LIGHT — AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise. **The grey itself is now spent/harmless**: the only man due inside at first light is sitting in the lane in their custody, with his key in Forge's hands · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
