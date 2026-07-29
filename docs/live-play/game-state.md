@@ -420,11 +420,58 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE TAIL IS RUNNING ON THE LOW LANE. Leg one HELD on Vale's 18 in spite of Forge's 6,
-Windreth joined for free, and Forge is in the breastplate at AC 16. The hand stopped, walked a
-counter-surveillance loop around a block, and is four to five minutes from where the lane bends
-inland. Pending: leg two, and follow-vs-ambush at the bend.**
+**★ Now: THE TAIL IS OVER AND THEY ARE AT THE PLACE. Leg two HELD 2-of-3 (Forge 21, Windreth 21,
+Vale 8). The low lane ends at THE FOOT OF STAIR HILL — the hand walked them home. He is sitting on
+a worn stone bench by an unmarked low door, satchel on his knees, back to the lane, EARLY, ~10
+minutes before the grey. Four options priced, no die touched. Pending: which one.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🕵 LEG TWO HELD 2-of-3, AND THE PASS CAME FROM THE MAN WHO FAILED LEG ONE.** Forge
+`d20(15) + 2 + 1d4(4) = 21` (queue `fa223f97`), Windreth `d20(10) + 10 + 1d4(1) = 21` (queue
+`8502a90d`), Vale `d20(8) = 8` (queue `e36972fe`) — all three `/narrate` → 204. **Forge took the
+roll instead of either free out and it paid; the "weak leg" read was RETIRED in public.**
+
+**⚠ VALE'S 8 IS POSITIONAL, NOT A CAPTURE.** A stranger's shutter went up on the water side and put
+lamplight across the lane; she folded into a crate gap and lost a street and a half. **Not caught,
+not seen, not lost — she is ~60 SECONDS BEHIND and coming in from the water side.** Stated before
+any decision: **if the party acts inside that minute, Vale is not in it.** That is the entire price.
+
+**🚪 THE DESTINATION — HE WALKED THEM HOME.** The low lane bends inland and dies against **the foot
+of Stair Hill**, the same hill they came off four hours earlier through the unclosable drain mouth.
+From below it is retaining stone, tide-line, weed. **There is a low iron-banded door in the flank —
+no lamp, no plate, no bell — the kind that exists so somebody need not be seen using the front.**
+
+**🪑 THE BENCH, AND WHY THEY HAVE A WINDOW AT ALL.** He does **not** knock. He sits on a stone bench
+beside the door — **worn into a dish by one man sitting in the same place for years** — lifts the
+strap over his head, sets the satchel on his knees and **rubs his hands, slowly, one thumb into the
+opposite palm.** *"Never once late in eleven years"* is only achievable by being **early every single
+morning**, so the washer's mercy-bought detail is what put them here with time in hand and his back
+turned. **~10 minutes to grey; then he goes in and walks to a stand with no book on it.**
+
+**⚖️ FOUR OPTIONS PRICED IN PUBLIC BEFORE ANY DIE (`1531960854491435049` / `1531960856844173413`):**
+› **① QUIET TAKE = ONE ROLL, NOT A COMBAT** — he is unaware, seated, old, both hands full, so it was
+ruled not worth fighting for: **Dex (Stealth) *or* Str (Athletics) *or* Sleight of Hand, player's
+pick, DC 13, group half-or-more → taken with no noise, no shout, no initiative.** **Fail = combat
+opens with him surprised** (one clerk vs three, they still win) **but the noise is out four feet from
+a door, and the noise is the actual cost.** ⚖ Arithmetic given in advance *again*: **acting now it is
+Forge + Windreth and half of two is ONE; waiting ~60s for Vale makes it three and three needs TWO** —
+waiting costs a minute of ten AND raises the bar, but buys her spells if it goes wrong. Trade named,
+**no DM opinion attached.**
+› **② TALK TO HIM ON THE BENCH** — **no roll to open**; the price is spending the surprise
+irrecoverably. *He is not a fighter, but he only has to be loud.* Offered to answer as him honestly
+within what he knows.
+› **③ LET HIM GO IN AND FOLLOW** — buys **the place where the writing happens**, the one thing the
+night has not shown them; costs the open street and means meeting the inside **after** it knows.
+› **④ WATCH AND DO NOTHING** — free, real, ends at the grey.
+🏃 **Bolt clause updated for the ground:** seated, bag on knees, bad knees — **the door is the only
+thing he could realistically reach, and going for the door IS the "running away" their declared
+capture clause covers.**
+🕯 **Clock real but not a whip.** **No preference stated, and it was said out loud that none will
+develop.**
+
+Fiction #the-story `1350bcd0-f26e-4533-b5fb-7da905351e44`.
+
+**Prior (07-29 ~04:00Z) — the pickup, the plate, and leg one:**
 
 **🛡 FORGE IS AC 16 — WRITTEN TO THE SHEET, NOT PROMISED.** The pickup happened (Windreth crossed
 back with the plate), he strapped it on, and the write went in: builder PUT with
@@ -964,7 +1011,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 THE TAIL IS RUNNING — LEG ONE HELD, LEG TWO UNROLLED.** Three PCs on the low lane before the grey, four to five minutes behind the bend where it turns inland. **He knows how to check for a tail** and has already done it once. Losing him is the failure state; it is explicitly not a fight · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🔴 ~10 MINUTES TO THE GREY, AND THEN HE GOES IN.** The tail is finished — they are at the foot of Stair Hill with the hand sat on his bench, early, back turned. When the grey comes he opens the door, walks to the stand, and finds no book on it; **that is the moment the quiet part of the night ends**, for them and for whoever has to be told · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
