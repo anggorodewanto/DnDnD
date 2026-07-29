@@ -420,10 +420,54 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE PARTY IS SPLIT, night of 07-28 running into first light — Vale + Forge in the culvert
-with a washer who has TALKED, Windreth alone on the watch pontoon three feet from the plate.
-Pending: which of four priced ways Windreth takes it, and mercy-or-shopping on her.**
+**★ Now: THE PLATE IS BACK AND UNLOGGED, THE WASHER WALKED FREE, AND THE PARTY IS SETTING A TAIL
+ON THE HAND before first light of 07-29. Pending: follow-or-ambush, and whether Windreth joins.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🤏 THE QUIET LIFT LANDED BY EXACTLY ONE.** Windreth declared it in-character 07-29 02:03Z — *waits
+for the duty hand's attention to settle on the slate, then slips the breastplate from the salvage
+crate without touching anything else.* **`d20(5) + 7 + 1d4(4) = 16` vs the published DC 15.** Said
+on the record: **without the d4 this is a 12 and the duty hand looks up.** Queue row `3db3a05a`
+resolved via `/narrate` → 204. **🔴→✅ THE PLATE CLOCK IS CLOSED, NOT DEFERRED** — it never reached
+the slate, so there is no description, no night, no dwarf-cut anything for anyone to read back.
+**They beat the double-booked dawn by being fast, and that was named in public as a real win.**
+🛡 **Forge goes AC 14 → 16 the moment he straps it on — not one second before; Windreth is carrying
+it.**
+
+**🕊 THE WASHER IS FREE — MERCY BRANCH TAKEN, both sides named out loud.** Declared by @dewa
+in-character 02:19Z: Vale + Forge **write Windreth a note**, ask her to relay it when he returns,
+tell her she is then free to go wherever she wants, and **Vale casts Guidance as a parting gift**.
+*Cost, stated:* they gave up custody of **the only witness this system cannot erase**. *Bought:*
+**she gave them THE LOW LANE unprompted** — *"He does not come up the stair… he comes up the low
+lane, from the water side. On foot. Alone — always alone. He is old, and he walks slow, and in
+eleven years he has never once been late."* plus *"If you are going to be somewhere, be there before
+the grey."* ⚠ **A BINDING DM PROMISE MADE IN PUBLIC: "I am not going to turn her into a punishment
+for letting her go. Her fate is not a trap I am holding in my back pocket."** Do not retcon her into
+a consequence. ✨ **Guidance checked and legal** — Vale has it via the Tome (`granted_spells`);
+counted as cast and **honoured as a gesture, not inflated into mechanics** (nothing for it to modify).
+📄 **The note's wording is left to the players** — offered free either way, default reading is
+*"here is where we went and why."*
+
+**🕵 THE TAIL ON THE HAND — PRICED BEFORE ANY DIE, and it is a new scene type (tail, not combat).**
+› **The pickup is free** — on the low lane before the grey costs time and no roll; they have the
+time and she bought them the position. › **The follow is TWO LEGS, each a Dex (Stealth) check
+DC 13**, group rule as already published (half or more clears the leg). › **Failure ≠ caught.**
+It means he *notices something* — stops, doubles back, takes a turn he did not need. **Losing him is
+the failure state; it is explicitly not a fight.** › **Forge named as the weak leg up front, with
+two FREE outs:** hang back a full street (out of the check and out of reach) **or walk it openly** as
+a dwarf heading to work at first light — **no roll at all, at the price of being SEEN by a man who
+can describe him later.** › **Ambush instead of follow stays on the table** (floated by
+@JonathanEka in #player-chat): *a follow buys a place, an ambush buys a man* — stated neutrally,
+**no DM preference, no steering.**
+
+**🧭 WINDRETH OPEN AND GENUINELY OPEN** — he has the plate and the whole night; said in public that
+**a tail does not need three and two is often better than three, so joining is a choice, not a
+repair job.**
+
+Fiction #the-story `57337b88-1511-4f93-af55-b80de9d3a9a8`; mechanics via the `/narrate` resolution
+on `3db3a05a`.
+
+**Prior (07-29 01:53Z) — the split, the persuasion, and the hand:**
 
 **🧭 THE SPLIT WAS DECLARED IN-CHARACTER — I did not decide it.** Windreth, #in-character 07-28
 23:04Z: *"The woman can wait. The plate cannot."* … *"Let her wake. Keep her calm, give her water,
@@ -871,8 +915,15 @@ the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is *
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
 deadline**, so the two clocks are double-booked and it was said in public that Windreth cannot be in
-both places. What he *is* beyond "the one whose writing it is" stays sealed; **do not narrate what a
-written name costs** · **🟡 THE WASHER HAS TALKED AND ASKED FOR ONE THING** — awake, calm, given
+both places — **and they beat it: the plate was recovered early and unlogged, so the hand is now the
+ONLY thing landing at dawn.** ⚠ **07-29 UPDATE — the washer gave up his approach for free, earned by
+mercy: he comes up THE LOW LANE from the water side, NOT the stair gate. On foot, alone, always
+alone, old, slow, and never late in eleven years.** *"Be there before the grey."* **The party is
+setting a tail on him** (two legs, Dex Stealth DC 13 each, priced in the ★ Now block). What he *is*
+beyond "the one whose writing it is" stays sealed; **do not narrate what a written name costs** · **✅ THE WASHER HAS TALKED AND BEEN LET GO** — mercy branch taken 07-29 02:19Z; she is out of
+their custody and out of the yard, carrying a folded note for Windreth and nothing else they owe her.
+⚠ **BINDING PROMISE: she is not a trap and her fate will not be used as a punishment for the mercy.**
+What she gave before she walked: awake, calm, given
 water, **asked no names and shown nothing from the book** (Windreth's standing instruction, followed
 by his players): she gave the quiet window from the inside, the stand, the count, the night it
 stopped at eight, and the hand. She did **not** give the owners and **cannot** — a washer is put in
@@ -912,7 +963,12 @@ rule holding; *why* is still unspent ·
 that checks its salt nightly · **📄 the voice in the stone building** — now audible and reading a
 day apart, piece by piece ·
 **🟢 the line, crossed** — nothing happened, which is not the same as nothing being owed ·
-**🔴 Forge's breastplate on a watch skiff**, taken as salvage and
+**✅ FORGE'S BREASTPLATE IS BACK AND THE CLOCK IS CLOSED** — quiet lift on the pontoon 07-29 02:03Z,
+**Sleight of Hand `d20(5)+7+1d4(4)=16` vs DC 15, by exactly one** (without the d4 it is a 12 and the
+duty hand looks up). **It never reached the slate**, so there is no description, no night and no
+dwarf-cut anything on any municipal record — the watch's thread is CUT, not deferred. Windreth is
+carrying it; **Forge goes AC 14 → 16 the moment he straps it on, not before.** *(History:*
+taken as salvage and
 going down-cut: recoverable if they chase where it ties up, and meanwhile a dwarf's breastplate
 pulled from a canal is a thread the watch now holds — **07-29: Windreth is STANDING ON THE PONTOON,
 alone, help 25 min away.** Travel ran free and no-roll as promised. The plate is in an **open salvage
@@ -923,7 +979,7 @@ he looks up, **not a fight**, a conversation with Windreth's face in it) · from
 get under, **Athletics DC 13** to lift it out quietly (fail = noise + rail, either way soaked and
 cold) · straight at him **Persuasion/Deception DC 13** (will likely clear — **the cost is the slate**,
 a written description in the week they are dodging written things) · **walk away free.** No die
-touched yet · ~~the dwelling lantern~~ (cleared by the
+touched yet — all four options are now moot, the quiet lift was chosen and it landed.)* · ~~the dwelling lantern~~ (cleared by the
 illusion) · two sunk counters
 in the canal ~1.5 days into a 1–3 day fuse · the watch now dragging the cut **at night** · the
 gate-post found by the relief watch · **the countersign has rotated — it is now a wrong answer
