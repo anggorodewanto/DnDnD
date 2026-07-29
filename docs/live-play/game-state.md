@@ -420,11 +420,53 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: THE TAIL IS OVER AND THEY ARE AT THE PLACE. Leg two HELD 2-of-3 (Forge 21, Windreth 21,
-Vale 8). The low lane ends at THE FOOT OF STAIR HILL — the hand walked them home. He is sitting on
-a worn stone bench by an unmarked low door, satchel on his knees, back to the lane, EARLY, ~10
-minutes before the grey. Four options priced, no die touched. Pending: which one.**
+**★ Now: THE CLERK IS TAKEN, AND IT WAS CLEAN. Option ① executed with TWO, needing one —
+Windreth Stealth 27, Forge Stealth 20 vs DC 13. No combat, no initiative rolled, no noise, no lamp
+on Stair Hill: NOBODY KNOWS. He never saw a face. In hand: one old clerk (alive, unhurt,
+unrestrained, sitting where the lane bends) and his SATCHEL, UNOPENED. Vale arrived ~60s later to a
+finished job — full party on the ground. ~8 minutes to grey. Pending: what they do with the man,
+the bag, and the door.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🤐 THE TAKE — ONE ROLL, EXACTLY AS PRICED, RESOLVED AS PRICED.** Windreth
+`d20(16) + 10 + 1d4(1) = 27` (queue `ebae4719`), Forge `d20(15) + 2 + 1d4(3) = 20` (queue
+`6af3da0f`) — both `/narrate` → 204. Declared in #in-character 10:08: *"Take him quietly now.
+Windreth + Forge only. Vale catches up after the clerk is secured."* Windreth came in blind-side and
+the hand landed before the head turned; **Forge's roll is the one that caught the satchel coming off
+the knees strap-first — the bag, not the grab, was the thing that would have made the sound.**
+🎲 **Guidance ruling, stated publicly:** the `+1d4` was NOT clawed back after the fact, and it was
+irrelevant anyway — **26 and 17 both clear 13 unaided.**
+✅ **What the clean version bought (all stated out loud):** nothing on the hill alerted · the door
+unspent, still shut and unwatched · **he never saw a face and cannot describe who took him** · Vale
+present and unhurt.
+
+**🎒 THE SATCHEL — IN FORGE'S HANDS, UNOPENED.** Described from outside only (soft old leather, strap
+worn thin by one shoulder, heavier than paper and lighter than tools, a few small hard things
+shifting inside). **Opening it is FREE — no roll, no check — the moment a player says so; the reveal
+is theirs to claim, not mine to spend.** *(Intended contents when opened: a folded sheaf of slips in
+a DOZEN DIFFERENT HANDS, an inkhorn, cut nibs, a straightedge, a key on a leather cord. The sheaf is
+the payoff for the Reading Room observation — **the book is one hand because HE is the one who copies
+everybody else's slips into it.** ⚠ This explains the single hand WITHOUT confirming the party's own
+book-is-the-mechanism deduction, and WITHOUT narrating what a written name costs. Both guardrails
+hold.)*
+
+**🧓 THE MAN.** Older, wool coat, ink to the second knuckle, hands shaking and never once closing
+into fists. He did not struggle — went rigid for half a second, then gave it up like a man who had
+run the arithmetic. Set down at the bend, hand off his mouth, **he does not shout, does not ask who
+they are, does not demand anything.** First words in the world: ***"Am I late?"*** — the thing he is
+most afraid of is not the party. **He is not a fight and was said in public not to be one:** no
+weapon, no intention of finding one. Offered: he answers anything honestly, inside what he knows.
+
+**🕯 CLOCK + PUBLIC PROMISE.** ~8 minutes to grey. **The stand behind the door stays empty for as
+long as he is out in the lane.** Stated verbatim: ***"I will tell you out loud the moment a real
+timer starts. I do not run hidden clocks and I am not starting now."***
+
+**📣 LIVE AND FREE (no die attached to any of them):** tie/gag him · talk to him · open the bag ·
+take his keys · walk him somewhere darker · go through the door. **No preference stated, again.**
+Fiction #the-story `cabac079-6f1d-47ea-a2f3-2f3a706d3cc4`; hand-back #in-character
+`1531968887917383680` / `1531968890056216698`.
+
+**Prior (07-29 ~09:45Z) — the tail's second leg and the four priced options:**
 
 **🕵 LEG TWO HELD 2-of-3, AND THE PASS CAME FROM THE MAN WHO FAILED LEG ONE.** Forge
 `d20(15) + 2 + 1d4(4) = 21` (queue `fa223f97`), Windreth `d20(10) + 10 + 1d4(1) = 21` (queue
@@ -1011,7 +1053,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🔴 ~10 MINUTES TO THE GREY, AND THEN HE GOES IN.** The tail is finished — they are at the foot of Stair Hill with the hand sat on his bench, early, back turned. When the grey comes he opens the door, walks to the stand, and finds no book on it; **that is the moment the quiet part of the night ends**, for them and for whoever has to be told · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🔴 ~8 MINUTES TO THE GREY — AND THE MAN WHO WAS SUPPOSED TO WALK THROUGH THAT DOOR IS NOW IN THEIR HANDS.** ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
