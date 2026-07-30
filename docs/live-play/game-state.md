@@ -441,6 +441,41 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🧺 THE STAKE-OUT IS SET, AND THE STREET IS THE THING THAT CAN FAIL — PLUS A NEW LIVE NPC ONE
+FLIGHT BELOW THE DOOR** (#the-story `8daf89f1-cb4d-432f-9786-1b86c6f98bce` · #in-character
+`1532302951165591694`). Declared 08:20 by @dewa: ***"we look for a hiding place where we can stake out
+that door for however long until the boy appears. what do we roll?"*** — a direct mechanical question, so
+it got a direct mechanical answer in the same beat as the fiction.
+
+- **🎲 FINDING THE SPOT: NO ROLL, GIVEN OUTRIGHT.** Consistent with the standing bar — *a d20
+  needs something to overcome* and three people finding cover on an ordinary lane at an ordinary hour has
+  nothing to overcome. They have **the gap behind the cooper's third stack of staves** (one standing
+  sideways, one crouching) **and the set-back shuttered shop doorway opposite.** Covers the whole flight,
+  both mouths of the lane, the underside of every landing.
+- **👀 HONEST SIGHTLINE COST, STATED ONCE: they hear the two knocks, they do not see the fist.**
+  The third landing sits back behind its own rail. Seeing the boy AT the door means being on the stair
+  with him; from safety they only get him on the flight.
+- **⏳ A SHORT WAIT IS FREE TOO — minutes or an hour, no dice, narrated straight.** So far: nothing knocks.
+- **🎯 *"HOWEVER LONG"* IS WHERE THE DIE LIVES, AND THE OPPOSITION IS NOT AN ENEMY — IT IS THE
+  STREET.** Three armed strangers holding one spot on a working lane for hours is what gets remarked on.
+  Ruled: when they commit to a long watch they **name the verb — look hidden / look like you belong / look
+  like you have business here — ONE roll for the party, pre-declared** per the standing rule. **No watcher
+  was retconned anywhere; this is ordinary street life, and the pinned Stair-Hill-yard promise is
+  untouched.**
+- **🕯 NO-HIDDEN-CLOCKS PROMISE HONOURED OUT LOUD AGAIN: *"nothing is scheduled to come to this
+  door. There is no timer running toward the boy."*** They asked to wait indefinitely, so they were owed
+  the truth that indefinite means indefinite. **Deliberately did NOT re-lecture the empty-stand switch** —
+  they hold it in the clerk's own words and the deduction stays theirs.
+- **🧺 NEW NPC, NEW SCENE GRAMMAR AVAILABLE — THE WOMAN ON THE SECOND LANDING.** Came out with a
+  covered basket at an hour she plainly keeps daily, pulled her door to without looking at it, came down
+  at a pace the timber knows, **passed within four feet**, and **looked** — flat and unhurried, pricing
+  three strangers standing still where nobody stands still. **Did not stop, speak, or quicken.** Turned
+  toward the chandler's and went. **She lives DIRECTLY BENEATH the worn door** — stated as bare fact.
+  ⚠ **What eleven years of two-knocks-low directly overhead would sound like from her room was NOT said;
+  that inference is entirely the players'.** Told them plainly she is a person on a stair and **approaching
+  her costs no roll to start** — a willful ordinary NPC is now sitting beside the stake-out as a
+  genuinely different scene option, with no railroad toward her.
+
 **🚪✅ THEY LEFT THE YARD — THE BELLS RANG WITH THE PARTY FOUR STREETS AWAY, AND THE STAKE-OUT
 IS ON A DOOR** (#the-story `72058837-375a-44c1-85e4-56595b8b5f4a` · #in-character `1532301402028769282`).
 Declared 08:13 by @dewa in character: ***"we are going to exit, and stake out the man's house, waiting for
