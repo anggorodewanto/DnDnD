@@ -441,6 +441,34 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🖐 FORGE BROKE COVER AND TOUCHED HIM — HE IS REAL, AND THE STOLEN BOOK CAME BACK AS A CONSEQUENCE
+IN HIS OWN FLAT VOICE** (#the-story `c91a0890-eb4d-4e65-9135-352c100b3865` · #in-character
+`1532384784649556139`). Declared 13:46 by @JonathanEka: ***"Forge approached that man, 'why don't you enter',
+Forge trying to touch that person, is it illusion, is it ghost, or is it real an animate being."*** **Queue
+clean, #roll-history empty — no die was called and none was rolled for anyone.**
+
+- **🖐 THE TEST ANSWERED FREE: HE IS REAL.** Wool damp at the shoulder from the walk, a thin warm
+  shoulder under it, the constant small tension of a man on his feet since first light. Not illusion, not a
+  ghost, not a thing wearing a shape. **Said out loud that the party ALREADY BOUGHT this fact with Forge's
+  Athletics 22 in the aisle and I was not charging a second time for it.** He does not pull away and does not
+  lean in — **he waits politely until Forge is finished touching him.**
+- **🛡 NO ROLL TO APPROACH EITHER.** He is not hostile, has never asked who they are, and **knows the
+  face on sight — you can watch him place it, and nothing happens in him afterwards.** Nothing alerted, no
+  alarm, no noise.
+- **📌 BOARD NAMED PLAINLY, NOT AS A SCOLDING:** Forge is now **in the open on the third landing**,
+  one stair up and one down; **the woman below has her bolt across and her lamp out**; Windreth and Vale still
+  hold the spot with **no limit**.
+- **🧾 THE CONSEQUENCE OF THEIR OWN THEFT CAME BACK IN HIS VOICE, UNPROMPTED AND FOR NOTHING** —
+  *"I don't know"* first, in the weather-voice, then the whole day flat as a delivery docket: in at first
+  light, set out the paper, waited at the stand; **the reader came at the bells, stood where the reader stands,
+  and there was nothing to read from; nobody spoke to him; he stayed until the second bells and then until
+  dark, because NOBODY TOLD HIM THE DAY WAS FINISHED.** *"My day ends when I finish the writing. I didn't
+  write anything."* **This explains the still hands and the stop at the latch without confirming one sealed
+  thing** — no word on what the book does, what a name costs, or what happened to the reader.
+- **❓ HE ASKED THE QUESTION AGAIN — *"Do you know if I'm late?"*** Fourth time, same voice, nothing behind
+  it. **Answering, dodging, lying to him, or telling him what actually happened are ALL FREE and ALL THEIRS.**
+  Restated in one clause only: **he does not lie, and that has always cut both ways.**
+
 **🧍 THE LONG STAKE-OUT PAID BY ITSELF — THE MAN CAME HOME, HIS HANDS WERE STILL, AND HE STOPPED
 AT HIS OWN DOOR** (#the-story `72177d19-91b9-4787-af98-d80cdc9eaaf4` · #in-character `1532379919710031962`).
 Declared 13:28 by @dewa: ***"vale rejoins the party in watching, she relayed the story, and the party braces
