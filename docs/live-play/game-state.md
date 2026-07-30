@@ -441,6 +441,38 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🗣✅ 21 vs DC 15 — THE WOMAN TALKED, AND THE STAIR HAS NO FEET ON IT** (#the-story
+`51fbdb56-24ae-4395-9518-4a01ecd854c6` · #in-character via queue-narrate on
+`e351013d-d76c-4e96-a793-e5113b496d10`). Vale rolled **21 vs DC 15, made it by six.** All four published items
+paid, plus a bonus for the margin.
+
+- **🧑 THE MAN, AND SHE INSISTED ON HIM FIRST:** eleven years on the landing above her and **the best
+  neighbour she has ever had** — never a raised voice, never a caller, never once late down the stair of a
+  morning. **She has no complaint about him and wanted that said out loud before anything else.** She is not
+  afraid of the man. Deliberate reframe: **the fear in her is not pointed at him.**
+- **🚪 THE KNOCKING FROM DIRECTLY UNDERNEATH IT:** **two. Always two** — never three, never one — **and
+  always LOW.** She knows the sound of the low part of that door against the high part the way you know your own
+  stairs in the dark, and **in eleven years it has never come from a hand's width higher.** Independent
+  corroboration of the belt-height wear on the timber and of the clerk's own gesture, from a witness who has
+  never seen it happen.
+- **👣 THE ONE THING SHE HAS NEVER HEARD — FEET.** *"Not before it. Not after it. Nobody comes up that
+  stair and nobody goes down it but him."* **Meaning entirely withheld.**
+- **⏰ MARGIN BONUS #1 — THE HOURS: no hour anybody could set a clock by.** Midnight; three in the afternoon.
+  **She hunted a pattern for years and there is none.** Corroborates from outside that **nothing is on a timer**
+  — the trigger is a state, not a schedule — without restating the switch at them.
+- **🗨 MARGIN BONUS #2 — SHE ASKED HIM ONCE**, early, on the stair, politely, whether he ever gets
+  callers. He said ***"He's never late."*** and went down to his work. *"Like there was nothing in it wanted
+  explaining."* **Exactly in character for the mechanism-man and confirms nothing sealed.**
+- **🔒 WHY THE BOLT, IN HER OWN WORDS — one night in the spring she got up.** Woke on the two knocks as
+  always, and this time went out onto her own landing, three or four seconds, and **looked up the last flight.
+  Empty. All the way to the top. His door shut, no light under it, nothing on the timber but the dark.** Bolt
+  across that night and every day and night since. **What she saw is stated as fact and nothing more; the
+  boy-refusal holds completely.**
+- **🤝 SHE COST THEM NOTHING AND ASKED FOR NOTHING.** One limit, hers, named on the way in: ***"I'll
+  not stand here twice."*** **That is her price, NOT a penalty** and not a door slammed in punishment.
+- **🛡 Position unchanged: nobody priced them, nothing knocked, lane still theirs with no limit.**
+  Closed with *"I am not going to tell you what any of it means."*
+
 **🗣 VALE WENT TO THE WOMAN WHO BOLTS HER DOOR — THE APPROACH WAS FREE, THE INFORMATION IS NOT,
 AND SHE IS THE FIRST GENUINELY UNWILLING NPC SINCE THE WASHER** (#the-story
 `d9ca74ad-eed5-470b-9669-1cfe842f9b34` · #in-character `1532374957764640939`). Declared 13:07 by @dewa:
