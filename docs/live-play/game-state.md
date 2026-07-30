@@ -441,6 +441,34 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🧍 THE LONG STAKE-OUT PAID BY ITSELF — THE MAN CAME HOME, HIS HANDS WERE STILL, AND HE STOPPED
+AT HIS OWN DOOR** (#the-story `72177d19-91b9-4787-af98-d80cdc9eaaf4` · #in-character `1532379919710031962`).
+Declared 13:28 by @dewa: ***"vale rejoins the party in watching, she relayed the story, and the party braces
+for a long stake out."*** **Rejoining, relaying and settling in all cost NOTHING — no roll**, because the
+position already carries **no limit** and charging again would have unpaid a published reward.
+
+- **🚫 NO FAKE PAYOFF FOR WAITING. The switch is still unarmed — the stand is not empty, so nothing
+  knocked, exactly as promised.** The watch did not conjure the boy; it ran until **the thing they were
+  watching for walked up the lane on its own legs.** No timer was invented and none was announced.
+- **🧍 THE EVENT: HE CAME HOME.** Ordinary hour, ordinary walk, same satchel on the same shoulder. He
+  and the cooper pass without speaking, in the way of two men who stopped needing to years ago. First landing:
+  children behind the door, he does not slow. Second landing: **he does not look at the bolted door — and the
+  light behind her shutter goes out as he passes.** Not quickly. It just goes out.
+- **🖐 WRONG THING #1 — HIS HANDS ARE STILL.** This lands **only because of work already banked**:
+  Forge's Athletics 22 in the aisle bought the fact that those fingers keep counting even through contact
+  with a stranger's chest. **They have not moved since he came up the lane.** One holds a strap, one holds a
+  latch, and that is all they are doing.
+- **🚪 WRONG THING #2 — HE STOPPED AT HIS OWN DOOR.** Hand on the latch, not opening it. **The basket
+  woman's eleven years of testimony is the measuring stick that makes this legible** — she is the one who
+  established he never breaks a pattern. He stands there **long enough that it has stopped being a pause.**
+- **⏳ THE WINDOW IS HONEST, NOT A CLOCK: *"exactly as long as a man deciding to go inside."*** Stated flat
+  that it is not a timer being run at them — that is just how long a person stands at a door.
+- **🧿 Board restated in one line only, no re-lecture:** they hold above / below / across per their
+  own earlier placement, **he has not seen them**, and **he has seen all three faces before, in a room, by
+  lamplight.** Closed with *"say what you do and I will tell you what it costs."*
+- **🔒 Nothing sealed touched:** no word on what went on at the yard today, nothing about the reader,
+  the blank quire, or what a name costs. **Every wrong thing here is posture and hands only.**
+
 **🗣✅ 21 vs DC 15 — THE WOMAN TALKED, AND THE STAIR HAS NO FEET ON IT** (#the-story
 `51fbdb56-24ae-4395-9518-4a01ecd854c6` · #in-character via queue-narrate on
 `e351013d-d76c-4e96-a793-e5113b496d10`). Vale rolled **21 vs DC 15, made it by six.** All four published items
