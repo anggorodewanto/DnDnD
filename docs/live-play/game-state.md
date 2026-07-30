@@ -441,6 +441,33 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🗣 VALE WENT TO THE WOMAN WHO BOLTS HER DOOR — THE APPROACH WAS FREE, THE INFORMATION IS NOT,
+AND SHE IS THE FIRST GENUINELY UNWILLING NPC SINCE THE WASHER** (#the-story
+`d9ca74ad-eed5-470b-9669-1cfe842f9b34` · #in-character `1532374957764640939`). Declared 13:07 by @dewa:
+***"While Forge and Windreth keep watch, Vale tries to get information from the woman who bolted her door. She
+wants to know why the bolt, and if there's anything suspicious or concerning in 3rd landing."*** Queue clean,
+#roll-history empty past 10:50, #player-chat OOC only — **nothing was rolled and nothing was rolled for them.**
+
+- **🎲 THE CALL: VALE, PERSUASION VS DC 15 — ONE ROLL, HERS.** Same DC as the washer, on purpose;
+  same shape too — **she is unwilling, not hostile.** Reason named out loud rather than hidden: she has kept
+  this to herself for years and they are strangers who watched her lane since dawn.
+- **🎁 GIVEN FREE, BEFORE THE DIE (the approach was already promised free, and that promise held):**
+  she **stopped** for Vale three treads short of her own landing · **she looked up the last flight before Vale
+  ever named a door** · she has already clocked them — *"You've been out there since morning"*, flat, not an
+  accusation · **the read on her is free: NO GUILT, only old worn-in fear**, the kind built by living a long
+  time underneath a noise · **and she will not turn her back on that stair to open her own door while they are
+  on it**, so the conversation happens in the open on the landing.
+- **⚖ BOTH OUTCOMES PUBLISHED PRE-ROLL; THE MISS IS A LOST DOOR, NOT AN AMBUSH.** Hit = **why the bolt in her
+  own words — what the knocking sounds like from directly underneath it, the one thing she has NEVER heard on
+  that stair, and what she makes of the man himself.** Miss = **nothing happens to them**; they get the
+  neighbour's answer (quiet man, never any trouble), she goes in early, the bolt goes across in front of them,
+  **and her door is shut to them for today** — the lane stays theirs with **no limit**.
+- **🛡 Forge and Windreth keeping watch is free** — no roll, position unchanged, nobody split off to
+  be picked at.
+- **🚫 Sealed material untouched:** she is a neighbour, not an insider — **she knows the door, not the
+  book**, so nothing here can confirm the book-is-the-mechanism read, and **the hit still will not say what
+  the boy IS.** Her testimony is sound and height only.
+
 **🎲✅ THE LONG WATCH IS MADE — ADVANTAGE GRANTED *AND* DECLARED FREE, BECAUSE THE LOW DIE ALREADY
 CLEARED; THE PARTY OWNS THE LANE AND THE LANE PAID A DAY OF INFORMATION** (#the-story
 `db850db3-277d-4457-9b65-88430201f8f5` · #in-character via queue-narrate on
