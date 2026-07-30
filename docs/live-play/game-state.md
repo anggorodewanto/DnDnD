@@ -420,18 +420,46 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: ⏳ THE DELIVERY CLOCK CLOSED — SOMETHING IS COMING UP THE OUTFLOW SLOPE WITH A LIGHT.
-A limping wheel (flat spot, iron on wet stone) climbing toward the south arch cols I–J — the exit
-they had already picked. AND THE SIX STOPPED. All of them, at the same instant, mid-reach, twelve
-hands out of the water: they never looked up for a door, for three armed strangers, or for the man
-who writes — THEY LOOKED UP FOR WORK ARRIVING. The name-rule did NOT break, it INVERTED (still
-nobody looking at the party). The man at the stand did not turn and did not speak; he put both palms
-flat on the blank quire. 💡 WHEN THE WHEEL IS THROUGH THE ARCH THE ROOM STOPS BEING DARK and
-darkvision 60 stops being an edge. ⏱ TIMER, NOT COMBAT: ONE ACTION EACH, DECLARED, THEN IT IS HERE.
-⏰ Bells still ~30 min out — THIS IS EARLY, AND EARLY IS INFORMATION. Pending: the arch, the west
-door (~40 ft, one move for Forge only, latch state deliberately un-pre-answered), trough cover row 4
-(~10 ft), the stand at Q6 (~40 ft, a corner not a route), or stand still in the dark.**
+**★ Now: 💡 THE LAMP IS FOR THE CART. The delivery came up out of the south arch ON A CHAIN — a
+flatbed trolley, one wheel worn flat, HAULED from somewhere turning far below. NOBODY CAME WITH IT.
+Nothing walked in, nothing looked around, THE PARTY WAS NOT SEEN — the lamp is hung on the front rail
+because the CART is what needs light; nobody who works in this room uses any. THE DARK IS GONE and
+darkvision 60 has stopped being an edge. THE SIX CAME OFF THEIR TRESTLES AND WALK WORN LINES TO THE
+ARCH — AND TWO OF THOSE LINES PASS THROUGH THE SQUARES THE PARTY IS STANDING IN. They will not stop,
+will not step around, and cannot know anyone is there. 📄 THE CARGO IS WRITTEN ON: ledgers, letters,
+tallies, lists, A HUNDRED ORDINARY HANDS — the written business of a city arriving by the cartload to
+be pulped (and the troughs are all ONE hand, HIS hand; BOTH true at once, DELIBERATELY NOT
+RECONCILED). 🧍 THE UNLOAD CAME UP ONE PAIR OF HANDS SHORT: a bale went into the water and NOBODY
+CORRECTED IT AND NOBODY LOOKED — a machine running short, explicitly NOT a punishment and NOT a bill
+for the mercy. 🗝 VALE BOUGHT THE BOY'S ADDRESS, HIS HEIGHT, AND THE SWITCH. ⏰ ~25 MIN TO THE
+BELLS. Pending: step off the line (free) · hold and let them pass through (a PRE-DECLARED roll) ·
+the arch (occupied, still theirs) · the lamp · the bale in the water · line eight.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🗝 THE BOY: ASKED, ANSWERED FREE, AND IT CAME OUT AS A LEVER** (declared 02:43 + 02:51, *"Vale asks
+the man how and where we can find the boy"* + *"meanwhile, we let the wheel come"* — **one plan, one
+beat, ZERO dice**). Third restatement of the ruling: **a check beats *unwillingness* and he has none;
+the ceiling is his KNOWLEDGE.** He answered **without turning around**, palms flat on the quire,
+speaking to the empty page. Bought: **an address — *"My door. Third landing, off the stair behind the
+cooper's."*** · **a height — his hand out in the dark at belt level, *"Here. Eleven years. It has never
+once come up."*** · **no face, not ever** — never opened the door fast enough, and the once he saw
+anything it was a back already going down · 🔑 **AND THE SWITCH, GIVEN UNASKED: *"He will not come
+tonight. He only comes when the stand is empty."*** **They have emptied that stand before and know
+exactly how.** What operating it *costs* was deliberately not stated. 🚫 **FOURTH REFUSAL about him: not
+telling them what the boy IS.** Not confirmed, not denied — *"immortal" remains the players' word.*
+
+**🚶 THE LIVE PHYSICAL PROBLEM — NOT SOCIAL, NOT COMBAT.** Six worn lines from the trestle rows (troughs
+at rows 4 and 9, D–O) converge on the arch (cols I–J); **two run through the party's mid-floor
+squares.** Ruled in public: **being unseen is FREE** (the six have no apparatus for noticing a person —
+"a d20 needs something to overcome and there was nothing"); **being untouched is NOT.** Options given:
+**step off the line = free, no roll** · **hold and let them pass = a roll, PRE-DECLARED before the die
+per the standing rule.** ⚠ **What a bump costs was explicitly NOT pre-answered** — *"a man who walks
+into a person in this room will not know what he has walked into."*
+
+Fiction #the-story `a0f5cfee-9dae-46eb-b85e-ce3bc08cd659`; mechanics #in-character
+`1532220103859372072` / `1532220105730297987` / `1532220107495833750`.
+
+**Prior (07-30 ~02:37Z) — the delivery clock firing:**
 
 **⏳ THE DELIVERY ARRIVES — THE ANNOUNCED CLOCK, NOT AN AMBUSH.** Fired on a beat with **no player
 declaration pending** (only a To-DM and OOC chat), deliberately: the world moves while they decide.
@@ -1203,7 +1231,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **⏳✅ THE DELIVERY CLOCK HAS FIRED — a limping wheel and a light are climbing the outflow slope toward the south arch (cols I–J), and the six stopped work to receive it.** Announced long before it ran, in the reader's own words at `:1088` (*"I am expecting a delivery. You are not it."*), timing withheld, **and they were told they could ask when.** ⏱ **Live micro-timer: ONE ACTION EACH, then the wheel is through the arch and the room stops being dark** (darkvision 60 stops being an edge). Not combat — no initiative, no rounds. ⚠ **Not a punishment and not a price for the mercy.** · **🔴 ~30 MINUTES TO THE BELLS — THE READER WALKS INTO THIS ROOM, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise (~20 min on the second interrogation, ~2 going in, ~5 inside). **The delivery is EARLY relative to it, and early is information.** **The grey is spent/harmless.** 🚪 **THEY ARE INSIDE THE READING ROOM AGAIN**, let in by the clerk with his own key; he closed it behind them. **He is at the stand with the blank quire squared and the ink set, waiting for a voice — when the reader arrives, A NEW BOOK STARTS.** ⚠ The clerk has seen all three faces too and does not lie; **board state, explicitly not a punishment for the mercy** — asking him to say nothing is a free no-roll option · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **💡✅ THE DELIVERY HAS LANDED — nobody came with it, the party was NOT seen, and THE DARK IS GONE (darkvision 60 no longer an edge). Two of the six now walk lines straight through the party's squares: unseen is free, untouched is not, and a bump's cost is deliberately un-pre-answered.** · ~~⏳ THE DELIVERY CLOCK HAS FIRED — a limping wheel and a light are climbing the outflow slope toward the south arch (cols I–J), and the six stopped work to receive it.** Announced long before it ran, in the reader's own words at `:1088` (*"I am expecting a delivery. You are not it."*), timing withheld, **and they were told they could ask when.** ⏱ **Live micro-timer: ONE ACTION EACH, then the wheel is through the arch and the room stops being dark** (darkvision 60 stops being an edge). Not combat — no initiative, no rounds. ⚠ **Not a punishment and not a price for the mercy.** · **🔴 ~25 MINUTES TO THE BELLS — THE READER WALKS INTO THIS ROOM, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise (~20 min on the second interrogation, ~2 going in, ~5 inside). **The delivery is EARLY relative to it, and early is information.** **The grey is spent/harmless.** 🚪 **THEY ARE INSIDE THE READING ROOM AGAIN**, let in by the clerk with his own key; he closed it behind them. **He is at the stand with the blank quire squared and the ink set, waiting for a voice — when the reader arrives, A NEW BOOK STARTS.** ⚠ The clerk has seen all three faces too and does not lie; **board state, explicitly not a punishment for the mercy** — asking him to say nothing is a free no-roll option · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
