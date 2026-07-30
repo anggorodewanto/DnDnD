@@ -441,6 +441,42 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**8️⃣ VALE ASKED FOR NUMBER EIGHT AND FOR WHAT THE WHOLE THING DOES — HE KNEW THE FIRST WITHOUT
+LOOKING AND ASKED HER BACK ON THE SECOND** (#the-story `020989ed-a91f-4877-8b62-c55b7715417c` ·
+#in-character `1532396306759159838`). Declared 14:33 by @dewa: ***"'what's number 8?' Vale asks, 'And what
+does this whole thing do?'"*** **Queue clean, #roll-history empty — no die called, none rolled.**
+
+- **📖 BOTH ANSWERED FREE, NO DIE.** Same knowledge ceiling as ever, and **he does not lie.** Stated
+  in one clause, not re-lectured.
+- **8️⃣ LINE EIGHT IS EMPTY AND HE KNEW IT WITHOUT GOING BACK TO THE BOOK** — *"There's nothing on
+  it,"* said the way a man tells you a shelf is empty. **He does not need to read a line he never wrote**,
+  which is the ceiling from the previous beat paying off instead of blocking.
+- **🖰 HIS SIDE CORROBORATES THE FORENSIC 18 WINDRETH ALREADY PAID FOR:** ***"I ruled it. Eight
+  lines, before there was anything to put on them — I ink the numbers in one loading of the nib, the way I
+  always do, and then I wait to be told."*** So **he is told how many lines the page gets BEFORE he is told a
+  single name** — the party's own earlier deduction (numbers 1–8 inked in one nib-loading before any name
+  went in) confirmed **from the hand's side, as a reward for a roll already made**, not as new sealed info.
+  *"Seven came in. Then the room went quiet and nobody said eight. So I put the pen down."*
+- **⚡ THE NEW FACT, AND IT IS HIS ALONE TO GIVE: *"In eleven years that's the only line I ever ruled that
+  never got filled."*** Line eight is the **only unfilled ruled line in two books.** Makes line eight
+  enormous **without touching the summon trigger, without saying whose it is, and without describing what a
+  written name costs.**
+- **❓ *"WHAT DOES THIS WHOLE THING DO?"* — HE DOES NOT KNOW, AND HE ASKED HER BACK.** First question all
+  night he had nothing ready for; everything else he answered before the sentence finished. He turns it
+  over, looks at the book squared on his own table, **stops being a mechanism for a moment** — a tired man
+  with the thing he has carried eleven years and **has never once opened for himself** — then: *"I don't
+  know."* And, no weight on it, no fear, honestly asking: ***"Does it do something?"***
+- **🔒 THE BINDING GUARDRAIL HELD AS CHARACTER TRUTH, NOT A DM STONEWALL** — said out loud in
+  #in-character that this is not stonewalling through a character's mouth: **he has never asked in eleven
+  years, and THE PARTY IS THE REASON HE ASKED TONIGHT.** The book-is-the-mechanism deduction stays theirs
+  and unconfirmed; **what a written name costs stays undescribed.**
+- **📕 BOARD GIVEN FLAT, WITH AN EXPLICIT "NO PUSH AND NO PREFERENCE FROM ME":** the book is open on
+  his table · **line eight is blank** · **the man whose whole function is to write a line when somebody says
+  a number and a name is sitting across from them.** Closed with *"I am not telling you to do anything with
+  that."* **Line eight remains a player choice and never a die roll — the reader's undecidable
+  advice-or-threat about reading it aloud was NOT re-litigated.**
+- **🕰 Nothing is coming to that door; Windreth still holds the outside, no limit.**
+
 **📖 THEY WALKED HIM THROUGH HIS OWN DOOR AND SHOWED HIM THE BOOK — SECOND BOOK, ELEVEN
 LINES LEFT, AND HE COULD NOT READ ONE OF THEM** (#the-story `0e853970-ab93-4411-8e6e-3eba9269e27c` ·
 #in-character `1532394073808310313`). Declared 14:22 by @dewa: ***"Vale also approaches, casting him Guidance
