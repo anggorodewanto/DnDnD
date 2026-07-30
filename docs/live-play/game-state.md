@@ -441,6 +441,40 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🎲✅ THE LONG WATCH IS MADE — ADVANTAGE GRANTED *AND* DECLARED FREE, BECAUSE THE LOW DIE ALREADY
+CLEARED; THE PARTY OWNS THE LANE AND THE LANE PAID A DAY OF INFORMATION** (#the-story
+`db850db3-277d-4457-9b65-88430201f8f5` · #in-character via queue-narrate on
+`0b19586d-606a-43af-9e75-97aec8c643a4`). Inputs: @dewa 10:43 — ***"Vale helps Windreth in stealthing by using
+her magic"***; **Windreth rolled twice on his own initiative (15, then 16)** and asked in character 10:49 —
+***"To DM: I rolled twice because of Vale help Windreth, it should give advantages."*** Both landed as pending
+`skill_check_narration` rows.
+
+- **🤝 RULING, GIVEN STRAIGHT: YES, VALE HELPING IS ADVANTAGE.** The pair reads as the one
+  pre-declared party roll and **the 16 is taken. 16 vs DC 15 — made it.**
+- **🎁 AND THE HONEST HALF, VOLUNTEERED: IT CHANGED NOTHING, SO VALE SPENDS NOTHING.** The low die
+  was a **15 against DC 15** — already a success before advantage did any work. **No slot, no concentration,
+  and she was NOT asked to name a spell to pay for a result she already owned.** Deliberately did not invent
+  a spell on her sheet, and deliberately did not charge a resource for a die that did not matter.
+- **🧾 QUEUE HYGIENE: both rows resolved** — the 16 via `POST /dashboard/queue/{id}/narrate` (which
+  posts the resolution to #in-character and marks it resolved), the 15 via `POST
+  /dashboard/queue/{id}/resolve` with an outcome note, so the low die did **not** double-post to the channel.
+- **✅ THE PROMISED REWARD PAID IN FULL, AS PUBLISHED PRE-ROLL: they hold the lane with no limit on it,
+  nobody priced them, and the lane paid information** — a whole day watched from cover, because a lane at
+  work does not look at people who are not doing anything.
+- **📖 WHAT THE DAY BOUGHT (all reached, none of it told to them for free):** **first landing** is a
+  household — door propped with a stone, four children, treads pale in the middle from their traffic.
+  **Second landing** is the basket woman: out at her hour, back an hour and change later, basket lighter.
+  **THIRD LANDING IS NOBODY — not a caller, not a delivery, not the man himself, all day.** One shut door,
+  no light under it. The coopers came out twice and **both times took off the FIRST stack** (the not-a-clock
+  fact from last beat held honest). **Nobody lights the lamps on this stair.**
+- **🔒 THE EARNED REVEAL, MEANING WITHHELD — THE WOMAN ON THE SECOND LANDING STOPS AND LOOKS UP AT
+  THE THIRD DOOR.** Late afternoon, one step from her own door with her hand already out; she stops, looks up
+  the last flight, *"about as long as it takes to check that a thing is still where you left it"* — then goes
+  in and **the bolt goes across, in daylight, on a stair where nobody else bolts anything.** Stated as fact
+  and sound only; **what she thinks is up there was NOT said, and the boy-refusal still holds.**
+- **🕯 No promise bent: nothing was scheduled to come to that door and nothing did.** *"Nothing
+  knocked."* The empty-stand switch is still the players' lever and was not re-lectured again.
+
 **🎲 THE VERB CAME BACK IN ONE WORD — *"WE WANT TO BE HIDDEN"* — SO THE DIE IS NAMED, THE DC IS
 PUBLIC, AND BOTH OUTCOMES WERE STATED BEFORE THE ROLL** (#the-story `41b67b3d-78c3-4f54-9436-d5078d0d7e7f` ·
 #in-character `1532334292020105260`). Declared 08:43 by @dewa: ***"we want to be hidden."*** No roll had been
