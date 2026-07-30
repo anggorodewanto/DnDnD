@@ -213,6 +213,25 @@ big-party technique is in [`big-party.md`](big-party.md).
     to compress; pay it immediately and without argument.
   - **Roll only what has a real failure state**, and prefer **one roll for the whole
     plan** over one per step. Everything else is narrated as done.
+  - **The rule binds the DM's own events too, not just the party's plans — one event is
+    one beat.** (Direction given a *second* time 07-30: *"you are going down to too
+    detailed beat by beat again."* The offender was DM-side: six workers crossing a floor
+    the party stood on became **four** beats by zooming the camera 30 ft → 4 ft → 2 ft →
+    six inches, resolving one NPC and one PC per post. Cinematic, and still a treadmill,
+    because no new decision appeared between beats.) So:
+    - **No countdown narration.** Announce a threat and resolve it in the *same* post.
+      Distance is a fact to state once, not a beat to spend.
+    - **One roll call, all PCs at once, resolved as a set.** If some players have not
+      rolled yet, hold the resolution or let the fiction move past it — do not spend a
+      whole beat on the one player who did.
+    - **Zoom is a budget.** A pass-by gets a sentence; save the inch-level close-up for
+      something that actually changes the board.
+  - **Keep #in-character posts short — target ~150–250 words.** State the result, the live
+    options, the clock, and stop. **Cut every restatement of a ruling already made** —
+    refusal counters, "as I promised", re-explaining why a call was fair, re-listing the
+    same options every post. Say it once and trust the table; repetition reads as padding
+    and buries the actual choice. (Same 07-30 correction: *"make your in-character posts
+    more compact, less repetition."*)
   - **Free actions stay free and stay silent** — do them on the party's behalf as part
     of the compressed result rather than asking permission for each. This is *not* a
     licence to narrate player choices: it covers the mechanical follow-through of a
