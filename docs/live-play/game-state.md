@@ -441,6 +441,48 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**📖 THEY WALKED HIM THROUGH HIS OWN DOOR AND SHOWED HIM THE BOOK — SECOND BOOK, ELEVEN
+LINES LEFT, AND HE COULD NOT READ ONE OF THEM** (#the-story `0e853970-ab93-4411-8e6e-3eba9269e27c` ·
+#in-character `1532394073808310313`). Declared 14:22 by @dewa: ***"Vale also approaches, casting him Guidance
+and guide him entering his home. Vale and Forge show him the book, while Windreth keeps watching from
+outside. Vale asks him all he know about the book. Afterwards Vale and Forge stays inside waiting for the
+knock."*** **Queue clean, #roll-history empty — no die called, none rolled for anyone.**
+
+- **🕯 EVERYTHING IN THE DECLARATION WAS FREE, NO DIE.** Going in, walking him through his own door,
+  and asking him everything about the book. He was never unwilling; **the ceiling was always what he knows** —
+  stated in one clause, not re-lectured.
+- **✨ GUIDANCE ADJUDICATED HONESTLY, NOT PUNISHED:** cantrip, no slot, **does take Vale's concentration**;
+  there is **no check pending for it to add to, so right now it adds nothing** — that is the cantrip, not a
+  penalty. Hold or drop is **her call**. He lets her put a hand on him the same as he let Forge.
+- **🚪 HE WENT IN ON THE FIRST WORD** — the latch lifts easily, it was never stuck; he holds the door
+  like a man expecting them and shuts it without looking back at the stair. **Nobody in eleven years had ever
+  told him the day was finished. That was the answer to the question he kept asking, and the party gave it
+  without spending anything.** His 4th *"am I late?"* is answered by their action, not by a ruling.
+- **🏠 THE ROOM (new location, one beat, no room-by-room search):** one room; bed made tight; cold
+  stove; table, cup, plate, and **ONE CHAIR THAT FACES THE DOOR**. Nothing on the walls — not poor-bare,
+  **bare the way a room is when nobody ever thought to put anything up**; everything mended and mended, and
+  **none of it looks eleven years old**. **THERE IS NO PAPER IN THE ROOM — not a sheet, no ink, no pen, no
+  rule, nothing to write on or with, in the home of a man who writes all day.** He lights a candle stub for
+  them and **the motion is clumsy, like something he has watched other people do and never needed** —
+  *"For you."*
+- **📖 THE BOOK ON THE TABLE — HE STANDS UP AND DOES NOT REACH FOR IT**, looks at it *"the way you
+  look at a chair that has been moved."* Given free and unasked: ***"That's the second one. The first one
+  lasted nine years. This one I started two years ago."*** — then, **without opening the cover, THERE ARE
+  ELEVEN LINES LEFT IN IT.** (First book 9 years, second book 2 years and nearly full: **the acceleration is
+  on the table as a fact and was NOT narrated as a clock.** Ties to the blank quire already squared on the
+  stand.)
+- **👉 WHAT HE COULD NOT DO — the knowledge ceiling made physical.** Vale asks what is in it. He
+  opens it, **goes down the page in small counted jumps — not reading, counting — stops dead without
+  hunting**, puts his finger on a line, **and waits**: never looks up, **never looks at the words under his
+  own finger**, waiting for somebody to say a number and then say the line. Nobody says anything. He lifts
+  his finger, closes it, and **squares it on the table edge to edge, exactly the way it sits on the stand.**
+  **Said out loud: *"I am not going to tell you what that means either."*** Confirms nothing sealed — no
+  word on what the book does, what a name costs, or what the boy is.
+- **🕰 WAITING INSIDE FOR THE KNOCK IS FREE and can last as long as they like — and answered
+  honestly in ONE clause, no re-lecture: nothing is coming to that door while there is paper on that stand.**
+  The switch stays theirs and unarmed.
+- **👁 Windreth still holds the outside, no limit** (position reward unspent, nothing recharged).
+
 **🖐 FORGE BROKE COVER AND TOUCHED HIM — HE IS REAL, AND THE STOLEN BOOK CAME BACK AS A CONSEQUENCE
 IN HIS OWN FLAT VOICE** (#the-story `c91a0890-eb4d-4e65-9135-352c100b3865` · #in-character
 `1532384784649556139`). Declared 13:46 by @JonathanEka: ***"Forge approached that man, 'why don't you enter',
