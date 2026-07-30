@@ -441,6 +441,21 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**📖 TO-DM ANSWERED FREE — AND A SMALL RULING MADE IN PUBLIC WHILE DOING IT** (#in-character
+`1532288609640517774`). @dewa asked *"who is coming at bells — the same reader we took the book from, or
+different?"* Answered flat, no roll, **no clock spent**, and said so in the post: **questions never cost a
+roll or a minute.** Worth keeping — it removes the incentive to guess rather than ask, and it costs the
+DM nothing.
+
+**The answer, and it is board state, not a threat: THE SAME MAN.** The reader who was at the stand when
+they walked in, who turned around when Vale spoke, who asked her ***"Do you have a name for me?"*** and
+never got an answer, and who **watched all three walk out with his book and did not follow, did not call
+out, did not raise the yard** — *"The work goes on. It is simply no longer about anyone."* **HE HAS SEEN
+ALL THREE FACES.** Separated explicitly from the clerk in the same breath: **the reader is not the hand**;
+the hand is the man standing beside them, whose bench that is, **who has never touched the book he writes
+in**, and who has been read to by **three** readers in eleven years. This one is the current one. ⏰ Clock
+unchanged at **~20 MIN TO THE BELLS** — nothing in-fiction moved.
+
 **✅ THE CROSSING IS CLOSED — OUT AND BACK, IN ONE POST, EXACTLY AS PROMISED** (#the-story
 `fd4bab2d-422d-4a31-a0a6-15041ba6ee85` · #in-character `1532285481910403082`). Vale's player (`dewa`)
 answered the pacing post with **one line, in character: *"We let them pass."*** — a hold, no die.
