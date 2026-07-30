@@ -420,20 +420,60 @@ Closed encounters, newest first (full chronology in
 
 ## Current scene (narrative framing — non-derivable)
 
-**★ Now: 🎲 A CHECK IS CALLED AND THE DICE ARE OWED BY THE PLAYERS. They declared the hold
-(*"We stay still and let them pass through"*), which is the option that was publicly priced as a
-roll. FOUR FEET AND CLOSING: two of the six walk a rut that goes through the party's squares, at the
-pace of men with all the time there has ever been. 🆓 THE CLOSE PASS WAS GIVEN FREE — one of the six
-went by clear at three feet in the new lamplight and HE IS A MAN: fifty-ish, wants shaving, an apron
-stain he stopped seeing, HANDS ELEVEN YEARS IN WATER (bleached soft, pads smooth, nails flattened
-wide), STILL PRACTISING THE REACH WHILE HE WALKS, eyes open and not tracking, and he did not glance at
-the lamp. 🎯 THE CALL: DC 13, AND THE PLAYERS PICK THE VERB — Dex (Acrobatics) *be somewhere he is
-not*, or Str (Athletics) *be the wall he already thinks you are*. ALL THREE ROLL SEPARATELY because
-squares were never fixed (generous, not harsh; nobody carries anybody). 🆓 STILL FREE UNTIL A DIE
-LANDS: step off the rut (visible in lamplight) · the SEVENTH PLACE is off the lines (flat board state,
-no recommendation, no trap). 🔁 AND THE TRAFFIC RUNS BOTH WAYS — they walk down empty and come back
-up CARRYING BALES along the same six ruts in about a minute. ⏰ ~24 MIN TO THE BELLS.**
+**★ Now: 🛡 FORGE HELD AND THE MAN WENT AROUND HIM. Athletics 22 vs DC 13 (d20 15 + 5, plus a
+player-declared 1d4 that was not needed). CONTACT HAPPENED AND DID NOT REGISTER AS A BODY: shoulder to
+breastplate, the practising hand came up and READ him three fingers flat, decided PLATE = a post left
+in the aisle, stepped six inches wide, GRUNTED ONCE like a man at the end of a shift, and kept walking
+without ever looking. 🔎 THE SUCCESS PAID INFORMATION, not just safety: THE REACH NEVER PAUSED — the
+fingers kept counting straight through the touch, ON FORGE'S BREASTPLATE. He has the real weight of a
+tired man; he is cold and damp all the way through; and the grunt means SOMEBODY IS IN THERE AND WAS
+ANNOYED. ⚠ 5th refusal: that is what he is LIKE, not what he IS. 🗺 THE FLOOR NOW HAS A JOG IN IT —
+the quarter-inch rut he has worn for eleven years bends six inches around a place where nothing usually
+stands. What that means was NOT stated; it is the players' read. ⚖ RULING SAID OUT LOUD: A DIE LANDING
+ON ONE LINE DOES NOT CLOSE THE FREE OPTIONS ON THE OTHER. Forge threw his die on Forge's rut, so VALE
+AND WINDRETH EACH STILL HAVE ALL THREE DOORS OPEN — step off (free, no roll, visible in lamplight) ·
+THE SEVENTH PLACE, off the lines (flat board state, no recommendation, no trap) · hold and roll DC 13,
+their pick of verb (Acrobatics *be somewhere he is not* / Athletics *be the wall he already thinks you
+are*), each resolved on its own, nobody carrying anybody. ⏱ THE SECOND MAN IS TWO FEET OUT ON THE FAR
+RUT AND HAS ADJUSTED FOR NOTHING. One thing each. STILL NOT COMBAT. 🔁 RETURN TRIP IN ~1 MIN CARRYING
+BALES — and one flat fact given with the conclusion refused: A MAN CARRYING A BALE HAS BOTH HANDS FULL,
+so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as advice, NOT safer and
+NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
+
+**🛡 THE CONTACT, RESOLVED** (Forge's own declaration + his own die: `/check` Athletics, d20 15 + 5 +
+1d4 2 = **22** vs DC 13, filed and resolved through the DM Queue). The player's in-table line was
+*"nek meh liwat, yo liwat'o, rasah nabrak2"* and that is exactly what got rolled: **he did not yield an
+inch.** The man's shoulder met breastplate; there was leather, wet cloth, and the dull knock of weight
+against metal that does not give. **The practising hand came up and read him** — three fingers laid
+flat, *"the way a man in the dark checks whether the thing in front of him is the doorframe or the
+doorway"* — cold, damp through, nails wide and soft. **And the hand decided: plate, standing where
+nothing usually stands, therefore a post, a barrow left in the aisle.** Six inches wide, one grunt,
+gone. **No alert, nothing turned, nobody stopped.**
+
+**🔎 WHAT A 22 BOUGHT BEYOND NOT-BEING-TOUCHED** (successes pay information in this room):
+**the reach never paused** — the fingers kept curling and opening on the same eleven-year count
+straight through the contact, **and for two seconds they were counting on Forge's chest**; he carries
+**the real weight of a tired man**; he is **cold and damp all the way through**; and **he grunted**,
+which is the smallest sound in the room and the worst thing in it, because it is the sound a man makes
+when somebody has left something where he walks. **Somebody is in there. Somebody was annoyed.**
+⚠ **Fifth refusal, stated in public: that is what he is LIKE. What he IS stays refused.**
+
+**🗺 THE JOG IN THE RUT.** The line he has worn a quarter-inch into stone now bends six inches around
+a place where nothing usually stands — and he walks it again, loaded, in about a minute. ⚠ **Given as
+a visible fact with the meaning deliberately withheld.** *(Not a book, not a name — do not explain it
+for them.)*
+
+**⚖ THE PER-LINE RULING** (new, and stated before it could look like a trick): *free until a die is
+thrown* is **per line, not per table.** Forge's die closed Forge's rut only. **Vale and Windreth are
+each still fully free**, and the second man being two feet out does not retroactively convert their
+silence into a hold. Nothing was rolled for them and nothing will be.
+
+Fiction #the-story `f0f367a0-f5f2-490b-84f3-2fc6b86dc760`; queue resolution posted to #in-character by
+the resolver (`d9775b5c-1659-49ca-b7a9-32eafb0ee080` → resolved); mechanics #in-character
+`1532254934739714078` / `1532254937075941529`.
+
+**Prior (07-30 ~04:51Z) — four feet, and nobody has looked at you yet:**
 
 **🎲 THE HOLD, PRICED AND CALLED** (declared 04:32 by JonathanEka: *"We stay still and let them pass
 through."*). Accepted exactly as pre-priced last beat: **unseen is free, untouched is not.** ⚠ **They
@@ -1255,7 +1295,7 @@ about them** — *mercy or shopping* is theirs to decide.
 deliberately un-described), *what the voice is reading and where a spoken name goes*, how THE SEAL
 is restored, and "patron = buyer" stated flat.
 
-**Clocks:** **🎲 A DC 13 CHECK IS CALLED AND THE PARTY OWES THE DICE (Acrobatics or Athletics, their pick, all three separately) — two of the six are FOUR FEET out on a rut that runs through them. Not combat. Stepping off is still free until a die lands. 🔁 The traffic runs BOTH WAYS: they come back up carrying bales in about a minute.** · **💡✅ THE DELIVERY HAS LANDED — nobody came with it, the party was NOT seen, and THE DARK IS GONE (darkvision 60 no longer an edge). Two of the six now walk lines straight through the party's squares: unseen is free, untouched is not, and a bump's cost is deliberately un-pre-answered.** · ~~⏳ THE DELIVERY CLOCK HAS FIRED — a limping wheel and a light are climbing the outflow slope toward the south arch (cols I–J), and the six stopped work to receive it.** Announced long before it ran, in the reader's own words at `:1088` (*"I am expecting a delivery. You are not it."*), timing withheld, **and they were told they could ask when.** ⏱ **Live micro-timer: ONE ACTION EACH, then the wheel is through the arch and the room stops being dark** (darkvision 60 stops being an edge). Not combat — no initiative, no rounds. ⚠ **Not a punishment and not a price for the mercy.** · **🔴 ~24 MINUTES TO THE BELLS — THE READER WALKS INTO THIS ROOM, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise (~20 min on the second interrogation, ~2 going in, ~5 inside). **The delivery is EARLY relative to it, and early is information.** **The grey is spent/harmless.** 🚪 **THEY ARE INSIDE THE READING ROOM AGAIN**, let in by the clerk with his own key; he closed it behind them. **He is at the stand with the blank quire squared and the ink set, waiting for a voice — when the reader arrives, A NEW BOOK STARTS.** ⚠ The clerk has seen all three faces too and does not lie; **board state, explicitly not a punishment for the mercy** — asking him to say nothing is a free no-roll option · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
+**Clocks:** **🛡 FORGE'S LINE IS RESOLVED — Athletics 22, contact made, NOT registered as a body; the man read him as a post and stepped six inches wide. 🎲 VALE AND WINDRETH STILL OWE NOTHING AND ARE STILL FULLY FREE: a die on one line does not close the other lines (ruled in public). Step off / the seventh place / hold-and-roll DC 13, their pick of verb. The second man is TWO FEET out and has adjusted for nothing. Not combat. 🔁 Return trip in ~1 min CARRYING BALES — both hands full, the reach occupied; stated as fact, not as advice.** · **💡✅ THE DELIVERY HAS LANDED — nobody came with it, the party was NOT seen, and THE DARK IS GONE (darkvision 60 no longer an edge). Two of the six now walk lines straight through the party's squares: unseen is free, untouched is not, and a bump's cost is deliberately un-pre-answered.** · ~~⏳ THE DELIVERY CLOCK HAS FIRED — a limping wheel and a light are climbing the outflow slope toward the south arch (cols I–J), and the six stopped work to receive it.** Announced long before it ran, in the reader's own words at `:1088` (*"I am expecting a delivery. You are not it."*), timing withheld, **and they were told they could ask when.** ⏱ **Live micro-timer: ONE ACTION EACH, then the wheel is through the arch and the room stops being dark** (darkvision 60 stops being an edge). Not combat — no initiative, no rounds. ⚠ **Not a punishment and not a price for the mercy.** · **🔴 ~23 MINUTES TO THE BELLS — THE READER WALKS INTO THIS ROOM, AND HE HAS SEEN ALL THREE FACES.** Announced out loud before it started running, per the no-hidden-clocks promise (~20 min on the second interrogation, ~2 going in, ~5 inside). **The delivery is EARLY relative to it, and early is information.** **The grey is spent/harmless.** 🚪 **THEY ARE INSIDE THE READING ROOM AGAIN**, let in by the clerk with his own key; he closed it behind them. **He is at the stand with the blank quire squared and the ink set, waiting for a voice — when the reader arrives, A NEW BOOK STARTS.** ⚠ The clerk has seen all three faces too and does not lie; **board state, explicitly not a punishment for the mercy** — asking him to say nothing is a free no-roll option · ~~🔴 ~8 MINUTES TO THE GREY~~ (**✅ CLOSED — the man who was supposed to walk through that door is in their hands.**) ✅ **THE TAKE LANDED CLEAN** (Windreth 27 / Forge 20 vs DC 13, needed one of two): no combat, no noise, nothing on the hill alerted, **and he never saw a face.** The stand behind the door stays empty for exactly as long as he is out in the lane with them. **Public promise attached: no hidden clocks — a real timer will be announced out loud before it runs** · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · ~~🔴 THE TAIL IS RUNNING~~ (**✅ BOTH LEGS HELD** — 1-of-2 then 2-of-3; he checked for company once and found none — **he knows how to check for a tail and did it once, on Forge's scuffed flag, and found nothing**) · **🔴 THE HAND COMES AT FIRST LIGHT** — new and the sharpest one on the board, given by
 the washer herself under a DC 15 Persuasion on 07-29 01:53Z: the whole book is **one man's hand**,
 no name known to her, and **when the stand is empty and a delivery comes they send for him — he
 arrives at dawn to write.** *"They will have sent for him already."* **Same sunrise as the plate
