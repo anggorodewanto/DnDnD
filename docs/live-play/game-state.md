@@ -441,6 +441,32 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🎲 THE VERB CAME BACK IN ONE WORD — *"WE WANT TO BE HIDDEN"* — SO THE DIE IS NAMED, THE DC IS
+PUBLIC, AND BOTH OUTCOMES WERE STATED BEFORE THE ROLL** (#the-story `41b67b3d-78c3-4f54-9436-d5078d0d7e7f` ·
+#in-character `1532334292020105260`). Declared 08:43 by @dewa: ***"we want to be hidden."*** No roll had been
+made — #roll-history and #player-chat both empty past 08:20, queue clean — so **the roll is still theirs and
+was NOT rolled for them.**
+
+- **🎲 THE CALL: ONE ROLL FOR THE PARTY, STEALTH VS DC 15, PARTY NOMINATES THE DIE.** Honoured the
+  pre-declaration exactly as given last beat — one roll, not three, and they pick who throws it. **Said out
+  loud that Forge's breastplate carries NO Stealth penalty, so the plate is not a reason to hand the die
+  away** (consistent with the armour ruling already on the sheet).
+- **⚖ BOTH OUTCOMES PUBLISHED BEFORE THE ROLL, and the failure is a LIMIT not an ambush.** Success = they
+  hold the spot as long as they want it, nobody prices them, **and the lane starts paying them information**
+  (who uses the stair, who lives on it, what hours it keeps). Failure = **nothing jumps out**; they get
+  *remarked on* — somebody on the lane starts wondering out loud about three people behind the staves, and
+  **the position acquires a limit.** No watcher retconned, no enemy conjured; the opposition stays the
+  street, exactly as named.
+- **🪵 ONE NEW HONEST FACT GIVEN *BEFORE* THE DIE, NOT AFTER: the coopers took this morning's
+  armload off the FIRST stack — not the third, which is the one they are behind.** Stated flat that this is
+  **not a clock being run at them**, just the consequence of where they chose to stand. The cooper counted
+  his three stacks the way the clerk counts lines, without stopping, **and never looked at the stair.**
+- **🧹 CUT ON PURPOSE:** the no-hidden-clocks promise and the empty-stand switch were **not**
+  restated — both were said in full last beat and repeating them buries the choice. Only the woman on the
+  second landing got a one-line re-offer, as a live alternative to the die rather than a re-lectured ruling.
+- **🌆 The lane filled with ordinary morning** — girl with a yoke and two buckets, an unhurried
+  cart, two women arguing a price four doors down like people who do it daily. **Nothing knocks.**
+
 **🧺 THE STAKE-OUT IS SET, AND THE STREET IS THE THING THAT CAN FAIL — PLUS A NEW LIVE NPC ONE
 FLIGHT BELOW THE DOOR** (#the-story `8daf89f1-cb4d-432f-9786-1b86c6f98bce` · #in-character
 `1532302951165591694`). Declared 08:20 by @dewa: ***"we look for a hiding place where we can stake out
