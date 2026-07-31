@@ -441,6 +441,41 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🚪 STEALTH 28 vs DC 15 — THE TAIL HELD AND THEY HAVE THE READER'S DOOR: A CARRIERS'
+HALL, AND IT OPENS FOR HIM WITHOUT A KEY** (#the-story `96e03924-e990-4967-a9af-610e1c410cf1` ·
+#in-character `1532715824513683600` · queue row `77e53134-c5bb-402e-907d-dcc66637a56f` resolved 204).
+
+- **🎲 THE ROLL:** @dewa 03:25 *"Vale gives Windreth help in stealthing using magic."*
+  #roll-history: **`Windreth — Stealth: d20(6/17→17) + 10 + 1d4(1) = 28`.** Advantage from the Help plus a
+  **+1d4** (Guidance-shaped) — **both applied by the engine, neither asked for.**
+- **🔁 VALE SPENDS NOTHING — SAME PRECEDENT AS THE STAKE-OUT, STATED IN ONE LINE, NOT
+  RE-LECTURED:** the low die (17+10 = 27) clears DC 15 on its own **and the d4 came up 1**, so the help
+  **changed nothing** and **no slot, no concentration, and no named spell were taken off her sheet.**
+- **✅ THE PUBLISHED HIT PAID IN FULL — AND THE "does he have a key" HALF PAID BETTER AS A NO.** **He has
+  no key. He does not knock.** He stops in front of a plain door in the yard wall, stands there about as
+  long as one breath, **and the door opens inward** — **somebody inside was watching for him to arrive.**
+  A "no" that hands them a **person behind a door, present right now**, instead of a lock.
+- **🏛️ THE DOOR IS THE SIDE OF A CARRIERS' HALL** — three storeys of clean stone, wide front,
+  clerk's window with a queue already at it. **Letters, bills, writs and contracts: the city's written
+  business comes in the front, gets sorted in a room in there, and goes out on the road.** He does not use
+  the front.
+- **📦 THE CONNECTION WAS LAID DOWN AS A FACT, NOT DRAWN AS A CONCLUSION:** the carts in the yard
+  are loaded and roped for travel and **what is on them is paper — bales, tied flat, corners squared,
+  "stacked the way you watched paper stacked in a wet yard on the other side of this city."** The
+  city's-written-business-goes-to-the-mill loop is **reachable by the players and was not closed for
+  them.**
+- **🎁 MARGIN (made by 13) PAID FREE:** **HE IS EXPECTED** — no signal, no waiting, **it happens
+  at this hour the way the bells happen**; and **THE POSITION HOLDS WITH NO LIMIT** — nobody in that yard
+  turned around, **and he never learned he was followed**, exactly as published.
+- **🎯 THREE LIVE OPTIONS, PRICED, NO DM PREFERENCE:** **THE FRONT IS PUBLIC** — clerk's window,
+  business hours, anyone may walk up and ask a carriers' hall a carriers' question, **free**; **THE SIDE
+  DOOR** — there is a person behind it who opens it **for people they expect**, so they would be seen by
+  them **and there is no crowd in that yard to be lost in**; **SIT ON IT** — see who else uses that door
+  or what comes back out, **costs the morning.**
+- **🔒 STILL SEALED AND UNTOUCHED:** who is buying · what a written name costs · why the boy has
+  not aged · why the pulp is his hand · **who tells the reader** (the door is the *place*, not the
+  answer). Mechanism read still theirs, still unconfirmed.
+
 **🚶 THEY LET HIM GO AND FOLLOWED — AND THE READER IS WALKING UPHILL** (#the-story
 `44fd8bf9-4682-4a64-8801-ab44ef5264f4` · #in-character `1532588493895761921`). Declared 07-31 03:07 by
 JonathanEka: ***"We let him go (for now) and decided to take some time to let him take the lead. We wait
