@@ -441,6 +441,41 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🕯️ THEY TOOK THE PAPER BRANCH AND THE READER WALKED IN — HE CARRIES NOTHING, AND HE
+STOPPED** (#the-story `713fb36d-3ca1-4e29-b3eb-fd7ee3f9d6b6` · #in-character `1532565773405523989`).
+Declared 07-31 01:46 by @dewa: ***"With that information, Vale and Forge take Windreth to go back to the
+yard, to talk to the reader."*** **Queue clean, #roll-history / #player-chat / #combat-log all empty —
+no die called, none rolled.**
+
+- **🎯 NO DIE, AND THE REASON WAS STATED ONCE:** getting there, getting in, and waiting were
+  never able to fail — **he has the key, he goes every morning, and he needed no persuading to do what he
+  was already going to do.** Travel + entry + the whole night's wait + dawn + the bells + the reader's
+  arrival = **ONE beat**, per the one-event-one-beat bar.
+- **📄 HE SET THE BLANK QUIRE OUT HIMSELF — his routine, not a DM ruling.** Named as such so the
+  board is not mistaken for a lever the party pulled: when the bells went, **a new book was always going
+  to start.** (Lamps filled, trestles straightened, quire squared, pen laid beside it — *"the first thing
+  he has done all night without thinking about it at all."*)
+- **👥 THE SIX IGNORED THEM COMPLETELY** — aprons on, wet sheets pulled, troughs unchanged, **not
+  one look at three strangers by the wall.** Consistent with the standing name-rule; no crowd
+  complication invented.
+- **🧍 THE READER, SHOWN AS BODY NOT NAME:** comes in under the south arch at the bells,
+  **nothing to look at** — middle-aged, clean, **a coat too good for the yard and shoes too good for the
+  floor.** Identity, name, and who he answers to all **still sealed.**
+- **⚡ THE NEW SHAPE-LEVEL FACT — HE CARRIES NOTHING.** No bag, no case, no paper, **not so much as a
+  folded note.** Ties straight to the established *"the reader has never touched the book"*: **whatever he
+  is about to say, he is carrying it in his head.** Opens the next link up the chain (where does *he* get
+  the names) **without touching the buyer, the cost of a name, or the boy.**
+- **🛑 HE WALKED FOUR STEPS AND STOPPED.** Callback paid, not re-explained: **the six have never
+  once stopped for a person.** He just did.
+- **📌 TWO STANDING FACTS RE-SURFACED AS BOARD STATE, NOT AS A TRAP:** (1) **the party still has
+  the old book** and he has never asked for it back; (2) **the man beside them does not lie** — if the
+  reader asks him who they are, he answers. Both were published days ago; nothing was sprung.
+- **🗣️ ALL THREE PCs ARE IN THE OPEN AND THAT IS WHAT THEY CHOSE** — the declaration was
+  *"to talk to the reader"*, so being seen is the intent, not a punishment. Beat ends on the hand-back:
+  **what do you say?**
+- **🔒 STILL SEALED AND UNTOUCHED:** who is buying · what a written name costs · why the boy has
+  not aged · why the pulp is his hand. **Mechanism read still the party's, still unconfirmed.**
+
 **🗝️ VALE NAMED THE MACHINE AND ASKED FOR THE READER — AND THE FORK IS NOW PRICED IN
 HIS OWN WORDS: PAPER ON THE STAND BRINGS THE READER, AN EMPTY STAND BRINGS THE BOY** (#the-story
 `d161625f-53f4-4e5c-ba01-59bf5a73aed6` · #in-character `1532564122548306033`). Declared 07-31 01:37 by
