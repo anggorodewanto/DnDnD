@@ -278,6 +278,101 @@ big-party technique is in [`big-party.md`](big-party.md).
   intent, so Sabinnet is captured alive and the sealed-name-reader lead survives
   rather than dying with her.)
 
+## Shape clear, why sealed (player direction, 07-31)
+
+Keep the horror and the mystery. But **what is actually happening must be simple —
+young-adult-novel simple.** The table should be able to say, without a whiteboard:
+*"the bad guy is doing this, and here are our choices to stop it."* If they can't,
+the beat failed regardless of how good the prose was.
+
+The split that makes both possible:
+
+- **SHAPE = the mechanism, the stakes, and the levers.** How the machine works, what
+  it costs the world, what the party could do about it. **Players need this to
+  choose. Say it out loud.**
+- **WHY = motive and identity.** Who is buying, what they want, what a written name
+  actually costs the person it's written about. **This can stay dark forever.**
+
+**Rule of thumb:** *if a player could not make a choice without knowing it, it is
+shape — say it. If knowing it only changes how scared they are, it is why — keep it.*
+
+The model is *Coraline*: you know exactly what the other mother wants, exactly where
+the door is, and exactly how to win — and what she **is** is never explained once.
+Clarity of shape and depth of dread are not in tension. Confusion is not mystery.
+
+### The anti-patterns this rule exists to kill
+
+All four were live DM habits by 07-30, diagnosed with the player:
+
+- **Withholding shape, not just why.** The three real seals below metastasized into a
+  reflex — *"the meaning is withheld"* attached to the rut, the bolt, the troughs, the
+  repeat-names. Cumulative message to the table: **finding things out never resolves
+  into anything**, which kills the reason to investigate at all.
+- **Refusal counters as prose.** *"I am not going to tell you what that means either"*
+  is a fifth-time-restated ruling wearing a costume. Say a seal **once**, ever, then
+  simply write around it. (Pairs with the ~150–250 word / cut-every-restatement rule.)
+- **Unpriced levers.** The one available action was left at *"its cost is unstated."*
+  Rational players never pull an unpriced landmine, so the board deadlocks. **Price
+  every lever in practical terms** ("empty the stand, the boy comes, and the hand is
+  the one who has to write") without ever pricing it in sealed terms.
+- **"No push, no preference from me," every post.** Intended as respect for agency;
+  received as *the DM will not tell you what matters*. Twelve equally-weighted open
+  threads is the same failure. **Name 2–3 live things at beat end**, let the rest stay
+  warm off-screen, and stop re-listing them.
+
+### Yes, and
+
+When a player proposes something, the answer is **yes, and the world moves** — never
+*"yes, but nothing happens,"* and never *"yes, and I won't tell you what it meant."*
+
+- **Meaning arrives as an event, not an explanation.** Rather than refusing to
+  interpret a fact, let the world act on it and let them watch the consequence. Same
+  secret kept, no refusal counter spent.
+- **Answer and hand them something.** Never answer and stop.
+- **The world has a heartbeat.** Something moves whether or not they act — not a doom
+  clock, just: the world noticed. (Their theft of the book had produced exactly one
+  consequence in nine days, and it was a *sympathetic* one.)
+- **Reuse what they already earned.** If a past success proved something, **tell them
+  it was proof.** They stole the book for one day and the entire machine stopped dead
+  — that is a completed experiment, and nobody ever told them it counted.
+
+### The only three hard seals
+
+Everything else previously withheld was self-imposed and can go:
+
+1. **Never confirm the book-is-the-mechanism deduction** — it is theirs
+   ([`campaign-arc.md`](campaign-arc.md) §"Structure ≠ railroad").
+2. **Never narrate what a written name costs.** Name the price, refuse to describe the
+   goods.
+3. **The washer mercy is never turned into a punishment** (binding public promise).
+
+Fog that is *texture only* — the boy who has not aged, what the water is for — stays
+unexplained forever. **But nothing a player needs in order to choose may depend on
+it.** That is the line that got crossed: unexplained things were allowed to become
+blockers.
+
+### Worked examples
+
+| Fact | ❌ Shape sealed (what was done) | ✅ Shape clear, why sealed |
+| --- | --- | --- |
+| **Line eight** | *"The only unfilled ruled line in two books — I'm not telling you what that means."* A spooky noun with no handle. | The book is a **work queue**; the page is ruled to the size of the order. Seven filled and struck, one empty ⇒ **somebody bought a slot and has not said the name yet.** Still no who, still no why — but now it's a countdown they can read *and act on*. |
+| **The troughs** | *"All one hand, and it is his — what the water is for is your read."* | The water is **how the paper trail dies**: everything ever written about an erased person comes back here and is unmade. Sealed: why it must be *his* hand, and what happens to the person. |
+| **The boy** | *"I am not going to say what he is."* | He is **the delivery** — stand goes empty, two knocks, low. That is how an order arrives, and now they know what operating the switch *summons*, which is the real price. Sealed forever: why he is still a boy after eleven years. |
+
+Sound of it at the table — no refusal, nothing leaked, actionable tonight:
+
+> "Eight lines, ruled in one loading of the nib. Seven names came, seven struck. He put
+> the pen down and waited for the eighth, and it never came. Whatever this is, somebody
+> ordered eight and only said seven."
+
+### The spine must stay nameable
+
+At any point the DM must be able to state the current leg in **three sentences: who is
+doing it, how the machine works, what the party can do about it.** If it takes more
+than that, the leg has drifted into convolution and needs cutting back, not more
+atmosphere. The current statement lives in
+[`campaign-arc.md`](campaign-arc.md) §"Legibility spine".
+
 ## Keep the record straight
 
 - **The DB / DM Console is the source of truth for mechanical state — never

@@ -45,6 +45,41 @@ Log orphan seeds under "Scattered orphan threads" below so a later arc can pick 
 up. Rule of thumb: **plant, don't explain** — an unexplained image the players
 remember beats a tidy answer.
 
+### Legibility spine — Leg 3b in three sentences (player direction, 07-31)
+
+Doctrine and the shape/why split live in [`dm-rules.md`](dm-rules.md) §"Shape clear,
+why sealed." This is the thing that section requires: **the current leg, statable in
+three sentences.** If it ever takes more than that, the leg has drifted into
+convolution and needs cutting back — not more atmosphere.
+
+**Who is doing it.** Somebody pays to have people unmade — a name goes in the book and
+that person stops having been. **How the machine works.** Three parts, and only three:
+**the hand** writes and cannot read, so he never knows who he is erasing; **the reader**
+says the number and the name and knows exactly; **the owners** pay, are never named,
+and are never in the room — and the mill exists to pulp every written trace so nobody
+erased leaves a paper trail. **What the party can do.** Four levers, all live:
+
+1. **The hand is the bottleneck** — one man, eleven years, no writer means no
+   erasures. **They already ran this experiment**: they stole the book and the whole
+   machine stopped dead for a full working day. That is proof, and it has never been
+   named to them as proof.
+2. **Take the reader** — the only person who knows who is on the list and who is
+   ordering.
+3. **Follow the money** to the owners — same place, same day, every time.
+4. **Use it once.** The trap. Available, ugly, real.
+
+Everything the party has already earned slots into this and nothing needs adding:
+repeat names with the earlier entry struck = **somebody being replaced**; the
+weighhouse / barge / counting-floor fraud they cracked = the money end; the Stair Hill
+yard = the disposal end. Same business, two ends.
+
+**The clock is already on the table and came from an NPC's own mouth:** book one lasted
+nine years, book two is two years old and nearly full. **The business is
+accelerating.** No invented doom timer is needed or wanted.
+
+**Still sealed** (and unaffected by any of the above): who is buying, what a written
+name costs the person, why the boy has not aged, why the pulp must be in *his* hand.
+
 ---
 
 ## The forward shape — act map + where each leg is going (DM structure)
