@@ -441,6 +441,36 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**📖 TO-DM QUESTION ANSWERED STRAIGHT AND FREE — "IS THERE ACTION WE CAN DO TO ASSESS WHAT
+IS BEHIND THE DOOR?" — AND THE AMBUSH READ WAS CORRECTED, NOT LEFT TO FESTER** (#in-character
+`1532741212564488352`). JonathanEka 07-31 13:23. **Queue empty, no roll, no declaration — this was a
+question, and it was not charged for.**
+
+- **🚫 THE MISREAD WAS NAMED FIRST:** OOC in #player-chat read the opening door as *"ada yg
+  nungguin pintu dari dalem — ambush"*. **Said plainly in-character: nothing is waiting for them.**
+  Somebody opened a door for a man they were expecting and shut it again; **nothing in that yard has
+  looked at them and nothing is hunting anybody.** Consistent with the standing no-boss-parked rule and
+  with the published *"he does not learn he was followed."*
+- **🚪 FREE DOOR FACTS, HONESTLY GATED TO WHAT THEY CAN SEE FROM WHERE THEY STAND:** **no handle
+  on the outside, no keyhole.** **It opens from within or it does not open — whoever is behind it is the
+  only way through it.** (Hinge detail deliberately NOT claimed at this distance.) This prices the
+  kick-it-in option without refusing it.
+- **🏛️ SECOND FREE FACT, THE ONE THAT REFRAMES THE PROBLEM: it is a room in a building, and the
+  front of that building is wide open with a queue at the counter.** The best recon here is the counter,
+  not the door — **offered, not pushed.**
+- **🎯 FOUR PRICED WAYS TO ASSESS, NO DM PREFERENCE:** **EAR TO THE TIMBER** → **Perception vs DC
+  15**, and **the miss wakes nothing up — it costs the yard** (a stranger listening at a blank door gets
+  moved along **and remembered**); **READ THE BUILDING FROM WHERE THEY STAND** (windows, chimneys, where
+  that room has to sit) → **free**; **WALK IN THE FRONT AND ASK** → **free, and what they get depends
+  entirely on what they ask for**; **MAGIC** → ***"name what is on your sheet and I will price it before
+  anyone spends anything"*** — the Vale-spends-nothing precedent made into a standing offer instead of a
+  surprise.
+- **⏳ ONE HONEST HEARTBEAT, AND IT BITES BOTH WAYS: the near cart is nearly roped. When it rolls the yard
+  gets emptier — fewer eyes on them, and less to stand behind.** Deliberately not a countdown and not a
+  threat; it changes the price of both listening and lurking.
+- **🔒 NOTHING SEALED WAS TOUCHED.** Who is behind the door stays unanswered — **the question was
+  answered as *what can you do about it*, not *what is in there.***
+
 **🚪 STEALTH 28 vs DC 15 — THE TAIL HELD AND THEY HAVE THE READER'S DOOR: A CARRIERS'
 HALL, AND IT OPENS FOR HIM WITHOUT A KEY** (#the-story `96e03924-e990-4967-a9af-610e1c410cf1` ·
 #in-character `1532715824513683600` · queue row `77e53134-c5bb-402e-907d-dcc66637a56f` resolved 204).
