@@ -441,6 +441,41 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🎲 THE PERSUASION MISSED — 8 vs DC 15 — AND THE READER SAID *"NO"* AND WALKED FOR THE
+ARCH** (#the-story `512afa56-76b9-4d80-8d8f-8c945cdff558` · #in-character `1532575034441338890` · queue
+row `7be515aa-cf64-496c-8ceb-c797d5395be0` resolved 204).
+
+- **🎲 THE ROLL WAS THEIRS AND IT CAME IN AT 8.** JonathanEka 02:21: *"As usual, Forge & Vale
+  prepared scenario. Quick rehearsal, both ready to persuade him. So, Forge gives help action to Vale."*
+  @dewa 02:22: *"Vale tries to persuade the reader."* #roll-history: **`Vale — Persuasion: d20(4/1→4) + 4
+  = 8`** — **the Help was already applied as advantage by the engine** (two dice, 4 and 1, took the 4), so
+  **no second die was asked for and none was rolled for her.** Called out in the post that **the Help
+  counted** — the dice just weren't there. Consistent with the Vale-helps-Windreth precedent.
+- **🗣️ APPROACH TAKEN AS DECLARED, NOT RE-INTERROGATED:** they rehearsed and made the plain
+  case — **not a threat and not a lie** — so it was played as *level with him*. Forge stood where he could
+  be seen and said the one line they had agreed on. **They were not sent back to re-declare a verb.**
+- **⚖ THE PUBLISHED MISS WAS PAID EXACTLY AS WRITTEN:** he **let her finish** (no interruption, no looking
+  away, *"his jaw moves like a man who has thought about this before, on his own time, and long ago
+  decided what he thinks"*), then ***"No."*** **He does not argue, does not ask what they will do about
+  it, does not ask for the book a second time.** **Nothing jumped out. No ambush. No combat. No watcher
+  invented.**
+- **📄 THE REAL CONSEQUENCE IS THE STAND:** he looks past them **once**, at the blank quire
+  squared on it with the pen laid beside it and the lamps lit — **and he does not go to it.** **HE CAME TO
+  START A NEW BOOK AND HE IS LEAVING WITHOUT STARTING IT.** Ties straight to the hand's own established
+  line (*"my day ends when I finish the writing"*): **the hand is left at his table with the pen up,
+  waiting to be told a number.**
+- **👁 SECOND SHAPE-LEVEL FACT, SAID PLAINLY NOT SPRUNG:** **he has seen three faces and he has
+  seen that book open in their hands** — and **he is the one who carries everything in his head.** Given
+  as board state under "shape clear, why sealed", not as a trap being armed.
+- **🎯 FORK HANDED OVER IMMEDIATELY, PRICED, WHILE HE IS STILL FOUR STEPS FROM THE ARCH AND NOT
+  HURRYING:** **STOP HIM** — Forge is close enough, and that is a hand on a man who has done nothing but
+  refuse them, **in front of the hand**; **LET HIM GO AND FOLLOW HIM** — callback to the hand's own
+  eleven years, *"nobody in this yard has ever seen a reader on the street, nobody knows where they go"*;
+  **LET HIM WALK.** No DM preference stated, no die pre-called.
+- **🔒 STILL SEALED AND UNTOUCHED:** who is buying · what a written name costs · why the boy has
+  not aged · why the pulp is his hand · **who tells the reader** (that was the thing the roll was for, and
+  it stays unbought). **Mechanism read still the party's, still unconfirmed.**
+
 **8️⃣ VALE PUT THE STOLEN BOOK IN THE READER'S FACE AND POINTED AT LINE EIGHT — *"I WAS TOLD
 EIGHT. I WAS GIVEN SEVEN."* FIRST QUESTION FREE, SECOND ONE IS A DIE** (#the-story
 `073f0457-e49d-479a-b9e2-538df21e5215` · #in-character `1532567933543518299`). Declared 07-31 01:54 by
