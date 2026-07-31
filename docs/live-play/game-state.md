@@ -441,6 +441,46 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🗝️ VALE NAMED THE MACHINE AND ASKED FOR THE READER — AND THE FORK IS NOW PRICED IN
+HIS OWN WORDS: PAPER ON THE STAND BRINGS THE READER, AN EMPTY STAND BRINGS THE BOY** (#the-story
+`d161625f-53f4-4e5c-ba01-59bf5a73aed6` · #in-character `1532564122548306033`). Declared 07-31 01:37 by
+@dewa: ***"I think, the names that has been struck are people who has been erased, there is 1 more name
+that is supposed to go there. Does the reader know? Can you bring us to him?"*** **Queue clean,
+#roll-history empty, #player-chat empty, #combat-log empty — no die called, none rolled.**
+
+- **🎯 FIRST BEAT UNDER "SHAPE CLEAR, WHY SEALED"** ([`dm-rules.md`](dm-rules.md)) — the
+  mechanism, the stakes and the levers get said out loud; only motive, identity and what a name costs
+  stay dark. **The doctrine change was NOT announced at the table** (player direction: continue
+  seamlessly, no tone-change post).
+- **🚫 HER DEDUCTION WAS NOT CONFIRMED — AND NOT REFUSED EITHER.** No DM refusal counter was
+  spent. He simply **cannot** confirm it: *"I don't know that. You might be right. Nobody's ever told me
+  either way, and I never asked. I'd have to ask the reader."* **The seal now holds through character
+  truth instead of through a DM withhold** — which is exactly what the previous beat set up when he
+  asked Vale *"Does it do something?"*
+- **✅ SHAPE PAID, BOTH QUESTIONS ANSWERED STRAIGHT AND FREE:**
+  - **DOES THE READER KNOW? YES.** *"He says the number and he says the name, and I write it. There's
+    nobody else in it. Him, and me, and the page."* **The whole chain named in one line: reader → hand →
+    page.**
+  - **CAN HE TAKE THEM TO HIM? NO — and the limit is honest, not a stonewall.** *"There've been three of
+    them since I started, and I never knew where any of them went. They come in, they read, they go out
+    under the arch. I have never once seen a reader on the street."*
+- **🔁 YES-AND: THE NO TURNS INTO THE LEVER.** *"He comes to me. At the bells, every day I've
+  ever worked. I set the paper out, I stand at the stand, and I wait, and he walks in."*
+- **🔺 THE FORK, PRICED IN HIS OWN MOUTH AND MUTUALLY EXCLUSIVE:**
+  - **PAPER ON THE STAND AT FIRST LIGHT** → the bells go, **the reader walks in and starts a new book**,
+    and the party is in that yard with him. (The blank quire he squared this morning is already on it —
+    *"There's paper on it right now. I put it there this morning."*)
+  - **STAND EMPTY** → *"then it isn't the reader who comes"* — two knocks, and it is the boy.
+  - **Not both in one morning.** Stated plainly: whichever they set, the other does not happen. **The
+    switch they have held unpriced for days is now priced**, and so is its alternative.
+- **🕰 THE WORLD'S OWN HEARTBEAT, NOT AN INVENTED CLOCK:** first light is a few hours off and
+  **he will go either way** — he has gone every day for eleven years and nobody has ever had to tell him
+  to. No doom timer added.
+- **🔒 STILL SEALED AND UNTOUCHED:** who is buying · what a written name costs · why the boy has
+  not aged · why the pulp must be in his hand. **The book-is-the-mechanism read remains the party's, and
+  the DM has still never confirmed it.**
+- **👁 Windreth still holds the outside, no limit.** Vale and Forge still inside with him.
+
 **8️⃣ VALE ASKED FOR NUMBER EIGHT AND FOR WHAT THE WHOLE THING DOES — HE KNEW THE FIRST WITHOUT
 LOOKING AND ASKED HER BACK ON THE SECOND** (#the-story `020989ed-a91f-4877-8b62-c55b7715417c` ·
 #in-character `1532396306759159838`). Declared 14:33 by @dewa: ***"'what's number 8?' Vale asks, 'And what
