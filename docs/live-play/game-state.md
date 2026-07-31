@@ -441,6 +441,39 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**🚶 THEY LET HIM GO AND FOLLOWED — AND THE READER IS WALKING UPHILL** (#the-story
+`44fd8bf9-4682-4a64-8801-ab44ef5264f4` · #in-character `1532588493895761921`). Declared 07-31 03:07 by
+JonathanEka: ***"We let him go (for now) and decided to take some time to let him take the lead. We wait
+for few seconds and waiting for him making the first turn, before follow him."*** OOC in #player-chat
+agreed it first (*"follow sek wae"*). **Queue empty, #roll-history clean, no combat.**
+
+- **🎯 THE FAILED PERSUASION DID NOT CLOSE THE DOOR — IT CHANGED THE PRICE.** The tail is a second
+  route to the same prize the roll would have bought (**the rung above the reader**), which is the
+  fail-forward the miss was designed for. Not stated as a ruling; just played.
+- **✅ THE WAIT WAS REWARDED FREE, NO DIE.** Giving him the lead cost nothing and **bought the first four
+  streets**: he goes out under the arch without hurrying and **does not look back once** — not at the
+  stand, not at the hand, not at them. **No glance at a window, not even the pause a man makes to shift a
+  bag he is not carrying.** *"Whatever else he is, he is not a man who has ever had to check."* Good craft
+  paid in information, not in a bonus.
+- **🏘️ FREE SHAPE-LEVEL FACT — HE IS GOING UPHILL.** Two streets and the ground changes: fewer
+  carts, dry cobbles, **doors that somebody pays to have painted**. **The coat that was too good for the
+  yard stops being too good for anything — up here it is ordinary.** Opens the *follow-the-money* lever
+  from the arc spine **without naming a buyer.**
+- **👥 AND THE SAME FACT IS THE PRESSURE:** the crowd that hid them thins with every street. Down
+  there they were three more bodies in a full lane; **up here they are three people who smell of wet
+  paper.** No watcher invented — **the opposition is the street getting cleaner**, same grammar as the
+  stake-out.
+- **💰 THE PRICE IS A CHOICE BEFORE IT IS A DIE, AND THE NO-ROLL OPTION IS REAL:** **STAY ON HIM**
+  → one roll, **party nominates the roller, Stealth vs DC 15**; **HANG BACK AND LET THE CORNERS TAKE HIM**
+  → **no roll, no risk, they keep the district for free and that is all they keep.**
+- **⚖ OUTCOMES PUBLISHED PRE-ROLL:** **HIT** → **the door** — where a reader goes, **and whether he has a
+  key to it.** **MISS** → they lose him in the last streets and keep **the district, not the door**, and
+  **they get looked at up here.** **Either way he does not learn he was followed — nothing jumps out.**
+- **🎲 NOT ROLLED, AND NOT ROLLED FOR THEM.** No roller nominated yet.
+- **🔒 STILL SEALED AND UNTOUCHED:** who is buying · what a written name costs · why the boy has
+  not aged · why the pulp is his hand · **who tells the reader.** Mechanism read still theirs, still
+  unconfirmed.
+
 **🎲 THE PERSUASION MISSED — 8 vs DC 15 — AND THE READER SAID *"NO"* AND WALKED FOR THE
 ARCH** (#the-story `512afa56-76b9-4d80-8d8f-8c945cdff558` · #in-character `1532575034441338890` · queue
 row `7be515aa-cf64-496c-8ceb-c797d5395be0` resolved 204).
