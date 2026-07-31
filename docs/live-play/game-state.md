@@ -441,6 +441,40 @@ so the reach is occupied for the whole climb. Stated as fact, explicitly NOT as 
 NOT worse. ⏰ ~23 MIN TO THE BELLS.**
 *(The 07-27 culvert approach below is how they got here and is still all live board state.)*
 
+**8️⃣ VALE PUT THE STOLEN BOOK IN THE READER'S FACE AND POINTED AT LINE EIGHT — *"I WAS TOLD
+EIGHT. I WAS GIVEN SEVEN."* FIRST QUESTION FREE, SECOND ONE IS A DIE** (#the-story
+`073f0457-e49d-479a-b9e2-538df21e5215` · #in-character `1532567933543518299`). Declared 07-31 01:54 by
+@dewa: ***"Vale opens the book and points to the empty line number 8, 'Number 8, who is this supposed to
+be? Who tell you the name?'"*** **Queue clean, #roll-history empty — the die is CALLED but NOT YET
+ROLLED, and it will not be rolled for them.**
+
+- **🖊️ THE MECHANISM SHOWN, NOT EXPLAINED — the hand's head came up.** He is reaching for the
+  pen **before she finishes saying the word eight**, "the way a man's hand goes to the latch of his own
+  door." **Then no name follows, and he stops with the pen half lifted and does not understand.** A
+  number without a name does nothing — **demonstrated as an event, never stated as a ruling**, and the
+  read-it-aloud advice-or-threat was NOT re-litigated.
+- **📖 THE READER'S REACTION TO THE OPEN BOOK IS ITSELF THE PAYOFF of "he has never touched
+  it":** one step **back**, weight stays there, looks at it *"the way you would look at a dog that had
+  got out"* — **does not approach it and does not reach for it.** *"Put that down."* **Eleven years,
+  three readers, and not one has ever had it open in front of him.**
+- **✅ Q1 ANSWERED FREE — AND THE ANSWER IS NOT WHAT SHE EXPECTED: HE DOES NOT KNOW WHO EIGHT IS.**
+  ***"I was told eight. I was given seven."*** **He passed *eight* down to the hand and then waited on a
+  name that never came** — so **the reader has been waiting on line eight exactly as long as the hand
+  has.** New harmless fact: **he has been reading four years** (fits three readers in eleven). His own
+  sting: ***"I have never been given a number without a name behind it. Not once. Not in four years."***
+- **🚫 Q2 IS WHERE THE UNWILLINGNESS LIVES, AND IT WAS NAMED NOT HIDDEN:** he will not say who
+  tells him. Stated plainly rather than letting them pay to discover it. **He is the first person in this
+  chain who CAN LIE, and the first with something to lose** — the opposite of the hand.
+- **🎯 THE CALL: ONE ROLL FOR THE PARTY, PARTY NOMINATES THE ROLLER *AND* NAMES THE APPROACH**
+  (lean on him / level with him / lie to him), **set against DC 15.** Same grammar as the stake-out verb
+  call.
+- **⚖ BOTH OUTCOMES PUBLISHED PRE-ROLL, MISS IS A LIMIT NOT AN AMBUSH:** **HIT** → he gives up **the rung
+  above him — how he is told, and what he has seen of who tells him.** **MISS** → he says nothing and
+  **walks for the arch; nothing jumps out**, but he walks, **and what they do about that is theirs.**
+- **🖋️ Free either way: the hand is still standing there with the pen up.**
+- **🔒 STILL SEALED:** who is buying · what a written name costs · why the boy has not aged · why
+  the pulp is his hand. **Mechanism read still the party's, still unconfirmed.**
+
 **🕯️ THEY TOOK THE PAPER BRANCH AND THE READER WALKED IN — HE CARRIES NOTHING, AND HE
 STOPPED** (#the-story `713fb36d-3ca1-4e29-b3eb-fd7ee3f9d6b6` · #in-character `1532565773405523989`).
 Declared 07-31 01:46 by @dewa: ***"With that information, Vale and Forge take Windreth to go back to the
